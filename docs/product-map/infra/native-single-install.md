@@ -88,6 +88,7 @@ manifest `features:` registry.
       `test_bundle_release_security.py::test_bundle_archive_urls_and_hashes_match_lockfile_exactly`,
       `::test_download_verified_checksum_mismatch_fails_without_consumable_destination`,
       `::test_bundle_assembles_the_exact_executable_installer_and_internal_checksum`).
+      <!-- behaviour: native-single-install-01 | tests: backend/tests/unit/scripts/test_bundle_release_security.py::test_bundle_archive_urls_and_hashes_match_lockfile_exactly -->
 - [x] The Linux installer verifies the release's ed25519-signed manifest over
       its exact bytes against an embedded current+next trust store, then verifies
       the tarball SHA-256 against that manifest before extracting anything. An
@@ -101,12 +102,14 @@ manifest `features:` registry.
       `::test_from_file_bare_filename_resolves_the_manifest_beside_the_tarball`,
       `test_manifest.py::test_shipped_trust_store_has_only_the_provisioned_current_key`,
       `::test_installer_embedded_store_matches_trust_rows`).
+      <!-- behaviour: native-single-install-02 | tests: backend/tests/unit/scripts/test_install_manifest_verification.py::test_extracted_argv_verifies_a_signed_manifest, backend/tests/unit/launcher/test_manifest.py::test_shipped_trust_store_has_only_the_provisioned_current_key -->
 - [x] A verified bundle installs under a user-writable versioned root
       (`~/.local/opt/farna-control/versions/<version>`), with `current` as the
       only version selector and a `~/.local/bin/farna-control` shim that points
       at it. The installer writes a path-only `env.sh` activation helper, prints
       the `source` command for the caller, and never edits the parent shell
       (`scripts/install.sh`; `test_install_activation_file.py::test_finalise_writes_a_usable_env_sh_under_set_u`).
+      <!-- behaviour: native-single-install-03 | tests: backend/tests/unit/scripts/test_install_activation_file.py::test_finalise_writes_a_usable_env_sh_under_set_u -->
 - [x] A pre-rename install (`~/.local/opt/modulo` plus the old shim) is migrated
       in place to the Farna Control root and marker, while an unrelated
       same-named shim is left alone and a host carrying both install roots is
@@ -114,6 +117,7 @@ manifest `features:` registry.
       (`scripts/install.sh`; `test_install_activation_file.py::test_a_pre_rename_install_root_and_shim_are_migrated`,
       `::test_an_unrelated_modulo_shim_is_left_untouched`,
       `::test_two_install_roots_is_refused_rather_than_guessed`).
+      <!-- behaviour: native-single-install-04 | tests: backend/tests/unit/scripts/test_install_activation_file.py::test_a_pre_rename_install_root_and_shim_are_migrated -->
 - [x] `scripts/install.sh` refuses macOS with a pointer to the macOS installer
       and any other non-Linux host with an explicit unsupported-platform error.
       It anchors every caller-supplied relative path to the invocation directory
@@ -122,6 +126,7 @@ manifest `features:` registry.
       (`scripts/install.sh`; `test_install_unreadable_cwd.py::test_install_from_a_cwd_without_search_permission`,
       `::test_relative_from_file_resolves_against_the_invocation_directory`,
       `::test_install_sh_anchors_every_path_override`).
+      <!-- behaviour: native-single-install-05 | tests: backend/tests/unit/scripts/test_install_unreadable_cwd.py::test_install_from_a_cwd_without_search_permission -->
 - [x] Every installer failure prints one delimited support block last, naming the
       stage, the absolute log path and a stable support reference. The transcript
       is written with private permissions, capped while keeping its tail, and only
@@ -130,6 +135,7 @@ manifest `features:` registry.
       `::test_transcript_is_persisted_with_private_permissions`,
       `::test_only_the_newest_five_logs_are_kept`,
       `::test_oversized_transcript_is_capped_and_keeps_the_tail`).
+      <!-- behaviour: native-single-install-06 | tests: backend/tests/unit/scripts/test_install_support_block.py::test_support_block_names_target_stage_log_and_reference -->
 - [x] An upgrade enforces a pre-upgrade `pg_dump` through the old bundle's
       runtime: the dump goes to a versioned snapshot inside the data dir, must be
       non-empty, and any failure aborts before the binary swap. The database
@@ -143,6 +149,7 @@ manifest `features:` registry.
       `::test_perform_upgrade_live_process_aborts`,
       `::test_perform_upgrade_skip_backup_runs_no_dump`,
       `::test_perform_upgrade_boot_failure_prints_snapshot_and_restore`).
+      <!-- behaviour: native-single-install-07 | tests: backend/tests/unit/launcher/test_upgrade.py::test_pre_upgrade_dump_reports_snapshot -->
 - [x] The in-product `farna-control upgrade <target-version>` performs the same
       verified flow: it stages and re-verifies the signed release, rejects a
       mismatched top-level identity, a tampered tarball, a PostgreSQL major
@@ -157,6 +164,7 @@ manifest `features:` registry.
       `::test_perform_upgrade_downgrade_refuses`,
       `::test_perform_upgrade_disk_preflight_refuses`,
       `::test_prune_versions_keeps_last_two_and_never_the_referenced`).
+      <!-- behaviour: native-single-install-08 | tests: backend/tests/unit/launcher/test_upgrade.py::test_perform_upgrade_full_flow -->
 - [x] The macOS builder produces a relocatable `.app` from verified inputs: it
       checks the downloaded Python is the expected Mach-O architecture and
       version, builds PostgreSQL and Redis into the bundle, ships the built SPA,
@@ -168,6 +176,7 @@ manifest `features:` registry.
       `::test_macos_bundle_build_gate_fails_on_an_env_name_drift`,
       `::test_macos_bundle_build_gate_fails_when_a_required_binary_is_missing`,
       `::test_macos_bundle_layout_binaries_resolve_at_the_launcher_exported_directory`).
+      <!-- behaviour: native-single-install-09 | tests: backend/tests/unit/test_macos_installer_normalize.py::test_macos_bundle_build_gate_passes_for_the_shipped_producer_contract -->
 - [x] The macOS workflow signs the `.app` inside-out, notarizes the DMG and
       proves the verdict: the artifact identity is recorded before and after the
       submit and must not change, a non-`Accepted` verdict fails loudly with the
@@ -180,6 +189,7 @@ manifest `features:` registry.
       `::test_macos_notarization_fails_loudly_on_a_non_accepted_status`,
       `::test_macos_nothing_resigns_or_rewrites_the_dmg_after_notarization`,
       `test_release_workflow_contract.py::test_macos_staple_retry_invokes_the_idempotent_helper`).
+      <!-- behaviour: native-single-install-10 | tests: backend/tests/unit/test_macos_installer_normalize.py::test_macos_dmg_contract_structurally_preserves_signing_notarization_and_gatekeeper_order, backend/tests/unit/test_release_workflow_contract.py::test_macos_staple_retry_invokes_the_idempotent_helper -->
 - [x] `scripts/macos/install.sh` verifies the DMG with `hdiutil verify` and
       `codesign`, requires exactly one non-symlink `.app`, checks the mounted
       launcher's Mach-O architecture against both the host and the artifact name,
@@ -189,6 +199,7 @@ manifest `features:` registry.
       (`scripts/macos/install.sh`; `test_macos_installer_normalize.py::test_install_sh_normalizes_duplicate_dmg_extension`,
       `::test_macos_dmg_contract_structurally_verifies_staging_and_post_mount_gates`,
       `::test_macos_mounted_app_codesign_agrees_with_gatekeeper_strictness`).
+      <!-- behaviour: native-single-install-11 | tests: backend/tests/unit/test_macos_installer_normalize.py::test_install_sh_normalizes_duplicate_dmg_extension -->
 - [x] The Windows payload is staged from pinned Windows inputs (CPython, the
       PostgreSQL Windows build, and a pinned Valkey release) and is
       byte-identical when staged twice without nesting, with the runtime marker
@@ -200,6 +211,7 @@ manifest `features:` registry.
       `::test_staged_bundle_writes_the_runtime_marker_the_installer_requires`,
       `::test_staging_twice_is_byte_identical_and_never_nests`,
       `::test_launcher_clean_environment_contract`).
+      <!-- behaviour: native-single-install-12 | tests: backend/tests/unit/scripts/test_windows_artifact_provenance.py::test_pins_are_strict_and_consistent -->
 - [x] The Windows Inno Setup installer copies the bundle launcher, creates
       Start Menu and optional desktop shortcuts, and deliberately registers no
       Windows service (`sc.exe` is never invoked and there is no uninstall run
@@ -215,6 +227,7 @@ manifest `features:` registry.
       `::test_the_info_file_states_the_coming_soon_limitation`,
       `::test_architecture_identifiers_are_gated_on_the_6_3_boundary`,
       `test_windows_installer_inno_setup_step.py::test_both_jobs_have_an_inno_setup_install_step`).
+      <!-- behaviour: native-single-install-13 | tests: backend/tests/unit/scripts/test_windows_installer_service.py::test_the_installer_never_invokes_sc_exe, backend/tests/unit/test_windows_installer_inno_setup_step.py::test_both_jobs_have_an_inno_setup_install_step -->
 - [x] The release pipeline gates the native artifacts end to end: the Linux
       bundle and `.deb` are built, the macOS DMGs are built on both native
       architectures, and the Windows installer is included only when the
@@ -225,6 +238,7 @@ manifest `features:` registry.
       `test_release_workflow_contract.py::test_publish_release_refuses_when_a_dependency_did_not_succeed`,
       `::test_final_release_manifest_hashes_each_artefact_without_loading_it_into_memory`,
       `::test_release_builds_the_deb_from_the_release_bundle`).
+      <!-- behaviour: native-single-install-14 | tests: backend/tests/unit/test_release_workflow_contract.py::test_publish_release_refuses_when_a_dependency_did_not_succeed -->
 - [x] Native-specific verification runs against the real artifacts: Gate 0
       proves an offline `uv` resolution and a no-egress boot import in a
       minimum-glibc container on pull requests, and the release smoke test
@@ -235,6 +249,7 @@ manifest `features:` registry.
       `scripts/linux/native-firstrun-smoke.sh`;
       `test_gate0_paths.py::test_gate0_covers_bundled_boot_critical_modules`,
       `::test_gate0_covers_bundled_boot_critical_directories`).
+      <!-- behaviour: native-single-install-15 | tests: backend/tests/unit/tools/test_gate0_paths.py::test_gate0_covers_bundled_boot_critical_modules -->
 
 ## Known Gaps
 

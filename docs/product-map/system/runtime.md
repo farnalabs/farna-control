@@ -54,19 +54,24 @@ purging old run data.
       and rejected with a reason for boot-only keys, and clear is allowed for
       every known key (`backend/tests/bdd/features/admin/runtime-config.feature`,
       `backend/tests/unit/core/runtime_config/test_key_registry.py`)
+      <!-- behaviour: runtime-01 | tests: backend/tests/bdd/features/admin/runtime-config.feature, backend/tests/unit/core/runtime_config/test_key_registry.py -->
 - [x] POST `/api/v1/admin/runtime-config/reload` refreshes config from
       environment variables (`admin_runtime_config.py`)
+      <!-- behaviour: runtime-02 | tests: none -->
 - [x] GET/PUT `/api/v1/admin/rate-limits` returns and replaces rate-limit rules;
       mode (redis/in-memory) is reported
       (`admin_rate_limits.py`, `model_backends/rate_limiting.feature`)
+      <!-- behaviour: runtime-03 | tests: none -->
 - [x] The rate-limit middleware enforces independent per-endpoint budgets
       (`POST /api/v1/runs` 60/min, `POST /api/v1/triggers` 100/min, webhook
       flood 100/min), isolates counters per API key, applies the window reset,
       and returns a `Retry-After` header plus a rate-limit problem body on 429
       (`rate_limiting/rate_limiting.feature`)
+      <!-- behaviour: runtime-04 | tests: none -->
 - [x] Housekeeping scan returns cleanup candidates grouped by category;
       cleanup deletes selected candidates; checkpoint purge reclaims DB volume
       (`backend/tests/bdd/features/admin/housekeeping.feature`)
+      <!-- behaviour: runtime-05 | tests: backend/tests/bdd/features/admin/housekeeping.feature -->
 - [x] Housekeeping includes an `edit_snapshot_retention` category (FAR-1815):
       per pipeline it surfaces provenance-edit snapshots (`version_kind='edit'`
       AND `created_kind='edit'`) beyond the newest 200 as `pipeline_snapshot`
@@ -82,6 +87,7 @@ purging old run data.
       `backend/tests/unit/core/test_edit_snapshot_retention.py`,
       `backend/tests/unit/core/test_housekeeping_scanners.py`,
       `backend/tests/integration/test_far1815_edit_snapshot_retention.py`)
+      <!-- behaviour: runtime-06 | tests: backend/tests/unit/core/test_edit_snapshot_retention.py, backend/tests/unit/core/test_housekeeping_scanners.py, backend/tests/integration/test_far1815_edit_snapshot_retention.py -->
 - [x] Housekeeping deletes fail closed with a typed `blocked_by` reason when a
       candidate row is parented by `policy_gate_decisions` RESTRICT FKs
       (FAR-1102): both the REST cleanup (`perform_cleanup` in
@@ -93,9 +99,11 @@ purging old run data.
       generic FK-violation, so an admin can see *why* an entity cannot be
       removed (`test_admin_housekeeping_decision_block.py`,
       `test_housekeeping_decision_block.py`)
+      <!-- behaviour: runtime-07 | tests: backend/tests/unit/api/test_admin_housekeeping_decision_block.py, backend/tests/unit/mcp/test_housekeeping_decision_block.py -->
 - [x] Run retention lists candidates with estimated byte sizes, exports as
       NDJSON, and purges terminal runs cascading to checkpoints; requires
       `confirm: true` (`run_retention.feature`)
+      <!-- behaviour: runtime-08 | tests: backend/tests/bdd/features/operations/run_retention.feature -->
 - [x] The run-retention export wire contract (FAR-1924): the body is NDJSON
       with exactly one run record per line, and the FINAL line is
       `{"_complete":true}`, emitted ONLY when the export stream ran to
@@ -114,6 +122,7 @@ purging old run data.
       in a `role="alert"` region, never as the generic export error nor as the
       status warning (`AdminRunRetentionView.spec.ts`,
       `tests/unit/api/test_admin_run_data_retention.py`)
+      <!-- behaviour: runtime-09 | tests: backend/tests/unit/api/test_admin_run_data_retention.py -->
 - [x] All three streaming exports (run-retention export, audit `/scan`,
       analytics `/scan`) prime their body generator through the shared
       `prime_stream` helper and re-emit it through the shared
@@ -125,9 +134,11 @@ purging old run data.
       hand-rolled subset (`test_db_error_handling.py`,
       `test_admin_run_data_retention.py`, `test_audit_scan_route.py`,
       `test_analytics_scan_route.py`)
+      <!-- behaviour: runtime-10 | tests: backend/tests/unit/api/test_db_error_handling.py, backend/tests/unit/api/test_admin_run_data_retention.py, backend/tests/unit/api/test_audit_scan_route.py, backend/tests/unit/api/test_analytics_scan_route.py -->
 - [x] Org sandbox concurrency is viewable/updatable on
       `GET/PUT /api/v1/admin/org/sandbox-concurrency` (clamped 1..100)
       (`admin.py`)
+      <!-- behaviour: runtime-11 | tests: none -->
 
 ## Known Gaps
 

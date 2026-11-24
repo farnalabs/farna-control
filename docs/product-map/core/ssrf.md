@@ -30,18 +30,24 @@ route, so it is tracked here rather than in the manifest registry.
 - [x] Strict URL pre-parsing before any resolution: rejects non-http(s)
       schemes, embedded userinfo credentials, missing hostname, and
       odd/out-of-range ports
+      <!-- behaviour: ssrf-01 | tests: none -->
 - [x] Canonical IP literals are validated directly (no DNS); private /
       internal / metadata literal targets fail closed with an actionable
       ValueError
+      <!-- behaviour: ssrf-02 | tests: none -->
 - [x] Non-canonical IP-literal encodings the resolver may reinterpret
       (decimal/hex integers, octal, abbreviated/overlong dotted-numeric,
       scope/percent-encoded zone ids) are rejected before reaching DNS
+      <!-- behaviour: ssrf-03 | tests: none -->
 - [x] A hostname that resolves to **any** blocked address is refused
       (fail-closed across the whole resolved set, IPv4 and IPv6)
+      <!-- behaviour: ssrf-04 | tests: none -->
 - [x] An empty resolution fails closed with a clear error - never a
       usable ``ips[0]`` IndexError crash
+      <!-- behaviour: ssrf-05 | tests: none -->
 - [x] DNS resolution is bounded (``SSRF_DNS_TIMEOUT``, default 10s); a
       hung or failed resolver fails closed rather than stalling the caller
+      <!-- behaviour: ssrf-06 | tests: none -->
 - [x] Hard NON-NEGOTIABLE blocked floor: link-local, multicast, IPv6
       site-local, AWS/GCP/Azure link-local metadata, CGNAT, benchmarking,
       current-network and Aliyun metadata ranges are blocked **before** any
@@ -49,41 +55,51 @@ route, so it is tracked here rather than in the manifest registry.
       it is blocked by default but remains allowlistable so a self-hosted
       deployment can reach a localhost model backend via
       ``SSRF_ALLOW_PRIVATE_RANGES`` (`ssrf.py` `_is_blocked_ip`)
+      <!-- behaviour: ssrf-07 | tests: none -->
 - [x] A configurable private-range allowlist (global
       ``SSRF_ALLOW_PRIVATE_RANGES`` + tenant-scoped ``allow_networks``
       overlay) may permit other private CIDRs, but can never weaken the
       hard floor; invalid entries are logged and skipped instead of failing
       config
+      <!-- behaviour: ssrf-08 | tests: none -->
 - [x] Model-backend save validation uses the operator-managed global policy for
       literal private targets while hostname resolution stays at the runtime
       pinned-client boundary; connector ``allowed_hosts`` remains a separate
       hostname restriction rather than private-IP authorization
+      <!-- behaviour: ssrf-09 | tests: none -->
 - [x] Tenant-scoped ``allow_networks`` layers on top of the global base,
       deduplicated, so a single ``is this address permitted?`` path serves
       every enforcement site
+      <!-- behaviour: ssrf-10 | tests: none -->
 - [x] Sync validation (``validate_outbound_url``, Pydantic validators /
       sync call sites) and async validation
       (``validate_outbound_url_async``, non-blocking ``loop.getaddrinfo``)
+      <!-- behaviour: ssrf-11 | tests: none -->
 - [x] Pinned transport - ``resolve_pinned_ip`` /
       ``pinned_async_transport`` / ``pinned_async_client`` and the synchronous
        ``pinned_http_transport_sync`` / ``pinned_http_client_sync`` factories resolve and
       validate once, then force the TCP connection to the validated
       address while keeping the **original** hostname for TLS SNI and
       certificate verification (the URL is never rewritten to the IP)
+      <!-- behaviour: ssrf-12 | tests: none -->
 - [x] Redirects default to not-followed; a redirect hop to an unpinned
       host raises ``UnpinnedHostError`` (fail-closed, never connect to an
       unvalidated destination)
+      <!-- behaviour: ssrf-13 | tests: none -->
 - [x] Host keys are normalized (lowercased, trailing dot stripped) so a
       ``rebind.example.`` host pins against the same key validation
       produced, without changing SNI/cert hostname
+      <!-- behaviour: ssrf-14 | tests: none -->
 - [x] ``trust_env=False`` is the safe default for the pinned transport (a
       trusted proxy would re-resolve the target server-side and defeat
       pinning); explicitly opting into proxy trust with a proxy env var
       present logs a loud warning
+      <!-- behaviour: ssrf-15 | tests: none -->
 - [x] Pinned hosts are re-resolved after ``SSRF_RESOLVE_TTL`` (default
       300s) so a decommissioned or changed IP self-heals without a restart;
       proxy environment variables are honored only when
       ``SSRF_TRUST_PROXY`` is enabled
+      <!-- behaviour: ssrf-16 | tests: none -->
 
 ## Known Gaps
 

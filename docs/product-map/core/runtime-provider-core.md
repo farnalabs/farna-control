@@ -59,22 +59,29 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
 ## Behaviors
 
 - [x] Runtime provider base contract (`base.py`): lifecycle, health, execution, teardown
+      <!-- behaviour: runtime-provider-core-01 | tests: none -->
 - [x] Provider registry/hub resolves the configured provider deterministically
       (explicit provider_type/hint match; `ProviderNotConfiguredError` otherwise)
+      <!-- behaviour: runtime-provider-core-02 | tests: none -->
 - [x] Built-in providers: `local`, `runner_docker` (aliases `docker`, `local_docker`), `e2b`, `kubernetes` (alias `k8s`, registered when the `kubernetes-asyncio` SDK and its env signal are present)
+      <!-- behaviour: runtime-provider-core-03 | tests: none -->
 - [x] Environment profiles CRUD (`/api/v1/environment-profiles`): list, create, get,
       update, delete, restore, and `POST /{id}/test` (SSE sandbox connectivity check) –
       input-validated, org-scoped, gated on the `environment_profiles` feature
+      <!-- behaviour: runtime-provider-core-04 | tests: none -->
 - [x] Graph validator rejects pipelines whose nodes need a capability the profile lacks
       (`test_environment_capabilities`)
+      <!-- behaviour: runtime-provider-core-05 | tests: none -->
 - [x] `sandbox_agent` node dispatch, crash-resume, and output-handling contracts
       (run model fields: node retry/resume markers)
+      <!-- behaviour: runtime-provider-core-06 | tests: none -->
 - [x] `ShellConnector` (a deprecated *connector type*, not a node type) is
       deprecated since ADR 044 (2026-07-16) with a runtime `DeprecationWarning`
       and a documented notice; existing ShellConnector pipelines continue running
       – new pipelines should use `sandbox_agent`. (No UI deprecation marker ships
       today: the pipeline editor's node vocabulary is
       `agent`/`manual`/`router`/`hitl`/`dispatch`, with no `shell` node.)
+      <!-- behaviour: runtime-provider-core-07 | tests: none -->
 - [x] Platform-provider matrix is BDD-exercised against the REAL runtime-provider
       seams network-free and DB-free (`provider_matrix.feature`):
       `build_hub` registers `local` unconditionally and gates `e2b` /
@@ -86,6 +93,7 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
       the valid vocabulary, a missing type is unresolvable); and the factory
       `initialise` loads docker-family configs under their config name, skips e2b
       without an api_key, and rejects unknown types
+      <!-- behaviour: runtime-provider-core-08 | tests: backend/tests/bdd/features/runtime_providers/provider_matrix.feature -->
 - [x] ADR 040 additive `RuntimeProviderError` family (FAR-1050 slice 1): typed
       members (`ProviderCapabilityUnsupportedError`, `WorkspaceGoneError`,
       `StreamingUnsupportedError`, `ArtifactTooLargeError`, `RateLimitedError`,
@@ -94,20 +102,24 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
       pre-existing `ProviderNotConfiguredError` / `UnknownProviderTypeError`
       config tree is deliberately NOT re-parented under the new base, so each
       dispatch catch-site stays reconciled
+      <!-- behaviour: runtime-provider-core-09 | tests: none -->
 - [x] `exec_command_stream` (D4 primitive) with a kill handle: async decoded
       chunks, `done` on every stream end, `exit_code` stays `None` until the END
       of a healthy stream (never a fabricated zero exit on a mid-stream
       engine/proxy drop), and the ABC default raises the typed
       `StreamingUnsupportedError` – never a raw `NotImplementedError` (ADR 040
       error-honesty carve-out)
+      <!-- behaviour: runtime-provider-core-10 | tests: none -->
 - [x] `destroy_workspace_by_ref` (ADR 040 substrate-level destroy): idempotent on
       already-destroyed / foreign refs (no-op success), confirmed-gone `True` /
       unconfirmed `False` best-effort (never raises), overridable via
       `AsyncSandbox.connect` on E2B, typed `ProviderCapabilityUnsupportedError`
       default
+      <!-- behaviour: runtime-provider-core-11 | tests: none -->
 - [x] `read_log_tail` (FAR-1050 R1): bounded tail read (`max_bytes` newest-end
       cap, 4k raw fallback, `b""` on invalid ref / fetch failure – never raises),
       with E2B's legacy `_fetch_sandbox_log_tail` content parity pinned
+      <!-- behaviour: runtime-provider-core-12 | tests: none -->
 - [x] `apply_isolation` + the frozen `IsolationPolicy` carrier (FAR-1050 R3): the
       single owner of the three in-sandbox controls – git-credential scoping,
       the selected-mode egress allowlist, and the read-only seal – replacing the
@@ -117,6 +129,7 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
       `ProviderCapabilityUnsupportedError` refusal on non-overriding providers;
       the carrier also carries `single_pr_per_run` (FAR-1273), the single
       carrier for the one-PR-per-run guard trigger
+      <!-- behaviour: runtime-provider-core-13 | tests: none -->
 - [x] Run-scoped one-PR-per-run `gh` guard (FAR-1264; trigger made explicit by
       FAR-1273): when the node carries `single_pr_per_run: true`, the engine
       threads the flag on the typed `IsolationPolicy` (the single carrier) to
@@ -180,6 +193,7 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
       predicate, the sentinel-only-gets-no-guard regression, and call-site
       routing/best-effort), with the e2b call site's own policy-flag read
       pinned in `tests/unit/core/runtime_provider/test_e2b_apply_isolation.py`
+      <!-- behaviour: runtime-provider-core-14 | tests: backend/tests/unit/pipeline_engine/test_sandbox_policy.py, backend/tests/unit/pipeline_engine/test_e2b_isolation_provider.py, backend/tests/unit/core/runtime_provider/test_e2b_apply_isolation.py -->
 - [x] The one-PR claim is RUN-scoped across MULTIPLE flagged nodes (FAR-1315):
       the FAR-1264 marker lives inside ONE sandbox, so two flagged nodes in one
       run previously allowed one PR per node (one claimable marker each). The
@@ -305,6 +319,7 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
       cancel-during-harvest findings), with
       `guard_owner` crossing `apply_isolation` into the ledger pinned in
       `tests/unit/core/runtime_provider/test_e2b_apply_isolation.py`
+      <!-- behaviour: runtime-provider-core-15 | tests: backend/tests/unit/pipeline_engine/test_sandbox_policy.py, backend/tests/unit/pipeline_engine/test_e2b_isolation_provider.py, backend/tests/unit/core/bundled_runner/test_runner_dispatch_node.py, backend/tests/unit/core/runtime_provider/test_e2b_apply_isolation.py -->
 - [x] One-PR-per-run: POST-RUN detection + an admin alert outside the sandbox
       (FAR-1274) – this DETECTS and alerts after the fact; it does **NOT
       prevent** a second PR. It is a stopgap until a preventive,
@@ -360,6 +375,7 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
       the alert; re-terminalization idempotency; a failed blob read never blocks
       the terminal write) and `tests/unit/db/test_notification_preferences.py`
       (admin-scope rows readable by org admins only)
+      <!-- behaviour: runtime-provider-core-16 | tests: backend/tests/unit/db/test_run_one_pr_per_run.py, backend/tests/unit/db/test_notification_preferences.py -->
 - [x] File-I/O primitives (FAR-1050 R2a): `read_file` / `write_file` /
       `list_files` / `get_info` (+ the frozen `WorkspaceFileInfo` value object)
       on the ABC – exec-based binary-safe defaults (base64 over the text exec
@@ -368,6 +384,7 @@ deprecation notice. The WorkspaceLease scaffolding was removed in FAR-587 (ADR 0
       `RuntimeProviderError` on a non-zero exit) with E2B native `sandbox.files`
       SDK overrides, all unit-covered and BDD-exercised against the REAL
       `LocalRuntimeProvider` exec backend (`file_io.feature`)
+      <!-- behaviour: runtime-provider-core-17 | tests: backend/tests/bdd/features/runtime_providers/file_io.feature -->
 
 ## Known Gaps
 

@@ -77,12 +77,97 @@ For **any** feature change (new feature, changed behavior, deprecated behavior):
 1. Update the manifest: add/update the route's `product_map` references and keep the
    `features:` registry description accurate (`frontend/src/manifest.yaml`).
 2. Update the behavior-tracker entry in this directory (`docs/product-map/`) – tick
-   verified behaviors, add tests to `code:`/`unit-tests:`/`bdd:`, and note new known
-   gaps. If the change adds a genuinely new feature, create a new entry here **and**
-   register it in `features:` (unless it is an infra-only surface with no UI route).
+   verified behaviors, bind each one to the test that proves it (see
+   [Behaviour bindings](#behaviour-bindings) below), add tests to
+   `code:`/`unit-tests:`/`bdd:`, and note new known gaps. If the change adds a
+   genuinely new feature, create a new entry here **and** register it in
+   `features:` (unless it is an infra-only surface with no UI route).
 3. Run the architecture suite so the graph stays consistent:
-   `uv run --project backend --no-sync pytest backend/tests/architecture/test_product_map*.py -q`
-4. Update the PRD if the change introduces new behavior (see CONTRIBUTING.md).
+   `uv run --project backend --no-sync pytest backend/tests/architecture/test_product_map*.py backend/tests/architecture/test_behaviour_bindings.py -q`
+4. Add a `Proves:` line to the PR body naming the test that proves the change (see
+   [Prove-the-fix convention](#prove-the-fix-convention) below).
+5. Update the PRD if the change introduces new behavior (see CONTRIBUTING.md).
+
+## Behaviour bindings
+
+A tick in the `## Behaviors` checklist used to be a human claim: nothing failed
+when the test behind it was deleted, was vacuous, or tested something else, and
+the frontmatter `status:` was typed by hand. Every behaviour now carries a
+**binding**: a stable id plus the test references that prove it, written as an
+HTML comment at the end of the bullet (invisible when the page renders).
+
+```markdown
+- [x] `GET /healthz` returns `{"status": "ok"}` and is advisory only
+      <!-- behaviour: health-checks-01 | tests: backend/tests/unit/api/test_health.py::test_healthz_ready_mounted -->
+```
+
+- **The id** is `<entry-file-stem>-<NN>`, numbered from the top of the entry's
+  Behaviors section. It is stable because it lives in the file: moving a
+  behaviour carries its id, and renumbering shows up as a baseline
+  stale-entry failure rather than silently rebinding to a different behaviour.
+- **`tests:`** is a comma-separated list of references, or `none`:
+
+  | Form | Meaning | Resolution |
+  | --- | --- | --- |
+  | `backend/tests/.../test_x.py::test_name` | node binding (the strong form) | the module exists and the function is defined in it |
+  | `backend/tests/.../test_x.py` | module binding (weaker, tolerated while backfilling) | the module exists and defines at least one test (or registers `scenarios(...)`) |
+  | `backend/tests/bdd/features/<x>.feature` | feature binding | a step module registers the file via `scenarios(...)` and at least one scenario executes |
+
+  A binding may not name a test the shared test-style lenses report as vacuous
+  (a pass-only `@then` step, a self-asserting BDD step, a duplicate test body).
+  `docs/product-map/unbound-behaviours.md` lists, per entry, every ticked
+  behaviour that has no clean binding yet and why.
+
+### Coverage status is derived, not typed
+
+`status: covered` is now checked against the bindings: every behaviour in the
+entry must be ticked and bound to a resolving, non-vacuous test. Any remaining
+shortfall is frozen in the shrink-only baseline
+`backend/tests/architecture/behaviour_bindings_baseline.json`, which can only
+shrink – binding a frozen behaviour fails the stale-entry check until its entry
+is removed, so an entry moves towards a provable `covered` and can never move
+away from one. `partial`/`gap` remain typed by a human.
+
+The gate is `backend/tests/architecture/test_behaviour_bindings.py`. It fails
+when a ticked behaviour has no resolvable binding and is not in the baseline,
+when any reference does not resolve, when a reference is vacuous, when a
+baseline entry has since become bound, and when the baseline or
+`unbound-behaviours.md` are not exactly what the regenerator produces.
+
+### Regenerating bindings, the baseline and the report
+
+```bash
+uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --all
+```
+
+`--write-markers` adds a marker to any behaviour that lacks one (backfilling
+from the test names in its text, the entry's `unit-tests:`/`bdd:` citations for
+disambiguation, and the test tree); `--write-baseline` and `--write-report`
+regenerate the baseline JSON and `unbound-behaviours.md`. Both artefacts are
+generated: never hand-edit them, and never widen the baseline to get green – a
+behaviour that genuinely has no test is a coverage gap, not a paperwork gap.
+
+## Prove-the-fix convention
+
+A PR that changes product code must name the test that proves it exists. When the
+diff touches `backend/src/**` or `frontend/src/**`, `scripts/run_check_prove_the_fix.py`
+(CI: the "Prove-the-fix marker" step in the backend-lint job) requires a line in
+the PR body of the form:
+
+```
+Proves: backend/tests/unit/api/test_health.py::test_healthz_ready_mounted
+```
+
+- One marker suffices; repeat the line for as many tests as the change needs.
+  Name one test per line.
+- Every named reference must be a pytest node id under `backend/tests/` and must
+  exist in the tree (the module defines that test). The check is deterministic
+  and uses no LLM: it reads the PR body and the changed-file list.
+- Only `backend/src/**` and `frontend/src/**` trigger the requirement. A PR
+  confined to `docs/`, `backend/tests/`, `frontend/tests/` or the repo root needs
+  no marker.
+- The test named should be the one that would FAIL without the change. A test
+  that already passed before the change proves nothing about it.
 
 ## Index – manifest feature registry (single source of truth)
 

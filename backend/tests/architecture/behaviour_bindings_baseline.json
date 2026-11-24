@@ -1,0 +1,1711 @@
+{
+  "schema_version": 1,
+  "description": "Product-map behaviours that cannot be bound to a resolving, non-vacuous test yet. Shrink-only: see docs/product-map/README.md.",
+  "generated_by": "scripts/run_behaviour_bindings_baseline.py --write-baseline",
+  "entries": {
+    "analytics-07": {
+      "entry": "docs/product-map/analytics/analytics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "analytics-08": {
+      "entry": "docs/product-map/analytics/analytics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "analytics-09": {
+      "entry": "docs/product-map/analytics/analytics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "analytics-13": {
+      "entry": "docs/product-map/analytics/analytics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-01": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-02": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-03": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-04": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-05": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-07": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-09": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-10": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "assistant-11": {
+      "entry": "docs/product-map/configure/assistant.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "audit-trail-01": {
+      "entry": "docs/product-map/audit/audit-trail.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "audit-trail-02": {
+      "entry": "docs/product-map/audit/audit-trail.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "audit-trail-04": {
+      "entry": "docs/product-map/audit/audit-trail.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "audit-trail-05": {
+      "entry": "docs/product-map/audit/audit-trail.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "audit-trail-06": {
+      "entry": "docs/product-map/audit/audit-trail.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "audit-trail-08": {
+      "entry": "docs/product-map/audit/audit-trail.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-02": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-03": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-04": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-05": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-06": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-07": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-08": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-09": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-11": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "auth-14": {
+      "entry": "docs/product-map/auth/auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "backup-restore-12": {
+      "entry": "docs/product-map/infra/backup-restore.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "connectors-02": {
+      "entry": "docs/product-map/configure/connectors.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "connectors-03": {
+      "entry": "docs/product-map/configure/connectors.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "connectors-04": {
+      "entry": "docs/product-map/configure/connectors.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "connectors-05": {
+      "entry": "docs/product-map/configure/connectors.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "connectors-07": {
+      "entry": "docs/product-map/configure/connectors.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "connectors-08": {
+      "entry": "docs/product-map/configure/connectors.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "container-deployment-11": {
+      "entry": "docs/product-map/infra/container-deployment.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "container-deployment-14": {
+      "entry": "docs/product-map/infra/container-deployment.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "container-deployment-18": {
+      "entry": "docs/product-map/infra/container-deployment.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "costs-02": {
+      "entry": "docs/product-map/monitor/costs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "costs-03": {
+      "entry": "docs/product-map/monitor/costs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "costs-04": {
+      "entry": "docs/product-map/monitor/costs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "costs-05": {
+      "entry": "docs/product-map/monitor/costs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "costs-06": {
+      "entry": "docs/product-map/monitor/costs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "costs-12": {
+      "entry": "docs/product-map/monitor/costs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "costs-13": {
+      "entry": "docs/product-map/monitor/costs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "costs-16": {
+      "entry": "docs/product-map/monitor/costs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "dashboard-02": {
+      "entry": "docs/product-map/build/dashboard.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "dashboard-05": {
+      "entry": "docs/product-map/build/dashboard.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "db-abstraction-core-01": {
+      "entry": "docs/product-map/core/db-abstraction-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "db-abstraction-core-02": {
+      "entry": "docs/product-map/core/db-abstraction-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "db-abstraction-core-03": {
+      "entry": "docs/product-map/core/db-abstraction-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "db-abstraction-core-04": {
+      "entry": "docs/product-map/core/db-abstraction-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "db-abstraction-core-05": {
+      "entry": "docs/product-map/core/db-abstraction-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "db-abstraction-core-06": {
+      "entry": "docs/product-map/core/db-abstraction-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-01": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-02": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-03": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-04": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-05": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-06": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-07": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-08": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-09": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-10": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-11": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-12": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-13": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "determination-14": {
+      "entry": "docs/product-map/build/determination.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "environments-02": {
+      "entry": "docs/product-map/environments/environments.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "environments-03": {
+      "entry": "docs/product-map/environments/environments.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "environments-04": {
+      "entry": "docs/product-map/environments/environments.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "environments-05": {
+      "entry": "docs/product-map/environments/environments.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "environments-09": {
+      "entry": "docs/product-map/environments/environments.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "environments-11": {
+      "entry": "docs/product-map/environments/environments.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "environments-12": {
+      "entry": "docs/product-map/environments/environments.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "environments-13": {
+      "entry": "docs/product-map/environments/environments.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-01": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-02": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-03": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-05": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-06": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-07": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-08": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-11": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-12": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-13": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-14": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-15": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-16": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-17": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evals-18": {
+      "entry": "docs/product-map/improve/evals.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-01": {
+      "entry": "docs/product-map/monitor/evidence.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-02": {
+      "entry": "docs/product-map/monitor/evidence.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-03": {
+      "entry": "docs/product-map/monitor/evidence.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-04": {
+      "entry": "docs/product-map/monitor/evidence.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-05": {
+      "entry": "docs/product-map/monitor/evidence.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-06": {
+      "entry": "docs/product-map/monitor/evidence.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-07": {
+      "entry": "docs/product-map/monitor/evidence.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-08": {
+      "entry": "docs/product-map/monitor/evidence.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-store-01": {
+      "entry": "docs/product-map/core/evidence-store.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-store-03": {
+      "entry": "docs/product-map/core/evidence-store.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-store-05": {
+      "entry": "docs/product-map/core/evidence-store.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-store-06": {
+      "entry": "docs/product-map/core/evidence-store.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-store-07": {
+      "entry": "docs/product-map/core/evidence-store.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-store-08": {
+      "entry": "docs/product-map/core/evidence-store.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-store-10": {
+      "entry": "docs/product-map/core/evidence-store.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "evidence-store-11": {
+      "entry": "docs/product-map/core/evidence-store.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "external-agent-registry-02": {
+      "entry": "docs/product-map/configure/external-agent-registry.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "feedback-02": {
+      "entry": "docs/product-map/improve/feedback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "feedback-03": {
+      "entry": "docs/product-map/improve/feedback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "feedback-04": {
+      "entry": "docs/product-map/improve/feedback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "feedback-05": {
+      "entry": "docs/product-map/improve/feedback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "feedback-06": {
+      "entry": "docs/product-map/improve/feedback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-01": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-02": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-03": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-04": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-05": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-06": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-07": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-08": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-09": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-10": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "governance-stack-11": {
+      "entry": "docs/product-map/governance/governance-stack.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-01": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-02": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-03": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-04": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-05": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-06": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-08": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-09": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-11": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-12": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-13": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-15": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-16": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "guardrails-17": {
+      "entry": "docs/product-map/configure/guardrails.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-01": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-02": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-03": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-04": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-05": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-06": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-07": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-08": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-09": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-10": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-11": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-12": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-13": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-14": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-15": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-16": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-17": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-18": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-19": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-20": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "health-checks-21": {
+      "entry": "docs/product-map/infra/health-checks.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-01": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-02": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-05": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-06": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-07": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-08": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-09": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-10": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-11": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-17": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-18": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-19": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-20": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-21": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-22": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-23": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-24": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-25": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-26": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-27": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-28": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "hitl-gates-29": {
+      "entry": "docs/product-map/hitl/hitl-gates.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "jwt-auth-01": {
+      "entry": "docs/product-map/auth/jwt-auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "jwt-auth-02": {
+      "entry": "docs/product-map/auth/jwt-auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "jwt-auth-03": {
+      "entry": "docs/product-map/auth/jwt-auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "jwt-auth-04": {
+      "entry": "docs/product-map/auth/jwt-auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "jwt-auth-05": {
+      "entry": "docs/product-map/auth/jwt-auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "jwt-auth-06": {
+      "entry": "docs/product-map/auth/jwt-auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "jwt-auth-07": {
+      "entry": "docs/product-map/auth/jwt-auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "jwt-auth-08": {
+      "entry": "docs/product-map/auth/jwt-auth.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "library-collections-02": {
+      "entry": "docs/product-map/library/library-collections.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "library-collections-04": {
+      "entry": "docs/product-map/library/library-collections.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "library-collections-05": {
+      "entry": "docs/product-map/library/library-collections.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "library-collections-06": {
+      "entry": "docs/product-map/library/library-collections.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "library-collections-09": {
+      "entry": "docs/product-map/library/library-collections.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "library-collections-11": {
+      "entry": "docs/product-map/library/library-collections.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "license-18": {
+      "entry": "docs/product-map/licensing/license.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "lifecycle-maps-09": {
+      "entry": "docs/product-map/pipelines/lifecycle-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "lifecycle-maps-10": {
+      "entry": "docs/product-map/pipelines/lifecycle-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-01": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-02": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-03": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-04": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-06": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-09": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-10": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-15": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-17": {
+      "entry": "docs/product-map/configure/mcp.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-server-registry-02": {
+      "entry": "docs/product-map/configure/mcp-server-registry.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "mcp-server-registry-13": {
+      "entry": "docs/product-map/configure/mcp-server-registry.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "model-backends-08": {
+      "entry": "docs/product-map/configure/model-backends.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "observability-03": {
+      "entry": "docs/product-map/observability/observability.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "observability-09": {
+      "entry": "docs/product-map/observability/observability.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "oidc-integration-01": {
+      "entry": "docs/product-map/auth/oidc-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "oidc-integration-02": {
+      "entry": "docs/product-map/auth/oidc-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "oidc-integration-03": {
+      "entry": "docs/product-map/auth/oidc-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "oidc-integration-04": {
+      "entry": "docs/product-map/auth/oidc-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "oidc-integration-05": {
+      "entry": "docs/product-map/auth/oidc-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "oidc-integration-06": {
+      "entry": "docs/product-map/auth/oidc-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "onboarding-01": {
+      "entry": "docs/product-map/auth/onboarding.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "onboarding-02": {
+      "entry": "docs/product-map/auth/onboarding.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "onboarding-03": {
+      "entry": "docs/product-map/auth/onboarding.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "onboarding-04": {
+      "entry": "docs/product-map/auth/onboarding.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "onboarding-05": {
+      "entry": "docs/product-map/auth/onboarding.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "onboarding-06": {
+      "entry": "docs/product-map/auth/onboarding.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "onboarding-08": {
+      "entry": "docs/product-map/auth/onboarding.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-01": {
+      "entry": "docs/product-map/admin/org.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-02": {
+      "entry": "docs/product-map/admin/org.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-08": {
+      "entry": "docs/product-map/admin/org.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-01": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-02": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-03": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-04": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-05": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-07": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-08": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-09": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-10": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "org-entity-11": {
+      "entry": "docs/product-map/teams/org-entity.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-01": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-02": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-03": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-04": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-05": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-06": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-07": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-11": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-19": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-20": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-21": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipeline-diff-rollback-22": {
+      "entry": "docs/product-map/pipelines/pipeline-diff-rollback.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipelines-01": {
+      "entry": "docs/product-map/pipelines/pipelines.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "pipelines-03": {
+      "entry": "docs/product-map/pipelines/pipelines.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "plugins-01": {
+      "entry": "docs/product-map/admin/plugins.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "plugins-02": {
+      "entry": "docs/product-map/admin/plugins.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "plugins-03": {
+      "entry": "docs/product-map/admin/plugins.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "plugins-04": {
+      "entry": "docs/product-map/admin/plugins.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "plugins-05": {
+      "entry": "docs/product-map/admin/plugins.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "plugins-06": {
+      "entry": "docs/product-map/admin/plugins.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "plugins-10": {
+      "entry": "docs/product-map/admin/plugins.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "plugins-12": {
+      "entry": "docs/product-map/admin/plugins.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "product-analytics-06": {
+      "entry": "docs/product-map/admin/product-analytics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "product-analytics-09": {
+      "entry": "docs/product-map/admin/product-analytics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "product-analytics-14": {
+      "entry": "docs/product-map/admin/product-analytics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "risk-assessment-01": {
+      "entry": "docs/product-map/monitor/risk-assessment.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "risk-assessment-02": {
+      "entry": "docs/product-map/monitor/risk-assessment.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "risk-assessment-03": {
+      "entry": "docs/product-map/monitor/risk-assessment.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "risk-assessment-04": {
+      "entry": "docs/product-map/monitor/risk-assessment.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "risk-assessment-05": {
+      "entry": "docs/product-map/monitor/risk-assessment.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-01": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-02": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-03": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-04": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-05": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-06": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-07": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-08": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-09": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-10": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-11": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-12": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-13": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "router-hitl-nodes-14": {
+      "entry": "docs/product-map/pipelines/router-hitl-nodes.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "run-context-01": {
+      "entry": "docs/product-map/core/run-context.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "run-context-02": {
+      "entry": "docs/product-map/core/run-context.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "run-context-03": {
+      "entry": "docs/product-map/core/run-context.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "run-context-04": {
+      "entry": "docs/product-map/core/run-context.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "run-context-05": {
+      "entry": "docs/product-map/core/run-context.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "run-context-06": {
+      "entry": "docs/product-map/core/run-context.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "run-context-07": {
+      "entry": "docs/product-map/core/run-context.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "run-context-08": {
+      "entry": "docs/product-map/core/run-context.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runs-02": {
+      "entry": "docs/product-map/build/runs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runs-05": {
+      "entry": "docs/product-map/build/runs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runs-06": {
+      "entry": "docs/product-map/build/runs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runs-07": {
+      "entry": "docs/product-map/build/runs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runs-09": {
+      "entry": "docs/product-map/build/runs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runs-13": {
+      "entry": "docs/product-map/build/runs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runs-23": {
+      "entry": "docs/product-map/build/runs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runs-27": {
+      "entry": "docs/product-map/build/runs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-02": {
+      "entry": "docs/product-map/system/runtime.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-03": {
+      "entry": "docs/product-map/system/runtime.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-04": {
+      "entry": "docs/product-map/system/runtime.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-11": {
+      "entry": "docs/product-map/system/runtime.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-01": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-02": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-03": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-04": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-05": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-06": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-07": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-09": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-10": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-11": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-12": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "runtime-provider-core-13": {
+      "entry": "docs/product-map/core/runtime-provider-core.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "saml-integration-01": {
+      "entry": "docs/product-map/auth/saml-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "saml-integration-02": {
+      "entry": "docs/product-map/auth/saml-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "saml-integration-03": {
+      "entry": "docs/product-map/auth/saml-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "saml-integration-04": {
+      "entry": "docs/product-map/auth/saml-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "saml-integration-05": {
+      "entry": "docs/product-map/auth/saml-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "saml-integration-06": {
+      "entry": "docs/product-map/auth/saml-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "saml-integration-07": {
+      "entry": "docs/product-map/auth/saml-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "saml-integration-08": {
+      "entry": "docs/product-map/auth/saml-integration.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "schemas-01": {
+      "entry": "docs/product-map/schemas/schemas.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "schemas-02": {
+      "entry": "docs/product-map/schemas/schemas.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "schemas-06": {
+      "entry": "docs/product-map/schemas/schemas.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "scim-provisioning-02": {
+      "entry": "docs/product-map/auth/scim-provisioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "scim-provisioning-03": {
+      "entry": "docs/product-map/auth/scim-provisioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "scim-provisioning-06": {
+      "entry": "docs/product-map/auth/scim-provisioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "scim-provisioning-08": {
+      "entry": "docs/product-map/auth/scim-provisioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-01": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-02": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-03": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-04": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-05": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-06": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-07": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-08": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-09": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-10": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-11": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "secrets-backend-12": {
+      "entry": "docs/product-map/core/secrets-backend.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-01": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-02": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-03": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-04": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-05": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-06": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-07": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-08": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-09": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "snapshot-versioning-10": {
+      "entry": "docs/product-map/pipelines/snapshot-versioning.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-01": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-02": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-03": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-04": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-05": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-06": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-07": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-08": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-09": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-10": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-11": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-12": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-13": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-14": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "sso-provider-ui-15": {
+      "entry": "docs/product-map/auth/sso-provider-ui.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-01": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-02": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-03": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-04": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-05": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-06": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-07": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-08": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-09": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-10": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-11": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-12": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-13": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-14": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-15": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "ssrf-16": {
+      "entry": "docs/product-map/core/ssrf.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "support-diagnostics-01": {
+      "entry": "docs/product-map/infra/support-diagnostics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "support-diagnostics-02": {
+      "entry": "docs/product-map/infra/support-diagnostics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "support-diagnostics-10": {
+      "entry": "docs/product-map/infra/support-diagnostics.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-config-01": {
+      "entry": "docs/product-map/system/system-config.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-01": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-04": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-10": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-11": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-16": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-22": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-23": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-24": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-25": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-26": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-31": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-32": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-33": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-maps-36": {
+      "entry": "docs/product-map/pipelines/system-maps.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "system-orgs-06": {
+      "entry": "docs/product-map/system/system-orgs.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-01": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-03": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-06": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-07": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-08": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-09": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-10": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-11": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-12": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-13": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-14": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-15": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-16": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-17": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-18": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-19": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "trigger-engine-23": {
+      "entry": "docs/product-map/triggers/trigger-engine.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "variants-04": {
+      "entry": "docs/product-map/improve/variants.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "variants-05": {
+      "entry": "docs/product-map/improve/variants.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "variants-08": {
+      "entry": "docs/product-map/improve/variants.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "variants-09": {
+      "entry": "docs/product-map/improve/variants.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "variants-11": {
+      "entry": "docs/product-map/improve/variants.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "variants-12": {
+      "entry": "docs/product-map/improve/variants.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "variants-13": {
+      "entry": "docs/product-map/improve/variants.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    }
+  }
+}

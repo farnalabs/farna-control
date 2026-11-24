@@ -44,34 +44,49 @@ incident-response playbook as the prevention control for IdP-initiated SSO valid
 ## Behaviors
 
 - [x] Admin can view the list of all configured SSO providers with type badges (O / S)
+      <!-- behaviour: sso-provider-ui-01 | tests: none -->
 - [x] Admin can add an OIDC provider (client ID, client secret, discovery URL, scopes)
+      <!-- behaviour: sso-provider-ui-02 | tests: none -->
 - [x] Admin can add a SAML 2.0 provider (metadata URL, metadata XML, entity ID)
+      <!-- behaviour: sso-provider-ui-03 | tests: none -->
 - [x] Provider form shows conditional fields based on selected type (OIDC vs SAML)
+      <!-- behaviour: sso-provider-ui-04 | tests: none -->
 - [x] Common fields per provider: name, auto-provision toggle, default role
       (operator/runner); group-to-team mappings are managed through the admin API
       (`PUT`/`GET /api/v1/admin/sso/providers/{provider_id}/group-mappings`), not
       the provider form
+      <!-- behaviour: sso-provider-ui-05 | tests: none -->
 - [x] Admin can edit, enable/disable, and delete an SSO provider (confirmation dialog)
+      <!-- behaviour: sso-provider-ui-06 | tests: none -->
 - [x] Admin can test an SSO provider connection – OIDC resolves the discovery URL,
       SAML parses the metadata XML
+      <!-- behaviour: sso-provider-ui-07 | tests: none -->
 - [x] Adds/edits/deletes/toggles raise audit events
+      <!-- behaviour: sso-provider-ui-08 | tests: none -->
 - [x] SSO provider management is admin-only (403 for non-admin)
+      <!-- behaviour: sso-provider-ui-09 | tests: none -->
 - [x] Duplicate provider name → 409 (with FOR UPDATE lock); empty update body → 400;
       invalid provider type/default role → 422; provider not found → 404
+      <!-- behaviour: sso-provider-ui-10 | tests: none -->
 - [x] ProgrammingError → 501 and SQLAlchemyError → 503 on the admin CRUD routes
+      <!-- behaviour: sso-provider-ui-11 | tests: none -->
 - [x] OIDC callback exchanges the code, verifies HMAC-signed state (CSRF), and issues a
       JWT pair; SAML ACS parses `SAMLResponse`, validates the assertion, and issues JWTs
+      <!-- behaviour: sso-provider-ui-12 | tests: none -->
 - [x] JIT provisioning creates the user with the provider's default role; group
       mappings apply at provisioning time
+      <!-- behaviour: sso-provider-ui-13 | tests: none -->
 - [x] Configured SSO providers surface on the login page as buttons – `LoginView.vue`
       calls `GET /api/v1/auth/sso/providers` on mount and renders an OIDC button per
       advertised provider (linking to `/api/v1/auth/oidc/{provider}/login`) plus a SAML
       button when SAML is enabled; when the feature is unavailable (the pre-auth
       discovery endpoint answers 200 with an empty provider list, never a 401/402)
       or no provider is advertised, the page stays on password login (fails closed)
+      <!-- behaviour: sso-provider-ui-14 | tests: none -->
 - [x] Deleting a provider warns that already-signed-in users are NOT signed out – their
       sessions remain valid until they expire and only new sign-ins through the provider
       are blocked (`settings-sso-delete-session-warning` in the delete-confirmation dialog)
+      <!-- behaviour: sso-provider-ui-15 | tests: none -->
 
 ## Known Gaps
 

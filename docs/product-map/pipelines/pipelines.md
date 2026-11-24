@@ -74,24 +74,30 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
 
 - [x] Pipeline creation supports minimal, LLM-node, manual-node and run_context-default
       configs; duplicate names are refused (409) (`create.feature`)
+      <!-- behaviour: pipelines-01 | tests: none -->
 - [x] Pipeline CRUD is team/org scoped and versioned, with copy errors surfaced
       (`crud.feature`, `test_pipeline_copy_errors.py`, `test_pipeline_patch_updated_at.py`)
+      <!-- behaviour: pipelines-02 | tests: backend/tests/unit/api/test_pipeline_copy_errors.py, backend/tests/unit/api/test_pipeline_patch_updated_at.py -->
 - [x] Folder security model (ADR 038): `PipelineFolder` is org-scoped only – no
       `owner_team_id`, no `visibility`, no security cascade. Pipeline ownership
       is explicit on the pipeline; folders are a UI organization concept. Any
       future proposal for folder-level security must address ADR 038's rationale
       for rejecting folders-as-security.
+      <!-- behaviour: pipelines-03 | tests: none -->
 - [x] Node types – standard agent, manual (pauses the run to `awaiting_human` and
       resumes with the human's output), HITL gate (interrupts the run to
       `awaiting_human` for approval) – are authorable and execute per type
       (`node_types.feature`)
+      <!-- behaviour: pipelines-04 | tests: backend/tests/bdd/features/pipelines/node_types.feature -->
 - [x] Conditional transitions and parallel fan-out route state between nodes
       (`conditional_transitions.feature`)
+      <!-- behaviour: pipelines-05 | tests: backend/tests/bdd/features/pipelines/conditional_transitions.feature -->
 - [x] Concurrency and error-recovery guard the authored graph
       (`error_recovery.feature`; concurrency admission is unit-covered in
       `tests/unit/pipeline_engine` and surface-exercised by the
       `max_concurrent_runs` refusal scenario in `run_sequential.feature`) – graph/config
       validation is unit-covered (`tests/unit/graph_validator`, `test_pipelines_endpoint.py`)
+      <!-- behaviour: pipelines-06 | tests: backend/tests/bdd/features/pipelines/error_recovery.feature, backend/tests/bdd/features/pipelines/run_sequential.feature, backend/tests/unit/api/test_pipelines_endpoint.py -->
 - [x] Scheduling and webhook triggers start runs from the authored graph
       (owned by `feat-triggers`: cron CRUD is BDD-exercised here in
       `scheduling.feature`, while full cron/polling/webhook delivery surfaces
@@ -101,6 +107,7 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
       failed run from its last checkpoint – now BDD-exercised end to end
       (`checkpoint_resume.feature`) and unit-covered
       (`tests/unit/pipeline_engine` recovery suite)
+      <!-- behaviour: pipelines-07 | tests: backend/tests/bdd/features/pipelines/scheduling.feature, backend/tests/bdd/features/triggers/cron.feature, backend/tests/bdd/features/triggers/polling.feature, backend/tests/bdd/features/triggers/webhook_hmac.feature, backend/tests/bdd/features/triggers/flood_protection.feature, backend/tests/bdd/features/pipelines/checkpoint_resume.feature -->
 - [x] Run lifecycle is BDD-exercised end to end: a manual trigger creates a pending
       run (202), the engine moves it pending → running, a clean completion lands on
       the terminal `complete` status, an unhandled node exception lands on `failed`
@@ -112,6 +119,7 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
       surfaces 429 through the typed `RateLimitConflictError` path, while the pipeline
       `max_concurrent_runs` cap is enforced at dispatch (an over-capacity run parks
       with the `pipeline_capacity` marker rather than 429 at trigger time)
+      <!-- behaviour: pipelines-08 | tests: backend/tests/bdd/features/pipelines/run_lifecycle.feature, backend/tests/bdd/features/pipelines/run_sequential.feature -->
 - [x] Per-pipeline Paused execution state (FAR-1530): a pipeline can be PRESENT and
       VISIBLE but NON-EXECUTING - deliberately distinct from `archived_at` (hidden) and
       the ORG-level `triggers_paused` kill-switch. `run_enabled` (default true) is the
@@ -127,12 +135,15 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
       (`backend/tests/unit/db/test_pipeline_pause_resume_crud.py`,
       `backend/tests/unit/api/test_pipelines_routes_coverage.py`,
       `backend/tests/unit/db/test_pipeline_state_gate.py`)
+      <!-- behaviour: pipelines-09 | tests: backend/tests/unit/db/test_pipeline_pause_resume_crud.py, backend/tests/unit/api/test_pipelines_routes_coverage.py, backend/tests/unit/db/test_pipeline_state_gate.py -->
 - [x] Node categories: deleting an unreferenced category succeeds, deleting one still
       referenced by a pipeline node is refused (409) with the referencing pipeline listed,
       and viewers cannot delete categories (403) (`admin/node-categories.feature`)
+      <!-- behaviour: pipelines-10 | tests: backend/tests/bdd/features/admin/node-categories.feature -->
 - [x] Graph validation and run-time enforcement are unit-covered under
       `tests/unit/graph_validator` and `tests/unit/pipeline_engine`
       (`test_pipeline_execution.py`, `test_pipeline_node_conversion.py`)
+      <!-- behaviour: pipelines-11 | tests: backend/tests/unit/test_pipeline_execution.py, backend/tests/unit/test_pipeline_node_conversion.py -->
 - [x] Pipeline graphs are written against a canonical node/edge contract
       (FAR-2457): the editor validates the graph payload on whole-graph saves
       and edge saves (and before computing an auto-layout) through
@@ -155,6 +166,7 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
       `frontend/src/types/pipeline-graph.ts`,
       `backend/tests/unit/core/test_graph_cache.py`,
       `frontend/src/__tests__/graph-schema.spec.ts`)
+      <!-- behaviour: pipelines-12 | tests: backend/tests/unit/core/test_graph_cache.py -->
 - [x] Sandbox `agent_commands` LIST items ending with a heredoc terminator are
       rejected at save time with code `SANDBOX_HEREDOC_TERMINATOR_IN_LIST_ITEM`
       – list items are joined with `commands_concatenation_string`, so a
@@ -163,6 +175,7 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
       operator semantics (reject, never clamp – same precedent as FAR-511); a
       scalar `agent_command` is unaffected because there is no join
       (FAR-664, `backend/tests/unit/graph_validator/test_edges_and_sandbox_validation.py`)
+      <!-- behaviour: pipelines-13 | tests: backend/tests/unit/graph_validator/test_edges_and_sandbox_validation.py -->
 - [x] Save-time graph validation is BDD-exercised against the real
       `GraphValidator.validate_definition` surface (mocked session – the same
       DB-free pattern as `tests/unit/graph_validator`): a graph with no nodes or
@@ -171,6 +184,7 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
       node is rejected (`TOPOLOGY_UNKNOWN_TARGET`), and a minimal single-node
       graph is accepted (`validation.feature`,
       `steps/test_pipeline_graph_validation.py`)
+      <!-- behaviour: pipelines-14 | tests: backend/tests/bdd/features/pipelines/validation.feature, backend/tests/bdd/steps/test_pipeline_graph_validation.py -->
 - [x] Governed CI-runner dispatch (FAR-1141, ADR-042): the `dispatch` node
       type and any binding that routes the `dispatch` verb fire a connector
       operation on a CI-runner connector (`trigger_run` / `get_run_status` /
@@ -198,6 +212,7 @@ pipeline CRUD and the versioned snapshot endpoints (`feat-pipelines-pipeline-ver
       backend/tests/unit/pipeline_engine/test_dispatch_composed_e2e.py,
       backend/tests/unit/connectors/test_ci_runner.py,
       backend/tests/unit/graph_validator/test_graph_validator.py`)
+      <!-- behaviour: pipelines-15 | tests: backend/tests/unit/pipeline_engine/test_dispatch_guards.py, backend/tests/unit/pipeline_engine/test_dispatch_composed_e2e.py, backend/tests/unit/connectors/test_ci_runner.py, backend/tests/unit/graph_validator/test_graph_validator.py -->
 
 ## Known Gaps
 

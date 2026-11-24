@@ -37,21 +37,28 @@ and org-scoped tenant context injection.
       `execute` helpers, the abstract `apply_tenant_filter` hook and the shared
       concrete `set_org_context` helper used by the generic and Postgres
       repositories
+      <!-- behaviour: db-abstraction-core-01 | tests: none -->
 - [x] `GenericRepository` works across backends (explicit `WHERE organisation_id`
       via `apply_tenant_filter`); `PostgresRepository` overrides only
       `apply_tenant_filter` (returns the statement unchanged - RLS does the
       filtering), while the shared `BaseRepository.set_org_context` →
       `db/rls.set_rls_org` writes `set_config('app.organisation_id', …, true)` on
       Postgres for transaction-local tenant isolation
+      <!-- behaviour: db-abstraction-core-02 | tests: none -->
 - [x] `set_org_context` requires an active transaction (raises otherwise) and skips
       the DB call when a non-Postgres backend is active
+      <!-- behaviour: db-abstraction-core-03 | tests: none -->
 - [x] `apply_tenant_filter` injects a `WHERE organisation_id = ...` predicate for
       org-scoped entities; skips entities without an org column and handles joined
       multi-org entities
+      <!-- behaviour: db-abstraction-core-04 | tests: none -->
 - [x] Advisory locks are backend-portable (`locks.py`)
+      <!-- behaviour: db-abstraction-core-05 | tests: none -->
 - [x] ALTER/revision path is Alembic-migratable against Postgres (migrations dir)
+      <!-- behaviour: db-abstraction-core-06 | tests: none -->
 - [x] Multi-backend conformance is exercised by the `multi_backend` BDD feature and
       `test_multi_backend_bdd.py`
+      <!-- behaviour: db-abstraction-core-07 | tests: backend/tests/unit/db/test_multi_backend_bdd.py -->
 
 ## Known Gaps
 

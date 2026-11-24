@@ -439,6 +439,42 @@ jobs:
         # a static data-testid without declaring it in the manifest went red
         # ~10 minutes later and the Branch Fixer patched the manifest.
         run: uv run --no-build --no-sync python -m pytest tests/architecture/test_product_map_consistency.py -q --tb=short -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+      - name: Prove-the-fix marker (FAR-2701)
+        # A PR that changes product source (backend/src/** or frontend/src/**)
+        # must name the test that proves it, as a line in the PR body:
+        #     Proves: backend/tests/<path>/test_<module>.py::test_<name>
+        # The check is deterministic (no model): it reads the body and the
+        # changed-file list, then verifies every named reference is a test that
+        # exists in the tree. A green PR whose new behaviour nothing asserts is
+        # the exact failure this closes; docs/product-map/README.md documents the
+        # convention. PR-only: a push to main has no PR body, and main is gated
+        # by the PR that merged it.
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$PR_BODY" > /tmp/pr-body.md
+          git diff --name-only "$BASE_SHA...$HEAD_SHA" > /tmp/changed-files.txt
+          uv run --no-build --project backend --no-sync python scripts/run_check_prove_the_fix.py \
+            --pr-body /tmp/pr-body.md --changed-files /tmp/changed-files.txt
+      - name: Behaviour-bindings baseline may only shrink (FAR-2701)
+        # The baseline test itself catches an entry that has since become bound
+        # (the accidental case). This catches the deliberate one: unbinding a
+        # product-map behaviour and freezing it in the same change. The baseline
+        # is a shrink-only ratchet (like the FAR-2699 group), so an ADDED id is a
+        # loosening; a removed id is a legitimate tightening. PR-only: the base
+        # revision is the PR's base commit, which is always resolvable here.
+        if: github.event_name == 'pull_request'
+        working-directory: .
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: uv run --no-build --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --check-base "$BASE_SHA"
       - name: Trivy filesystem scan (dependency CVEs + misconfigs)
         uses: aquasecurity/trivy-action@d2a0b60797ff03db6132bd4e2b293f9b37081297
         # Pin the vulnerability DB to the canonical GHCR repository instead of

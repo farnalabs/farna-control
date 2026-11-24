@@ -41,6 +41,7 @@ formatted value columns. All strings are i18n-backed and status regions use
       `RiskAssessmentView.vue` fetches risk assessment data via the evidence
       store and renders facets, summary cards, and a sortable table with
       i18n-backed strings and `role=status`/`aria-live` status regions
+      <!-- behaviour: risk-assessment-01 | tests: none -->
 - [x] Facet filters (key prefix, pipeline, time window, action) drive
       server-side filtering through the risk assessment store and update URL
       query params for deep-linking. Deep-link hydration accepts ONLY values
@@ -58,6 +59,7 @@ formatted value columns. All strings are i18n-backed and status regions use
       `frontend/src/views/RiskAssessmentView.vue`,
       `frontend/src/components/risk-assessment/RiskAssessmentFacets.vue`,
       `frontend/src/__tests__/RiskAssessmentView.spec.ts`)
+      <!-- behaviour: risk-assessment-02 | tests: none -->
 - [x] The pipeline facet loads EVERY selectable pipeline, not just the first
       page: the list endpoint ignores ``limit`` and caps ``page_size`` at 100,
       so the view walks the offset pages (``page_size=100``, bounded at 20
@@ -68,13 +70,16 @@ formatted value columns. All strings are i18n-backed and status regions use
       it as complete
       (`frontend/src/views/RiskAssessmentView.vue`,
       `frontend/src/__tests__/RiskAssessmentView.spec.ts`)
+      <!-- behaviour: risk-assessment-03 | tests: none -->
 - [x] Summary card displays total rows and per-action counts (block, warn,
       continue, escalate) with facet degradation indicator and time window note
+      <!-- behaviour: risk-assessment-04 | tests: none -->
 - [x] Sortable table renders evidence rows with timestamp, key, action badge,
       subject, and formatted value columns; empty state handled. The action
       badge renders the gate action resolved server-side from
       `policy_gate_decisions` (never a key-prefix guess), and sortable headers
       are buttons carrying `aria-sort` so keyboard users can sort
+      <!-- behaviour: risk-assessment-05 | tests: none -->
 
 ## Known Gaps
 

@@ -35,18 +35,24 @@ API surface ships and is gated by the `plugin_management` feature and the
 - [x] Plugins are discovered at startup and available through the registry's
       `list_plugins` / `get_plugin` queries
       (`backend/src/farna/core/plugin_registry/__init__.py`)
+      <!-- behaviour: plugins-01 | tests: none -->
 - [x] `GET /api/v1/plugins` lists every discovered plugin with
       `PLUGIN_ID`, `display_name`, `description`, `version`, `capabilities` and
       per-plugin health (patched-registry BDD + unit tests)
+      <!-- behaviour: plugins-02 | tests: none -->
 - [x] `GET /api/v1/plugins/{plugin_id}` returns the full manifest plus health
       for a single plugin, and 404s for an unknown id
+      <!-- behaviour: plugins-03 | tests: none -->
 - [x] `GET /api/v1/plugins/{plugin_id}/health` returns `{ok, detail, checked_at}`
       and 404s with `Plugin not found` for an unknown id
+      <!-- behaviour: plugins-04 | tests: none -->
 - [x] An entry point referencing a package with no installed metadata
       (`dist is None`) is surfaced as an unhealthy plugin with a descriptive
       detail - broken entry points are never silently dropped from the registry
+      <!-- behaviour: plugins-05 | tests: none -->
 - [x] An entry point whose `load()` raises records `Failed to load entry point …`
       and is surfaced unhealthy through `health_check`
+      <!-- behaviour: plugins-06 | tests: none -->
 - [x] NO distribution metadata problem can abort discovery: `dist.name` /
       `dist.metadata` read and parse the distribution's `METADATA` file from
       disk, and a corrupt or half-written `.dist-info` (interrupted install,
@@ -59,12 +65,14 @@ API surface ships and is gated by the `plugin_management` feature and the
       where an escaping raise made the whole instance unbootable because of one
       broken third-party package
       (`test_plugin_registry.py::test_unreadable_distribution_metadata_*`)
+      <!-- behaviour: plugins-07 | tests: backend/tests/unit/plugin_registry/test_plugin_registry.py::test_unreadable_distribution_metadata_does_not_abort_discovery, backend/tests/unit/plugin_registry/test_plugin_registry.py::test_unreadable_distribution_metadata_is_surfaced_unhealthy -->
 - [x] Unexpected failures from the entry-point provider or malformed entry-point
       objects are fail-soft: discovery logs the provider error and returns an
       empty discovery result, while a broken entry point is surfaced as an
       unhealthy `unknown-entry-point` record and healthy siblings continue
       scanning (`test_plugin_registry.py::test_discover_plugins_swallows_unexpected_entry_point_query_error`,
       `test_unreadable_entry_point_attributes_do_not_abort_discovery`)
+      <!-- behaviour: plugins-08 | tests: backend/tests/unit/plugin_registry/test_plugin_registry.py::test_discover_plugins_swallows_unexpected_entry_point_query_error -->
 - [x] Builders are only known to be *callable*, so `build_connector` /
       `build_model_backend` label a failing builder safely: a callable object, a
       `functools.partial` or any other `__name__`-less callable still yields the
@@ -78,12 +86,15 @@ API surface ships and is gated by the `plugin_management` feature and the
       `test_far1129_cap_plugins_registry.py` drives a REAL installed plugin whose
       entry point resolves to a callable-object builder - the state no in-repo
       unit test constructs, because every in-repo builder is a `def`)
+      <!-- behaviour: plugins-09 | tests: backend/tests/unit/plugin_registry/test_plugin_registry.py::test_connector_builder_without_dunder_name_still_raises_runtime_error, backend/tests/unit/plugin_registry/test_plugin_registry.py::test_model_backend_builder_without_dunder_name_still_raises_runtime_error, backend/tests/integration/test_far1129_cap_plugins_registry.py -->
 - [x] The routes are gated behind `require_feature("plugin_management")` and
       `require_permission("plugin.list")`
+      <!-- behaviour: plugins-10 | tests: none -->
 - [x] The `plugin_management` feature gate FIRES: all three endpoints return 402
       when the feature is disabled on the plan (negative-path tests - the gate
       was previously declared but never observed to deny)
       (`backend/tests/unit/api/test_plugin_registry_bdd.py`)
+      <!-- behaviour: plugins-11 | tests: backend/tests/unit/api/test_plugin_registry_bdd.py -->
 - [x] The `/admin/plugins` view is READ-ONLY: it lists plugins and their health
       and offers no install / enable / disable / uninstall control, because
       lifecycle management is pip-managed and deliberately has no registry API
@@ -91,6 +102,7 @@ API surface ships and is gated by the `plugin_management` feature and the
       `frontend/src/__tests__/AdminPluginsView.spec.ts`; a toggle once shipped
       that called a non-existent `PUT /api/v1/plugins/{id}/toggle` and was
       removed)
+      <!-- behaviour: plugins-12 | tests: none -->
 
 ## Known Gaps
 

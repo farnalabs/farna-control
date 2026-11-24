@@ -43,8 +43,10 @@ clients.
       consumed with compare-and-swap; brute-force rate limiting applies exponential
       backoff per IP (`backend/src/farna/api/routes/auth.py`,
       `backend/tests/unit/api/test_auth_routes_coverage.py`)
+      <!-- behaviour: auth-01 | tests: backend/tests/unit/api/test_auth_routes_coverage.py -->
 - [x] Demo auto-login mints short-lived tokens (2h TTL, 4h hard cap) with no
       refresh token; all failures return 404 to hide the feature
+      <!-- behaviour: auth-02 | tests: none -->
 - [x] Token rotation validates refresh claims, detects token theft (reused sequence
       numbers blacklist the family), and returns new access+refresh tokens. A stale
       sequence presented within the FAR-819 reuse grace window (inside
@@ -53,6 +55,7 @@ clients.
       (reuse_replay=True for logging). Reuse outside the window, ahead of max, or
       from a blacklisted family blacklists the family as theft
       (`backend/src/farna/db/crud/token_family.py`)
+      <!-- behaviour: auth-03 | tests: none -->
 - [x] Cross-tab refresh serialization: the refresh token rides the httpOnly
       `modulo_refresh` cookie (FAR-1197 - no longer persisted in localStorage),
       which the browser shares across tabs, so a rotation by one tab is
@@ -62,6 +65,7 @@ clients.
       single-flight promise, falling back to a direct refresh when Web Locks are
       unavailable (older browsers, test environments)
       (`frontend/src/lib/api/auth.ts`)
+      <!-- behaviour: auth-04 | tests: none -->
 - [x] Reuse-interval refresh (client view): a within-window stale refresh token
       is accepted by the server, so the frontend does not retry or re-mint –
       `attemptTokenRefresh` POSTs once and consumes the returned pair; outside
@@ -70,26 +74,35 @@ clients.
       blacklisted on a within-window reuse
       (`backend/src/farna/db/crud/token_family.py`,
       `backend/src/farna/api/routes/auth.py`)
+      <!-- behaviour: auth-05 | tests: none -->
 - [x] Logout blacklists the token family so all tokens from that session are
       invalidated
+      <!-- behaviour: auth-06 | tests: none -->
 - [x] `/me` returns the authenticated user's profile with `must_change_password`
       flag for forced password change on first login
+      <!-- behaviour: auth-07 | tests: none -->
 - [x] Invitation enrollment handles four account-resolution branches: new account,
       SSO rejection (409), local account without password adopts password, local
       account with password reports existing_account=true
+      <!-- behaviour: auth-08 | tests: none -->
 - [x] Password change clears `must_change_password`, invalidates refresh-token
       families, and records an audit event
+      <!-- behaviour: auth-09 | tests: none -->
 - [x] The forced (admin-reset) change flow is BDD-covered: the same
       `PUT /api/v1/me/password` clears the `must_change_password` admin-reset
       flag in the same transaction as the hash swap, so App.vue's forced
       change-password gate un-arms on the change (`backend/tests/bdd/features/auth/change_password.feature`
       "Forced password change clears the admin-reset flag" scenario)
+      <!-- behaviour: auth-10 | tests: backend/tests/bdd/features/auth/change_password.feature -->
 - [x] OAuth consent screen authorizes third-party MCP applications via PKCE flow
+      <!-- behaviour: auth-11 | tests: none -->
 - [x] All auth endpoints are org-RLS scoped; tenant isolation prevents cross-org
       pipeline access (`backend/tests/bdd/features/auth/tenant_isolation.feature`)
+      <!-- behaviour: auth-12 | tests: backend/tests/bdd/features/auth/tenant_isolation.feature -->
 - [x] RBAC privilege-cap model enforces team role ≤ org role; team CRUD,
       membership management, and feature gating by role
       (`backend/tests/bdd/features/auth/rbac.feature`)
+      <!-- behaviour: auth-13 | tests: backend/tests/bdd/features/auth/rbac.feature -->
 - [x] Access revocation is immediate (ADR 047): every tenant-scoped request
       re-reads the account's LIVE org role from `org_memberships` (deactivated
       rows excluded; INNER JOIN requires `accounts.active IS TRUE`) on each
@@ -100,6 +113,7 @@ clients.
       (`backend/src/farna/auth/dependencies.py` `_verify_identity` /
       `get_current_tenant_user`, `backend/src/farna/api/routes/auth.py`
       `_advance_refresh_sequence`, `backend/src/farna/db/crud/org_membership.py`)
+      <!-- behaviour: auth-14 | tests: none -->
 
 ## QA History
 - 2026-10-02: **Improve Architecture product-map walk**: closed

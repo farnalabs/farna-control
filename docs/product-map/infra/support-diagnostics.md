@@ -52,6 +52,7 @@ Farnalabs service is contacted.
       (`frontend/src/lib/supportReference.ts`,
       `frontend/src/views/RunDetailView.vue`; `supportReference.spec.ts`,
       `RunDetailShare.spec.ts`, `RunDetailView.spec.ts`)
+      <!-- behaviour: support-diagnostics-01 | tests: none -->
 - [x] An error group exposes one canonical support reference built by
       `buildErrorGroupSupportReference`: group id, fingerprint, level and count,
       plus the source segment only when the caller actually has one (the list
@@ -59,6 +60,7 @@ Farnalabs service is contacted.
       page copy it through the same helper so the two surfaces cannot drift
       (`AdminErrorsView.vue`, `AdminErrorDetailView.vue`; `AdminErrorsView.spec.ts`,
       `AdminErrorDetailView.spec.ts`)
+      <!-- behaviour: support-diagnostics-02 | tests: none -->
 - [x] `farna-control support` builds the redacted bundle and prints the
       pasteable reference line, the absolute bundle path and byte size, the
       instruction to open the bundle before sending it, and one `missing
@@ -69,6 +71,7 @@ Farnalabs service is contacted.
       `./modulo-support-<ref>.zip` carrying the same per-run ref as the archive
       (`backend/src/farna/cli/main.py`;
       `backend/tests/unit/cli/test_support_command.py`)
+      <!-- behaviour: support-diagnostics-03 | tests: backend/tests/unit/cli/test_support_command.py -->
 - [x] `farna-control doctor --report PATH` writes the same redacted bundle
       format (the historical narrow report is only an import shim now), keeps
       the doctor exit status rather than the report status, and prints
@@ -76,6 +79,7 @@ Farnalabs service is contacted.
       a missing report (`backend/src/farna/launcher/doctor_report.py`,
       `backend/src/farna/cli/main.py`; `test_doctor_report.py`,
       `test_bundle.py::test_doctor_report_delegates_to_v1_bundle`)
+      <!-- behaviour: support-diagnostics-04 | tests: backend/tests/unit/launcher/test_doctor_report.py, backend/tests/unit/support/test_bundle.py::test_doctor_report_delegates_to_v1_bundle -->
 - [x] The bundle is a versioned zip with a FIXED member allowlist
       (`MANIFEST.txt`, `report.json`, `version.txt`, `doctor.txt`, `health.json`,
       `settings.txt`, `deployment.txt`, `db.txt`, `errors.json`, `runs.json`,
@@ -84,6 +88,7 @@ Farnalabs service is contacted.
       assembly time, and a new member requires a format-version change
       (`backend/src/farna/support/bundle.py`; `test_bundle.py::test_golden_member_set_is_exact`,
       `test_support_coverage_gaps.py::test_assert_allowlist_rejects_a_member_outside_the_fixed_set`)
+      <!-- behaviour: support-diagnostics-05 | tests: backend/tests/unit/support/test_bundle.py::test_golden_member_set_is_exact, backend/tests/unit/support/test_support_coverage_gaps.py::test_assert_allowlist_rejects_a_member_outside_the_fixed_set -->
 - [x] Bundle contents are bounded and honest: settings carry a full key
       inventory with values only for a reviewed safe-list and `set`/`unset` for
       everything else, the licence member never carries the key, database and
@@ -93,6 +98,7 @@ Farnalabs service is contacted.
       if the bundle still exceeds the cap the build refuses rather than writing
       an oversized archive (`bundle.py`; `test_bundle.py`,
       `test_support_coverage_gaps.py`)
+      <!-- behaviour: support-diagnostics-06 | tests: backend/tests/unit/support/test_bundle.py, backend/tests/unit/support/test_support_coverage_gaps.py -->
 - [x] Redaction is five ordered layers and fails closed: (1) the fixed member
       allowlist; (2) exact-value scrubbing of generated secrets from Settings
       and the launcher `secrets.json`, including percent-encoded forms; (3)
@@ -107,6 +113,7 @@ Farnalabs service is contacted.
       scoped narrowly so a credential in a URL path is still caught
       (`backend/src/farna/support/redaction.py`; `test_bundle.py`,
       `test_bundle_withholding.py`)
+      <!-- behaviour: support-diagnostics-07 | tests: backend/tests/unit/support/test_bundle.py, backend/tests/unit/support/test_bundle_withholding.py -->
 - [x] Docker Compose has its own collector, `scripts/support-bundle.sh`: it
       runs from the repository root, writes one zip (default
       `modulo-support-bundle-<UTC>.zip`), works with the stack down by recording
@@ -117,6 +124,7 @@ Farnalabs service is contacted.
       the member when that filter cannot run)
       (`scripts/support-bundle.sh`;
       `backend/tests/unit/scripts/test_support_bundle_sh.py`)
+      <!-- behaviour: support-diagnostics-08 | tests: backend/tests/unit/scripts/test_support_bundle_sh.py -->
 - [x] A failed native install still leaves a diagnosable artefact before any
       `farna-control` binary exists: the installer tees its transcript to
       `~/.local/state/farna-control/install-<UTC>-<ref>.log` (state dir 0700,
@@ -128,10 +136,12 @@ Farnalabs service is contacted.
       that also embeds the reference. A successful run prints no block and exit
       codes are unchanged (`scripts/install.sh`;
       `backend/tests/unit/scripts/test_install_support_block.py`)
+      <!-- behaviour: support-diagnostics-09 | tests: backend/tests/unit/scripts/test_install_support_block.py -->
 - [x] Kubernetes / Helm needs no extra install: the same module runs inside the
       backend pod (`python -m farna.support.bundle --out ...`) and the bundle is
       copied out with `kubectl cp`, with cluster facts and raw logs captured via
       `kubectl` alongside it (`docs/support.md`)
+      <!-- behaviour: support-diagnostics-10 | tests: none -->
 
 ## Known Gaps
 

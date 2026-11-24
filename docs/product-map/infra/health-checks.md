@@ -51,10 +51,15 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
 ## Behaviors
 
 - [x] `GET /healthz` returns `{"status": "ok"}` and is advisory only (never flips readiness)
+      <!-- behaviour: health-checks-01 | tests: none -->
 - [x] `GET /healthz/ready` checks database connectivity (SELECT 1)
+      <!-- behaviour: health-checks-02 | tests: none -->
 - [x] Redis connectivity check (degraded when not configured)
+      <!-- behaviour: health-checks-03 | tests: none -->
 - [x] Checkpointer schema accessibility check (degraded on failure)
+      <!-- behaviour: health-checks-04 | tests: none -->
 - [x] Alembic migration status check (degraded when migrations are pending)
+      <!-- behaviour: health-checks-05 | tests: none -->
 - [x] Database-hygiene sub-check (FAR-1445) – worst-table dead-tuple ratio
       (`n_dead_tup / (n_live_tup + n_dead_tup)` from `pg_stat_user_tables`, over a
       configurable dead-tuple floor, zero-size relations excluded from the pick) plus
@@ -62,22 +67,28 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       degrades (never `unavailable`, so never 503s readiness alone) on bloat at/above
       the configured ratio or on freeze age past 50% of the ceiling; thresholds via
       `FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES` / `FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO`
+      <!-- behaviour: health-checks-06 | tests: none -->
 - [x] A database-hygiene probe that does NOT complete within its budget (timeout, or the
       probe raising) reports `degraded` – "database-hygiene probe did not complete within
       Ns (likely an event-loop stall; see event_loop_lag) - hygiene not measured" – but is
       ADVISORY (FAR-1510): still listed in the body, never gating the aggregate and never
       firing the readiness alert, because no hygiene reading was taken. Only a completed
       reading graded over a threshold gates.
+      <!-- behaviour: health-checks-07 | tests: none -->
 - [x] SAQ worker liveness check – a stopped worker pool for 4+ consecutive probe ticks 503s readiness (Plan F7)
+      <!-- behaviour: health-checks-08 | tests: none -->
 - [x] System-cron liveness watchdog – fire_due_triggers missing 2x cadence 503s readiness (Plan F8)
+      <!-- behaviour: health-checks-09 | tests: none -->
 - [x] Stale-run recovery sweep outcome – ADVISORY, never gates readiness: a missing or
       >15min-stale sweep reports `degraded` to alert operators while the app stays
       healthy (`_check_stale_run_recovery`, health.py)
+      <!-- behaviour: health-checks-10 | tests: none -->
 - [x] Dispatcher reconcile staleness – two tiers: `degraded` after 180s (3x the 60s
       system-cron cadence, so a single slow or missed tick alone never pages)
       is advisory (never flips readiness), `unavailable` past 5 minutes – the system
       worker's cron is silently dead and the fleet can no longer terminalize
       stalled/never-dispatched runs – 503s readiness
+      <!-- behaviour: health-checks-11 | tests: none -->
 - [x] Dispatcher reconcile detail counters (FAR-1621) – `_format_reconcile_detail`
       renders the outcome counters on every tier, including the per-org
       bounded-failure family so an alert email can tell the cases apart without
@@ -94,9 +105,13 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       lock/pool/connect/statement SKIPs deliberately leave `status="ok"` and
       `last_error=None` and carry their stage in the matching WARNING log line
       instead
+      <!-- behaviour: health-checks-12 | tests: none -->
 - [x] Fleet worker / fleet system-cron aggregation (worker process-group health, ADR 021)
+      <!-- behaviour: health-checks-13 | tests: none -->
 - [x] Break-glass watchdog exposure is advisory and never contributes to readiness
+      <!-- behaviour: health-checks-14 | tests: none -->
 - [x] Per-check timeout limits, configurable via `modulo_health_*_timeout_seconds` settings
+      <!-- behaviour: health-checks-15 | tests: none -->
 - [x] Overall status: `unavailable` if any gate is `unavailable`, `degraded` if any gate
       is `degraded`. Gates are `database`, `redis`, `checkpointer`, `migrations`,
       `saq_workers`, `system_crons`, a COMPLETED `db_hygiene` reading, and
@@ -106,10 +121,15 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       `runner_workspace_reconcile`, `runner_marker_sweep`, `runner_health_probe`, the
       `degraded` tier of `dispatcher_reconcile`, and a database-hygiene probe that did
       not complete (FAR-1510). Source of truth: `evaluate_readiness` in health.py
+      <!-- behaviour: health-checks-16 | tests: none -->
 - [x] 503 status code when overall unavailable
+      <!-- behaviour: health-checks-17 | tests: none -->
 - [x] Latency tracked per check
+      <!-- behaviour: health-checks-18 | tests: none -->
 - [x] Fly.io deployment wiring – `fly.toml` `[[http_service.checks]]` probes `/healthz/ready`
+      <!-- behaviour: health-checks-19 | tests: none -->
 - [x] Worker process-group health check via top-level `[checks]` (ADR 021)
+      <!-- behaviour: health-checks-20 | tests: none -->
 - [x] External uptime monitoring is GONE – `.github/workflows/uptime-monitor.yml`
       (the 10-minute off-platform probe of `control.farna.dev/healthz/ready` that failed
       and opened a Linear ticket on outage or on a degraded sub-check, FAR-400 /
@@ -118,6 +138,7 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       (FAR-1512). Its alerting role is taken by the in-app legs below; the
       ADVISORY / dead-sweep class only the workflow covered is now covered by the
       FAR-1571 real-failure advisory classification (see below)
+      <!-- behaviour: health-checks-21 | tests: none -->
 - [x] Readiness-degradation email alert (FAR-1446): the `health_readiness_alert`
       system cron runs every 5 minutes and emails `ALERT_EMAIL_TO` when readiness
       CONFIRMEDLY transitions into `degraded`/`unavailable` (edge-triggered with a
@@ -138,6 +159,7 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       record silently so a distinct later incident can alert after
       re-inclusion (`core/health_alerts.py`, `core/saq_worker.py`,
       `api/routes/health.py` `evaluate_readiness`, `test_health_alerts.py`)
+      <!-- behaviour: health-checks-22 | tests: backend/tests/unit/core/test_health_alerts.py -->
 - [x] Advisory / dead-sweep failures alert in-app (FAR-1571): the readiness
       aggregate deliberately EXCLUDES the advisory checks, so keying
       alert-worthiness on the aggregate alone left a dead or erroring system sweep
@@ -167,6 +189,7 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       `_split_cleared_conditions` / `_recovery_summary` report only the alert-time
       conditions that actually cleared, so a still-degraded benign advisory is never
       falsely claimed resolved (`core/health_alerts.py`, `test_health_alerts.py`)
+      <!-- behaviour: health-checks-23 | tests: backend/tests/unit/core/test_health_alerts.py -->
 - [x] Out-of-process Gatus health sentinel in the compose deployment (PR #1260):
       `deploy/watchdog/` ships a non-root Gatus container wired into
       `docker-compose.yml` (on by default, quiet without email creds) that probes
@@ -174,6 +197,7 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       cron depends on, closing the full-outage case the FAR-1446 cron cannot
       cover (`deploy/watchdog/config.yaml`, `deploy/watchdog/Dockerfile`,
       `test_watchdog_config.py`, `test_watchdog_container.py`)
+      <!-- behaviour: health-checks-24 | tests: backend/tests/unit/test_watchdog_config.py, backend/tests/docker/test_watchdog_container.py -->
 - [x] In-process worker-liveness watchdog (ADR 021): a plain asyncio task in the
       web-process FastAPI lifespan – deliberately NOT an SAQ cron, so the alert
       cannot depend on the worker path it watches – reads SAQ worker_info and the
@@ -199,6 +223,7 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       later re-included incident can win the `SET NX` claim instead of being
       silently unalerted until the state TTL
       (`core/watchdog/worker_liveness.py`, `test_worker_liveness.py`)
+      <!-- behaviour: health-checks-25 | tests: backend/tests/unit/core/watchdog/test_worker_liveness.py -->
 - [x] Shared operator-alert context (FAR-1495 / FAR-1499): every operator alert
       identifies the deployment environment (`Environment: <FARNA_CONTROL_ENV>`, empty ->
       `unknown`) and appends the operator's `ALERT_CONTEXT` free text (runbook links,
@@ -214,6 +239,7 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       is `repr=False` so it never enters a log or the stdout stamp
       (`core/alert_context.py`, `test_alert_context.py`, `test_health_alerts.py`,
       `test_worker_liveness.py`)
+      <!-- behaviour: health-checks-26 | tests: backend/tests/unit/core/test_alert_context.py, backend/tests/unit/core/test_health_alerts.py, backend/tests/unit/core/watchdog/test_worker_liveness.py -->
 
 ## Known Gaps
 

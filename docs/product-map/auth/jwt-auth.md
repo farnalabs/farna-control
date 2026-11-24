@@ -30,27 +30,35 @@ authenticated API route through `auth/dependencies.py`.
 - [x] `create_access_token` issues a signed JWT carrying user identity (`sub`),
       org context, role, expiry, and the credential class (`client_kind`); unlike
       the refresh/ws/claim helpers it stamps no `purpose` claim
+      <!-- behaviour: jwt-auth-01 | tests: none -->
 - [x] `decode_principal` validates signature and expiry, and validates a token's
       `purpose` claim only when `allowed_purposes` is supplied; returns an
       `AuthenticatedPrincipal` (carrying the `is_system_admin` flag) and raises on
       wrong key, expired token, malformed/empty `sub`, missing or non-string
       account id, or a token used outside its allowed purpose. Farna Control's own
       tokens carry no `iss` claim, so no issuer check is performed
+      <!-- behaviour: jwt-auth-02 | tests: none -->
 - [x] `none` algorithm is rejected and only allowlisted signing algorithms pass
+      <!-- behaviour: jwt-auth-03 | tests: none -->
 - [x] Refresh tokens carry a `refresh` purpose and issue a new access token via
       `refresh_access_token`
+      <!-- behaviour: jwt-auth-04 | tests: none -->
 - [x] The JWT WebSocket-token helper (`auth/jwt.py` `create_ws_token`) stamps
       `purpose: "ws"` and is accepted only under that purpose; the production
       run-WebSocket credential is instead the opaque single-use Redis token
       minted by `auth/ws_token.py` (60s TTL, `GETDEL` consumption), not a JWT
+      <!-- behaviour: jwt-auth-05 | tests: none -->
 - [x] Claim tokens (`create_claim_token` / `decode_claim_token`) are purpose-scoped
       short-lived tokens
+      <!-- behaviour: jwt-auth-06 | tests: none -->
 - [x] Tenant identity is embedded in the token and validated on decode
+      <!-- behaviour: jwt-auth-07 | tests: none -->
 - [x] Purpose isolation holds in the `decode_principal` contract: an access token
       (which carries no `purpose`) or a refresh token is rejected when the caller
       requires the `ws` purpose. On the normal API path access tokens are decoded
       without a purpose restriction (`allowed_purposes=None`), so the restriction
       guards the purpose-scoped token families rather than every request
+      <!-- behaviour: jwt-auth-08 | tests: none -->
 
 ## Known Gaps
 

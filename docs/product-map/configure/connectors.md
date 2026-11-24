@@ -88,12 +88,15 @@ and per-destination rate limiting.
       credentials are Fernet-encrypted at rest and never exposed in responses
       (`backend/src/farna/api/routes/connectors.py`,
       `backend/tests/unit/api/test_connectors_endpoint.py`)
+      <!-- behaviour: connectors-01 | tests: backend/tests/unit/api/test_connectors_endpoint.py -->
 - [x] query() is the read surface and write() is the write surface; mutating
       verbs retry only when an idempotency_header is declared
       (`backend/src/farna/connectors/rest`)
+      <!-- behaviour: connectors-02 | tests: none -->
 - [x] Non-2xx/3xx responses surface typed RESTStatusError with status_code,
       location, and Retry-After metadata; response body capped at max_response_size
       (`backend/src/farna/connectors/rest`)
+      <!-- behaviour: connectors-03 | tests: none -->
 - [x] Per-destination rate limiting enforces one budget per tenant:destination:
       a Redis-atomic shared bucket when a `redis_client` is wired at the
       composition root (fleet-wide), otherwise the connector-local per-process
@@ -101,60 +104,73 @@ and per-destination rate limiting.
       limiter FAILS CLOSED on a Redis outage - it never falls back to a
       per-process bucket that would multiply the effective cap by the worker
       count (`connectors/rest`)
+      <!-- behaviour: connectors-04 | tests: none -->
 - [x] Fan-out emits items sequentially with redacted outcome records; cardinality
       exceeds max_cardinality fails CLOSED before any request
+      <!-- behaviour: connectors-05 | tests: none -->
 - [x] The REST connector's health check issues the configured request with the
       credentials applied and reports OK only for a 2xx status - redirects are
       never followed, so a 3xx is raised as the typed `RESTStatusError` before
       the sub-400 check and is reported unhealthy
       (`backend/tests/bdd/features/connectors/connector_health.feature`)
+      <!-- behaviour: connectors-06 | tests: backend/tests/bdd/features/connectors/connector_health.feature -->
 - [x] AdminConnectorsView renders schema-driven structured forms for REST
       connector config (base_url, method, credentials, advanced JSON)
       (`frontend/src/views/AdminConnectorsView.vue`)
+      <!-- behaviour: connectors-07 | tests: none -->
 - [x] ConnectorHub registers and manages 30+ native connector types with
       per-connector BDD features (`backend/src/farna/core/connector_hub`,
       `backend/tests/unit/connector_hub/`)
+      <!-- behaviour: connectors-08 | tests: none -->
 - [x] The Sentry connector is BDD-exercised against the real `SentryConnector`
       (respx-mocked Sentry API): token validation via `/` (200 => healthy, 401
       => unhealthy), listing issues/projects, updating issue status, and
       creating releases (`sentry.feature`, `steps/test_sentry_connector.py`)
+      <!-- behaviour: connectors-09 | tests: backend/tests/bdd/features/connectors/sentry.feature, backend/tests/bdd/steps/test_sentry_connector.py -->
 - [x] The PagerDuty connector is BDD-exercised against the real
       `PagerDutyConnector` (respx-mocked PagerDuty API): token validation via
       `/users` (200 => healthy, 401 => unhealthy), listing incidents/services,
       and trigger/acknowledge/resolve incident writes (`pagerduty.feature`,
       `steps/test_pagerduty_connector.py`)
+      <!-- behaviour: connectors-10 | tests: backend/tests/bdd/features/connectors/pagerduty.feature, backend/tests/bdd/steps/test_pagerduty_connector.py -->
 - [x] The Grafana connector is BDD-exercised against the real
       `GrafanaConnector` (respx-mocked Grafana API): token validation via
       `/api/health` (200 => healthy, 401 => unhealthy), listing dashboards /
       dashboard-by-uid / alert-rules / datasources, and annotation writes
       (`grafana.feature`, `steps/test_grafana_connector.py`)
+      <!-- behaviour: connectors-11 | tests: backend/tests/bdd/features/connectors/grafana.feature, backend/tests/bdd/steps/test_grafana_connector.py -->
 - [x] The Buildkite connector is BDD-exercised against the real
       `BuildkiteConnector` (respx-mocked Buildkite REST API v2): token
       validation via `/user` (200 => healthy, 401 => unhealthy), triggering a
       build on a branch, getting run status / listing runs / fetching per-job
       run logs (`buildkite.feature`, `steps/test_buildkite_connector.py`)
+      <!-- behaviour: connectors-12 | tests: backend/tests/bdd/features/connectors/buildkite.feature, backend/tests/bdd/steps/test_buildkite_connector.py -->
 - [x] The CircleCI connector is BDD-exercised against the real
       `CircleCIConnector` (respx-mocked CircleCI REST API v2): token validation
       via `/me` (200 => healthy, 401 => unhealthy), triggering a pipeline on a
       branch, getting pipeline status / listing recent pipeline runs / fetching
       workflow+job logs (`circleci.feature`, `steps/test_circleci_connector.py`)
+      <!-- behaviour: connectors-13 | tests: backend/tests/bdd/features/connectors/circleci.feature, backend/tests/bdd/steps/test_circleci_connector.py -->
 - [x] The Jenkins connector is BDD-exercised against the real
       `JenkinsConnector` (respx-mocked Jenkins REST API): token validation via
       `/api/json` (200 => healthy, 401 => unhealthy), triggering a build
       (plain + parameterized via `buildWithParameters`), getting build status /
       listing recent builds / fetching console logs
       (`jenkins.feature`, `steps/test_jenkins_connector.py`)
+      <!-- behaviour: connectors-14 | tests: backend/tests/bdd/features/connectors/jenkins.feature, backend/tests/bdd/steps/test_jenkins_connector.py -->
 - [x] The TeamCity connector is BDD-exercised against the real
       `TeamCityConnector` (respx-mocked TeamCity REST API): querying projects /
       buildTypes / agents, triggering a build (buildQueue) and creating a build
       type, and failing closed on an unsupported query resource
       (`teamcity_connector.feature`, `steps/test_teamcity_connector.py`)
+      <!-- behaviour: connectors-15 | tests: backend/tests/bdd/features/connectors/teamcity_connector.feature, backend/tests/bdd/steps/test_teamcity_connector.py -->
 - [x] The Opsgenie connector is BDD-exercised against the real
       `OpsgenieConnector` (respx-mocked Opsgenie REST API v2): listing alerts /
       teams / schedules / escalations, single-alert / notes / logs lookups,
       on-call lookups, the alert write family (create / acknowledge / close /
       note / snooze), and API-key validation via `GET /alerts?limit=1`
       (`opsgenie_connector.feature`, `steps/test_opsgenie_connector.py`)
+      <!-- behaviour: connectors-16 | tests: backend/tests/bdd/features/connectors/opsgenie_connector.feature, backend/tests/bdd/steps/test_opsgenie_connector.py -->
 - [x] The Azure Key Vault connector is BDD-exercised against the real
       `AzureKeyVaultConnector` (respx-mocked Azure Key Vault REST API 7.4):
       token validation via `GET /secrets?maxresults=1` (200 => healthy, 401 =>
@@ -162,12 +178,14 @@ and per-destination rate limiting.
       certificate lookups, and the secret write family (create via PUT +
       soft-delete via DELETE) (`azure_key_vault.feature`,
       `steps/test_azure_key_vault_connector.py`)
+      <!-- behaviour: connectors-17 | tests: backend/tests/bdd/features/connectors/azure_key_vault.feature, backend/tests/bdd/steps/test_azure_key_vault_connector.py -->
 - [x] The Azure Pipelines connector is BDD-exercised against the real
       `AzurePipelinesConnector` (respx-mocked Azure DevOps REST API 7.0):
       listing projects / pipelines / runs / releases, triggering a pipeline
       run (pipeline_id + branch) and a release (definition_id), and failing
       closed on an unsupported query resource
       (`azure_pipelines.feature`, `steps/test_azure_pipelines_connector.py`)
+      <!-- behaviour: connectors-18 | tests: backend/tests/bdd/features/connectors/azure_pipelines.feature, backend/tests/bdd/steps/test_azure_pipelines_connector.py -->
 - [x] The Dropbox Paper connector is BDD-exercised against the real
       `DropboxPaperConnector` (respx-mocked Dropbox API v2 ``api.dropboxapi.com``):
       account validation via `/users/get_current_account` (200 => healthy with the
@@ -176,30 +194,35 @@ and per-destination rate limiting.
       listing folders (``folders`` resource), creating a Paper doc via markdown
       import (``doc`` write resource), and failing closed on unsupported query/write
       resources (`dropbox_paper.feature`, `steps/test_dropbox_paper_connector.py`)
+      <!-- behaviour: connectors-19 | tests: backend/tests/bdd/features/connectors/dropbox_paper.feature, backend/tests/bdd/steps/test_dropbox_paper_connector.py -->
 - [x] The Azure Repos connector is BDD-exercised against the real
       `AzureReposConnector` (respx-mocked Azure DevOps REST API v7.0): PAT
       validation via the profile endpoint (401 => unhealthy), listing
       repositories / pull requests / commits, reading a file from a branch,
       writing a file via a push, and creating a pull request
       (`azure_repos.feature`, `steps/test_azure_repos_connector.py`)
+      <!-- behaviour: connectors-20 | tests: backend/tests/bdd/features/connectors/azure_repos.feature, backend/tests/bdd/steps/test_azure_repos_connector.py -->
 - [x] The Discord connector is BDD-exercised against the real
       `DiscordConnector` (respx-mocked Discord REST API v10): bot-token
       validation via `/users/@me` (200 => healthy, 401 => unhealthy), listing
       guilds / channels / messages / guild members / roles, getting a guild by
       id, and the message / reaction / channel write family
       (`discord.feature`, `steps/test_discord_connector.py`)
+      <!-- behaviour: connectors-21 | tests: backend/tests/bdd/features/connectors/discord.feature, backend/tests/bdd/steps/test_discord_connector.py -->
 - [x] The Microsoft Teams connector is BDD-exercised against the real
       `MicrosoftTeamsConnector` (respx-mocked Microsoft Graph API v1.0): token
       validation via `/users` (200 => healthy, 401 => unhealthy), listing
       teams / channels / messages / members / users / groups, getting a team and
       a channel by id, and the message / channel write family
       (`microsoft_teams.feature`, `steps/test_microsoft_teams_connector.py`)
+      <!-- behaviour: connectors-22 | tests: backend/tests/bdd/features/connectors/microsoft_teams.feature, backend/tests/bdd/steps/test_microsoft_teams_connector.py -->
 - [x] The SharePoint connector is BDD-exercised against the real
       `SharePointConnector` (respx-mocked Microsoft Graph API v1.0): token
       validation via `/sites/root` (200 => healthy reporting the site root
       name, 401 => unhealthy), listing sites / list items, reading a file, and
       creating a list item (`sharepoint.feature`,
       `steps/test_sharepoint_connector.py`)
+      <!-- behaviour: connectors-23 | tests: backend/tests/bdd/features/connectors/sharepoint.feature, backend/tests/bdd/steps/test_sharepoint_connector.py -->
 - [x] Connector bindings on pipeline nodes are swappable and validated at graph
       save time against the SAME helper the runtime hub gates with: swapping a
       node's binding swaps the extracted snapshot binding without touching the
@@ -226,6 +249,7 @@ and per-destination rate limiting.
       real `extract_connector_bindings` + `GraphValidator.validate_definition`
       surfaces (`swappable_binding.feature`,
       `steps/test_pipeline_connector_binding.py`)
+      <!-- behaviour: connectors-24 | tests: backend/tests/bdd/features/connectors/swappable_binding.feature, backend/tests/bdd/steps/test_pipeline_connector_binding.py -->
 - [x] The connector instance CRUD lifecycle is BDD-exercised against the real
       admin API: create (201) Fernet-encrypts credentials at rest and never
       echoes them, malformed REST credentials / config are rejected at the
@@ -234,6 +258,7 @@ and per-destination rate limiting.
       fresh credentials (200), DELETE removes the instance (204), and a
       foreign-org connector resolves to 404 before any read/update/delete
       (`connector_crud.feature`, `steps/test_connector_crud.py`)
+      <!-- behaviour: connectors-25 | tests: backend/tests/bdd/features/connectors/connector_crud.feature, backend/tests/bdd/steps/test_connector_crud.py -->
 - [x] A connector's operation scope is UNRESTRICTED unless a non-empty
       allowlist restrains it (FAR-1564): the single shared
       `unrestricted_allowed_operations` predicate - used by `ConnectorACL`, the
@@ -252,6 +277,7 @@ and per-destination rate limiting.
       ACL-denial semantics in comments only and does not read the predicate;
       `unit-tests: test_acl.py, test_connectors_endpoint.py,
       test_guardrail_conformance_midrun.py`)
+      <!-- behaviour: connectors-26 | tests: backend/tests/unit/connectors/test_acl.py, backend/tests/unit/api/test_connectors_endpoint.py, backend/tests/unit/core/test_guardrail_conformance_midrun.py -->
 - [x] Capability spellings reduce through ONE canonical vocabulary shared by
       enforcement and certification (FAR-1582 / FAR-1594): `qualified_capability`
       / `canonical_capability` / `canonical_capability_set` live in the
@@ -282,6 +308,7 @@ and per-destination rate limiting.
       (`backend/src/farna/connectors/base.py`,
       `backend/src/farna/core/guardrails/conformance.py`;
       `unit-tests: test_acl.py, test_guardrail_conformance_midrun.py`)
+      <!-- behaviour: connectors-27 | tests: backend/tests/unit/connectors/test_acl.py, backend/tests/unit/core/test_guardrail_conformance_midrun.py -->
 - [x] A connector binding that crosses a team boundary is refused at graph
       save with 409 `connector_team_mismatch` (FAR-1515, PRD §9.3, model
       restated by FAR-1618). Teams are a VISIBILITY GROUPING, not a
@@ -326,6 +353,7 @@ and per-destination rate limiting.
       `unit-tests: test_pipeline_team_visibility.py,
       test_team_visibility.py, test_team_binding_enforcement.py,
       test_team_scope.py`; `integration: test_pipeline_team_gate_parity.py`)
+      <!-- behaviour: connectors-28 | tests: backend/tests/unit/api/test_pipeline_team_visibility.py, backend/tests/unit/core/test_team_visibility.py, backend/tests/unit/mcp/test_team_binding_enforcement.py, backend/tests/unit/db/crud/test_team_scope.py, backend/tests/integration/test_pipeline_team_gate_parity.py -->
 
 ## Known Gaps
 

@@ -43,14 +43,17 @@ org. Every mutation runs under org RLS and is audited fail-closed (ADR 047).
       `scim is not available on your plan`
       (`backend/src/farna/auth/scim_auth.py`; `test_scim_auth.py`,
       `scim_provisioning.feature`)
+      <!-- behaviour: scim-provisioning-01 | tests: backend/tests/unit/auth/test_scim_auth.py, backend/tests/bdd/features/scim/scim_provisioning.feature -->
 - [x] `GET /scim/v2/ServiceProviderConfig` advertises the supported
       capabilities truthfully: `patch` supported, `bulk` / `sort` / `etag` /
       `changePassword` not, `filter` supported with `maxResults: 100`, and a
       Bearer authentication scheme
+      <!-- behaviour: scim-provisioning-02 | tests: none -->
 - [x] `GET /scim/v2/Users` returns a SCIM `ListResponse`
       (`totalResults` / `itemsPerPage` / `startIndex` / `Resources`), paginated
       by `startIndex` (>= 1) and `count` (1–100, default 20) with an optional
       SCIM `filter`; `GET /scim/v2/Groups` mirrors it for teams
+      <!-- behaviour: scim-provisioning-03 | tests: none -->
 - [x] `POST /scim/v2/Users` JIT-provisions a Farna Control user: a brand-new account is
       created with `auth_provider="scim"`, a NULL `password_hash` (a
       password login on a SCIM account is 401 by design) and an org membership
@@ -59,6 +62,7 @@ org. Every mutation runs under org RLS and is audited fail-closed (ADR 047).
       (tombstone cleared, account re-activated) so an IdP delete-then-recreate
       is reversible rather than a permanent 409; a duplicate ACTIVE membership
       is 409 (`backend/src/farna/db/crud/scim.py`; `test_scim_provisioning.py`)
+      <!-- behaviour: scim-provisioning-04 | tests: backend/tests/unit/scim/test_scim_provisioning.py -->
 - [x] `GET` / `PUT` / `PATCH` / `DELETE /scim/v2/Users/{user_id}`: reads are
       404 for an unknown id; `PUT` replaces attributes; `PATCH` applies
       add/replace/remove operations; a `PATCH active=false` (or a `PUT`/`PATCH`
@@ -67,6 +71,7 @@ org. Every mutation runs under org RLS and is audited fail-closed (ADR 047).
       and record-preserving, never hard-deleted - and `DELETE` applies the same
       tombstone (`scim_provisioning.feature` "Delete ... deactivates",
       "Deprovisioning ... preserves the record")
+      <!-- behaviour: scim-provisioning-05 | tests: backend/tests/bdd/features/scim/scim_provisioning.feature -->
 - [x] Deprovisioning fails closed around the last-admin invariant: SCIM
       authenticates with a shared token and has no per-user identity, so the
       acting caller is the org's first active non-break-glass admin; when none
@@ -74,6 +79,7 @@ org. Every mutation runs under org RLS and is audited fail-closed (ADR 047).
       lockout is 409 with the guard's reason, and an unverifiable guard is 503
       (never a silent success that locks the org out)
       (`assert_not_last_admin`, `_resolve_scim_admin_caller`)
+      <!-- behaviour: scim-provisioning-06 | tests: none -->
 - [x] `POST /scim/v2/Groups` maps an IdP group to a Farna Control team (duplicate
       `displayName` → 409) and syncs its initial members; `PATCH`/`PUT`
       `/scim/v2/Groups/{group_id}` add/remove members and rename the team, and
@@ -82,11 +88,13 @@ org. Every mutation runs under org RLS and is audited fail-closed (ADR 047).
       closed); `DELETE` removes the team
       (`backend/src/farna/db/crud/scim.py`; `test_scim_route_branch.py`,
       `test_scim.py`)
+      <!-- behaviour: scim-provisioning-07 | tests: backend/tests/unit/api/test_scim_route_branch.py, backend/tests/unit/db/crud/test_scim.py -->
 - [x] Every user/group mutation is audited fail-closed
       (`scim_user_created` / `scim_user_updated` / `scim_user_deleted` and the
       group equivalents; FAR-1472), attributed to that same resolved admin
       authority - a provisioning change that lands without an audit event fails
       the response rather than mutating membership unattributably
+      <!-- behaviour: scim-provisioning-08 | tests: none -->
 - [x] Database failures on the mutating routes map to honest SCIM status codes
       instead of a generic 500: `ProgrammingError` (missing migration) → 501,
       `IntegrityError` → 409 and other `SQLAlchemyError` → 503 - except a
@@ -96,6 +104,7 @@ org. Every mutation runs under org RLS and is audited fail-closed (ADR 047).
       helper swallows `ProgrammingError` and returns an empty collection (200),
       so the route-level 501 arm is unreachable for a real query failure
       (`scim_provisioning.feature`, `test_scim_provisioning_programming_error.py`)
+      <!-- behaviour: scim-provisioning-09 | tests: backend/tests/bdd/features/scim/scim_provisioning.feature, backend/tests/unit/scim/test_scim_provisioning_programming_error.py -->
 
 ## Known Gaps
 

@@ -54,9 +54,11 @@ compatibility alias to the same view.
       before serialization; permitted fields (`key`,
       `subject_type`/`subject_id`, `observed_at`, timestamps, pass/fail
       outcomes) survive unredacted
+      <!-- behaviour: evidence-01 | tests: none -->
 - [x] `GET /api/v1/evidence/{evidence_id}` returns a single org-scoped evidence
       row with the same server-side redaction applied and 404s an id absent for
       the org
+      <!-- behaviour: evidence-02 | tests: none -->
 - [x] Redaction rules are readable and editable by org admins only:
       `GET /api/v1/evidence/redaction-rules` lists the org's rules and
       `PUT /api/v1/evidence/redaction-rules` upserts one by
@@ -64,6 +66,7 @@ compatibility alias to the same view.
       `evidence.redaction.manage` (admin) via `require_system_or_org_admin`,
       with unknown redaction classes rejected 422 (a rule can never be a silent
       no-op); writes are audited (`evidence_redaction_rule_upserted`)
+      <!-- behaviour: evidence-03 | tests: none -->
 - [x] The baseline schema migration creates `evidence_redaction_rules`
       (OrgScoped + soft-delete, `UNIQUE (organisation_id, key_pattern, role)`,
       role CHECK in admin/operator/viewer), the baseline RLS migration applies
@@ -71,10 +74,12 @@ compatibility alias to the same view.
       and the seed data migration creates the mandatory catch-all row `key_pattern='*'` / `role='viewer'` /
       `redacted_fields='{sensitive_output, internal_metadata}'` for every
       existing organization
+      <!-- behaviour: evidence-04 | tests: none -->
 - [x] The `/evidence` route renders under the RUNS sidebar group;
       `EvidenceView.vue` fetches the already-redacted payload and renders it
       as-is with NO client-side redaction or conditional field hiding, with
       i18n-backed strings and `role=status`/`aria-live` status regions
+      <!-- behaviour: evidence-05 | tests: none -->
 - [x] The `/admin/evidence-redaction` route (ADMINISTRATION sidebar group, admin role)
       renders `AdminEvidenceRedactionView.vue`, which lists the org's rules and
       creates or edits them through the same
@@ -87,6 +92,7 @@ compatibility alias to the same view.
       vocabulary, the seeded `*` / `viewer` catch-all is marked mandatory (with
       a warning when it is absent), and the page configures the SERVER boundary
       only - it never redacts or hides evidence values in the client
+      <!-- behaviour: evidence-06 | tests: none -->
 - [x] `GET /api/v1/compliance/evidence-index` returns the organization's
       per-instance evidence index, gated by `compliance.evidence_index.read`,
       scoped to the caller's organization from the authenticated principal
@@ -101,6 +107,7 @@ compatibility alias to the same view.
       `missing_artifact_types`, customer-owned record types are deliberately
       omitted, and `pack_version`/`pack_content_hash` pin which pack produced
       the index
+      <!-- behaviour: evidence-07 | tests: none -->
 - [x] The canonical `/admin/compliance/evidence-index` route renders
       `ComplianceEvidenceIndexView.vue`, with the deprecated `/admin/evidence`
       route kept as a compatibility alias to that same view. The page shows pack
@@ -110,6 +117,7 @@ compatibility alias to the same view.
       identifier renders as a concise label plus a link to that exact version
       and the raw identifier behind a details disclosure with a copy action,
       while every other identifier stays verbatim
+      <!-- behaviour: evidence-08 | tests: none -->
 
 ## Redaction rule editor
 

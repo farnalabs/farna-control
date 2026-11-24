@@ -64,10 +64,12 @@ org profile, and is the product-map home for user roles.
 - [x] Team CRUD: create with name/description (201), duplicate name 409, empty name 422,
       non-admin create 403, paginated list, get by id (404 when missing), rename (409 on
       duplicate), delete 204 for a team with no owned resources (`team_crud.feature`)
+      <!-- behaviour: teams-01 | tests: backend/tests/bdd/features/teams/team_crud.feature -->
 - [x] Membership: an admin or the team operator adds/removes members with a role, a user
       cannot be granted a team role above their org role (422 "exceeds"), duplicate
       membership is 409, adding to a missing team is 404, and the profile lists memberships
       with team id and role (`team_membership.feature`)
+      <!-- behaviour: teams-02 | tests: backend/tests/bdd/features/teams/team_membership.feature -->
 - [x] Deletion safety: deleting a team that still owns resources (pipelines, connectors,
       model backends, library primitives) is blocked with 409 (`team_has_resources`) and
       the per-resource counts in the error
@@ -75,6 +77,7 @@ org profile, and is the product-map home for user roles.
       a soft delete (`deleted_at`), so memberships are not cascade-deleted; delete with no
       owned resources is 204, non-admin delete is 403 and a missing team is 404
       (`team_crud.feature`, `team_deletion.feature`, `team_deletion_blocked.feature`)
+      <!-- behaviour: teams-03 | tests: backend/tests/unit/api/test_teams_routes_coverage.py, backend/tests/bdd/features/teams/team_crud.feature, backend/tests/bdd/features/teams/team_deletion.feature, backend/tests/bdd/features/teams/team_deletion_blocked.feature -->
 - [x] Cross-team isolation: a team cannot see or enumerate another team's team-scoped
       pipelines (404 / omitted from list counts), cross-team connector binding is refused
       as `connector_team_mismatch`, org-wide resources stay shared, and there is no
@@ -90,10 +93,13 @@ org profile, and is the product-map home for user roles.
       machine-readable code: `connector_team_mismatch`, `model_backend_team_mismatch`,
       `environment_profile_team_mismatch` / `environment_profile_binding_team_mismatch`
       (`core/team_visibility.py`)
+      <!-- behaviour: teams-04 | tests: backend/tests/bdd/features/teams/cross_team_isolation.feature -->
 - [x] Team-scoped pipeline visibility and the view-as-team admin flows are enforced
       (`team_pipeline_visibility.feature`, `view_as_team.feature`)
+      <!-- behaviour: teams-05 | tests: backend/tests/bdd/features/teams/team_pipeline_visibility.feature, backend/tests/bdd/features/teams/view_as_team.feature -->
 - [x] RBAC roles (`admin | operator | runner | viewer`) gate team surfaces
       (`users/roles.feature`, `auth/team_rbac.py`, `test_team_rbac.py`)
+      <!-- behaviour: teams-06 | tests: backend/tests/bdd/features/users/roles.feature, backend/tests/unit/auth/test_team_rbac.py -->
 - [x] Viewer reads are bounded by team membership (PR #2552): `run.list`,
       `trigger.list`, `trigger.events.list` and `hitl.list` floor at `viewer`, and a
       viewer's list, stats, heatmap, trigger and HITL read paths are clamped to the
@@ -106,6 +112,7 @@ org profile, and is the product-map home for user roles.
       (`backend/tests/unit/db/crud/test_team_scope.py`,
       `backend/tests/unit/mcp/test_team_scope_enforcement.py`,
       `backend/tests/unit/api/test_triggers_routes_coverage.py`)
+      <!-- behaviour: teams-07 | tests: backend/tests/unit/db/crud/test_team_scope.py, backend/tests/unit/mcp/test_team_scope_enforcement.py, backend/tests/unit/api/test_triggers_routes_coverage.py -->
 - [x] DB team RLS covers every team-scoped table (FAR-1514):
       `lifecycle_maps`, `eval_datasets` and `eval_suites` joined the five 0124
       tables, and the baseline RLS migration `0351_baseline_rls.py` applies the
@@ -129,6 +136,7 @@ org profile, and is the product-map home for user roles.
       Policy-DDL only, existence-guarded (idempotent), Postgres-only
       (`tests/integration/test_rls_isolation.py`,
       `tests/architecture/test_team_scope_wiring.py`)
+      <!-- behaviour: teams-08 | tests: backend/tests/integration/test_rls_isolation.py, backend/tests/architecture/test_team_scope_wiring.py -->
 - [x] MCP `set_resource_owner_team` (FAR-2298) sets or clears `owner_team_id` on a
       pipeline, model backend or connector (`resource_type`, `resource_id`,
       nullable `owner_team_id`). It reuses the REST PATCH team gates (team exists in
@@ -139,6 +147,7 @@ org profile, and is the product-map home for user roles.
       Operator role, same as the REST update permissions; team-scoped keys cannot
       move another team's resource
       (`backend/tests/unit/api/test_mcp_set_resource_owner_team.py`)
+      <!-- behaviour: teams-09 | tests: backend/tests/unit/api/test_mcp_set_resource_owner_team.py -->
 
 ## Known Gaps
 

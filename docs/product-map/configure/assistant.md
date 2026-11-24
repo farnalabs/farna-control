@@ -40,16 +40,21 @@ listed org roles always granted).
 - [x] Sessions: `GET/POST /api/v1/assistant/sessions`, `GET/PATCH/DELETE
       /api/v1/assistant/sessions/{id}` – create, rename, list and delete sessions; delete
       removes the session and its messages
+      <!-- behaviour: assistant-01 | tests: none -->
 - [x] Messages: `GET /api/v1/assistant/sessions/{id}/messages` lists paginated messages and
       `POST` appends a user message
+      <!-- behaviour: assistant-02 | tests: none -->
 - [x] Streaming: `POST /api/v1/assistant/sessions/{id}/stream` returns an SSE stream of the
       LLM response for the session history
+      <!-- behaviour: assistant-03 | tests: none -->
 - [x] Assistant resolves read-only `get_manifest` tool calls locally against the app
       manifest and reports them as `tool_call` SSE events under the called tool's name
       (no browser-action tools are advertised)
+      <!-- behaviour: assistant-04 | tests: none -->
 - [x] Admin config: `GET/PUT /api/v1/admin/assistant/config` reads and updates the
       assistant's provider/model/prompt/access settings with feature-flag + org
       scoping; `GET /available-providers` lists selectable providers
+      <!-- behaviour: assistant-05 | tests: none -->
 - [x] Admin skills CRUD (`GET/POST /api/v1/admin/assistant/skills`,
       `PUT/DELETE /api/v1/admin/assistant/skills/{skill_id}`): org-level
       reusable skills named `org:...`. Users manage their OWN skills through
@@ -57,10 +62,13 @@ listed org roles always granted).
       `PUT/DELETE /api/v1/me/assistant/skills/{skill_id}`
       (`UserAssistantSkillsView.vue`, `test_me_assistant_skills.py`); skills
       inject instructions into the assistant context (ADR 011)
+      <!-- behaviour: assistant-06 | tests: backend/tests/unit/api/test_me_assistant_skills.py -->
 - [x] Context sources: `GET/PUT /context-sources/{key}` and `DELETE /context-sources`
       manage the extra context injected into the assistant window
+      <!-- behaviour: assistant-07 | tests: none -->
 - [x] Access control: the access list grants explicit user ids and org roles, admins
       always have access, and blocked users are refused (`assistant_access_control.feature`)
+      <!-- behaviour: assistant-08 | tests: backend/tests/bdd/features/assistant/assistant_access_control.feature -->
 - [x] The UI-driving configuration surface was removed with FAR-2232: the org
       assistant config (`AssistantConfig` in `core/assistant/config_service.py`)
       carries no `tool_permissions` / `permission_mode` / `allowed_page_patterns` /
@@ -69,13 +77,16 @@ listed org roles always granted).
       panel, migration `0340_drop_assistant_ui_driving_flag_row` deletes the leftover
       `assistant_ui_driving` feature-flag catalog row, and the obsolete `en-US` i18n
       keys are swept
+      <!-- behaviour: assistant-09 | tests: none -->
 - [x] Guidance tuning ships end to end: `additional_guidance` is a first-class field on
       the admin assistant config (`GET/PUT /api/v1/admin/assistant/config`, model in
       `core/assistant/config_service.py`), edited through the Additional Guidance
       textarea in the admin settings view and asserted on the PUT body
       (`AdminAssistantView.spec.ts`)
+      <!-- behaviour: assistant-10 | tests: none -->
 - [x] BDD coverage across sessions, messages, context window, context sources, skills,
       admin config, UI commands and access control (`backend/tests/bdd/features/assistant/`)
+      <!-- behaviour: assistant-11 | tests: none -->
 
 ## Known Gaps
 

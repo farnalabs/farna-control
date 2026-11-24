@@ -61,28 +61,34 @@ applications. Built on the auth + model-backend core.
       library, connector, trigger, model-backend, secret, runtime and viewmodel
       tools – as a thin adapter over the ViewModel API with per-tool definitions
       emitted via `mcp_tool_registry.build_tool_registry`
+      <!-- behaviour: mcp-01 | tests: none -->
 - [x] Authentication is API-key bearer (`Authorization: Bearer mk_<key>`):
       `McpAuthMiddleware` validates the key at the HTTP layer, rejects
       unauthenticated requests, and sets org_id/role in a ContextVar for tool
       handlers (operator vs runner roles); tenant org context is validated
       per-event on SSE streams
+      <!-- behaviour: mcp-02 | tests: none -->
 - [x] Dual-layer scope enforcement: the middleware gate is re-checked at the
       viewmodel layer by `core/mcp/scope_validator.py` against the centralized
       permission registry (ADR 047) – a bypass of the middleware cannot widen a
       tool's effective role – and team-bound tools enforce the caller's team
       binding
+      <!-- behaviour: mcp-03 | tests: none -->
 - [x] OAuth 2.0 client management (browser-authenticated): register/list/delete
       OAuth clients (`POST/GET/DELETE /api/v1/mcp/oauth/clients`) and approve
       pending browser consent (`POST /api/v1/mcp/oauth/consent/approve`), with
       the authorize/token/refresh protocol endpoints served by the MCP sub-app
+      <!-- behaviour: mcp-04 | tests: none -->
 - [x] Completion setup handoff: `POST /api/v1/model-backends/{backend_id}/complete-setup`
       (`api/routes/mcp_setup.py`, `tests/unit/api/test_mcp_setup.py`) consumes a
       one-time setup token from an MCP tool response, configures the returned API
       key on the target model backend, and completes the setup flow
+      <!-- behaviour: mcp-05 | tests: backend/tests/unit/api/test_mcp_setup.py -->
 - [x] The `/settings/mcp` view lists the MCP URL, creates API keys with a
       selectable role (`settings-mcp-create-key`), revokes keys, and shows the
       generated key value for copying – the configured key is what external
       agents authenticate with
+      <!-- behaviour: mcp-06 | tests: none -->
 - [x] The MCP API-keys card distinguishes a **revoked** key from an
       **expired** one by observed facts, not the derived `is_active` flag
       (FAR-1296 / FAR-1299): the key serializer
@@ -99,6 +105,7 @@ applications. Built on the auth + model-backend core.
       (`frontend/src/views/SettingsMcpView.vue`,
       `frontend/src/__tests__/SettingsMcpView.spec.ts`,
       `backend/tests/unit/api/test_api_keys_endpoint.py`)
+      <!-- behaviour: mcp-07 | tests: backend/tests/unit/api/test_api_keys_endpoint.py -->
 - [x] MCP OAuth client registration UI (2026-09-28, FAR-1251): the
       "Registered OAuth Clients" card on `/settings/mcp`
       (`components/settings/McpOauthClientsCard.vue`) lists the org's clients
@@ -140,11 +147,14 @@ applications. Built on the auth + model-backend core.
       protocol endpoints need a real public issuer
       (`SettingsMcpView.spec.ts`, `tests/unit/api/test_mcp_oauth.py`,
       `mcp/mcp_oauth.feature`)
+      <!-- behaviour: mcp-08 | tests: backend/tests/bdd/steps/test_mcp_oauth.py, backend/tests/bdd/features/mcp/mcp_oauth.feature -->
 - [x] API-key listing is restricted to operator/admin principals on REST and MCP because it discloses account attribution (`account_kind`, `account_display_name`, and human `account_email`; service-account email is always `null`). The list response excludes the one-time raw key value, hashed secret, and all other secret material; malformed successful non-array responses are rendered as an explicit error rather than an empty state (`api_keys.py`, `auth/api_key.py`, `core/mcp/scope_validator.py`, `SettingsMcpView.vue`)
+      <!-- behaviour: mcp-09 | tests: none -->
 - [x] Security hardening: keys are minted/revoked through the api-key surface,
       list-run/cost and other sensitive tools are role-gated, HITL-gated tools
       route through human review, and the suite guards structural tool
       coverage so new tools cannot ship unscoped
+      <!-- behaviour: mcp-10 | tests: none -->
 - [x] Viewer-level MCP reads are team-membership bounded (PR #2552): `run.list`,
       `trigger.list`, `trigger.events.list` and `hitl.list` floor at `viewer`, so
       `list_runs`, `list_triggers`, `get_trigger`, `list_trigger_events`,
@@ -158,6 +168,7 @@ applications. Built on the auth + model-backend core.
       (`backend/src/farna/api/mcp_server.py`,
       `backend/tests/unit/mcp/test_team_scope_enforcement.py`,
       `backend/tests/unit/mcp/test_get_trigger_events.py`)
+      <!-- behaviour: mcp-11 | tests: backend/tests/unit/mcp/test_team_scope_enforcement.py, backend/tests/unit/mcp/test_get_trigger_events.py -->
 
 
 - [x] MCP trigger dispatch (2026-09-22): the `trigger_pipeline` tool drives the
@@ -169,6 +180,7 @@ applications. Built on the auth + model-backend core.
       and middleware seams (the tool handlers are invoked directly with the
       request ContextVars hydrated by hand, so the FastMCP invoke/dispatch layer
       itself is not exercised)
+      <!-- behaviour: mcp-12 | tests: backend/tests/bdd/features/mcp/trigger.feature -->
 - [x] MCP HITL review (2026-09-24): the `review_hitl` unified gate tool (claim /
       approve / reject / deliver_manual) drives the REAL parse guard, scope gate
       and decision dispatch – `approve`/`reject` require a claim token
@@ -184,6 +196,7 @@ applications. Built on the auth + model-backend core.
       execute in CI against these real handler seams (auth re-validation + DB /
       HITLManager seams patched), closing the last legacy `/mcp/tools/call`
       `@awaiting-implementation` draft under the review surface
+      <!-- behaviour: mcp-13 | tests: backend/tests/bdd/features/mcp/review_hitl.feature -->
 - [x] MCP human-only gate enforcement (2026-09-24): the REAL `review_hitl`
       policy hook `_check_human_only_gate` denies an API-key/MCP principal every
       decision action (claim/approve/deliver_manual) on a `human_only` gate –
@@ -206,12 +219,14 @@ applications. Built on the auth + model-backend core.
       `hitl._client_type` vs `mcp` stamped by the MCP `_dispatch_hitl_action`)
       – with only the auth re-validation and DB / config-resolution /
       HITLManager seams patched
+      <!-- behaviour: mcp-14 | tests: backend/tests/bdd/features/mcp/human_only.feature -->
 - [x] Every API key carries an immutable caller scope (`org` | `user`,
       ADR 030/FAR-620): user-scoped keys act as their creator and are
       REST-JWT-minted only (flag + 10-key quota gated); MCP minting stays
       org-only. Mint/revoke emit `api_key_created` / `api_key_revoked` audit
       events on BOTH surfaces with `auth_type` / `key_scope` masked-prefix
       payload stamps
+      <!-- behaviour: mcp-15 | tests: none -->
 - [x] MCP library browse (2026-09-25): the `search_library` tool is the
       read-only library-browse surface (browse + text search + cursor
       pagination over org / Native primitives). It stays on the
@@ -228,6 +243,7 @@ applications. Built on the auth + model-backend core.
       in CI against the real handler + scope-gate seams (auth re-validation +
       `list_primitives` / `_session` seams patched), closing the last pinned
       legacy-`/mcp/tools/call` draft
+      <!-- behaviour: mcp-16 | tests: backend/tests/bdd/features/mcp/library_browse.feature -->
 - [x] Caller-scoped (`.self` permission-key suffix) MCP tools target the
       CALLER's own account with NO target parameter (registry-introspection
       pinned); the first pair (`get_hitl_email_alerts` /
@@ -237,6 +253,7 @@ applications. Built on the auth + model-backend core.
       (visible-but-failing in tools/list); all of its writes go through the
       single row-locked preferences writer
       (`db/crud/account.set_hitl_email_preference`)
+      <!-- behaviour: mcp-17 | tests: none -->
 - [x] MCP tool errors carry specific, branchable codes (FAR-1502): `_tool_error`
       REQUIRES a keyword-only `code` (no default), so no call site can fall back
       to the disallowed generic `internal_error`; the shared `_tool_exception_error`
@@ -252,6 +269,7 @@ applications. Built on the auth + model-backend core.
       `_tool_exception_error`, `backend/src/farna/api/db_error_handling.py`
       `session_contract_error_payload`; `test_mcp_tool_exception_error.py`,
       `test_mcp_session_contract_errors.py`)
+      <!-- behaviour: mcp-18 | tests: backend/tests/unit/mcp/test_mcp_tool_exception_error.py, backend/tests/unit/mcp/test_mcp_session_contract_errors.py -->
 - [x] The run WebSocket control-frame vocabulary aligns to the MCP codes
       (FAR-1502): the frames answer `database_unavailable` (the old
       `db_unavailable` key no other surface used) and `server_error` (the old
@@ -263,6 +281,7 @@ applications. Built on the auth + model-backend core.
       `backend/tests/architecture/test_mcp_error_codes.py` structurally forbids
       the `internal_error` payload in both sources and keeps `_tool_error`'s
       `code` keyword-only with no default
+      <!-- behaviour: mcp-19 | tests: backend/tests/unit/api/test_run_ws.py, backend/tests/architecture/test_mcp_error_codes.py -->
 - [x] OAuth discovery metadata (2026-10-07, FAR-1476): two unauthenticated
       `/.well-known/` documents let a stock MCP harness bootstrap OAuth from a
       bare Farna Control URL – the RFC 8414 authorization-server metadata
@@ -296,6 +315,7 @@ applications. Built on the auth + model-backend core.
       (`backend/src/farna/api/routes/oauth_metadata.py`,
       `backend/src/farna/api/mcp_server.py`, `backend/src/farna/api/main.py`;
       `backend/tests/unit/api/test_oauth_metadata.py`)
+      <!-- behaviour: mcp-20 | tests: backend/tests/unit/api/test_oauth_metadata.py -->
 - [x] Browser OAuth consent screen (2026-10-10, FAR-1476): the SPA consent
       route `/oauth/authorize` is a real grant-review page, not a placeholder.
       An anonymous pre-auth context endpoint
@@ -335,6 +355,7 @@ applications. Built on the auth + model-backend core.
       `frontend/src/__tests__/OAuthConsentView.spec.ts`,
       `backend/tests/unit/api/test_mcp_oauth_bdd.py`,
       migration `0301_oauth_consent_state_preauth_rls`)
+      <!-- behaviour: mcp-21 | tests: backend/tests/unit/api/test_mcp_oauth_bdd.py -->
 - [x] Widened OAuth scope vocabulary + delegated HITL decisions (2026-10-10,
       FAR-1476): the grantable scope set is the delegable `PERMISSIONS`
       registry - every key `auth.permissions.is_delegable` accepts (~158
@@ -365,6 +386,7 @@ applications. Built on the auth + model-backend core.
       `backend/tests/unit/api/test_mcp_oauth.py`,
       `backend/tests/unit/auth/test_oauth.py`,
       `frontend/src/__tests__/SettingsMcpView.spec.ts`)
+      <!-- behaviour: mcp-22 | tests: backend/tests/unit/mcp/test_hitl_delegation_boundary.py, backend/tests/unit/api/test_mcp_oauth.py, backend/tests/unit/auth/test_oauth.py -->
 
 - [x] MCP manages model backends (FAR-2329): `list_model_backends`
       (cursor-paginated, limit clamped 1..100) and `get_model_backend` are
@@ -389,6 +411,7 @@ applications. Built on the auth + model-backend core.
       `model_backend.*` registry key (`api/mcp_server.py`,
       `core/mcp/scope_validator.py`; `tests/unit/mcp/test_mcp_schema_tools.py`,
       `tests/unit/api/test_model_backend_fallback_validation.py`)
+      <!-- behaviour: mcp-23 | tests: backend/tests/unit/mcp/test_mcp_schema_tools.py, backend/tests/unit/api/test_model_backend_fallback_validation.py -->
 
 ## Known Gaps
 

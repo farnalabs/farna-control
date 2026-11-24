@@ -80,11 +80,20 @@ def _entry_frontmatter(path: Path) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
+#: Markdown files under ``docs/product-map/`` that are NOT feature-graph nodes:
+#: the graph index itself, and the FAR-2701 generated report that lists the
+#: behaviours still unbound to a proving test (``scripts/run_behaviour_bindings_baseline.py``
+#: regenerates it, and ``test_behaviour_bindings.py`` asserts it is current).
+#: Both are navigation/support documents, so they carry no ``feat-*`` node id and
+#: are exempt from the entry invariants below - exactly like the index.
+_SUPPORT_DOCS = frozenset({GRAPH_INDEX.resolve(), (PRODUCT_MAP_DIR / "unbound-behaviours.md").resolve()})
+
+
 def _product_map_entry_paths() -> list[Path]:
-    """Every behaviour-tracker entry (``*.md`` except the graph index)."""
+    """Every behaviour-tracker entry (``*.md`` except the graph index and support docs)."""
     if not PRODUCT_MAP_DIR.is_dir():
         return []
-    return sorted(path for path in PRODUCT_MAP_DIR.rglob("*.md") if path.resolve() != GRAPH_INDEX.resolve())
+    return sorted(path for path in PRODUCT_MAP_DIR.rglob("*.md") if path.resolve() not in _SUPPORT_DOCS)
 
 
 def _product_map_entry_ids() -> set[str]:

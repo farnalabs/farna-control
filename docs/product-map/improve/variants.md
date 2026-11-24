@@ -29,21 +29,27 @@ batch-compare view directly; it is a community-tier page with no feature flag
 - [x] A variant group is creatable with weighted variants that fuse
       `run_context_overrides` into each run's input payload
       (`tests/bdd/features/variants/variant_groups.feature`)
+      <!-- behaviour: variants-01 | tests: backend/tests/bdd/features/variants/variant_groups.feature -->
 - [x] A batch run triggers one run per variant in insertion order with variant names
       carried through the run record
       (`tests/bdd/features/variants/variant_groups.feature`)
+      <!-- behaviour: variants-02 | tests: backend/tests/bdd/features/variants/variant_groups.feature -->
 - [x] Sequential execution fires one run per variant in variant insertion order,
       driving the real `run_variant_batch` seam (insertion order preserved,
       one shared `batch_id`)
       (`tests/bdd/features/variants/variant_groups.feature`)
+      <!-- behaviour: variants-03 | tests: backend/tests/bdd/features/variants/variant_groups.feature -->
 - [x] Variant groups can be listed, fetched, updated, deleted and restored
       (ownership asserted per organization, `api/routes/variants.py`)
+      <!-- behaviour: variants-04 | tests: none -->
 - [x] Comparison surfaces include coverage gaps, prompt diffs and the batch-compare
       summary (`prompt_diffs`, `coverage_gaps`, `batch_compare` endpoints)
+      <!-- behaviour: variants-05 | tests: none -->
 - [x] Eval coverage gaps report the pipeline eval definitions each variant is
       missing, driving the real `get_coverage_gaps` seam (a variant claiming the
       eval is not flagged)
       (`tests/bdd/features/variants/variant_groups.feature`)
+      <!-- behaviour: variants-06 | tests: backend/tests/bdd/features/variants/variant_groups.feature -->
 - [x] Per-token breakdown comparison across variants ships: each variant's
       per-node token usage (input/output/total tokens + cost) rides the
       variant-batch detail surface (`_run_to_variant_run` in
@@ -55,13 +61,16 @@ batch-compare view directly; it is a community-tier page with no feature flag
       page renders a per-node token table per expanded variant run
       (`VariantBatchCompareView.vue`, `VariantBatchCompareView.spec.ts`,
       `test_variant_batches.py`, `test_variants.py`)
+      <!-- behaviour: variants-07 | tests: backend/tests/unit/api/test_variant_batches.py, backend/tests/unit/api/test_variants.py -->
 - [x] The variant batch-compare UI at `/variants/compare/:batchId` is ungated
       (community tier, no feature flag): the phantom `variant_batch_compare`
       flag was removed in FAR-926 and the route serves `VariantBatchCompareView`
       directly (frontend router)
+      <!-- behaviour: variants-08 | tests: none -->
 - [x] Variant groups are created and batch-fired from the inline builder on
       `/variants/compare` (`components/variants/VariantGroupBuilder.vue`), which
       honors the `pipeline_id` deep-link from a pipeline's "Run as variant" action
+      <!-- behaviour: variants-09 | tests: none -->
 - [x] A terminal `rejected` run (FAR-1487) aggregates exactly like `cancelled`
       in the server-computed batch status: `_CANCELLED = {"cancelled",
       "rejected"}` in `api/routes/variant_batches.py`, so a batch whose runs are
@@ -69,6 +78,7 @@ batch-compare view directly; it is a community-tier page with no feature flag
       reports `partial` (`test_variant_batches.py` `TestComputeBatchStatus`) –
       a HITL rejection lowers a batch's completion ratio rather than raising a
       batch-level `failed`
+      <!-- behaviour: variants-10 | tests: backend/tests/unit/api/test_variant_batches.py -->
 - [x] `/variants/compare` lists comparison groups in the shared `DataTable`
       (name, pipeline, variants, declared evals, selection strategy, runs,
       degraded evals, actions) with a pipeline select and a name search. It
@@ -82,6 +92,7 @@ batch-compare view directly; it is a community-tier page with no feature flag
       first visible row so it never lands empty-handed
       (`VariantCompareView.vue`, `VariantCompareView.spec.ts`,
       `variant-compare-groups.spec.ts`)
+      <!-- behaviour: variants-11 | tests: none -->
 - [x] User-visible copy on the variants surface standardises on "comparison"
       (table columns, empty state, the inline explainer linking to `/evals`, the
       builder title/subtitle) while "variant group" stays the code and route
@@ -90,6 +101,7 @@ batch-compare view directly; it is a community-tier page with no feature flag
       writes them empty and nothing scores with them), not the scores a run
       received (`VariantCompareView.vue`, `VariantGroupBuilder.vue`,
       `locales/en-US.js`)
+      <!-- behaviour: variants-12 | tests: none -->
 - [x] The comparison builder exposes the group-level `degraded_evals` flag
       (default off, operator-controlled) and sends it in
       `CreateVariantGroupRequest`; the backend persists it
@@ -104,6 +116,7 @@ batch-compare view directly; it is a community-tier page with no feature flag
       (`VariantGroupBuilder.vue`, `VariantCompareView.vue`,
       `locales/en-US.js`, `VariantGroupBuilder.spec.ts`,
       `VariantCompareView.spec.ts`)
+      <!-- behaviour: variants-13 | tests: none -->
 
 ## Known Gaps
 

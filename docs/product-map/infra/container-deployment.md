@@ -78,11 +78,13 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       Gatus watchdog. Every host-published port binds `127.0.0.1`, so a default
       stack is not reachable from a non-loopback interface.
       (`docker-compose.yml`; `test_compose_loopback_ports.py::test_default_compose_ports_are_loopback_only`).
+      <!-- behaviour: container-deployment-01 | tests: backend/tests/architecture/test_compose_loopback_ports.py::test_default_compose_ports_are_loopback_only -->
 - [x] Every service that builds from `./backend` (and therefore runs the
       credential-widening entrypoint) is given the same `POSTGRES_PASSWORD` as
       the database service, so the `alembic_version` widening step and the
       migrations cannot disagree about the credential.
       (`docker-compose.yml`; `test_docker_compose_wiring.py::test_app_services_declare_postgres_password`).
+      <!-- behaviour: container-deployment-02 | tests: backend/tests/unit/test_docker_compose_wiring.py::test_app_services_declare_postgres_password -->
 - [x] The root and local Compose bring-up files refuse to start without a
       required `FERNET_KEY` interpolation whose message tells the operator how to
       generate one. The tests prove a generated value satisfies `Settings` and
@@ -93,6 +95,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `::test_the_failure_message_says_how_to_generate_the_key`,
       `::test_the_broken_placeholders_are_not_used_as_a_fernet_key`,
       `::test_a_generated_key_boots_settings_and_is_a_real_fernet_key`).
+      <!-- behaviour: container-deployment-03 | tests: backend/tests/architecture/test_compose_fernet_key_contract.py::test_every_service_passes_a_required_fernet_key -->
 - [x] Every shipped Compose Redis sets an operator-overridable `--maxmemory`
       bound and a `volatile-*` eviction policy, so a worker wedge cannot grow
       the queue until enqueue writes fail, and eviction only touches TTL-bearing
@@ -101,12 +104,14 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `deploy/compose/docker-compose.prod.yml`;
       `test_compose_redis_memory_bound.py::test_shipped_redis_has_a_maxmemory_bound`,
       `::test_shipped_redis_policy_only_evicts_repairable_keys`).
+      <!-- behaviour: container-deployment-04 | tests: backend/tests/architecture/test_compose_redis_memory_bound.py::test_shipped_redis_has_a_maxmemory_bound -->
 - [x] The source-build stack wires `FARNA_CONTROL_SYSTEM_DATABASE_URL` into the
       backend and the system worker, authenticating as the `farna_control_system`
       (BYPASSRLS) role with the same password as the app role. Without it the
       `dispatcher_reconcile` cron fails closed and `/healthz/ready` never
       reports ready.
       (`docker-compose.yml`; `test_root_compose_system_url.py::test_service_wires_the_system_database_url`).
+      <!-- behaviour: container-deployment-05 | tests: backend/tests/architecture/test_root_compose_system_url.py::test_service_wires_the_system_database_url -->
 - [x] The production Compose file pulls the published all-in-one image pinned by
       a required `TAG`, publishes only the application on `${PORT:-80}:80`, and
       keeps every other service loopback-only. It refuses to run until
@@ -117,6 +122,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       (`deploy/compose/docker-compose.prod.yml`;
       `test_compose_loopback_ports.py::test_service_scoped_compose_ports_are_loopback_only`,
       `test_all_in_one_supervisor_workers.py::test_the_compose_wires_the_system_database_url_the_system_worker_requires`).
+      <!-- behaviour: container-deployment-06 | tests: backend/tests/architecture/test_compose_loopback_ports.py::test_service_scoped_compose_ports_are_loopback_only, backend/tests/architecture/test_all_in_one_supervisor_workers.py::test_the_compose_wires_the_system_database_url_the_system_worker_requires -->
 - [x] Every environment variable the production Compose passes to the
       application is one the application actually reads, every required
       `Settings` field is satisfied, the resolved environment constructs
@@ -128,6 +134,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `::test_compose_environment_constructs_settings`,
       `::test_env_example_documents_the_required_secrets`,
       `::test_no_compose_variable_has_a_silent_default`).
+      <!-- behaviour: container-deployment-07 | tests: backend/tests/architecture/test_prod_compose_env_contract.py::test_every_env_var_passed_to_the_app_is_read_by_the_app -->
 - [x] The all-in-one image is a multi-stage build (Node/pnpm frontend, Python
       runtime) that runs as the unprivileged `www-data` user, grants only
       `cap_net_bind_service` to bind port 80, removes the distribution nginx
@@ -138,6 +145,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       (`deploy/docker/Dockerfile.all-in-one`, `deploy/supervisor/entrypoint.sh`;
       `test_dockerfile_docker_extra.py::test_saq_worker_images_install_docker_extra`,
       `test_alignment_entrypoints.py::test_entrypoint_guards_before_running_migrations`).
+      <!-- behaviour: container-deployment-08 | tests: backend/tests/architecture/test_dockerfile_docker_extra.py::test_saq_worker_images_install_docker_extra, backend/tests/unit/db/test_alignment_entrypoints.py::test_entrypoint_guards_before_running_migrations -->
 - [x] The all-in-one image's supervisord runs the API (`uvicorn` on loopback),
       nginx, and BOTH SAQ workers in the one container. The worker commands
       match the root Compose services verbatim, autostart, run in `/app`, and
@@ -148,6 +156,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `::test_each_worker_program_autostarts_and_logs_where_an_operator_can_read_them`,
       `::test_supervisord_conf_is_actually_shipped_by_the_all_in_one_dockerfile`,
       `::test_the_workers_are_not_a_compose_side_service`).
+      <!-- behaviour: container-deployment-09 | tests: backend/tests/architecture/test_all_in_one_supervisor_workers.py::test_each_worker_program_matches_the_root_compose_command -->
 - [x] The all-in-one nginx serves the SPA with history fallback and a
       no-cache index, proxies `/api/`, `/.well-known/` (OAuth discovery JSON),
       `/mcp/` (buffering off for SSE), `/ws` (upgrade headers), and `/health`
@@ -159,6 +168,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `::test_app_demo_robots_allows_crawling`;
       `.github/workflows/publish-images.yml` runs `nginx -t` against the built
       image).
+      <!-- behaviour: container-deployment-10 | tests: backend/tests/unit/api/test_robots_txt.py::test_staging_robots_disallows_crawling -->
 - [x] `deploy/caddy/Caddyfile` is an optional reference TLS reverse proxy:
       environment-substituted domain and upstreams, automatic HTTPS, security
       headers, JSON access logging, a per-IP rate limit on `/api/*`, and the
@@ -166,6 +176,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       buffering, WebSocket, SPA fallback). It is a sample config, not part of
       the default stack.
       (`deploy/caddy/Caddyfile`).
+      <!-- behaviour: container-deployment-11 | tests: none -->
 - [x] `scripts/package_compose_release.py` builds the downloadable
       `farna-control-<version>-compose.tar.gz` bundle with the production
       Compose hard-pinned to an immutable release tag, a copy named
@@ -183,6 +194,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `::test_bundled_init_env_generates_every_required_variable`,
       `::test_bundled_compose_is_standalone_and_dropped_the_source_build`,
       `::test_bundled_env_values_satisfy_the_settings_validators`).
+      <!-- behaviour: container-deployment-12 | tests: backend/tests/unit/scripts/test_package_compose_release.py::test_validate_release_tag_rejects_latest -->
 - [x] The release acceptance matrix proves the operator-visible Compose
       lifecycle: clean install of the old tag, upgrade to the new tag, an
       intentionally broken upgrade (invalid `SECRET_KEY`), rollback to the old
@@ -194,11 +206,13 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `::test_matrix_records_every_required_transition`,
       `::test_evidence_redacts_secret_literals`,
       `::test_failed_upgrade_reads_the_backend_child_log_not_the_container_log`).
+      <!-- behaviour: container-deployment-13 | tests: backend/tests/unit/scripts/test_verify_compose_upgrade_rollback.py::test_build_compose_command_is_project_isolated -->
 - [x] `scripts/smoke-compose.sh` proves a running stack can actually store a
       credential rather than merely answer a health poll: it logs in, asserts
       the readiness `checkpointer` check is `ok`, confirms the checkpoint tables
       exist in Postgres, then creates, reads back, and deletes a model backend.
       (`scripts/smoke-compose.sh`).
+      <!-- behaviour: container-deployment-14 | tests: none -->
 - [x] The build/release pipeline publishes the all-in-one image and the split
       backend/frontend images to GHCR, with built-in image smoke checks
       (`import farna`, `nginx -t`); the release workflow supplies the versioned
@@ -210,6 +224,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `scripts/render_validation_compose.py`;
       `test_release_workflow_contract.py::test_rc_validation_runs_the_docker_acceptance_matrix_before_pen_test`,
       `::test_rc_validation_renders_matrix_compose_without_a_concrete_tag`).
+      <!-- behaviour: container-deployment-15 | tests: backend/tests/unit/test_release_workflow_contract.py::test_rc_validation_runs_the_docker_acceptance_matrix_before_pen_test -->
 - [x] The Helm chart deploys the backend API, both SAQ workers, the frontend
       SPA, and (optionally) an in-cluster Redis. PostgreSQL is always external.
       It refuses to render without `SECRET_KEY` and `FERNET_KEY`, and the
@@ -223,6 +238,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `test_helm_image_tag_defaults.py::test_default_image_tags_resolve_from_the_chart_not_a_literal`,
       `::test_image_helper_defaults_to_chart_app_version`,
       `::test_workload_templates_pass_app_version_into_the_image_helper`).
+      <!-- behaviour: container-deployment-16 | tests: backend/tests/unit/test_helm_image_tag_defaults.py::test_default_image_tags_resolve_from_the_chart_not_a_literal -->
 - [x] The Helm chart's embedded Redis requires a password (or an existing
       Secret), passes it to `redis-server --requirepass` through a
       shell-expanded environment variable rather than rendering it into the
@@ -241,6 +257,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `test_helm_redis_memory_bound.py::test_helm_redis_has_a_maxmemory_bound`,
       `::test_helm_embedded_redis_auth_runtime_wiring`,
       `::test_helm_redis_policy_only_evicts_ttl_bearing_keys`).
+      <!-- behaviour: container-deployment-17 | tests: backend/tests/unit/test_helm_redis_memory_bound.py::test_helm_redis_has_a_maxmemory_bound -->
 - [x] The Kubernetes conformance gate lints the Helm chart on every chart
       change and runs the runtime-provider conformance suite on a throwaway
       kind cluster plus a rotating managed cloud (EKS/AKS/GKE). A substrate is
@@ -249,6 +266,7 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       explicitly not claimed.
       (`.github/workflows/k8s-conformance.yml`,
       `docs/deployment/k8s-conformance-parity.md`).
+      <!-- behaviour: container-deployment-18 | tests: none -->
 
 ## Known Gaps
 

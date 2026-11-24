@@ -129,6 +129,7 @@ point in time.
       org-scoped key; there is no longer a caller-visibility class to separate
       (`core/feature_flags.py`, `api/routes/admin_feature_flags.py`,
       `api/routes/admin_org_feature_flags.py`)
+      <!-- behaviour: system-maps-01 | tests: none -->
 - [x] Every System Maps request passes three gates and fails closed: the
       router-level `_require_internal_system_maps_access`, which enforces the
       operator role floor through `require_in_dev_operator` (developer mode is
@@ -150,6 +151,7 @@ point in time.
       (`test_system_maps_routes.py::test_dev_mode_is_not_required`,
       `test_system_maps_discovery_routes.py::test_discovery_allows_operator_without_dev_mode`,
       `test_internal_jwt_without_grants_can_access`)
+      <!-- behaviour: system-maps-02 | tests: backend/tests/unit/api/test_system_maps_routes.py::test_dev_mode_is_not_required, backend/tests/unit/api/test_system_maps_discovery_routes.py::test_discovery_allows_operator_without_dev_mode -->
 - [x] Published reads are a distinct, viewer-level surface (FAR-2363):
       `system_maps.read` is a viewer permission and `system_maps_read` is a
       community-tier entitlement flag that is NOT internal/default-OFF, so a
@@ -181,6 +183,7 @@ point in time.
       is `private_preview`, so it needs developer mode, but the router guard
       does not additionally consult the demo flag: a demo session on a
       dev-mode instance can still open `/system-maps` by direct URL until Beta
+      <!-- behaviour: system-maps-03 | tests: backend/tests/unit/api/test_system_maps_routes.py, backend/tests/unit/auth/test_permissions.py, backend/tests/unit/core/test_feature_flag_registry.py -->
 - [x] The permission vocabulary is registered and enforced on every shipped
       route: `system_maps_access` is operator; `system_map.list`,
       `system_map.revision.get`, `system_map.revision.diff` and
@@ -191,11 +194,13 @@ point in time.
       keys are registered but have no route: nodes, relationships and loop
       configs are authored inside the revision payload
       (`auth/permissions.py`, `api/routes/system_maps.py`)
+      <!-- behaviour: system-maps-04 | tests: none -->
 - [x] Every handler is organization-scoped: it binds `set_rls_org` and
       `set_rls_user_context` inside the same `session.begin()` block as its
       reads and writes, and every repository call carries an explicit
       `organisation_id` (`api/routes/system_maps.py`,
       `db/repositories/system_map.py`; `test_system_maps_routes.py`)
+      <!-- behaviour: system-maps-05 | tests: backend/tests/unit/api/test_system_maps_routes.py -->
 - [x] Map visibility is team-aware: `system_maps` carries `visibility`
       (`org` / `team`) and `owner_team_id`, and the model's
       `ck_system_maps_team_owner` CHECK constraint rejects a `team` visibility
@@ -219,12 +224,14 @@ point in time.
       applies only the caller-supplied `visibility` / `owner_team_id` / `name`
       filters, resolving no caller team scope of its own
       (`db/repositories/system_map.py`)
+      <!-- behaviour: system-maps-06 | tests: backend/tests/unit/api/test_system_maps_routes.py, backend/tests/architecture/test_team_scope_wiring.py, backend/tests/integration/test_rls_isolation.py -->
 - [x] One published revision per map is a database invariant: a partial unique
       index on `(system_map_id)` where `status = 'published'`, a unique
       `(system_map_id, revision_number)` pair, composite tenant foreign keys,
       and a partial unique live-name index on `(organisation_id, name)` where
       `deleted_at IS NULL` (`db/models/system_map.py`;
       `0350_baseline_schema.py`; `test_system_map_models.py`)
+      <!-- behaviour: system-maps-07 | tests: backend/tests/unit/db/test_system_map_models.py -->
 - [x] `POST /api/v1/system-maps/discover` inspects only the caller's
       organization: live pipelines (`deleted_at IS NULL`,
       `archived_at IS NULL`), live triggers, live connector instances and
@@ -233,6 +240,7 @@ point in time.
       warnings, draft map/revision ids, revision number, `published=false`)
       (`api/routes/system_maps.py`, `api/schemas/system_maps.py`;
       `test_system_maps_discovery_routes.py`)
+      <!-- behaviour: system-maps-08 | tests: backend/tests/unit/api/test_system_maps_discovery_routes.py -->
 - [x] Discovery is bounded, not an unbounded tenant scan: every per-kind
       inventory query is ordered by `id` and capped at
       `MAX_DISCOVERY_SOURCES + 1` rows, so Postgres returns a stable subset
@@ -244,6 +252,7 @@ point in time.
       already bounded (`core/system_maps_discovery.py`,
       `api/routes/system_maps.py`; `test_system_maps_discovery.py`,
       `test_system_maps_discovery_routes.py`)
+      <!-- behaviour: system-maps-09 | tests: backend/tests/unit/api/test_system_maps_discovery_routes.py -->
 - [x] Discovery is deterministic and explainable: sources are sorted by
       `(kind, identifier, name)`; nodes are built only for the supported kinds
       (pipeline, trigger, connector, folder); edges are emitted only for
@@ -251,6 +260,7 @@ point in time.
       folder); every edge carries `config_json.suggested = true` plus a reason;
       duplicate edges are de-duplicated in a stable sort order
       (`core/system_maps_discovery.py`; `test_system_maps_discovery.py`)
+      <!-- behaviour: system-maps-10 | tests: none -->
 - [x] Unsupported or unresolvable sources are reported, never guessed: an
       unknown source kind, a trigger with no pipeline binding, a trigger whose
       pipeline is not in the inventory, a pipeline whose folder is not in the
@@ -259,12 +269,14 @@ point in time.
       non-empty `skipped` list raises a warning (an empty inventory raises its
       own warning instead) (`core/system_maps_discovery.py`;
       `test_system_maps_discovery.py`)
+      <!-- behaviour: system-maps-11 | tests: none -->
 - [x] The draft's lifecycle-map-shaped `stages` / `edges` compatibility
       projection is honest about provenance: a discovery pipeline node maps to
       `modulo`, a trigger node to `manual` (it carries no Farna Control pipeline of its
       own), and connector/folder nodes to `placeholder` (external systems,
       never presented as Farna Control) (`api/routes/system_maps.py::_stage_type`;
       `test_system_maps_routes.py`)
+      <!-- behaviour: system-maps-12 | tests: backend/tests/unit/api/test_system_maps_routes.py -->
 - [x] Discovery persists a draft in the System Maps tables, not `lifecycle_maps`:
       it creates the map (or refuses a name already used by a live map with
       409, with no silent reuse and no automatic suffix) and one draft revision;
@@ -272,6 +284,7 @@ point in time.
       so the revision identity is stable for a given map and inventory
       (`core/system_map_persistence.py`;
       `test_system_map_persistence.py`, `test_system_maps_discovery.py`)
+      <!-- behaviour: system-maps-13 | tests: backend/tests/unit/core/test_system_map_persistence.py -->
 - [x] A draft revision is authored from a bounded payload: `POST
       /system-maps/{map_id}/revisions` accepts nodes, relationships and loop
       configs, validates every pipeline / connector / eval / owner-team /
@@ -279,6 +292,7 @@ point in time.
       server-side, and records a `system_map.revision.created` audit event
       (`api/routes/system_maps.py`, `db/repositories/system_map.py`;
       `test_system_maps_routes.py`)
+      <!-- behaviour: system-maps-14 | tests: backend/tests/unit/api/test_system_maps_routes.py -->
 - [x] Publishing validates before it publishes: relationship endpoints resolve
       against live nodes, `flow` edges are acyclic, every `improvement_loop`
       node has a loop config carrying all six required parameters, and every
@@ -288,11 +302,13 @@ point in time.
       `published_revision_id`, closes the previous revision's effective window
       and stamps `effective_from` (`db/repositories/system_map.py`,
       `api/routes/system_maps.py`; `test_system_maps_publish_audit.py`)
+      <!-- behaviour: system-maps-15 | tests: backend/tests/integration/test_system_maps_publish_audit.py -->
 - [x] Archiving closes the revision's effective window and clears
       `published_revision_id` when the archived revision was the published one;
       a revision cannot be deleted while published (409, archive first), and a
       draft or archived revision is soft-deleted with an audit event
       (`db/repositories/system_map.py`, `api/routes/system_maps.py`)
+      <!-- behaviour: system-maps-16 | tests: none -->
 - [x] Revision diff and restore ship: `POST .../revisions/{rev_id}/diff` reports
       node / relationship / loop-config additions, removals and modifications
       against another revision or the current draft, and
@@ -300,6 +316,7 @@ point in time.
       from a published or archived one and is audited; diff is a read
       (`api/routes/system_maps.py`, `api/schemas/system_maps.py`;
       `test_system_maps_version_aware.py`)
+      <!-- behaviour: system-maps-17 | tests: backend/tests/integration/test_system_maps_version_aware.py -->
 - [x] Version-aware reads let runs and metrics be interpreted against the map
       revision active at a point in time:
       - `GET .../revisions/by-time?at=<ISO8601>` returns the revision whose
@@ -315,6 +332,7 @@ point in time.
         historical revision's window
       (`api/routes/system_maps.py`, `db/repositories/system_map.py`,
       `0350_baseline_schema.py`, `test_system_maps_version_aware.py`)
+      <!-- behaviour: system-maps-18 | tests: backend/tests/integration/test_system_maps_version_aware.py -->
 - [x] `GET /system-maps/{map_id}/overview` is a read model over the trailing
       seven UTC days: per-node health (`healthy` / `degraded` / `unhealthy` /
       `unknown`, where `unhealthy` is a failure rate of 50% or more, any
@@ -324,6 +342,7 @@ point in time.
       nothing
       (`api/routes/system_maps.py`, `db/repositories/system_map.py`;
       `test_system_maps_overview_metrics.py`)
+      <!-- behaviour: system-maps-19 | tests: backend/tests/integration/test_system_maps_overview_metrics.py -->
 - [x] Attribution bindings attach live triggers and loop action pipelines to
       nodes in the published revision (409 while the map has no published
       revision): a `trigger` binding requires a
@@ -333,6 +352,7 @@ point in time.
       organization, and delete is a fail-closed audited soft delete
       (`api/routes/system_maps.py`, `db/repositories/system_map.py`;
       `test_system_maps_routes.py`)
+      <!-- behaviour: system-maps-20 | tests: backend/tests/unit/api/test_system_maps_routes.py -->
 - [x] `farna-control apply` treats a System Map as a name-keyed declarative entity
       (`KIND_SYSTEM_MAP`): it plans and applies `system_maps` entries, creates
       the map plus its declared draft revision on create, blocks an ambiguous
@@ -341,6 +361,7 @@ point in time.
       (`cli/apply/system_map_apply.py`, `cli/apply/plan.py`,
       `cli/apply/models.py`, `core/system_map_validation.py`;
       `test_system_map_apply.py`)
+      <!-- behaviour: system-maps-21 | tests: backend/tests/unit/cli/apply/test_system_map_apply.py -->
 - [x] The routed UI is wired to the shipped backend: `/system-maps` lists maps
       with create, open, discover (per-row action), delete and pagination, and
       `/system-maps/:id` provides the bounded graph editor, save-draft, publish,
@@ -349,6 +370,7 @@ point in time.
       `frontend/src/views/SystemMapDetailView.vue`,
       `frontend/src/components/system-maps/SystemMapHeaderBar.vue`;
       `SystemMapsView.spec.ts`, `SystemMapDetailView.spec.ts`)
+      <!-- behaviour: system-maps-22 | tests: none -->
 - [x] "Discover My System" is a real operation in the routed UI: the store
       POSTs `/api/v1/system-maps/discover`, the detail view opens
       `SystemMapDiscoveryPanel`, and the panel renders sources inspected,
@@ -358,6 +380,7 @@ point in time.
       `frontend/src/components/system-maps/SystemMapDiscoveryPanel.vue`,
       `frontend/src/components/system-maps/discoveryMerge.ts`;
       `systemMapsAuthoring.spec.ts`)
+      <!-- behaviour: system-maps-23 | tests: none -->
 - [x] The graph editor is bounded to the backend vocabularies
       (`pipeline` / `agent` / `connector` / `improvement_loop` / `data_store` /
       `external_system`; `flow` / `data` / `trigger` / `loop_back`), mirrored
@@ -365,6 +388,7 @@ point in time.
       (`frontend/src/stores/systemMaps.ts`,
       `frontend/src/components/system-maps/SystemMapGraphEditor.vue`;
       `SystemMapGraphEditor.spec.ts`)
+      <!-- behaviour: system-maps-24 | tests: none -->
 - [x] The dashboard card renders the real overview aggregate for the default
       (or first) published map, with loading, empty, error and retry states,
       and only after the store access probe settles with the flag enabled AND
@@ -374,6 +398,7 @@ point in time.
       (`frontend/src/components/dashboard/DashboardSystemOverview.vue`,
       `frontend/src/views/DashboardView.vue`;
       `DashboardSystemOverview.spec.ts`, `systemMapsStore.spec.ts`)
+      <!-- behaviour: system-maps-25 | tests: none -->
 - [x] The store's access probe fails closed and rejects stale principals: it
       revalidates on every access-token change, de-duplicates concurrent
       probes, drops responses from a previous generation or token, and derives
@@ -385,6 +410,7 @@ point in time.
       (`frontend/src/stores/systemMaps.ts`, `frontend/src/views/SystemMapsView.vue`,
       `frontend/src/components/system-maps/SystemMapHeaderBar.vue`;
       `systemMapsStore.spec.ts`, `SystemMapsView.spec.ts`)
+      <!-- behaviour: system-maps-26 | tests: none -->
 - [x] MCP flag listings include `system_maps` for every caller since FAR-2595
       removed it from `INTERNAL_FLAGS`; `_mcp_flag_visible` returns it through
       the normal (non-internal) path, and the flag stays default-OFF. The MCP
@@ -394,6 +420,7 @@ point in time.
       (`api/mcp_server.py`; `tests/unit/mcp/test_mcp_config_tools.py` -
       `TestSystemMapsInternalFlagMCP` and
       `TestSystemMapsAccessUsesSharedGrantCheck`)
+      <!-- behaviour: system-maps-27 | tests: backend/tests/unit/mcp/test_mcp_config_tools.py -->
 - [x] Discovery is exposed over MCP: the `discover_system_map` tool drives the
       SAME `POST /api/v1/system-maps/discover` handler the REST surface uses, so
       the inventory read, deterministic inference and persistence stay one
@@ -409,6 +436,7 @@ point in time.
       wrapper's generic mapping (`api/mcp_server.py::discover_system_map`,
       `core/mcp/scope_validator.py`;
       `tests/unit/mcp/test_mcp_system_map_discovery.py`)
+      <!-- behaviour: system-maps-28 | tests: backend/tests/unit/mcp/test_mcp_system_map_discovery.py -->
 - [x] System Maps overview is exposed over MCP through the canonical REST
       overview handler: `get_system_map_overview` returns revision-aware node
       health, loop metrics and bottlenecks, applies the published-read feature
@@ -416,12 +444,14 @@ point in time.
       REST refusals and database failures to branchable MCP error codes
       (`api/mcp_server.py`, `core/mcp/scope_validator.py`;
       `tests/unit/mcp/test_mcp_system_map_discovery.py`)
+      <!-- behaviour: system-maps-29 | tests: backend/tests/unit/mcp/test_mcp_system_map_discovery.py -->
 - [x] MCP exposes the revision-aware overview in addition to discovery: agents
       can read published-map health, loop metrics, bottlenecks, revision selection
       and the UTC reporting window through `get_system_map_overview`, while
       authoring, publish, archive, diff, restore, and revision-history reads
       remain REST-only (`api/mcp_server.py`,
       `tests/unit/mcp/test_mcp_system_map_discovery.py`)
+      <!-- behaviour: system-maps-30 | tests: backend/tests/unit/mcp/test_mcp_system_map_discovery.py -->
 - [x] The revision sidebar switches between the current and a historical
       revision through the version-aware read model: "View current" calls
       `GET /revisions/current`, and a `datetime-local` picker calls
@@ -436,6 +466,7 @@ point in time.
       `frontend/src/components/system-maps/SystemMapRevisionSidebar.vue`;
       `systemMapsStoreCrud.spec.ts`, `SystemMapDetailView.spec.ts`,
       `SystemMapComponents.coverage.spec.ts`)
+      <!-- behaviour: system-maps-31 | tests: none -->
 - [x] The revision sidebar reads `GET /revisions/history` when a map opens and
       replaces its session list with every tenant-scoped published, draft and
       archived revision, ordered newest first; selecting an entry loads its
@@ -446,23 +477,27 @@ point in time.
       `frontend/src/views/SystemMapDetailView.vue`,
       `frontend/src/components/system-maps/SystemMapRevisionSidebar.vue`;
       `frontend/src/__tests__/systemMapsStoreCrud.spec.ts`)
+      <!-- behaviour: system-maps-32 | tests: none -->
 - [x] The revision sidebar exposes the existing revision diff and restore-as-new
       actions: authors can compare a historical revision with the published revision
       and see counts for changed nodes, relationships, and loop configurations,
       while restore creates a new draft from the selected revision
       (`frontend/src/components/system-maps/SystemMapRevisionSidebar.vue`,
       `frontend/src/stores/systemMaps.ts`, `frontend/src/views/SystemMapDetailView.vue`)
+      <!-- behaviour: system-maps-33 | tests: none -->
 - [ ] Discovery cannot re-scan into an existing map: there is no re-scan
       endpoint and each successful discovery creates a map (a repeat with a
       colliding name is 409), so the added / removed / ambiguous
       re-scan reconciliation is not available
       (`core/system_map_persistence.py`, `api/routes/system_maps.py`)
+      <!-- behaviour: system-maps-34 | tests: none -->
 - [ ] Loop execution is not wired: loop configs and the admission-attempt /
       reservation tables ship, but nothing dispatches a loop. There is no
       admission check, budget enforcement, cooldown scheduling or concurrency
       guard at runtime, and the admission / reservation repository methods have
       no production caller (`db/repositories/system_map.py`;
       `0350_baseline_schema.py`)
+      <!-- behaviour: system-maps-35 | tests: none -->
 - [x] The dashboard card's "Discover My System" control runs the real
       discovery operation and deep-links to the created draft with
       `?discovery=1`, where the detail view opens the review panel on arrival;
@@ -471,6 +506,7 @@ point in time.
       `frontend/src/views/SystemMapDetailView.vue`,
       `frontend/src/components/system-maps/SystemMapDraftReview.vue`;
       `DashboardSystemOverview.spec.ts`, `SystemMapDetailView.spec.ts`)
+      <!-- behaviour: system-maps-36 | tests: none -->
 - [x] BDD coverage ships for the access gate and the revision lifecycle:
       `access_and_discovery.feature` drives the real router through
       `TestClient` for an authorized discovery (201, the report names the
@@ -485,6 +521,7 @@ point in time.
       (`backend/tests/bdd/steps/test_system_maps.py`;
       `backend/tests/bdd/features/system_maps/access_and_discovery.feature`,
       `backend/tests/bdd/features/system_maps/revisions.feature`)
+      <!-- behaviour: system-maps-37 | tests: backend/tests/bdd/features/system_maps/access_and_discovery.feature, backend/tests/bdd/features/system_maps/revisions.feature, backend/tests/bdd/steps/test_system_maps.py -->
 
 ## Known Gaps
 

@@ -70,9 +70,11 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
 - [x] `POST /api/v1/runs` triggers a run (202) carrying `thread_id`; 404 for a missing
       pipeline, 409 for a deleted org, 422 for unknown fields, and 429 on
       rate-limit/capacity conflict (`test_runs_endpoint.py`)
+      <!-- behaviour: runs-01 | tests: backend/tests/unit/api/test_runs_endpoint.py -->
 - [x] `GET /api/v1/runs` lists org-scoped runs with actor/trigger labels and
       pagination; `GET /stats` and `GET /stats/heatmap` power the run stats/heatmap
       views
+      <!-- behaviour: runs-02 | tests: none -->
 - [x] Viewer run reads are team-membership bounded (PR #2552): `run.list` floors at
       `viewer`, but a caller whose org role is `viewer` is clamped to the teams its
       account belongs to. The effective owner is
@@ -85,6 +87,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       `get_run_heatmap`, `db/crud/team_scope.account_team_scope_clause`,
       `backend/tests/unit/test_runs_stats.py`,
       `backend/tests/unit/api/test_runs_endpoint.py`)
+      <!-- behaviour: runs-03 | tests: backend/tests/unit/test_runs_stats.py, backend/tests/unit/api/test_runs_endpoint.py -->
 - [x] A connector node that reports failure is a failed RUN, not a completed run with
       a failed node (FAR-2090): a `connector` or `dispatch` node envelope whose
       artifact has `status: failed` (or the legacy `connector_failure: true` marker)
@@ -97,30 +100,38 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       (`backend/src/farna/core/pipeline_engine/executor.py`
       `_downgrade_connector_failures`,
       `backend/tests/unit/pipeline_engine/test_executor.py`)
+      <!-- behaviour: runs-04 | tests: backend/tests/unit/pipeline_engine/test_executor.py -->
 - [x] `GET /runs/{id}` returns run detail including current status, blocked partial
       summaries (with `null` for non-dicts), guardrail summaries (absent/malformed →
       `null`), `gate_fired` (idempotency gate, email classification, marker delivery
       and success-path markers) and serialized error detail
+      <!-- behaviour: runs-05 | tests: none -->
 - [x] `POST /runs/{id}/cancel` cancels a run (202); already-terminal and
       `budget_exceeded` runs conflict (409); missing runs 404
+      <!-- behaviour: runs-06 | tests: none -->
 - [x] `GET /runs/{id}/io`, `GET /runs/{id}/export-fixture`, `GET
       /runs/{id}/nodes/{node_id}/output` expose input/output and fixture export;
       `GET /workspace-lease` and `GET /workspace-events` track the run workspace
+      <!-- behaviour: runs-07 | tests: none -->
 - [x] `GET /runs/{id}/events` streams chunked run events since a sequence number
       (404 when the run is unknown, node-id filterable) with a WebSocket event surface
       under `run_ws.py` (`test_run_events_endpoint.py`, `test_run_ws.py`)
+      <!-- behaviour: runs-08 | tests: backend/tests/unit/api/test_run_events_endpoint.py, backend/tests/unit/api/test_run_ws.py -->
 - [x] Run actions: `POST /runs/{id}/nodes/{node_id}/observe` records observations,
       `POST /nodes/{node_id}/recover` recovers a failed node, `POST
       /guardrail-override` overrides a fired guardrail gate, and `POST
       /nodes/{node_id}/prompt/reveal` reveals a node's prompt
+      <!-- behaviour: runs-09 | tests: none -->
 - [x] Only authenticated/authorized principals can trigger/inspect runs; api-key
       principals are scoped per key policy (`test_run_api_key_auth.py`)
+      <!-- behaviour: runs-10 | tests: backend/tests/unit/api/test_run_api_key_auth.py -->
 - [x] `POST /api/v1/runs` team-scope gate (FAR-946): team-private pipelines
       (`visibility='team'`) require membership in the owning team or org-admin
       role; org-visible pipelines remain open to any runner.  Uses the shared
       `require_team_membership_or_admin_any_credential` gate with a body-based
       resolver that reads `pipeline_id` from the JSON request (`test_runs_team_scope.py`,
       `runner_role.feature`)
+      <!-- behaviour: runs-11 | tests: backend/tests/unit/api/test_runs_team_scope.py, backend/tests/bdd/features/users/runner_role.feature -->
 - [x] Run-level cost warnings (missing self-report surfacing, FAR-1305): a
       `self_reported` cost component with an eligible sandbox node but no
       accepted agent report stays visible in the run-detail breakdown – never
@@ -144,6 +155,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       `core/cost_controller/breakdown/aggregate.py`,
       `test_run_warnings.py`, `test_runs_endpoint.py`,
       `test_mcp_server_coverage_gaps.py`)
+      <!-- behaviour: runs-12 | tests: backend/tests/unit/core/cost_controller/test_run_warnings.py, backend/tests/unit/api/test_runs_endpoint.py, backend/tests/unit/api/test_mcp_server_coverage_gaps.py -->
 - [x] Run-execution service identity (ADR 038): a run executes with the
       pipeline owner's authority (service identity scoped to `owner_team_id`),
       not the triggering user's grants. Referenced resources (schema, connector,
@@ -152,6 +164,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       pipeline?" (`trigger_run` team gate). Secrets are brokered – injected by
       the engine, never readable by the user. `runs.owner_team_id` is metadata
       (dashboard aggregation), not a security control.
+      <!-- behaviour: runs-13 | tests: none -->
 - [x] Error-state handling: failed states and node recovery flows are covered by
       `backend/tests/bdd/features/errors/{failed_state,recovery}.feature`. The
       recovery scenarios drive the REAL `POST /runs/{id}/nodes/{node_id}/recover`
@@ -160,6 +173,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       concurrent-recovery 409 / failed-resume-enqueue 500 / non-operator 403)
       with only the `recover_node` DB seam and the `dispatch_run` resume seam
       patched (`steps/test_alpha_errors.py`)
+      <!-- behaviour: runs-14 | tests: backend/tests/bdd/steps/test_alpha_errors.py -->
 - [x] Run lifecycle is BDD-exercised end to end: a manual trigger creates a pending run
       (202), the engine moves it pending → running, a clean completion lands on
       the terminal `complete` status, an unhandled node exception lands on `failed`
@@ -172,6 +186,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       over-capacity run parks with the `pipeline_capacity` marker rather than 429 at
       trigger time) (`run_lifecycle.feature`, `run_sequential.feature`, registered for
       execution by `steps/test_pipelines.py`)
+      <!-- behaviour: runs-15 | tests: backend/tests/bdd/features/pipelines/run_lifecycle.feature, backend/tests/bdd/features/pipelines/run_sequential.feature, backend/tests/bdd/steps/test_pipelines.py -->
 - [x] Run-outcome delivery signal (FAR-189/228): every terminal run carries a
       `run_classification` JSON record written atomically with terminalization by
       the shared fenced terminal write – `value` (`delivered` / `no_delivery` /
@@ -191,6 +206,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       `queue_expired` reason marks a run superseded because it waited in a
       capacity queue past its pipeline's `queue_timeout_seconds` – a
       supersession, not a failure.
+      <!-- behaviour: runs-16 | tests: backend/tests/unit/pipeline_engine/test_run_classification.py -->
 - [x] Business-expected run outcomes (FAR-707): a pipeline may declare explicit
       benign signatures (`benign_signatures` JSON column on `pipelines`, migration
       0296 – a list of `{"error_code": "<exact runs.error_code>", "error_detail_contains":
@@ -223,6 +239,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       `test_run_classification.py`, `test_pipelines_endpoint.py`,
       `test_analytics_builder.py`, `test_analytics_record_facts.py`,
       `test_runs_stats.py`)
+      <!-- behaviour: runs-17 | tests: backend/tests/unit/pipeline_engine/test_run_classification.py, backend/tests/unit/api/test_pipelines_endpoint.py, backend/tests/unit/test_analytics_builder.py, backend/tests/unit/test_analytics_record_facts.py, backend/tests/unit/test_runs_stats.py -->
 - [x] The delivery signal is agent-reported and honestly labelled (FAR-1336,
       vocabulary renamed from `self_reported` by FAR-1388):
       `delivered_pr_urls` are harvested in one walk from each node's structured
@@ -246,12 +263,14 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
 
       pre-FAR-1336 six-key rows are never backfilled and readers treat an absent
       key as legacy/unknown, never an error (`classify.py`, `test_run_classification.py`)
+      <!-- behaviour: runs-18 | tests: backend/tests/unit/pipeline_engine/test_run_classification.py -->
 - [x] Run detail serializes the stored classification record and the derived
       gate-fired flag (FAR-228): `GET /api/v1/runs/{id}` returns
       `run_classification` (defensive-coerced – a non-dict degrades to null, never
       a 500) and `gate_fired` (True when the idempotency gate suppressed a delivery
       retry, the classification reason is `email_delivered`, or a raw-output marker
       carries `delivery_done`) (`test_runs_endpoint.py`)
+      <!-- behaviour: runs-19 | tests: backend/tests/unit/api/test_runs_endpoint.py -->
 - [x] Node-deadline watchdog firings are recorded distinctly from terminal
       failures (FAR-1463): `pipeline_execution._fail_overdue_node` durably
       increments `runs.node_deadline_watchdog_fired_count` on its OWN
@@ -268,6 +287,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       (`core/pipeline_execution.py`, `db/models/run.py`,
       `test_watchdog_firing_record_writer.py`,
       `test_pipeline_execution_watchdog_retry.py`)
+      <!-- behaviour: runs-20 | tests: backend/tests/unit/core/test_watchdog_firing_record_writer.py, backend/tests/unit/core/test_pipeline_execution_watchdog_retry.py -->
 - [x] The node-deadline watchdog gates re-dispatch on durable forward progress
       (FAR-2050): every node family's completion writes
       `run_node_outputs.completed_at` exactly once at the single
@@ -287,6 +307,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       migration `0337_per_node_completion`, `docs/troubleshooting.md`;
       `test_per_node_completion.py`, `test_pipeline_execution_watchdog_retry.py`,
       `test_migration_0337_per_node_completion.py`)
+      <!-- behaviour: runs-21 | tests: backend/tests/unit/core/test_per_node_completion.py, backend/tests/unit/core/test_pipeline_execution_watchdog_retry.py, backend/tests/unit/db/test_migration_0337_per_node_completion.py -->
 - [x] A run is refused for a pipeline that may not run (FAR-1528, extended by
       FAR-1530): `create_run` raises `PipelineNotRunnableError` when the
       pipeline is archived, soft-deleted OR paused (`run_enabled=false` - the
@@ -304,6 +325,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       `db/crud/run.py` state classifier, `core/exceptions.py`,
       `test_runs_endpoint.py`, `test_runs_rerun_endpoint.py`,
       `test_pipeline_state_gate.py`, `test_pipeline_state_gate_rls.py`)
+      <!-- behaviour: runs-22 | tests: backend/tests/unit/api/test_runs_endpoint.py, backend/tests/unit/api/test_runs_rerun_endpoint.py, backend/tests/unit/db/test_pipeline_state_gate.py, backend/tests/integration/test_pipeline_state_gate_rls.py -->
 - [x] Every run carries WHERE its work was executed (FAR-1141, ADR-042):
       `runs.execution_origin` (migration `0288_runs_execution_origin`)
       is stamped `dispatched` by `create_run` when the run's frozen snapshot
@@ -318,6 +340,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       "Dispatched" badge (`frontend/src/utils/runUtils.ts`,
       `frontend/src/lib/api/runs.ts`, `api/routes/{runs,viewmodel,dashboard,
       lifecycle_maps,analytics}.py`)
+      <!-- behaviour: runs-23 | tests: none -->
 - [x] The governed-run provenance VOCABULARY is ONE taxonomy (FAR-1693,
       ADR-042 unified 2026-10-12): `core/provenance.py` single-sources the
       closed four-class set - `observed` (Farna Control observed it through a
@@ -338,6 +361,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       (`core/provenance.py`, `core/run_provenance.py`,
       `core/pipeline_engine/node_runner.py`, `core/node_output_split.py`,
       `api/routes/runs.py`, `tests/unit/core/test_provenance_taxonomy.py`)
+      <!-- behaviour: runs-24 | tests: backend/tests/unit/core/test_provenance_taxonomy.py -->
 - [x] Durable per-attempt execution history (FAR-2078): every execution ATTEMPT
       of a run is recorded, not only the final one. `run_attempts` (migration
       `0329`, org-scoped with the `rls_org_isolation` policy, `run_id` /
@@ -359,6 +383,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       (`db/models/run_attempt.py`, `db/crud/run_attempts.py`,
       `core/pipeline_execution.py`, `test_run_attempts.py`,
       `test_far2078_attempt_instrumentation.py`)
+      <!-- behaviour: runs-25 | tests: backend/tests/unit/db/crud/test_run_attempts.py, backend/tests/unit/core/test_far2078_attempt_instrumentation.py -->
 - [x] `GET /api/v1/runs/{run_id}/attempts` returns the run's attempt history
       ordered by `attempt_index` ascending, gated on the SAME viewer-level
       `run.status` permission as run detail (`require_permission_any_credential`,
@@ -369,6 +394,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       100 while `total` carries the run's true attempt count, so a truncated
       page is visible rather than silently reported as complete
       (`test_run_attempts_endpoint.py`)
+      <!-- behaviour: runs-26 | tests: backend/tests/unit/api/test_run_attempts_endpoint.py -->
 - [x] The run detail page renders the attempt history
       (`RunAttemptHistory.vue`) as a STATIC record, deliberately NOT an
       `aria-live` region: 1-based attempt numbers over the 0-based wire index,
@@ -381,6 +407,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       failure degrades to unavailable), a monotonic request id discards a stale
       response when the run id changes mid-flight, and a truncation note appears
       when `total` exceeds the returned items (`RunAttemptHistory.spec.ts`)
+      <!-- behaviour: runs-27 | tests: none -->
 - [x] `GET /api/v1/runs/{run_id}/schema-enforcement` returns the run's per-node
       schema enforcement records, gated on the same viewer-level `run.status`
       permission as run detail and attempts
@@ -391,6 +418,7 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
       sit below the run surface it derives from (FAR-2683;
       `test_runs_schema_enforcement.py`). Response shape and the enforcement
       data model are documented in `docs/operations/schema-enforcement.md`
+      <!-- behaviour: runs-28 | tests: backend/tests/unit/api/test_runs_schema_enforcement.py -->
 - _Output Diff (`/runs/diff`, `POST /runs/diff`, `core/line_diff.py`) deferred from the
   MVP nav (hidden via `visibility: private_preview`). Behavior detail removed for the
   MVP cut – restore from git history when re-enabling. See FAR-542._

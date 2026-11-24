@@ -45,10 +45,12 @@ change**, so `pnpm run generate:api` is not required.
 
 - [x] `/governance` renders the seven-level hierarchy as one read-only
       inventory, each level composing an existing list API client-side.
+      <!-- behaviour: governance-stack-01 | tests: none -->
 - [x] Each level loads independently and shows a live count plus a
       configured/empty state, or its own `restricted` (402 feature-gated / 403
       permission) state, or a retry-able per-level error state. One level's
       failure or restriction never blanks another level or the page.
+      <!-- behaviour: governance-stack-02 | tests: none -->
 - [x] A level never publishes a count or a configured/empty verdict it has
       not read. Level 7 aggregates three sources; its two enrichment reads
       (error groups, notification endpoints) stay best-effort, but an
@@ -58,34 +60,43 @@ change**, so `pnpm run generate:api` is not required.
       a `count unavailable` label, a configured OTel export renders
       `Configured` with the same label, and the per-source detail line still
       names every number it did read.
+      <!-- behaviour: governance-stack-03 | tests: none -->
 - [x] Levels deep-link to their existing management surfaces (the table above).
+      <!-- behaviour: governance-stack-04 | tests: none -->
 - [x] Level 3 (MCP) today is what Farna Control *serves* to agents (OAuth clients,
       API keys); Level 4 (Agents) is agents Farna Control dispatches; Level 5
       (Commands) is a rename over composite templates + library primitives.
+      <!-- behaviour: governance-stack-05 | tests: none -->
 - [x] Level 6 (Autonomy) summarizes the pipeline list as total pipelines plus
       the distribution across the three rungs from `earned_autonomy_level`,
       falling back to `default_autonomy_level` when earned is null.
+      <!-- behaviour: governance-stack-06 | tests: none -->
 - [x] The rung distribution is read across EVERY page of
       `GET /api/v1/pipelines` (keyset `next_cursor`, `page_size=100`, bounded
       at 20 pages), so the three rungs always sum to the pipeline total the
       count beside them shows: a single-page read put "150 pipelines" above a
       ladder that summed to 100, because `page_size` is capped at 100 while the
       count comes from `total`.
+      <!-- behaviour: governance-stack-07 | tests: none -->
 - [x] A failure on any page after the first fails the autonomy level (its
       own retry-able error state) instead of publishing a partial ladder; only
       the `has_more`-with-no-`next_cursor` case and the page budget are treated
       as truncation, and either one renders the `autonomy_detail_partial`
       string ("… (first {sampled} of {total} pipelines)") rather than a
       prefix dressed up as the whole ladder.
+      <!-- behaviour: governance-stack-08 | tests: none -->
 - [x] Count labels pluralize through vue-i18n's named-`count` form, and the
       spec asserts the rendered text EXACTLY (singular forms included): a
       `toContain` assertion also matches an unpluralized pipe-joined message,
       so containment alone proved nothing about pluralization.
+      <!-- behaviour: governance-stack-09 | tests: none -->
 - [x] Plan-gated levels reuse the same `FeatureGate` as their management page
       (`model_backend_management`, `plugin_management`, `mcp_server`,
       `observability`); every user-facing string is i18n-backed and per-level
       status regions use `role="status"` / `aria-live` (assertive for errors).
+      <!-- behaviour: governance-stack-10 | tests: none -->
 - [x] Covered by the `GovernanceStackView` Vitest spec.
+      <!-- behaviour: governance-stack-11 | tests: none -->
 
 ## Known Gaps
 
