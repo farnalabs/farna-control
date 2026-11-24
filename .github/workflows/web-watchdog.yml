@@ -45,7 +45,25 @@
 # In-process, local work on the web machine is lost - accepted, because this
 # workflow only fires when the web server is by definition unresponsive.
 # Background pipeline runs execute on separate worker-process machines and are
-# NOT affected; this workflow never inspects or restarts worker machines.
+# NOT affected; the restart pass never inspects or restarts worker machines
+# (worker machines are only ever STARTED when stopped - see the next section).
+#
+# Stopped machines (added after the 2026-11-24 incident)
+# -------------------------------------------------------
+# On 2026-11-24 production went fully down because BOTH machines (process
+# groups "app" and "worker") were in state "stopped" (a stop requested by a
+# user-source action, exit 0). The restart pass only looks at STARTED
+# machines, and its deploy guard also skips on a queued deploy run, so a
+# deploy stuck "pending" for an hour would have blocked it anyway: nothing
+# recovered prod until a human ran `flyctl machine start`. A second pass now
+# STARTS machines in state "stopped" in the "app" or "worker" process group
+# (any other group, e.g. one-off release/rehearsal machines that are
+# legitimately stopped, is ignored). Guards: the machine's updated_at must be
+# older than 10 minutes (a deploy or restart may have just stopped it; an
+# unparseable timestamp skips), and no deploy run may be in_progress (a
+# queued/pending run does NOT block recovery; a failed deploy-run query
+# skips, fail-closed). At most 5 machines are started per run. This pass only
+# ever starts machines - it never restarts or stops them.
 #
 # Guards (both must pass before a restart is issued)
 # --------------------------------------------------
@@ -130,6 +148,8 @@ jobs:
           APP="${{ matrix.app }}"
           FRESHNESS_SECS=900          # 15-minute boot grace period
           MAX_RESTARTS_PER_RUN=5      # hard cap against pathological states
+          STOPPED_FRESHNESS_SECS=600  # 10 minutes: a deploy/restart may have just stopped it
+          MAX_STARTS_PER_RUN=5        # hard cap on starts of stopped machines
 
           SUMMARY="${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY not set}"
 
@@ -142,6 +162,23 @@ jobs:
               --workflow deploy.yml \
               --json databaseId,status \
               --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length' \
+              </dev/null 2>/dev/null || true)"
+            case "$count" in
+              '' | *[!0-9]*) echo "unknown" ;;
+              *) echo "$count" ;;
+            esac
+          }
+
+          # Stopped-machine pass deploy guard: number of deploy runs in
+          # progress (queued/pending runs deliberately do NOT count - a run
+          # stuck pending must not block recovery), or "unknown" on query
+          # failure or non-numeric output (fail-closed).
+          in_progress_deploy_runs() {
+            local count
+            count="$(gh run list --repo "${GITHUB_REPOSITORY}" \
+              --workflow deploy.yml \
+              --json databaseId,status \
+              --jq '[.[] | select(.status == "in_progress")] | length' \
               </dev/null 2>/dev/null || true)"
             case "$count" in
               '' | *[!0-9]*) echo "unknown" ;;
@@ -202,22 +239,26 @@ jobs:
             } >> "$SUMMARY"
             exit 0
           fi
-          if [ -z "$CANDIDATES" ]; then
-            # Filter exited 0 with no matches: valid JSON, genuinely healthy.
-            echo "All app machines healthy - nothing to do."
-            echo "no-op: all app machines healthy" >> "$SUMMARY"
-            exit 0
-          fi
 
           # --- Guards + restart -------------------------------------------
+          # No early exit when CANDIDATES is empty: the stopped-machine pass
+          # below must still run.
           NOW_TS="$(date -u +%s)"
-          DEPLOY_STATE="$(active_deploy_runs)"
           RESTARTED=0
+          DEPLOY_STATE="0"
 
           {
             echo "### Recover: Web Machine - ${APP}"
             echo ""
           } >> "$SUMMARY"
+
+          if [ -z "$CANDIDATES" ]; then
+            # Filter exited 0 with no matches: valid JSON, no wedged machine.
+            echo "No wedged app machines - restart pass has nothing to do."
+            echo "- restart pass: no wedged app machines" >> "$SUMMARY"
+          else
+            DEPLOY_STATE="$(active_deploy_runs)"
+          fi
 
           while IFS= read -r CAND; do
             [ -z "$CAND" ] && continue
@@ -271,4 +312,77 @@ jobs:
             [ "$RESTARTED" -ge "$MAX_RESTARTS_PER_RUN" ] && break
           done <<< "$CANDIDATES"
 
-          echo "Watchdog run complete (restarted: ${RESTARTED})."
+          # --- Stopped-machine pass ---------------------------------------
+          # Start machines in state "stopped" in the app or worker process
+          # group (see header: 2026-11-24 incident). Independent of the
+          # restart pass above.
+          cat > /tmp/wd-stopped.jq <<'JQ'
+          [
+            .[]
+            | select(((.state // "") | tostring) == "stopped")
+            | ((.config.metadata.fly_process_group // .config.env.FLY_PROCESS_GROUP // "") | tostring) as $g
+            | select($g == "app" or $g == "worker")
+            | {machine_id: (.id // "?"), group: $g, updated_at: (.updated_at // "")}
+          ]
+          | unique_by(.machine_id)
+          | .[]
+          JQ
+
+          STARTED=0
+          STOPPED_RC=0
+          STOPPED="$(printf '%s' "$MACHINES_JSON" | jq -c -f /tmp/wd-stopped.jq 2>/dev/null)" || STOPPED_RC=$?
+          if [ -z "$STOPPED" ] && [ "$STOPPED_RC" -ne 0 ]; then
+            echo "::warning::jq filter for stopped machines failed (exit ${STOPPED_RC}) - no stopped-machine action taken (next run retries)."
+            echo "- start pass: could not determine stopped machines (filter failed); retrying next run." >> "$SUMMARY"
+          elif [ -z "$STOPPED" ]; then
+            echo "No stopped app/worker machines."
+            echo "- start pass: no stopped app/worker machines" >> "$SUMMARY"
+          else
+            STOP_DEPLOY_STATE="$(in_progress_deploy_runs)"
+            while IFS= read -r SCAND; do
+              [ -z "$SCAND" ] && continue
+              MID="$(printf '%s' "$SCAND" | jq -r '.machine_id // "?"')"
+              GROUP="$(printf '%s' "$SCAND" | jq -r '.group // "?"')"
+              UPDATED_AT="$(printf '%s' "$SCAND" | jq -r '.updated_at // ""')"
+
+              # Guard 1: freshness (a deploy/restart may have just stopped it).
+              UPDATED_TS="$(date -u -d "$UPDATED_AT" +%s 2>/dev/null || true)"
+              if [ -z "$UPDATED_TS" ]; then
+                echo "::warning::Stopped machine ${MID} (${GROUP}) has an unparseable updated_at ('${UPDATED_AT}') - skipping start."
+                echo "- Skipped start of \`${MID}\` (${GROUP}): machine timestamp unparseable; retrying next run." >> "$SUMMARY"
+                continue
+              fi
+              AGE=$(( NOW_TS - UPDATED_TS ))
+              if [ "$AGE" -lt "$STOPPED_FRESHNESS_SECS" ]; then
+                echo "::warning::Stopped machine ${MID} (${GROUP}) was updated ${AGE}s ago (< ${STOPPED_FRESHNESS_SECS}s) - skipping start."
+                echo "- Skipped start of \`${MID}\` (${GROUP}): stopped only ${AGE}s ago (< 10 min); retrying next run." >> "$SUMMARY"
+                continue
+              fi
+
+              # Guard 2: no start while a deploy is in_progress (fail-closed
+              # on query failure; queued/pending runs do not block).
+              if [ "$STOP_DEPLOY_STATE" = "unknown" ]; then
+                echo "::warning::Stopped machine ${MID} (${GROUP}): deploy-run status could not be queried - skipping start (fail-closed; retrying next run)."
+                echo "- Skipped start of \`${MID}\` (${GROUP}): deploy-run status unknown (query failed); retrying next run." >> "$SUMMARY"
+                continue
+              fi
+              if [ "$STOP_DEPLOY_STATE" -gt 0 ] 2>/dev/null; then
+                echo "::warning::Stopped machine ${MID} (${GROUP}): ${STOP_DEPLOY_STATE} deploy run(s) in progress - skipping start."
+                echo "- Skipped start of \`${MID}\` (${GROUP}): deploy run(s) in progress (${STOP_DEPLOY_STATE}); retrying next run." >> "$SUMMARY"
+                continue
+              fi
+
+              echo "::notice::Starting stopped machine ${MID} (${GROUP})."
+              if fly machine start "$MID" --app "$APP" </dev/null; then
+                STARTED=$(( STARTED + 1 ))
+                echo "- **Started \`${MID}\`** (${GROUP}) at $(date -u '+%Y-%m-%dT%H:%M:%SZ'): stopped for more than 10 minutes, no deploy in progress." >> "$SUMMARY"
+              else
+                echo "::error::fly machine start failed for ${MID}."
+                echo "- ERROR: start command failed for \`${MID}\` (${GROUP}) - manual attention may be required." >> "$SUMMARY"
+              fi
+
+              [ "$STARTED" -ge "$MAX_STARTS_PER_RUN" ] && break
+            done <<< "$STOPPED"
+          fi
+
+          echo "Watchdog run complete (restarted: ${RESTARTED}, started: ${STARTED})."
