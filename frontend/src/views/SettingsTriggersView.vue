@@ -64,12 +64,11 @@
 
     <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadAll" />
 
-    <div v-else-if="items.length === 0" class="rounded-lg border bg-card p-8 text-center">
-      <p class="text-lg font-medium">{{ $t('views.SettingsTriggersView.no_triggers_configured') }}</p>
-      <p class="mt-1 text-sm text-muted-foreground">
-        {{ $t('views.SettingsTriggersView.no_triggers_configured_description') }}
-      </p>
-    </div>
+    <EmptyState
+      v-else-if="items.length === 0"
+      :title="$t('views.SettingsTriggersView.no_triggers_configured')"
+      :description="$t('views.SettingsTriggersView.no_triggers_configured_description')"
+    />
 
     <template v-else>
       <div class="table-wrapper">
@@ -582,6 +581,7 @@ import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import TableActions from '../components/shared/TableActions.vue'

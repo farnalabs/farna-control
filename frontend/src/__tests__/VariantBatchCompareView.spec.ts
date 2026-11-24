@@ -570,6 +570,19 @@ describe('VariantBatchCompareView', () => {
     expect(batchMocks.fetchVariantBatches).toHaveBeenCalledTimes(2)
   })
 
+  it('renders an empty state when there are no comparisons yet', async () => {
+    batchMocks.fetchVariantBatches.mockResolvedValue({ data: { items: [], total: 0 }, error: undefined })
+
+    const wrapper = mount(VariantBatchCompareView, {
+      global: { stubs: { FeatureGate: { template: '<div><slot /></div>' } } },
+    })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('No comparisons yet')
+    expect(wrapper.find('[data-testid="variant-batch-link-b1"]').exists()).toBe(false)
+  })
+
   it('renders a partial batch status with its translated label, not raw lowercase', async () => {
     batchMocks.fetchVariantBatches.mockResolvedValue({
       data: {

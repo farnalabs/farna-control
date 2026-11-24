@@ -10,6 +10,14 @@ Live in the DB layer (not ``farna.api``) so both ``farna.db`` and
 also why :func:`team_blind_org_scope` (the FAR-1515 widened read) lives HERE:
 the binding gates in ``farna.core.team_visibility`` need it, and ``farna.db``
 must not import ``farna.core``.
+
+ADR 070 §3 — no escape may widen past ``organisation_id``:
+:func:`team_blind_org_scope` widens ONLY the team clause
+(``app.execution_context``). Its ``org_id`` argument is a claim the session
+must already satisfy, never a value it writes: the helper refuses (with
+:class:`TeamBlindScopeOrgMismatchError`) when the session's own
+``app.organisation_id`` is unset or different. Enforce the org from the
+authenticated principal (``db.rls.set_rls_org``) BEFORE widening.
 """
 
 import asyncio
@@ -37,6 +45,11 @@ from farna.db.models.team_membership import TeamMembership
 # rest of the request transaction keeps its original visibility. Same
 # ``set_config(..., is_local => true)`` form as ``db/rls.py``
 # (transaction-scoped, reverts on rollback).
+#
+# ADR 070 §3: the org write in _RLS_WIDEN_SQL is a RE-STATEMENT, never a grant.
+# ``team_blind_org_scope`` refuses to issue any of these statements unless the
+# session's own ``app.organisation_id`` already equals its ``org_id``
+# argument, so the value written here is provably the value already in force.
 _RLS_READ_GUCS_SQL = "SELECT current_setting('app.organisation_id', true), current_setting('app.execution_context', true)"
 _RLS_WIDEN_SQL = "SELECT set_config('app.organisation_id', :oid, true), set_config('app.execution_context', 'true', true)"
 _RLS_RESTORE_SQL = "SELECT set_config('app.organisation_id', :oid, true), set_config('app.execution_context', :exec_ctx, true)"
@@ -116,27 +129,98 @@ async def _resolve_dialect(session: AsyncSession) -> str:
     return str(bind.dialect.name)
 
 
+class TeamBlindScopeOrgMismatchError(RuntimeError):
+    """``team_blind_org_scope`` was asked to widen to a foreign or unset org.
+
+    ADR 070 §3: no escape may widen past ``organisation_id``. The helper's
+    ``org_id`` argument must therefore MATCH the org the session is already
+    bound to — it is a requirement to verify, never a value to write. A
+    mismatched (or unset) session org means the caller has not established the
+    tenant from the authenticated principal, so widening would be an authority
+    grant: exactly the defect this error exists to refuse.
+
+    ``RuntimeError`` matches the contract of the sibling RLS helpers
+    (``db.rls.set_rls_*`` raise ``RuntimeError`` for a misused session), so a
+    caller that already guards those keeps its existing behaviour.
+    """
+
+    def __init__(self, *, requested_org_id: uuid.UUID, session_org_id: object) -> None:
+        self.requested_org_id = requested_org_id
+        self.session_org_id = session_org_id
+        super().__init__(
+            "team_blind_org_scope refused: the session's app.organisation_id is "
+            f"{_render_org(session_org_id)} but the widen was requested for organisation "
+            f"{requested_org_id}. This helper widens ONLY the team clause - set the "
+            "organisation from the authenticated principal (db.rls.set_rls_org) before "
+            "widening; it will never adopt or overwrite the org for you."
+        )
+
+
+def _render_org(session_org_id: object) -> str:
+    """Render a session org GUC value for the refusal message."""
+    if session_org_id is None or (isinstance(session_org_id, str) and not session_org_id.strip()):
+        return "<unset>"
+    return repr(session_org_id)
+
+
+def _parse_session_org(session_org_id: object) -> uuid.UUID | None:
+    """Return the session org as a UUID, or ``None`` when unset/unparseable."""
+    if session_org_id is None:
+        return None
+    try:
+        return uuid.UUID(str(session_org_id).strip())
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _assert_session_org_matches(session_org_id: object, org_id: uuid.UUID) -> None:
+    """Refuse to widen unless the session is already bound to *org_id*.
+
+    Fail closed on every departure from an exact match: an unset GUC (``NULL``
+    from a never-defined setting, or ``''`` from the pool-checkout reset), an
+    unparseable value, and a different organisation all raise. The org write in
+    ``_RLS_WIDEN_SQL`` is therefore provably a re-statement of the same value.
+    """
+    if _parse_session_org(session_org_id) != org_id:
+        raise TeamBlindScopeOrgMismatchError(requested_org_id=org_id, session_org_id=session_org_id)
+
+
 @asynccontextmanager
 async def team_blind_org_scope(session: AsyncSession, org_id: uuid.UUID) -> AsyncIterator[None]:
-    """Run the wrapped block with team visibility widened to the WHOLE org.
+    """Run the wrapped block with team visibility widened WITHIN the caller's org.
 
     FAR-1515 CRITICAL 1: the team-scope gates must judge rows the request
     caller's own RLS context cannot see - another team's ``visibility='team'``
     connector, or (on the connector re-scope path) another team's
     team-private pipeline binding the connector. On Postgres the block saves
     the caller's ``app.organisation_id`` / ``app.execution_context`` GUCs,
-    widens to the internal-execution context - still AND-gated by
-    ``app.organisation_id = org_id``, so it can never cross organisations -
-    runs, and restores the caller's GUCs in a ``finally`` so the rest of the
-    request transaction keeps its original team visibility.
+    widens to the internal-execution context, runs, and restores the caller's
+    GUCs in a ``finally`` so the rest of the request transaction keeps its
+    original team visibility.
+
+    ADR 070 §3 - the widenable scope is the TEAM clause ONLY, never the org:
+
+    * *org_id* is a REQUIREMENT, not a value this helper writes. The session
+      must already carry that same ``app.organisation_id`` (set from the
+      authenticated principal via ``db.rls.set_rls_org``); a session whose org
+      is unset or different is refused with
+      :class:`TeamBlindScopeOrgMismatchError` BEFORE anything is widened. A
+      helper that can *set* the org is an authority grant, not an escape
+      hatch - it would be structurally capable of crossing tenants for any
+      caller that passed the wrong id.
+    * the widen then re-states the (now proven identical) org and sets
+      ``app.execution_context``; every read is still AND-gated by
+      ``app.organisation_id``, so it can never cross organisations.
 
     Off Postgres there is no team RLS policy (the tenant filter scopes by org
-    only), so reads are already team-blind: nothing is issued.
+    only), so reads are already team-blind and nothing is issued - there is no
+    widen to bound, and no reachable cross-tenant grant.
     """
     if await _resolve_dialect(session) != "postgresql":
         yield
         return
     prev_org, prev_exec_ctx = (await session.execute(text(_RLS_READ_GUCS_SQL))).one()
+    _assert_session_org_matches(prev_org, org_id)
     await session.execute(text(_RLS_WIDEN_SQL), {"oid": str(org_id)})
     try:
         yield
