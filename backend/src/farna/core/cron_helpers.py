@@ -1111,7 +1111,14 @@ def compute_next_send(cron_expression: str, after: datetime | None = None) -> da
 
 
 async def _set_rls_org(session: AsyncSession, org_id: uuid.UUID) -> None:
-    """Set org-scoped RLS context for a cron/background transaction."""
+    """Set org-scoped RLS context for a cron/background transaction.
+
+    Applies the same grant as ``farna.db.background.background_session`` (org,
+    then ``app.execution_context``) — the cron lanes receive an open session
+    from ``_open_factory()`` rather than acquiring one, which is why this stays
+    a session-taking helper. Keep the two in step: a new background lane should
+    acquire its session from ``background_session`` instead of copying this.
+    """
     dialect = session.get_bind().dialect.name
     if dialect == "postgresql":
         await session.execute(

@@ -21,6 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import farna.db.background as background
 from farna.core import cron_helpers as ch
 from farna.core import pipeline_execution as pe
 from farna.core.pipeline_engine.executor import SandboxCapacityExceededError
@@ -53,9 +54,14 @@ class _FakeSession:
 
 
 def _patch_session_factory(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replace the helper's engine/session plumbing with fakes."""
-    monkeypatch.setattr(pe, "async_sessionmaker", MagicMock(return_value=lambda: _FakeSession()))
-    monkeypatch.setattr(pe, "set_rls_org", AsyncMock())
+    """Replace the helper's session plumbing with fakes.
+
+    ADR 070 §3: the session and its grant come from
+    ``db.background.background_session``, so the factory and grant are stubbed
+    THERE — never on ``pipeline_execution``, which no longer builds either.
+    """
+    monkeypatch.setattr(background, "async_sessionmaker", MagicMock(return_value=lambda: _FakeSession()))
+    monkeypatch.setattr(background, "apply_background_grant", AsyncMock())
 
 
 class TestDeferCapacityDeniedRun:

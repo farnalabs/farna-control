@@ -62,6 +62,7 @@ from farna.core.dispatch_phases import (
     PHASE_SPEND_CHECK,
     PHASE_STREAMING,
 )
+from farna.db.background import background_session
 from farna.db.crud.run import get_run
 from farna.db.models.run import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.db.models.run_attempt import (
@@ -1094,30 +1095,18 @@ async def claim_run_async(
         return None
 
 
-async def set_rls_org(session: Any, org_id: uuid.UUID) -> None:
-    """Set the RLS org context for the session (transaction-scoped on Postgres).
-
-    Delegates to the canonical helper in ``farna.db.rls`` so the tenant-filter
-    key (``org_id``) stays consistent with every other writer. Previously this
-    copy wrote ``session.info["organisation_id"]`` which never activated the
-    generic-backend tenant filter (the listener reads ``org_id``), leaving the
-    run-by-id reads below unscoped.
-    """
-    from farna.db.rls import set_rls_org as _canonical_set_rls_org
-
-    await _canonical_set_rls_org(session, org_id)
-
-
 async def load_and_setup(aeng: AsyncEngine, rid: uuid.UUID, oid: uuid.UUID) -> tuple[Any, Any]:
     """Load the Run and create a PipelineExecutor with checkpointer.
 
     Returns ``(run, executor)`` or ``(None, None)`` if the run is missing.
+
+    The read runs inside :func:`farna.db.background.background_session`, so it
+    carries the background grant (org + ``app.execution_context``) — a team-owned
+    run stays visible once the runs family is team-scoped (ADR 070 Phase 1B).
     """
     from farna.core.pipeline_engine.executor import PipelineExecutor
 
-    factory = async_sessionmaker(aeng, expire_on_commit=False, autobegin=False)
-    async with factory() as session, session.begin():
-        await set_rls_org(session, oid)
+    async with background_session(oid, engine=aeng) as session:
         cur = await get_run(session, rid)
         if cur is None:
             _log.warning("Run %s not found during load", rid)
@@ -1493,8 +1482,7 @@ async def record_attempt_close(
     from farna.db.crud.run_attempts import close_attempt
 
     try:
-        async with session_factory() as session, session.begin():
-            await set_rls_org(session, uuid.UUID(str(org_id)))
+        async with background_session(org_id, session_factory=session_factory) as session:
             return await close_attempt(
                 session,
                 uuid.UUID(str(run_id)),
@@ -1655,9 +1643,7 @@ async def _persist_worker_lost_triage(
     )
 
     try:
-        factory = async_sessionmaker(aeng, expire_on_commit=False, autobegin=False)
-        async with factory() as session, session.begin():
-            await set_rls_org(session, uuid.UUID(org_id))
+        async with background_session(org_id, engine=aeng) as session:
             await persist_terminal_triage_marker(
                 session,
                 run_id=uuid.UUID(run_id),
@@ -1842,9 +1828,7 @@ async def defer_capacity_denied_run_to_awaiting_human(
     """
     from farna.db.crud.run import update_run_status
 
-    factory = async_sessionmaker(aeng, expire_on_commit=False, autobegin=False)
-    async with factory() as session, session.begin():
-        await set_rls_org(session, uuid.UUID(org_id))
+    async with background_session(org_id, engine=aeng) as session:
         refreshed = await update_run_status(
             session,
             uuid.UUID(run_id),
@@ -2345,10 +2329,8 @@ async def _record_derived_deadline_cost(
     from farna.db.crud.row_lock import set_mutation_row_lock_timeout
 
     try:
-        factory = async_sessionmaker(aengine, expire_on_commit=False, autobegin=False)
-        async with factory() as session, session.begin():
+        async with background_session(org_id, engine=aengine) as session:
             await set_mutation_row_lock_timeout(session)
-            await set_rls_org(session, uuid.UUID(org_id))
             await finalize_failed_run(
                 session,
                 run_id=uuid.UUID(run_id),
@@ -2402,10 +2384,8 @@ async def record_worker_lost_derived_cost(
     from farna.db.crud.row_lock import set_mutation_row_lock_timeout
 
     try:
-        factory = async_sessionmaker(aengine, expire_on_commit=False, autobegin=False)
-        async with factory() as session, session.begin():
+        async with background_session(org_id, engine=aengine) as session:
             await set_mutation_row_lock_timeout(session)
-            await set_rls_org(session, uuid.UUID(org_id))
             await finalize_worker_lost_run(
                 session,
                 run_id=uuid.UUID(run_id),
@@ -2438,11 +2418,9 @@ async def _write_node_deadline_triage_marker(
         persist_terminal_triage_marker,
     )
 
-    factory = async_sessionmaker(aeng, expire_on_commit=False, autobegin=False)
     run_uuid = uuid.UUID(run_id)
     org_uuid = uuid.UUID(org_id)
-    async with factory() as session, session.begin():
-        await set_rls_org(session, org_uuid)
+    async with background_session(org_uuid, engine=aeng) as session:
         if redispatched:
             await persist_redispatch_triage_marker(
                 session,
@@ -2565,10 +2543,8 @@ async def _salvage_cancelled_run_cost(aengine: AsyncEngine, run_id: str, org_id:
     from farna.db.crud.row_lock import set_mutation_row_lock_timeout
 
     try:
-        factory = async_sessionmaker(aengine, expire_on_commit=False, autobegin=False)
-        async with factory() as session, session.begin():
+        async with background_session(org_id, engine=aengine) as session:
             await set_mutation_row_lock_timeout(session)
-            await set_rls_org(session, uuid.UUID(org_id))
             await salvage_cancelled_run_cost(
                 session,
                 run_id=uuid.UUID(run_id),
@@ -3267,11 +3243,8 @@ async def _probe_completed_nodes(
     claim_token: str | None,
 ) -> bool:
     from farna.db.crud.run_node_outputs import has_completed_nodes_in_attempt
-    from farna.db.rls import set_rls_org
 
-    factory = async_sessionmaker(aeng, expire_on_commit=False, autobegin=False)
-    async with factory() as session, session.begin():
-        await set_rls_org(session, uuid.UUID(org_id))
+    async with background_session(org_id, engine=aeng) as session:
         return await has_completed_nodes_in_attempt(
             session,
             run_id=uuid.UUID(run_id),
@@ -3301,11 +3274,8 @@ async def _write_node_completion(
         from sqlalchemy import select
 
         from farna.db.models.run_node_outputs import RunNodeOutput
-        from farna.db.rls import set_rls_org as _set_rls_org
 
-        factory = async_sessionmaker(aeng, expire_on_commit=False, autobegin=False)
-        async with factory() as session, session.begin():
-            await _set_rls_org(session, uuid.UUID(org_id))
+        async with background_session(org_id, engine=aeng) as session:
             row = (
                 await session.execute(
                     select(RunNodeOutput).where(
@@ -4419,10 +4389,8 @@ async def _attribute_swept_run_derived_cost(
     run_uuid = run_id if isinstance(run_id, uuid.UUID) else uuid.UUID(str(run_id))
     org_uuid = org_id if isinstance(org_id, uuid.UUID) else uuid.UUID(str(org_id))
     try:
-        factory = async_sessionmaker(aengine, expire_on_commit=False, autobegin=False)
-        async with factory() as session, session.begin():
+        async with background_session(org_uuid, engine=aengine) as session:
             await set_mutation_row_lock_timeout(session)
-            await set_rls_org(session, org_uuid)
             row = (await session.execute(select(Run.status, Run.error_code, Run.error_detail).where(Run.id == run_uuid))).one_or_none()
             if row is None:
                 _log.info("pipeline_execution.swept_cost_run_missing run=%s", run_id)

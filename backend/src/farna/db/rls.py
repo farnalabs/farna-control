@@ -237,6 +237,23 @@ async def set_rls_org(session: AsyncSession, org_id: uuid.UUID | None) -> None:
         session.info[_TENANT_KEY] = org_id
 
 
+def _record_context_marker(session: AsyncSession, key: str, value: object) -> None:
+    """Record an in-process RLS-context marker on ``session.info``, best-effort.
+
+    ADR 070 Phase 1A: the non-production ``db.rls_tripwire`` listener is SYNC and
+    cannot read the server-side GUCs, so the grant helpers leave a marker here
+    for it. This is bookkeeping ONLY — never an authorisation input, and
+    ``read_rls_org`` on Postgres still reads the GUC first.
+
+    Tolerant of a session double with no ``info`` (the settle/neighbour unit
+    suites drive these helpers with lightweight doubles): a missing marker can
+    only ever make the tripwire quieter, never change a grant.
+    """
+    info = getattr(session, "info", None)
+    if isinstance(info, dict):
+        info[key] = value
+
+
 async def set_rls_user_context(session: AsyncSession, user_id: uuid.UUID, org_role: str) -> None:
     """Set the current user identity and role for team-scoped RLS policies.
 
@@ -244,6 +261,12 @@ async def set_rls_user_context(session: AsyncSession, user_id: uuid.UUID, org_ro
 
     Postgres: calls ``set_config`` for ``app.user_id`` and ``app.org_role``.
     Generic backends: stores values in ``session.info`` for future use.
+
+    ``session.info`` is populated on EVERY dialect (ADR 070 tripwire): the
+    non-production ``db.rls_tripwire`` listener is sync and cannot read the
+    server-side GUCs, so it needs an in-process marker that this session was
+    given an identity.  ``info`` is bookkeeping only — never an authorisation
+    input, and ``read_rls_org`` on Postgres still ignores it.
     """
     dialect = await _ensure_active_transaction(session)
 
@@ -256,9 +279,8 @@ async def set_rls_user_context(session: AsyncSession, user_id: uuid.UUID, org_ro
             text("SELECT set_config('app.org_role', :role, true)"),
             {"role": org_role},
         )
-    else:
-        session.info["user_id"] = user_id
-        session.info["org_role"] = org_role
+    _record_context_marker(session, "user_id", user_id)
+    _record_context_marker(session, "org_role", org_role)
 
 
 async def set_rls_execution_context(session: AsyncSession) -> None:
@@ -271,6 +293,10 @@ async def set_rls_execution_context(session: AsyncSession) -> None:
     user-facing sessions (which never set it) stay team-filtered.
 
     Must be called inside an active transaction alongside set_rls_org.
+
+    ``session.info["execution_context"]`` is set on EVERY dialect for the same
+    ADR 070 tripwire reason as ``set_rls_user_context`` above: the marker is
+    in-process bookkeeping for a sync listener, never an authorisation input.
     """
     dialect = await _ensure_active_transaction(session)
 
@@ -278,8 +304,7 @@ async def set_rls_execution_context(session: AsyncSession) -> None:
         await session.execute(
             text("SELECT set_config('app.execution_context', 'true', true)"),
         )
-    else:
-        session.info["execution_context"] = True
+    _record_context_marker(session, "execution_context", True)
 
 
 def register_rls_reset_hook(engine: AsyncEngine) -> None:

@@ -37,6 +37,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import farna.core.pipeline_execution as pe
+import farna.db.background as background
 from farna.core.dispatch_phases import PHASE_FIRST_NODE_DISPATCHED
 from farna.core.pipeline_execution import stale_run_recovery_sweep
 from farna.db.crud.run_node_outputs import RunBlobs
@@ -197,7 +198,7 @@ async def _run_sweep(
     # ``_attribute_swept_run_derived_cost`` opens its session through the
     # module-level ``async_sessionmaker``; bind it to the fixture engine so the
     # REAL booking path (not a stub) runs against the reaped rows.
-    monkeypatch.setattr(pe, "async_sessionmaker", lambda *a, **k: async_sessionmaker(db_engine, expire_on_commit=False, autobegin=False))
+    monkeypatch.setattr(background, "async_sessionmaker", lambda *a, **k: async_sessionmaker(db_engine, expire_on_commit=False, autobegin=False))
     conn = _SqliteBackedConn(db_session)
     result = await stale_run_recovery_sweep(_Engine(conn))  # type: ignore[arg-type]
     return result, advanced

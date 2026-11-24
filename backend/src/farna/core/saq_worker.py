@@ -876,15 +876,14 @@ async def _fail_suite_run_on_enqueue_error(suite_run_id: str, org_id: str) -> No
     committed transaction so the fire job itself can still return cleanly.
     """
     from farna.core.eval_engine.execute_suite_run import _fail_run
+    from farna.db.background import background_session
     from farna.db.models.eval_suite_run import SuiteRun
-    from farna.db.rls import set_rls_org as _set_rls
 
     rid = uuid.UUID(suite_run_id)
     oid = uuid.UUID(org_id)
     factory = _make_session_factory()
     try:
-        async with factory() as session, session.begin():
-            await _set_rls(session, oid)
+        async with background_session(oid, session_factory=factory) as session:
             run = await session.get(SuiteRun, rid)
             if run is None or run.organisation_id != oid:
                 _log.warning("fire_suite_run_trigger: cannot terminalise missing/cross-org suite_run %s", rid)
@@ -1156,13 +1155,12 @@ async def _persist_suite_run_execution_failure(factory: Any, suite_run_id: uuid.
     caller still re-raises so SAQ's after_process sink sees the original error.
     """
     from farna.core.eval_engine.execute_suite_run import _fail_run, _failure_detail
+    from farna.db.background import background_session
     from farna.db.models.eval_suite_run import SuiteRun
-    from farna.db.rls import set_rls_org as _set_rls
 
     detail = _failure_detail(exc)
     try:
-        async with factory() as session, session.begin():
-            await _set_rls(session, org_id)
+        async with background_session(org_id, session_factory=factory) as session:
             run = await session.get(SuiteRun, suite_run_id)
             if run is None or run.organisation_id != org_id:
                 _log.warning(

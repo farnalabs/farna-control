@@ -92,7 +92,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from farna.core.dispatch_phases import PHASE_FIRST_NODE_DISPATCHED
 from farna.db.sqlstates import is_row_lock_timeout
@@ -115,11 +115,6 @@ WORKER_LOST_DETAIL = "Worker executing this run was shut down (deploy or restart
 #: plus the machine-checked reason — the operator learns both WHAT happened
 #: and WHY it was not retried, from the row alone.
 WORKER_LOST_NOT_REQUEUED_DETAIL = "Worker executing this run was shut down (deploy or restart); the run was terminal-failed instead of handed back for re-dispatch because a re-run is not safe (FAR-1627). Reason: "
-
-# RLS set_config helper — same contract as the periodic sweeps (the per-org
-# statement runs inside set_config('app.organisation_id', ...)).
-_SQL_SET_ORG_ID = "SELECT set_config('app.organisation_id', :val, true)"
-
 
 # The handback RE-QUEUE arm. Fenced exactly like every other claim-fenced
 # writer:
@@ -304,7 +299,7 @@ async def track_inflight_run(
 
 
 async def _load_handback_row(
-    conn: AsyncConnection,
+    conn: AsyncSession,
     *,
     run_id: uuid.UUID,
     org_id: uuid.UUID,
@@ -473,7 +468,7 @@ def _handback_decision(row: Any, graph_json: Any) -> _HandbackDecision:
 
 
 async def _handback_one_entry(
-    conn: AsyncConnection,
+    conn: AsyncSession,
     entry: InFlightRun,
     org_id: uuid.UUID,
 ) -> tuple[int, int, str | None]:
@@ -538,11 +533,26 @@ async def _handback_org(
     transaction back whole, so NONE of its runs moved. It is counted as skipped
     and the remaining orgs still run.
 
+    Transaction acquisition is :func:`farna.db.background.background_session`
+    (ADR 070 §3): the handback re-queues runs the shutting-down worker owned,
+    so it reads the runs family TEAM-BLIND — org plus the
+    ``app.execution_context`` grant — instead of org alone. Without the grant a
+    team-scoped ``runs`` policy (Phase 1B) would make every load come back
+    empty and the shutdown would silently release nothing.
+
+    One consequence of moving from a raw connection to a session: the ORM
+    soft-delete filter now applies to this read, so an in-flight run whose
+    PIPELINE has been soft-deleted is "not visible" and is skipped rather than
+    re-queued. That is the fail-closed direction and matches the sibling
+    reconcile lanes (which read on sessions too) — such a run is left to the
+    heartbeat-TTL sweeps instead of being re-dispatched into a deleted pipeline.
+
     Returns ``(handed_back, skipped, terminals, handed_back_entries)``. The
     entries handed back are returned so their FAR-2078 attempt rows can be
     closed AFTER this transaction commits — closing them here would open a
     second transaction while this one holds the run rows' locks.
     """
+    from farna.db.background import background_session
     from farna.db.crud.row_lock import set_mutation_row_lock_timeout
 
     handed_back = 0
@@ -550,9 +560,8 @@ async def _handback_org(
     terminals: list[tuple[InFlightRun, str]] = []
     handed_back_entries: list[InFlightRun] = []
     try:
-        async with async_engine.connect() as conn, conn.begin():
+        async with background_session(org_id, engine=async_engine) as conn:
             await set_mutation_row_lock_timeout(conn)
-            await conn.execute(text(_SQL_SET_ORG_ID), {"val": str(org_id)})
             for entry in org_entries:
                 entry_handed_back, entry_skipped, reason = await _handback_one_entry(conn, entry, org_id)
                 handed_back += entry_handed_back

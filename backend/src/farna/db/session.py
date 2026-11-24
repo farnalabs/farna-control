@@ -15,6 +15,12 @@ pool overrides (the SAQ worker keeps its per-worker budget via
 so dispatch, crons, workers and the API all share ONE engine per process.
 Whichever consumer creates it first fixes the pool size for the process; later
 callers share the same engine.
+
+Background code does NOT acquire its own session from ``AsyncSessionLocal``: it
+uses :func:`farna.db.background.background_session`, the ONE acquisition point
+that applies the transaction-scoped org + execution-context grant (ADR 070 §3).
+That factory builds its sessions on this same engine — there is still exactly
+one engine per process.
 """
 
 import logging
@@ -26,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from farna.core.audit_logger.append_only import register_append_only_guard
 from farna.db.rls import register_rls_reset_hook, register_tenant_filter
+from farna.db.rls_tripwire import register_rls_context_tripwire
 from farna.db.soft_delete import register_soft_delete_filter
 from farna.settings import get_settings
 
@@ -62,6 +69,9 @@ def _register_global_hooks_once() -> None:
         register_append_only_guard()
         register_tenant_filter()
         register_soft_delete_filter()
+        # ADR 070 Phase 1A: non-production diagnostic. Self-gated on settings —
+        # a no-op in production and on the SQLite test backend.
+        register_rls_context_tripwire()
         _GLOBAL_HOOKS_REGISTERED = True
 
 

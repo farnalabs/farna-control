@@ -35,6 +35,7 @@ from sqlalchemy.dialects import postgresql
 import farna.core.pipeline_execution as pipeline_execution
 import farna.core.saq_worker as sw
 import farna.core.worker_handoff as wh
+import farna.db.background as background
 from farna.core.pipeline_engine.error_codes import (
     ERROR_CODE_REGISTRY,
     LEGACY_ALIASES,
@@ -206,7 +207,7 @@ async def test_track_inflight_run_keeps_entry_on_cancellation() -> None:
     assert entry.cancellation_observed is True
 
 
-async def test_handback_never_touches_unobserved_entries() -> None:
+async def test_handback_never_touches_unobserved_entries(monkeypatch: pytest.MonkeyPatch) -> None:
     """M3: an entry whose task never observed the cancellation is NOT handed back.
 
     SAQ runs the shutdown callbacks even when cancellation timed out, so a
@@ -218,10 +219,15 @@ async def test_handback_never_touches_unobserved_entries() -> None:
     reg = InFlightRunRegistry()
     reg.register(run_id=uuid.uuid4(), org_id=uuid.uuid4(), claim_token="tok")
     engine = MagicMock()
+    # ADR 070 §3: the handback acquires its transaction through
+    # ``background_session``, so "touched the database" is that factory being
+    # built at all.
+    factory_spy = MagicMock()
+    monkeypatch.setattr(background, "async_sessionmaker", factory_spy)
 
     result = await handback_inflight_runs(engine, registry=reg)
 
-    engine.connect.assert_not_called()
+    factory_spy.assert_not_called()
     assert result["handed_back"] == 0
     assert result["terminalised"] == 0
     assert result["skipped"] == 1
@@ -546,12 +552,28 @@ class _ResetResult:
         return self._row
 
 
+def _async_cm(value: object) -> MagicMock:
+    """One ``async with``-shaped double yielding *value*."""
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=value)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    return cm
+
+
 def _handback_engine(
+    monkeypatch: pytest.MonkeyPatch,
     *,
     reset_rows: list[object] | None = None,
     execute_error: BaseException | None = None,
 ) -> MagicMock:
     """Engine double for :func:`handback_inflight_runs`.
+
+    The per-org handback acquires its transaction through
+    :func:`farna.db.background.background_session` (ADR 070 §3), so the double
+    replaces the ACQUISITION — its factory and its grant — and leaves the
+    read/reset logic below under test. The grant itself is covered by
+    ``tests/unit/db/test_background_session.py`` and the real-Postgres
+    behavioural test.
 
     ``conn.execute`` answers the org ``set_config`` with a benign result and
     each ``_HANDBACK_RESET_SQL`` with the next ``reset_rows`` entry (a non-None
@@ -569,15 +591,14 @@ def _handback_engine(
         return _ResetResult(None)
 
     conn.execute = AsyncMock(side_effect=_execute)
-    begin_cm = MagicMock()
-    begin_cm.__aenter__ = AsyncMock(return_value=None)
-    begin_cm.__aexit__ = AsyncMock(return_value=False)
-    conn.begin.return_value = begin_cm
-    connect_cm = MagicMock()
-    connect_cm.__aenter__ = AsyncMock(return_value=conn)
-    connect_cm.__aexit__ = AsyncMock(return_value=False)
+    conn.begin.return_value = _async_cm(None)
+
+    session_factory = MagicMock(side_effect=lambda: _async_cm(conn))
+    monkeypatch.setattr(background, "async_sessionmaker", MagicMock(return_value=session_factory))
+    monkeypatch.setattr(background, "apply_background_grant", AsyncMock())
+
     engine = MagicMock()
-    engine.connect.return_value = connect_cm
+    engine.connect = MagicMock(side_effect=AssertionError("the handback must not open a raw connection — it uses background_session"))
     return engine
 
 
@@ -598,8 +619,8 @@ def _load_returning(row: object, graph: object) -> object:
     return _load
 
 
-async def test_handback_empty_registry_returns_zero_counts() -> None:
-    engine = _handback_engine()
+async def test_handback_empty_registry_returns_zero_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = _handback_engine(monkeypatch)
     result = await handback_inflight_runs(engine, registry=InFlightRunRegistry())
     engine.connect.assert_not_called()
     assert result == {"handed_back": 0, "terminalised": 0, "skipped": 0}
@@ -608,7 +629,7 @@ async def test_handback_empty_registry_returns_zero_counts() -> None:
 async def test_handback_releases_observed_run(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine(reset_rows=[(str(run_id),)])
+    engine = _handback_engine(monkeypatch, reset_rows=[(str(run_id),)])
     monkeypatch.setattr(wh, "_load_handback_row", _load_returning(_row(), {"nodes": [{"id": "n1"}]}))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     result = await handback_inflight_runs(engine, registry=reg)
@@ -620,7 +641,7 @@ async def test_handback_releases_observed_run(monkeypatch: pytest.MonkeyPatch) -
 async def test_handback_skips_fenced_out_reset(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine(reset_rows=[None])
+    engine = _handback_engine(monkeypatch, reset_rows=[None])
     monkeypatch.setattr(wh, "_load_handback_row", _load_returning(_row(), {"nodes": [{"id": "n1"}]}))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     result = await handback_inflight_runs(engine, registry=reg)
@@ -630,7 +651,7 @@ async def test_handback_skips_fenced_out_reset(monkeypatch: pytest.MonkeyPatch) 
 async def test_handback_skips_run_not_visible(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine()
+    engine = _handback_engine(monkeypatch)
     monkeypatch.setattr(wh, "_load_handback_row", _load_returning(None, None))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     result = await handback_inflight_runs(engine, registry=reg)
@@ -641,7 +662,7 @@ async def test_handback_terminalises_observed_activity(monkeypatch: pytest.Monke
     """Observed E2B work gets a durable terminal failure, not a silent re-claim."""
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine()
+    engine = _handback_engine(monkeypatch)
     monkeypatch.setattr(wh, "_load_handback_row", _load_returning(_row(observed_activity=True), {"nodes": [{"id": "n1"}]}))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     fail = AsyncMock(return_value=True)
@@ -663,7 +684,7 @@ async def test_handback_terminal_fenced_out_books_no_cost(monkeypatch: pytest.Mo
     """FAR-2077: a fenced-out terminal write is another writer's row — book nothing."""
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine()
+    engine = _handback_engine(monkeypatch)
     monkeypatch.setattr(wh, "_load_handback_row", _load_returning(_row(), {"nodes": [{"id": "n1", "idempotent": False}]}))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     monkeypatch.setattr(pipeline_execution, "fail_run_terminal", AsyncMock(return_value=False))
@@ -677,7 +698,7 @@ async def test_handback_terminal_fenced_out_books_no_cost(monkeypatch: pytest.Mo
 async def test_handback_terminal_write_fenced_out_counts_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine()
+    engine = _handback_engine(monkeypatch)
     monkeypatch.setattr(wh, "_load_handback_row", _load_returning(_row(), {"nodes": [{"id": "n1", "idempotent": False}]}))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     monkeypatch.setattr(pipeline_execution, "fail_run_terminal", AsyncMock(return_value=False))
@@ -688,7 +709,7 @@ async def test_handback_terminal_write_fenced_out_counts_skipped(monkeypatch: py
 async def test_handback_terminal_write_error_counts_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine()
+    engine = _handback_engine(monkeypatch)
     monkeypatch.setattr(wh, "_load_handback_row", _load_returning(_row(), {"nodes": [{"id": "n1", "idempotent": False}]}))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     monkeypatch.setattr(pipeline_execution, "fail_run_terminal", AsyncMock(side_effect=RuntimeError("db down")))
@@ -699,7 +720,7 @@ async def test_handback_terminal_write_error_counts_skipped(monkeypatch: pytest.
 async def test_handback_terminal_cancelled_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine()
+    engine = _handback_engine(monkeypatch)
     monkeypatch.setattr(wh, "_load_handback_row", _load_returning(_row(), {"nodes": [{"id": "n1", "idempotent": False}]}))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     monkeypatch.setattr(pipeline_execution, "fail_run_terminal", AsyncMock(side_effect=asyncio.CancelledError))
@@ -710,7 +731,7 @@ async def test_handback_terminal_cancelled_error_propagates(monkeypatch: pytest.
 async def test_handback_org_row_lock_timeout_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine(execute_error=RuntimeError("55P03 lock_not_available"))
+    engine = _handback_engine(monkeypatch, execute_error=RuntimeError("55P03 lock_not_available"))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     monkeypatch.setattr(wh, "is_row_lock_timeout", lambda _exc: True)
     result = await handback_inflight_runs(engine, registry=reg)
@@ -720,7 +741,7 @@ async def test_handback_org_row_lock_timeout_is_skipped(monkeypatch: pytest.Monk
 async def test_handback_org_generic_failure_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine(execute_error=RuntimeError("boom"))
+    engine = _handback_engine(monkeypatch, execute_error=RuntimeError("boom"))
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     monkeypatch.setattr(wh, "is_row_lock_timeout", lambda _exc: False)
     result = await handback_inflight_runs(engine, registry=reg)
@@ -730,7 +751,7 @@ async def test_handback_org_generic_failure_is_skipped(monkeypatch: pytest.Monke
 async def test_handback_org_cancelled_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     run_id, org_id = uuid.uuid4(), uuid.uuid4()
     reg = _observed_registry(run_id, org_id)
-    engine = _handback_engine(execute_error=asyncio.CancelledError)
+    engine = _handback_engine(monkeypatch, execute_error=asyncio.CancelledError)
     monkeypatch.setattr(row_lock, "set_mutation_row_lock_timeout", AsyncMock())
     with pytest.raises(asyncio.CancelledError):
         await handback_inflight_runs(engine, registry=reg)

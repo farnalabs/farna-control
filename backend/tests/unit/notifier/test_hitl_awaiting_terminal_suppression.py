@@ -282,7 +282,7 @@ async def test_run_state_db_error_fails_open(harness: _Harness) -> None:
     The ``except Exception`` arm is the safety net that keeps a DB blip from
     silently swallowing a live review request.
     """
-    with patch("farna.core.notifier.set_rls_org", side_effect=RuntimeError("db blip")):
+    with patch("farna.db.background.apply_background_grant", side_effect=RuntimeError("db blip")):
         assert await harness.notifier._run_is_terminal(_ORG, _TERMINAL_RUN) is False
 
 
@@ -293,7 +293,7 @@ async def test_run_state_cancellation_propagates(harness: _Harness) -> None:
     so the caller's cancellation is honoured.
     """
     with (
-        patch("farna.core.notifier.set_rls_org", side_effect=asyncio.CancelledError),
+        patch("farna.db.background.apply_background_grant", side_effect=asyncio.CancelledError),
         pytest.raises(asyncio.CancelledError),
     ):
         await harness.notifier._run_is_terminal(_ORG, _TERMINAL_RUN)

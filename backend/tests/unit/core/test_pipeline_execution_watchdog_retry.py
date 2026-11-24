@@ -365,15 +365,15 @@ async def test_record_derived_deadline_cost_rereises_cancelled_error() -> None:
     """
     with (
         patch(
-            "farna.core.pipeline_execution.async_sessionmaker",
+            "farna.db.background.async_sessionmaker",
             side_effect=asyncio.CancelledError(),
         ),
         pytest.raises(asyncio.CancelledError),
     ):
         await _record_derived_deadline_cost(
             MagicMock(),
-            "run-1",
-            "org-1",
+            str(uuid.uuid4()),
+            str(uuid.uuid4()),
             error_detail="node 'n1' exceeded its deadline",
             derived_sandbox_wall_hours=300 / 3600.0,
             killed_node_id="n1",
@@ -404,8 +404,8 @@ async def test_record_worker_lost_derived_cost_bounds_lock_and_delegates_uuids()
         captured.update(kwargs)
 
     with (
-        patch("farna.core.pipeline_execution.async_sessionmaker", return_value=_session_factory(session)),
-        patch("farna.core.pipeline_execution.set_rls_org", new=AsyncMock()) as mock_rls,
+        patch("farna.db.background.async_sessionmaker", return_value=_session_factory(session)),
+        patch("farna.db.background.apply_background_grant", new=AsyncMock()) as mock_grant,
         patch("farna.db.crud.row_lock.set_mutation_row_lock_timeout", new=_bound),
         patch("farna.core.cost_controller.finalize.finalize_worker_lost_run", new=_finalize),
     ):
@@ -422,19 +422,19 @@ async def test_record_worker_lost_derived_cost_bounds_lock_and_delegates_uuids()
     assert captured["org_id"] == org_id
     assert captured["error_code"] == "harness.worker_lost"
     assert captured["error_detail"] == "worker shut down mid-run"
-    mock_rls.assert_awaited_once_with(session, org_id)
+    mock_grant.assert_awaited_once_with(session, org_id)
 
 
 async def test_record_worker_lost_derived_cost_rereises_cancelled_error() -> None:
     """Worker shutdown is not ours to swallow."""
     with (
-        patch("farna.core.pipeline_execution.async_sessionmaker", side_effect=asyncio.CancelledError()),
+        patch("farna.db.background.async_sessionmaker", side_effect=asyncio.CancelledError()),
         pytest.raises(asyncio.CancelledError),
     ):
         await record_worker_lost_derived_cost(
             MagicMock(),
-            "run-1",
-            "org-1",
+            str(uuid.uuid4()),
+            str(uuid.uuid4()),
             error_code="harness.worker_lost",
             error_detail="worker shut down mid-run",
         )
@@ -443,13 +443,13 @@ async def test_record_worker_lost_derived_cost_rereises_cancelled_error() -> Non
 async def test_record_worker_lost_derived_cost_swallows_ordinary_failure(caplog: pytest.LogCaptureFixture) -> None:
     """An ordinary failure is logged and swallowed — the terminal write stands."""
     with (
-        patch("farna.core.pipeline_execution.async_sessionmaker", side_effect=RuntimeError("db down")),
+        patch("farna.db.background.async_sessionmaker", side_effect=RuntimeError("db down")),
         caplog.at_level(logging.WARNING),
     ):
         await record_worker_lost_derived_cost(
             MagicMock(),
-            "run-1",
-            "org-1",
+            str(uuid.uuid4()),
+            str(uuid.uuid4()),
             error_code="harness.worker_lost",
             error_detail="worker shut down mid-run",
         )
@@ -499,8 +499,8 @@ async def test_record_derived_deadline_cost_bounds_the_row_lock_before_finalize(
         order.append("finalize")
 
     with (
-        patch("farna.core.pipeline_execution.async_sessionmaker", return_value=_session_factory(session)),
-        patch("farna.core.pipeline_execution.set_rls_org", new=AsyncMock()),
+        patch("farna.db.background.async_sessionmaker", return_value=_session_factory(session)),
+        patch("farna.db.background.apply_background_grant", new=AsyncMock()),
         patch("farna.db.crud.row_lock.set_mutation_row_lock_timeout", new=_bound),
         patch("farna.core.cost_controller.finalize.finalize_failed_run", new=_finalize),
     ):
@@ -528,8 +528,8 @@ async def test_salvage_cancelled_run_cost_bounds_the_row_lock_before_salvage() -
         order.append("salvage")
 
     with (
-        patch("farna.core.pipeline_execution.async_sessionmaker", return_value=_session_factory(session)),
-        patch("farna.core.pipeline_execution.set_rls_org", new=AsyncMock()),
+        patch("farna.db.background.async_sessionmaker", return_value=_session_factory(session)),
+        patch("farna.db.background.apply_background_grant", new=AsyncMock()),
         patch("farna.db.crud.row_lock.set_mutation_row_lock_timeout", new=_bound),
         patch("farna.core.cost_controller.finalize.salvage_cancelled_run_cost", new=_salvage),
     ):
@@ -2321,12 +2321,12 @@ async def test_salvage_cancelled_run_cost_rereises_cancelled_error() -> None:
     """
     with (
         patch(
-            "farna.core.pipeline_execution.async_sessionmaker",
+            "farna.db.background.async_sessionmaker",
             side_effect=asyncio.CancelledError(),
         ),
         pytest.raises(asyncio.CancelledError),
     ):
-        await _salvage_cancelled_run_cost(MagicMock(), "run-1", "org-1")
+        await _salvage_cancelled_run_cost(MagicMock(), str(uuid.uuid4()), str(uuid.uuid4()))
 
 
 async def test_salvage_cancelled_run_cost_fails_open(caplog: pytest.LogCaptureFixture) -> None:
@@ -2335,11 +2335,11 @@ async def test_salvage_cancelled_run_cost_fails_open(caplog: pytest.LogCaptureFi
     with (
         caplog.at_level(logging.WARNING, logger="farna.core.pipeline_execution"),
         patch(
-            "farna.core.pipeline_execution.async_sessionmaker",
+            "farna.db.background.async_sessionmaker",
             side_effect=RuntimeError("db down"),
         ),
     ):
-        await _salvage_cancelled_run_cost(MagicMock(), "run-1", "org-1")
+        await _salvage_cancelled_run_cost(MagicMock(), str(uuid.uuid4()), str(uuid.uuid4()))
 
     assert "pipeline_execution.cancel_cost_salvage_failed" in caplog.text
 

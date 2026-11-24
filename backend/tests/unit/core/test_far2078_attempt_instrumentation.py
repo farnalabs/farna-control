@@ -37,6 +37,7 @@ from farna.core.pipeline_engine import PipelineExecutor
 from farna.core.pipeline_engine import executor as ex
 from farna.core.pipeline_engine import retry_policy as retry_policy_module
 from farna.core.pipeline_engine import watchdog_retry as wr
+from farna.db import background
 from farna.db.crud import run_attempts as attempt_crud
 from farna.db.models.run_attempt import (
     ATTEMPT_TERMINAL_REASON_COMPLETED,
@@ -643,7 +644,13 @@ async def test_mark_complete_closes_the_attempt_as_completed() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _handback_engine(*, reset_landed: bool) -> MagicMock:
+def _handback_engine(*, reset_landed: bool, monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Engine double for the handback (which now acquires via background_session).
+
+    ADR 070 §3: the per-org handback opens its transaction through
+    ``db.background.background_session``, so the factory and the grant are bound
+    THERE. The engine only has to exist — a raw ``connect()`` would be a defect.
+    """
     conn = MagicMock()
 
     async def _execute(stmt: object, params: object = None) -> Any:
@@ -656,15 +663,21 @@ def _handback_engine(*, reset_landed: bool) -> MagicMock:
     begin_cm.__aenter__ = AsyncMock(return_value=None)
     begin_cm.__aexit__ = AsyncMock(return_value=False)
     conn.begin = MagicMock(return_value=begin_cm)
-    connect_cm = MagicMock()
-    connect_cm.__aenter__ = AsyncMock(return_value=conn)
-    connect_cm.__aexit__ = AsyncMock(return_value=False)
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=conn)
+    session_cm.__aexit__ = AsyncMock(return_value=False)
+    session_factory = MagicMock(return_value=session_cm)
+
+    monkeypatch.setattr(background, "async_sessionmaker", MagicMock(return_value=session_factory))
+    monkeypatch.setattr(background, "apply_background_grant", AsyncMock())
+
     engine = MagicMock()
-    engine.connect = MagicMock(return_value=connect_cm)
+    engine.connect = MagicMock(side_effect=AssertionError("the handback must not open a raw connection — it uses background_session"))
     return engine
 
 
-async def _handback_once(*, reset_landed: bool) -> tuple[MagicMock, dict[str, int]]:
+async def _handback_once(monkeypatch: pytest.MonkeyPatch, *, reset_landed: bool) -> tuple[MagicMock, dict[str, int]]:
     reg = wh.InFlightRunRegistry()
     reg.register(run_id=RUN, org_id=ORG, claim_token="tok")
     reg.mark_cancellation_observed(RUN, "tok")
@@ -691,12 +704,12 @@ async def _handback_once(*, reset_landed: bool) -> tuple[MagicMock, dict[str, in
         patch("farna.db.crud.row_lock.set_mutation_row_lock_timeout", AsyncMock()),
         patch.object(wh, "_close_handed_back_attempts", closer),
     ):
-        result = await wh.handback_inflight_runs(_handback_engine(reset_landed=reset_landed), registry=reg)
+        result = await wh.handback_inflight_runs(_handback_engine(reset_landed=reset_landed, monkeypatch=monkeypatch), registry=reg)
     return closer, result
 
 
-async def test_a_handed_back_run_closes_its_attempt() -> None:
-    closer, result = await _handback_once(reset_landed=True)
+async def test_a_handed_back_run_closes_its_attempt(monkeypatch: pytest.MonkeyPatch) -> None:
+    closer, result = await _handback_once(monkeypatch, reset_landed=True)
 
     assert result["handed_back"] == 1
     closer.assert_awaited_once()
@@ -704,8 +717,8 @@ async def test_a_handed_back_run_closes_its_attempt() -> None:
     assert [entry.run_id for entry in closer.await_args.args[1]] == [RUN]
 
 
-async def test_a_fenced_out_handback_closes_no_attempt() -> None:
-    closer, result = await _handback_once(reset_landed=False)
+async def test_a_fenced_out_handback_closes_no_attempt(monkeypatch: pytest.MonkeyPatch) -> None:
+    closer, result = await _handback_once(monkeypatch, reset_landed=False)
 
     assert result["handed_back"] == 0
     closer.assert_awaited_once()
