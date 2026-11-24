@@ -2181,7 +2181,98 @@ def test_release_schema_gate_and_publish_share_the_single_resolved_target() -> N
     publish_names = _step_names(publish_steps)
     create = publish_steps[publish_names.index("Create GitHub Release with assets")]
     assert create["env"]["TARGET_SHA"] == "${{ needs.release.outputs.target_sha }}"
+    assert create["env"]["MODE"] == "${{ inputs.mode }}"
     assert "Target commit:" in create["run"]
+
+
+@pytest.mark.posix_only
+def test_release_notes_target_for_cut_is_the_rc_tag_commit(tmp_path: Path) -> None:
+    """FAR-2752: for ``mode=cut`` the notes must record the version-bump merge
+    commit the RC tag points at, never the origin/main sample resolve-target took
+    at dispatch. A recut records the single resolved (pinned) target, and the
+    pinned/resolved wording is scoped to a recut only."""
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+
+    release_steps = jobs["release"]["steps"]
+    release_names = _step_names(release_steps)
+    rc_output = release_steps[release_names.index("Expose release candidate tag")]
+    # The normaliser selects the published target per mode from the cut step's
+    # own merged commit.
+    assert rc_output["env"]["MODE"] == "${{ inputs.mode }}"
+    assert rc_output["env"]["CUT_SHA"] == "${{ steps.cut.outputs.cut_sha }}"
+
+    main_sample = "a" * 40
+    cut_sha = "b" * 40
+    resolved = "c" * 40
+
+    def _outputs_for(mode: str, cut: str, target: str, pinned: str) -> dict[str, str]:
+        out = tmp_path / f"output-{mode}-{cut or 'none'}"
+        run_env = {
+            **os.environ,
+            "GITHUB_OUTPUT": str(out),
+            "MODE": mode,
+            "CUT_SHA": cut,
+            "CUT_RC_TAG": "v0.2.0-rc1" if mode == "cut" else "",
+            "RECUT_RC_TAG": "v0.2.0-rc2" if mode == "recut" else "",
+            "TARGET_SHA": target,
+            "TARGET_PINNED": pinned,
+        }
+        result = _run_bash(rc_output["run"], cwd=tmp_path, env=run_env)
+        assert result.returncode == 0, result.stderr
+        parsed: dict[str, str] = {}
+        for line in out.read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                parsed[key] = value
+        return parsed
+
+    # cut: the target is the cut step's merged commit, NOT the origin/main sample.
+    cut_outputs = _outputs_for("cut", cut_sha, main_sample, "false")
+    assert cut_outputs["target_sha"] == cut_sha
+    assert cut_outputs["target_pinned"] == "false"
+
+    # recut: the single resolved (here pinned) target survives untouched.
+    recut_outputs = _outputs_for("recut", "", resolved, "true")
+    assert recut_outputs["target_sha"] == resolved
+    assert recut_outputs["target_pinned"] == "true"
+
+    # A cut that produced no merged commit fails closed instead of publishing the
+    # origin/main sample as the target.
+    missing = tmp_path / "output-cut-missing"
+    result = _run_bash(
+        rc_output["run"],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "GITHUB_OUTPUT": str(missing),
+            "MODE": "cut",
+            "CUT_SHA": "",
+            "CUT_RC_TAG": "v0.2.0-rc1",
+            "RECUT_RC_TAG": "",
+            "TARGET_SHA": main_sample,
+            "TARGET_PINNED": "false",
+        },
+    )
+    assert result.returncode != 0
+    assert "no exact merged commit SHA" in result.stdout + result.stderr
+
+    # The cut step tags its merged commit, so the cut_sha IS the RC tag commit the
+    # notes must name.
+    cut_step = release_steps[release_names.index("Cut release candidate and freeze main")]
+    assert 'git tag -a "$RC_TAG"' in cut_step["run"]
+    assert "cut_sha=$(git rev-parse HEAD)" in cut_step["run"]
+
+    # The notes step consumes that target, cross-checks it against the tag it
+    # publishes, and scopes the pinned/resolved wording to a recut.
+    publish_steps = jobs["publish-release"]["steps"]
+    create = publish_steps[_step_names(publish_steps).index("Create GitHub Release with assets")]
+    assert create["env"]["TARGET_SHA"] == "${{ needs.release.outputs.target_sha }}"
+    assert create["env"]["MODE"] == "${{ inputs.mode }}"
+    note_script = create["run"]
+    assert 'git rev-parse "${RC_TAG}^{commit}"' in note_script
+    assert "the version-bump merge commit tagged as this release candidate" in note_script
+    assert 'elif [ "${MODE:-}" = "cut" ]' in note_script
 
 
 @pytest.mark.posix_only

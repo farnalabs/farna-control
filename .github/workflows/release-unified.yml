@@ -2496,19 +2496,38 @@ jobs:
         if: always()
         shell: bash
         env:
+          MODE: ${{ inputs.mode }}
           CUT_RC_TAG: ${{ steps.cut.outputs.rc_tag }}
           RECUT_RC_TAG: ${{ steps.recut.outputs.rc_tag }}
+          CUT_SHA: ${{ steps.cut.outputs.cut_sha }}
           TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
           TARGET_PINNED: ${{ needs.resolve-target.outputs.target_pinned }}
         run: |
           set -euo pipefail
           rc_tag="${CUT_RC_TAG:-}${RECUT_RC_TAG:-}"
           echo "rc_tag=${rc_tag}" >> "$GITHUB_OUTPUT"
+          # FAR-2752: the published target must be the commit the RC tag actually
+          # points at. `cut` tags the merge commit of its version-bump PR - a
+          # commit that did not exist when resolve-target sampled origin/main - so
+          # for cut the target is the cut step's own merged commit, never the
+          # origin/main sample. A recut (and only a recut) publishes the single
+          # resolved target it validated, which may be pinned.
+          if [ "${MODE:-}" = "cut" ]; then
+            if [ -z "${CUT_SHA:-}" ]; then
+              echo "::error::cut produced no exact merged commit SHA to record as the release target."
+              exit 1
+            fi
+            target_sha="${CUT_SHA}"
+            target_pinned="false"
+          else
+            target_sha="${TARGET_SHA:-}"
+            target_pinned="${TARGET_PINNED:-}"
+          fi
           {
-            echo "target_sha=${TARGET_SHA:-}"
-            echo "target_pinned=${TARGET_PINNED:-}"
+            echo "target_sha=${target_sha}"
+            echo "target_pinned=${target_pinned}"
           } >> "$GITHUB_OUTPUT"
-          echo "Release candidate tag exposed to dependent jobs: '${rc_tag}' (target ${TARGET_SHA:-}, pinned=${TARGET_PINNED:-})"
+          echo "Release candidate tag exposed to dependent jobs: '${rc_tag}' (target ${target_sha}, pinned=${target_pinned})"
 
   # ---------------------------------------------------------------------------
 
@@ -3155,13 +3174,26 @@ jobs:
           TAG: bundle-v${{ inputs.version }}
           RC_TAG: ${{ needs.release.outputs.rc_tag }}
           INCLUDE_WINDOWS: ${{ inputs.include_windows }}
-          # The release job re-exports the single resolved target (FAR-2752), so
-          # the notes trace exactly the commit the schema gate proved.
+          MODE: ${{ inputs.mode }}
+          # The release job re-exports the commit the RC tag actually points at
+          # (FAR-2752): for cut that is the version-bump merge commit, for a recut
+          # the pinned/resolved target. So the notes trace exactly the commit the
+          # schema gate proved and the tag published.
           TARGET_SHA: ${{ needs.release.outputs.target_sha }}
           TARGET_PINNED: ${{ needs.release.outputs.target_pinned }}
         shell: bash
         run: |
           set -euo pipefail
+
+          # FAR-2752: prove the recorded target is the commit the RC tag points
+          # at before it is published. `cut` tags its version-bump merge commit
+          # and a recut tags the resolved/pinned target; either way the note must
+          # name the tagged commit, never the origin/main sample taken at dispatch.
+          TAGGED_SHA="$(git rev-parse "${RC_TAG}^{commit}")"
+          if [ "${TARGET_SHA:-}" != "$TAGGED_SHA" ]; then
+            echo "::error::Release notes target '${TARGET_SHA}' does not match the RC tag ${RC_TAG} commit ${TAGGED_SHA}; refusing to publish a wrong target."
+            exit 1
+          fi
 
           # Generate changelog and release notes
           NOTES_FILE="$(mktemp)"
@@ -3177,15 +3209,17 @@ jobs:
             --version "$VERSION" \
             --output CHANGELOG.md > "$NOTES_FILE"
 
-          # FAR-2752: record which commit this RC was pinned to, so a published
-          # RC traces to an explicitly chosen commit rather than "whatever main
-          # was". The RC tag is the same commit the schema gate proved.
+          # FAR-2752: record the commit this RC was tagged at. The pinned/resolved
+          # wording applies to a recut only; a cut publishes the merge commit of
+          # its version-bump PR, which is neither pinned nor the origin/main sample.
           {
             echo ""
             echo "---"
             echo ""
-            if [ "$TARGET_PINNED" = "true" ]; then
+            if [ "${TARGET_PINNED:-false}" = "true" ]; then
               echo "Target commit: \`${TARGET_SHA}\` (pinned via the \`target_sha\` workflow input)."
+            elif [ "${MODE:-}" = "cut" ]; then
+              echo "Target commit: \`${TARGET_SHA}\` (the version-bump merge commit tagged as this release candidate)."
             else
               echo "Target commit: \`${TARGET_SHA}\` (resolved once from \`origin/main\` at dispatch)."
             fi
