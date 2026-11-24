@@ -14,7 +14,7 @@
          so the fallback is never mistaken for a broken link. -->
     <p
       v-if="pipelineLinkNotice"
-      class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+      class="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm"
       role="status"
       aria-live="polite"
       data-testid="eval-editor-pipeline-link-notice"
@@ -120,7 +120,7 @@
                 </div>
 
                 <template v-if="isTyped">
-                  <div v-if="legacyMode" class="mt-3 rounded border border-amber-500/40 bg-amber-500/10 p-3 text-xs" data-testid="eval-editor-legacy-notice">
+                  <div v-if="legacyMode" class="mt-3 rounded border border-warning/40 bg-warning/10 p-3 text-xs" data-testid="eval-editor-legacy-notice">
                     <p class="font-medium">{{ $t('views.EvalEditorView.judging.legacyNoticeTitle') }}</p>
                     <p class="mt-1 text-muted-foreground">{{ $t('views.EvalEditorView.judging.legacyNoticeBody') }}</p>
                     <pre class="mt-2 max-h-40 overflow-auto rounded bg-background p-2 font-mono text-[11px]">{{ legacyConfigJson }}</pre>
@@ -911,7 +911,7 @@
                     <span
                       v-if="evalGateActions[ev.id]"
                       class="inline-block rounded px-2 py-0.5 text-xs font-medium"
-                      :class="evalGateActions[ev.id] === 'block' ? 'bg-destructive/10 text-destructive-text' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'"
+                      :class="evalGateActions[ev.id] === 'block' ? 'bg-destructive/10 text-destructive-text' : 'bg-warning/10 text-warning-text'"
                       data-testid="policy-gate-badge"
                     >
                       {{ evalGateActions[ev.id] === 'block' ? $t('views.EvalEditorView.policyGate.badgeBlock') : $t('views.EvalEditorView.policyGate.badgeWarn') }}

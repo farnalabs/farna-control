@@ -5,7 +5,7 @@
         :subtitle="$t('views.ModelBackendSetupView.page_subtitle')" />
 
       <div v-if="success" class="space-y-4">
-        <div class="rounded-md bg-green-50 p-3 text-sm text-green-800">
+        <div class="rounded-md bg-success/10 p-3 text-sm text-success-text">
           {{ $t('views.ModelBackendSetupView.backend_now_active', { name: backendName }) }}
         </div>
         <Button severity="secondary" outlined class="w-full"
@@ -16,7 +16,7 @@
       </div>
 
       <div v-else-if="!token" class="space-y-4">
-        <div class="rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+        <div class="rounded-md bg-warning/10 p-3 text-sm text-warning-text">
           {{ $t('views.ModelBackendSetupView.missing_token_hint') }}
         </div>
       </div>
@@ -34,7 +34,7 @@
           />
         </div>
 
-        <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
+        <p v-if="error" class="text-sm text-destructive-text">{{ error }}</p>
 
         <Button type="submit" :disabled="loading || !apiKey.trim()" class="w-full"
           data-testid="model-backend-setup-submit">

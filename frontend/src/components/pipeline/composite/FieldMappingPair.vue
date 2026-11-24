@@ -89,11 +89,11 @@ function removeMapping(sourceKey: string) {
 
 <template>
   <div class="space-y-3">
-    <div v-if="isPassthrough" class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400" aria-hidden="true" focusable="false">
+    <div v-if="isPassthrough" class="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-success-text" aria-hidden="true" focusable="false">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
       </svg>
-      <span class="text-xs font-medium text-emerald-400">{{ $t('components.pipeline.composite.FieldMappingPair.passthrough') }}</span>
+      <span class="text-xs font-medium text-success-text">{{ $t('components.pipeline.composite.FieldMappingPair.passthrough') }}</span>
       <span class="text-xs text-muted-foreground">{{ $t('components.pipeline.composite.FieldMappingPair.schemas_identical_no_mapping') }}</span>
     </div>
 

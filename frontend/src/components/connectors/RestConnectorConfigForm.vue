@@ -122,7 +122,7 @@
            config_json, so the prefill silently defaults to bearer which may not
            match the stored credential — surface the ambiguity explicitly
            instead (FAR-532). -->
-      <p v-if="mode === 'edit' && legacyAuthEcho" data-testid="rest-connector-legacy-auth-hint" class="mb-3 text-xs text-amber-600 dark:text-amber-400">
+      <p v-if="mode === 'edit' && legacyAuthEcho" data-testid="rest-connector-legacy-auth-hint" class="mb-3 text-xs text-warning-text">
         {{ $t('connectors.rest.auth_mode_legacy_echo_hint') }}
       </p>
       <div class="space-y-4">

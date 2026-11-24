@@ -15,7 +15,7 @@
       data-testid="settings-triggers-paused-banner"
       aria-live="polite"
       :aria-label="$t('views.SettingsTriggersView.paused_banner_title')"
-      class="mb-4 block rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+      class="mb-4 block rounded-lg border border-warning/40 bg-warning/10 p-4"
     >
       <p class="text-sm font-medium">{{ $t('views.SettingsTriggersView.paused_banner_title') }}</p>
       <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.SettingsTriggersView.paused_banner_body') }}</p>
@@ -902,7 +902,7 @@ function streakBadgeClass(trigger: TriggerItem): string {
   }
   if (s.enabled && threshold > 0 && streak > 0 && streak >= threshold - 1) {
     if (streak >= threshold) return 'bg-destructive/10 text-destructive-text'
-    return 'bg-amber-500/10 text-amber-600'
+    return 'bg-warning/10 text-warning-text'
   }
   return 'bg-muted text-muted-foreground'
 }
@@ -946,7 +946,7 @@ const agentReportedConfidenceDetail = computed(() =>
 
 function outcomeBadgeClass(classification: string | null | undefined): string {
   if (classification === OUTCOME_DELIVERED) return 'bg-success/10 text-success-text'
-  if (classification === 'no_delivery') return 'bg-amber-500/10 text-amber-600'
+  if (classification === 'no_delivery') return 'bg-warning/10 text-warning-text'
   return 'bg-muted text-muted-foreground'
 }
 

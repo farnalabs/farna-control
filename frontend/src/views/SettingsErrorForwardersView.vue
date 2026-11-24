@@ -47,7 +47,7 @@
             <template #actions>
               <span
                 v-if="!fwd.configured"
-                class="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600"
+                class="rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning-text"
               >{{ $t('views.SettingsErrorForwardersView.not_configured') }}</span>
               <ToggleSwitch
                 :checked="fwd.enabled"

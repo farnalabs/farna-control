@@ -23,7 +23,7 @@
         v-if="killSwitchEnabled"
         data-testid="settings-guardrails-kill-switch-banner"
         aria-live="polite"
-        class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+        class="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-4"
       >
         <p class="text-sm font-medium">{{ $t('views.SettingsGuardrailsView.kill_switch_banner') }}</p>
         <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.SettingsGuardrailsView.kill_switch_banner_body') }}</p>

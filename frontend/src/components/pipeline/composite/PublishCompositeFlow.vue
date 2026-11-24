@@ -151,7 +151,7 @@ function closeDialog() {
               step === s.num
                 ? 'bg-indigo-600 text-white'
                 : step > s.num
-                  ? 'bg-green-700 text-white'
+                  ? 'bg-success text-white'
                   : 'bg-muted text-muted-foreground'
             "
           >
@@ -285,14 +285,14 @@ function closeDialog() {
       <!-- Success -->
       <div v-if="success" class="space-y-4">
         <div
-          class="flex items-center gap-3 rounded-lg border border-green-600/30 bg-green-600/10 p-4"
+          class="flex items-center gap-3 rounded-lg border border-success/30 bg-success/10 p-4"
         >
           <span
-            class="flex h-8 w-8 items-center justify-center rounded-full bg-green-700 text-lg font-bold text-white"
+            class="flex h-8 w-8 items-center justify-center rounded-full bg-success text-lg font-bold text-white"
             >✓</span
           >
           <div>
-            <p class="text-sm font-medium text-green-700 dark:text-green-300">
+            <p class="text-sm font-medium text-success-text">
               Published!
             </p>
             <p class="text-xs text-muted-foreground">

@@ -276,7 +276,7 @@ const verdictClass = computed(() => {
     return "bg-destructive/10 text-destructive-text";
   }
   if (verdict === "draining") {
-    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    return "bg-success/10 text-success-text";
   }
   return "bg-muted text-muted-foreground";
 });
