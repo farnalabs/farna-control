@@ -316,6 +316,7 @@ jobs:
           rm -f "$STARTS_RESULT_FILE"
           case "$STARTED" in
             '' | *[!0-9]*) STARTED=0 ;;
+            *) : ;;
           esac
 
           # Machine-readable no-op marker (FAR-2157): a run that restarted and
