@@ -85,6 +85,7 @@ vi.mock('../composables/useDataFetch', async () => {
 
 import EvalProposalsQueueView from '../views/EvalProposalsQueueView.vue'
 import PageTabs from '../components/PageTabs.vue'
+import FormDialog from '../components/shared/FormDialog.vue'
 
 // The PrimeVue Dialog portals to <body>; this stub renders the default and
 // footer slots inline so the publish form and its buttons are DOM-reachable.
@@ -324,6 +325,23 @@ describe('EvalProposalsQueueView', () => {
     await nextTick()
 
     expect(wrapper.find('[data-testid="publish-name"]').exists()).toBe(false)
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('keeps the form open when the dialog reports it is open', async () => {
+    const wrapper = mountView()
+    await flush()
+
+    await wrapper.find('[data-testid="proposal-publish"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="publish-name"]').exists()).toBe(true)
+
+    // FormDialog only emits update:open to signal a state change; a truthy
+    // value must not trigger the close-only teardown.
+    wrapper.findComponent(FormDialog).vm.$emit('update:open', true)
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="publish-name"]').exists()).toBe(true)
     expect(mockPost).not.toHaveBeenCalled()
   })
 
