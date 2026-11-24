@@ -2249,10 +2249,50 @@ jobs:
 
       - name: Check deployed SHA
         shell: pwsh
+        # FAR-2656: a from-zero deploy starts brand-new machines, and the app
+        # can be several seconds away from answering its first request. Probe
+        # with a bounded wait instead of a single curl, so a cold start does
+        # not fail a deploy that is otherwise healthily rolling out.
         run: |
           $expectedSha = "${{ steps.git.outputs.git-sha }}".Substring(0, 7)
-          $info = curl -s -m 10 "https://staging-farna-control.fly.dev/api/v1/deployment" 2>$null
-          if (-not $info) { Write-Host "No deployment info"; exit 1 }
+          $hostName = "staging-farna-control.fly.dev"
+          # 1) Wait (bounded) for the app to answer its readiness endpoint.
+          #    24 attempts at 5s intervals, capped at 120s wall clock, so a
+          #    hung probe cannot stretch the step past its budget.
+          $readyAttempts = 24
+          $ready = $false
+          $attempt = 0
+          $deadline = (Get-Date).AddSeconds(120)
+          while ($attempt -lt $readyAttempts -and (Get-Date) -lt $deadline) {
+            $attempt++
+            $code = curl -s -o /dev/null -m 5 -w "%{http_code}" "https://staging-farna-control.fly.dev/healthz/ready" 2>$null
+            if ($code -eq "200") { $ready = $true; break }
+            Write-Host "Readiness attempt $attempt/$readyAttempts on $hostName returned '$code'; retrying in 5s"
+            Start-Sleep -Seconds 5
+          }
+          if (-not $ready) {
+            Write-Host "::error::$hostName did not report readiness (HTTP 200) after $attempt attempts"
+            exit 1
+          }
+          # 2) Read the deployment info with a bounded retry. An empty body or
+          #    a non-2xx response is retryable; exhaustion fails loudly below.
+          $infoAttempts = 6
+          $info = ""
+          $infoFile = [System.IO.Path]::GetTempFileName()
+          for ($attempt = 1; $attempt -le $infoAttempts; $attempt++) {
+            $code = curl -s -m 5 -o $infoFile -w "%{http_code}" "https://staging-farna-control.fly.dev/api/v1/deployment" 2>$null
+            $raw = if (Test-Path -LiteralPath $infoFile) { Get-Content -Raw -LiteralPath $infoFile } else { $null }
+            $info = if ($raw) { $raw.Trim() } else { "" }
+            if ($code -eq "200" -and $info) { break }
+            $info = ""
+            Write-Host "Deployment info attempt $attempt/$infoAttempts on $hostName returned HTTP '$code'; retrying in 5s"
+            if ($attempt -lt $infoAttempts) { Start-Sleep -Seconds 5 }
+          }
+          Remove-Item -LiteralPath $infoFile -ErrorAction SilentlyContinue
+          if (-not $info) {
+            Write-Host "::error::No deployment info from $hostName after $infoAttempts attempts"
+            exit 1
+          }
           $deployInfo = $info | ConvertFrom-Json
           $deployedSha = if ($deployInfo.git_sha) { $deployInfo.git_sha.Substring(0, 7) } else { "?" }
           if ($deployedSha -ne $expectedSha) {
@@ -3748,13 +3788,53 @@ jobs:
         if: steps.verify.outputs.rolled_back == 'false'
         id: deployed
         shell: pwsh
+        # FAR-2656: a from-zero deploy starts brand-new machines, and the app
+        # can be several seconds away from answering its first request. Probe
+        # with a bounded wait instead of a single curl, so a cold start does
+        # not fail a deploy that is otherwise healthily rolling out.
         run: |
           $expectedSha = "${{ steps.git.outputs.git-sha }}".Substring(0, 7)
           # FAR-2656: the deployed-SHA check must read the app this job
           # deployed (farna-control), not the custom domain, which still points
           # at the old app until the domain move.
-          $info = curl -s -m 10 "https://farna-control.fly.dev/api/v1/deployment" 2>$null
-          if (-not $info) { Write-Host "No deployment info"; exit 1 }
+          $hostName = "farna-control.fly.dev"
+          # 1) Wait (bounded) for the app to answer its readiness endpoint.
+          #    24 attempts at 5s intervals, capped at 120s wall clock, so a
+          #    hung probe cannot stretch the step past its budget.
+          $readyAttempts = 24
+          $ready = $false
+          $attempt = 0
+          $deadline = (Get-Date).AddSeconds(120)
+          while ($attempt -lt $readyAttempts -and (Get-Date) -lt $deadline) {
+            $attempt++
+            $code = curl -s -o /dev/null -m 5 -w "%{http_code}" "https://farna-control.fly.dev/healthz/ready" 2>$null
+            if ($code -eq "200") { $ready = $true; break }
+            Write-Host "Readiness attempt $attempt/$readyAttempts on $hostName returned '$code'; retrying in 5s"
+            Start-Sleep -Seconds 5
+          }
+          if (-not $ready) {
+            Write-Host "::error::$hostName did not report readiness (HTTP 200) after $attempt attempts"
+            exit 1
+          }
+          # 2) Read the deployment info with a bounded retry. An empty body or
+          #    a non-2xx response is retryable; exhaustion fails loudly below.
+          $infoAttempts = 6
+          $info = ""
+          $infoFile = [System.IO.Path]::GetTempFileName()
+          for ($attempt = 1; $attempt -le $infoAttempts; $attempt++) {
+            $code = curl -s -m 5 -o $infoFile -w "%{http_code}" "https://farna-control.fly.dev/api/v1/deployment" 2>$null
+            $raw = if (Test-Path -LiteralPath $infoFile) { Get-Content -Raw -LiteralPath $infoFile } else { $null }
+            $info = if ($raw) { $raw.Trim() } else { "" }
+            if ($code -eq "200" -and $info) { break }
+            $info = ""
+            Write-Host "Deployment info attempt $attempt/$infoAttempts on $hostName returned HTTP '$code'; retrying in 5s"
+            if ($attempt -lt $infoAttempts) { Start-Sleep -Seconds 5 }
+          }
+          Remove-Item -LiteralPath $infoFile -ErrorAction SilentlyContinue
+          if (-not $info) {
+            Write-Host "::error::No deployment info from $hostName after $infoAttempts attempts"
+            exit 1
+          }
           $deployInfo = $info | ConvertFrom-Json
           $deployedSha = if ($deployInfo.git_sha) { $deployInfo.git_sha.Substring(0, 7) } else { "?" }
           if ($deployedSha -ne $expectedSha) {
