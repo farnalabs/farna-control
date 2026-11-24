@@ -85,13 +85,16 @@ async def effective_run_owner_team_id(session: AsyncSession, run: Run) -> uuid.U
     as org-level. The inputs to a boundary decision must not be filtered by the
     boundary (the FAR-1513 fail-open shape).
     """
-    if run.owner_team_id is not None:
-        return run.owner_team_id
-    # Resolve through the defining module at call time, not a bound name: the
-    # boundary resolver is patched on farna.db.crud.team_scope in tests, and a
-    # module-level import would make that patch silently non-intercepting.
-    scope = await team_scope.pipeline_team_scope_team_blind(session, run.pipeline_id)
-    return OWNER_UNRESOLVED if scope is None else scope.owner_team_id
+    # Delegate the owner precedence to the DB-layer resolver so REST and MCP
+    # keep one effective-owner implementation instead of a drifting copy.
+    # Resolve it through the defining module at call time, not a bound name:
+    # the team-blind pipeline read is patched on ``farna.db.crud.team_scope``
+    # in tests, and a module-level import would make that patch silently
+    # non-intercepting.
+    resolved = await team_scope.run_effective_owner_team_id(session, run)
+    # An unresolved pipeline is UNKNOWN, not org-level: keep the fail-closed
+    # sentinel distinct from a genuine ``owner_team_id=None``.
+    return OWNER_UNRESOLVED if not resolved.pipeline_present else resolved.owner_team_id
 
 
 async def run_visible_to_principal(
