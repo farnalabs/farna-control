@@ -8,7 +8,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 const RIGHT_SLOT_FILTERS = '<span data-testid="right-slot-content">Filters</span>'
 
 function mountPageHeader(
-  props: { title: string; subtitle?: string; backLink?: string; dataTestId?: string; tabs?: { label: string; to: string }[] },
+  props: { title: string; subtitle?: string; backLink?: string; dataTestId?: string; titleAs?: 'h1' | 'p'; tabs?: { label: string; to: string }[] },
   options: { defaultSlot?: string; rightSlot?: string; routerPush?: ReturnType<typeof vi.fn>; attrs?: Record<string, string> } = {},
 ) {
   return mount(PageHeader, {
@@ -33,6 +33,23 @@ describe('PageHeader', () => {
     const wrapper = mountPageHeader({ title: 'Runs' })
     expect(wrapper.find('h1').text()).toBe('Runs')
     expect(wrapper.find('p').exists()).toBe(false)
+  })
+
+  it('claims the page heading and focus target by default', () => {
+    const wrapper = mountPageHeader({ title: 'Runs' })
+    const heading = wrapper.get('h1[data-page-heading]')
+    expect(heading.text()).toBe('Runs')
+    expect(heading.attributes('tabindex')).toBe('-1')
+  })
+
+  it('renders the title as a non-heading context label when titleAs is "p" (FAR-2723)', () => {
+    const wrapper = mountPageHeader({ title: 'Runners', titleAs: 'p' })
+    expect(wrapper.find('h1').exists()).toBe(false)
+    const label = wrapper.get('p')
+    expect(label.text()).toBe('Runners')
+    // A context label must never compete for the route-change focus target.
+    expect(wrapper.find('[data-page-heading]').exists()).toBe(false)
+    expect(label.attributes('tabindex')).toBeUndefined()
   })
 
   it('applies dataTestId to the header element', () => {

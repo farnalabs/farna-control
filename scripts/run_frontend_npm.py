@@ -18,10 +18,11 @@ by the ESLint pre-commit hook: ``pass_filenames: true`` makes pre-commit
 append the staged filenames (repo-root-relative, e.g.
 ``frontend/src/App.vue``), and this script strips the ``frontend/`` prefix
 so they resolve from inside ``frontend/`` before running eslint on them.
-Only the changed files are linted instead of the entire ``src/``
-directory.  ``pnpm run lint`` is bypassed because its script hardcodes
-``eslint src``, so extra filenames would be additive rather than a
-replacement.  Paths outside ``frontend/`` are ignored.
+Only the changed files are linted instead of the whole ``src`` plus
+``tests/visual-baseline`` scope.  ``pnpm run lint`` is bypassed because its
+script hardcodes ``eslint src tests/visual-baseline``, so extra filenames
+would be additive rather than a replacement.  Paths outside ``frontend/``
+are ignored.
 """
 
 from __future__ import annotations
@@ -79,10 +80,13 @@ def frontend_relative_paths(filenames: list[str]) -> list[str]:
     pre-commit passes paths relative to the repo root (e.g.
     ``frontend/src/App.vue``) but eslint runs with ``cwd=frontend/``, so the
     ``frontend/`` prefix has to be stripped.  Anything outside ``frontend/``
-    is dropped: the frontend eslint config is scoped to ``frontend/src`` (the
-    ``lint`` script is ``eslint src``) and files elsewhere are not part of the
-    CI lint gate.  Each surviving path is sanitized before it can reach the
-    subprocess command line.
+    is dropped.  The files that reach here are the ones the hook's ``files:``
+    filter selects, mirroring the CI lint gate: ``frontend/src`` plus the
+    ``frontend/tests/visual-baseline`` tooling (the ``lint`` script is
+    ``eslint src tests/visual-baseline``).  ``frontend/tests/e2e/**`` stays
+    outside that gate because of pre-existing ``no-console`` findings.  Each
+    surviving path is sanitized before it can reach the subprocess command
+    line.
     """
     result: list[str] = []
     for filename in filenames:
@@ -125,10 +129,11 @@ def _run_eslint_on_staged(extra_args: list[str]) -> int:
     """Run eslint on the staged files under frontend/ (pre-commit path)."""
     # When extra_args are present (filenames from pre-commit with
     # pass_filenames: true), we cannot use "pnpm run lint" because its
-    # script hardcodes `eslint src` — extra filenames would be additive,
-    # not a replacement.  Instead, run eslint directly with just the staged
-    # files, translated to paths that resolve from frontend/ (pre-commit
-    # passes repo-root-relative paths while eslint runs with cwd=frontend/).
+    # script hardcodes `eslint src tests/visual-baseline` — extra filenames
+    # would be additive, not a replacement.  Instead, run eslint directly with
+    # just the staged files, translated to paths that resolve from frontend/
+    # (pre-commit passes repo-root-relative paths while eslint runs with
+    # cwd=frontend/).
     staged = frontend_relative_paths(extra_args)
     if not staged:
         print(
