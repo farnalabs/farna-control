@@ -237,4 +237,70 @@ describe('StateTabs', () => {
     expect(wrapper.get('[data-testid="close-beta"]').attributes('role')).toBeUndefined()
     wrapper.unmount()
   })
+
+  it('keeps the first tab tabbable when nothing is selected and every tab is disabled', () => {
+    const wrapper = mountTabs({ modelValue: 'missing' }, [
+      { id: 'alpha', label: 'Alpha', disabled: true },
+      { id: 'beta', label: 'Beta', disabled: true },
+    ])
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons[0].attributes('tabindex')).toBe('0')
+    expect(buttons[1].attributes('tabindex')).toBe('-1')
+    wrapper.unmount()
+  })
+
+  it('omits data-testid when no testidPrefix is supplied', () => {
+    const wrapper = mountTabs()
+
+    expect(wrapper.get('[role="tab"]').attributes('data-testid')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('ignores a keyboard event carrying a modifier', async () => {
+    const wrapper = mountTabs({ testidPrefix: 'example' })
+
+    await tab(wrapper, 'example-alpha').trigger('keydown', { key: 'ArrowRight', ctrlKey: true })
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('does nothing when a disabled tab receives a raw click event', () => {
+    const wrapper = mountTabs({ testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha' },
+      { id: 'beta', label: 'Beta', disabled: true },
+    ])
+
+    // A real user cannot click a disabled button; a programmatic dispatch still
+    // reaches the handler, which must refuse to activate the disabled tab.
+    tab(wrapper, 'example-beta').element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('handles arrow keys on a fully disabled list without moving selection', () => {
+    const wrapper = mountTabs({ modelValue: 'missing', testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha', disabled: true },
+      { id: 'beta', label: 'Beta', disabled: true },
+    ])
+
+    tab(wrapper, 'example-alpha').element.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+    )
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('falls back to the first enabled tab when the eventing tab is not in the enabled set', () => {
+    const wrapper = mountTabs({ testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha' },
+      { id: 'beta', label: 'Beta', disabled: true },
+    ])
+
+    tab(wrapper, 'example-beta').element.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+    )
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['alpha'])
+    wrapper.unmount()
+  })
 })

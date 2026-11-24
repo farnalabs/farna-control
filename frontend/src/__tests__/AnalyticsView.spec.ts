@@ -1434,3 +1434,24 @@ describe('aggregateByKey capacity fields', () => {
     expect(result[0].avg_final_idle_ms).toBeCloseTo(166.7, 0)
   })
 })
+
+describe('AnalyticsView — stale data notice', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('shows the stale notice when the fact rows lag', async () => {
+    setupMocks({ ...validResponse, facts_stale: true })
+    const wrapper = mount(AnalyticsView)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="analytics-stale-notice"]').exists()).toBe(true)
+  })
+
+  it('hides the stale notice when the fact rows are fresh', async () => {
+    setupMocks({ ...validResponse, facts_stale: false })
+    const wrapper = mount(AnalyticsView)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="analytics-stale-notice"]').exists()).toBe(false)
+  })
+})
