@@ -147,7 +147,7 @@ class SuiteRun(OrgScoped):
     )
 
     owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), nullable=True, index=True)
-    # ADR 070 ��4 / Phase 1A - the LEGACY-UNOWNED marker, identical in meaning to
+    # ADR 070 §4 / Phase 1A - the LEGACY-UNOWNED marker, identical in meaning to
     # ``runs.owner_unresolved`` (see that column's comment for the full contract).
     # A suite run carries the team of the pipeline whose trigger fired it (the
     # pipeline id lives in ``extra['pipeline_id']``), stamped at creation and

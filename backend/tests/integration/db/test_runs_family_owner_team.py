@@ -156,6 +156,9 @@ class Seed:
         self.dataset = uuid.uuid4()
         self.backend = uuid.uuid4()
         self.suite_run = uuid.uuid4()
+        self.suite_run_never_moved = uuid.uuid4()
+        self.suite_run_legacy = uuid.uuid4()
+        self.suite_run_broken = uuid.uuid4()
         self.pipelines = {
             name: uuid.uuid4()
             for name in (
@@ -321,18 +324,31 @@ def _seed(engine: sa.Engine) -> Seed:
             sa.text("INSERT INTO model_backends (id, name, display_name, provider, model_id, credentials_ciphertext, account_id, organisation_id, default_params) VALUES (:id, 'owner-backend', 'Owner backend', 'openai', 'gpt-4o-mini', :cipher, :acct, :org, '{}'::jsonb)"),
             {"id": seed.backend, "cipher": b"\x00", "acct": seed.account, "org": seed.org},
         )
-        conn.execute(
-            sa.text("INSERT INTO suite_runs (id, organisation_id, suite_id, dataset_id, model_backend_id, definition_checksum, state, extra, created_at) VALUES (:id, :org, :suite, :dataset, :backend, 'checksum', 'completed', jsonb_build_object('pipeline_id', CAST(:pid AS text)), :created_at)"),
-            {
-                "id": seed.suite_run,
-                "org": seed.org,
-                "suite": seed.suite,
-                "dataset": seed.dataset,
-                "backend": seed.backend,
-                "pid": str(p["moved"]),
-                "created_at": now - timedelta(hours=3),
-            },
-        )
+
+        def add_suite_run(suite_run_id: uuid.UUID, pipeline: str, created_at: datetime) -> None:
+            conn.execute(
+                sa.text("INSERT INTO suite_runs (id, organisation_id, suite_id, dataset_id, model_backend_id, definition_checksum, state, extra, created_at) VALUES (:id, :org, :suite, :dataset, :backend, 'checksum', 'completed', jsonb_build_object('pipeline_id', CAST(:pid AS text)), :created_at)"),
+                {
+                    "id": suite_run_id,
+                    "org": seed.org,
+                    "suite": seed.suite,
+                    "dataset": seed.dataset,
+                    "backend": seed.backend,
+                    "pid": str(p[pipeline]),
+                    "created_at": created_at,
+                },
+            )
+
+        # A suite run for the moved pipeline, created BEFORE the move: resolves to A.
+        add_suite_run(seed.suite_run, "moved", now - timedelta(hours=3))
+        # Pass 2: a never-moved pipeline copies its owner straight onto the suite run.
+        add_suite_run(seed.suite_run_never_moved, "never_moved", now - timedelta(hours=3))
+        # Legacy arm 1: created while the pipeline was org-level, team-owned today,
+        # so it cannot be resolved but arm 1 must still mark it.
+        add_suite_run(seed.suite_run_legacy, "moved_from_org", now - timedelta(hours=3))
+        # Legacy arm 2: a broken chain on an org-level pipeline - arm 1 cannot fire
+        # (the pipeline is org-level today), so only the broken-chain arm marks it.
+        add_suite_run(seed.suite_run_broken, "broken_org_level", now - timedelta(hours=2))
     return seed
 
 
@@ -378,6 +394,16 @@ def test_0365_backfill_resolves_owner_at_created_at_and_marks_legacy(pre_change_
 
         # suite_runs: the same three-pass rule, pipeline id read from ``extra``
         assert _scalar(engine, "SELECT owner_team_id FROM suite_runs WHERE id = :r", r=seed.suite_run) == seed.team_a
+        # pass 2: a never-moved suite_run inherits the pipeline owner, not legacy
+        assert _scalar(engine, "SELECT owner_team_id FROM suite_runs WHERE id = :r", r=seed.suite_run_never_moved) == seed.team_a
+        assert _scalar(engine, "SELECT owner_unresolved FROM suite_runs WHERE id = :r", r=seed.suite_run_never_moved) is None
+        # legacy arm 1: unowned and the pipeline is team-owned today
+        assert _scalar(engine, "SELECT owner_team_id FROM suite_runs WHERE id = :r", r=seed.suite_run_legacy) is None
+        assert _scalar(engine, "SELECT owner_unresolved FROM suite_runs WHERE id = :r", r=seed.suite_run_legacy) is True
+        # legacy arm 2: broken chain on an org-level pipeline - arm 1 cannot fire,
+        # so this pins the broken-chain arm independently of arm 1
+        assert _scalar(engine, "SELECT owner_team_id FROM suite_runs WHERE id = :r", r=seed.suite_run_broken) is None
+        assert _scalar(engine, "SELECT owner_unresolved FROM suite_runs WHERE id = :r", r=seed.suite_run_broken) is True
 
         # children inherit the resolved parent run (never the live pipeline)
         run_id = seed.runs["never_moved"]

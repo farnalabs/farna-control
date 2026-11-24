@@ -60,7 +60,7 @@ Three passes for ``runs`` (identical for ``suite_runs``)
   org-level now (it never moved). Those rows keep ``owner_team_id IS NULL`` and
   ``owner_unresolved IS NULL`` - distinguishable from a legacy row by the marker.
   Legacy rows are admin-only after the Phase 1B flip, never "org-visible"
-  (ADR 070 ��4: a NULL owner never means org-visible).
+  (ADR 070 §4: a NULL owner never means org-visible).
 
 Why a second column rather than a convention
 --------------------------------------------
@@ -533,7 +533,7 @@ WHERE p.id = n.pipeline_id
 
 #: Operator-facing summary of what the backfill could NOT resolve, emitted into the
 #: deploy log. A NOTICE is used (not a failure): legacy-unowned history is a
-#: documented, expected outcome (ADR 070 ��4/"Phase 1A"), and the Phase 1B gate is
+#: documented, expected outcome (ADR 070 §4/"Phase 1A"), and the Phase 1B gate is
 #: what refuses to proceed if the resolved state is not what was expected.
 _REPORT_SQL = """
 DO $$

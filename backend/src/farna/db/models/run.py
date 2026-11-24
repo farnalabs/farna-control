@@ -433,7 +433,7 @@ class Run(OrgScoped):
     run_group_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
     run_number: Mapped[int] = mapped_column(Integer, nullable=False)
     owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
-    # ADR 070 ��4 / Phase 1A - the LEGACY-UNOWNED marker.
+    # ADR 070 §4 / Phase 1A - the LEGACY-UNOWNED marker.
     #
     # TRUE marks a run of a CURRENTLY team-owned pipeline whose team owner could
     # not be resolved from the pipeline's ownership history (the audit-event chain
