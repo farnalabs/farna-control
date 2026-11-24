@@ -244,6 +244,30 @@ class TestRunScopeDecision:
         membership.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_viewer_without_an_organisation_reads_membership_unscoped(self) -> None:
+        """A viewer with no organisation skips the blind org-scope wrapper.
+
+        The ``organisation_id is None`` arm answers the membership read
+        directly: it must still consult ``viewer_run_scope_visible`` and must
+        never enter ``team_blind_org_scope`` with a null org.
+        """
+        organisationless_viewer = TenantPrincipal(
+            username="viewer",
+            organisation_id=None,
+            account_id=_ACCOUNT_ID,
+            org_role="viewer",
+        )
+        with (
+            patch.object(run_scope, "viewer_run_scope_visible", AsyncMock(return_value=True)) as membership,
+            patch.object(run_scope, "team_blind_org_scope", MagicMock()) as blind_scope,
+        ):
+            visible = await run_scope.run_visible_to_principal(_decision_session(), organisationless_viewer, _make_run(owner_team_id=_TEAM_B))
+
+        assert visible is True
+        membership.assert_awaited_once()
+        blind_scope.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_admin_is_exempt_from_both_clauses(self) -> None:
         visible = await run_scope.run_visible_to_principal(_decision_session(), _admin(), _make_run(owner_team_id=_TEAM_B))
 
