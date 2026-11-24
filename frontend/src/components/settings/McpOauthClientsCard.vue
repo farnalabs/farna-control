@@ -53,40 +53,42 @@
           />
         </div>
 
-        <div v-else class="table-wrapper">
-          <table class="w-full text-sm">
-            <thead>
-              <tr>
-                <th class="table-header">{{ $t('views.SettingsMcpView.name') }}</th>
-                <th class="table-header">{{ $t('views.SettingsMcpView.client_id') }}</th>
-                <th class="table-header">{{ $t('views.SettingsMcpView.scopes') }}</th>
-                <th class="table-header">{{ $t('views.SettingsMcpView.redirect_uris') }}</th>
-                <th class="table-header">{{ $t('views.SettingsMcpView.created') }}</th>
-                <th class="table-header" />
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr v-for="client in clients" :key="client.id" class="transition-colors hover:bg-muted/20">
-                <td class="table-cell font-medium">{{ client.name }}</td>
-                <td class="table-cell font-mono text-muted-foreground">{{ client.client_id }}</td>
-                <td class="table-cell">
-                  <span
-                    v-for="scope in client.scopes"
-                    :key="scope"
-                    class="mr-1 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
-                  >{{ scope }}</span>
-                </td>
-                <td class="table-cell max-w-xs font-mono text-xs break-all text-muted-foreground">{{ client.redirect_uris.join(', ') }}</td>
-                <td class="table-cell text-muted-foreground">{{ formatDate(client.created_at) }}</td>
-                <td class="table-cell-numeric">
-                  <Button severity="danger" size="small" data-testid="settings-mcp-revoke-oauth-client" @click="confirmRevokeOauth(client)">
-                    {{ $t('views.SettingsMcpView.revoke') }}
-                  </Button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          v-else
+          :columns="clientColumns"
+          :rows="clientRows"
+          :row-clickable="false"
+        >
+          <template #cell-name="{ value }">
+            <span class="font-medium">{{ value }}</span>
+          </template>
+          <template #cell-client_id="{ value }">
+            <span class="font-mono text-muted-foreground">{{ value }}</span>
+          </template>
+          <template #cell-scopes="{ row }">
+            <span
+              v-for="scope in (row.scopes as string[])"
+              :key="scope"
+              class="mr-1 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+            >{{ scope }}</span>
+          </template>
+          <template #cell-redirect_uris="{ value }">
+            <span class="max-w-xs font-mono text-xs break-all text-muted-foreground">{{ value }}</span>
+          </template>
+          <template #cell-created="{ value }">
+            <span class="text-muted-foreground">{{ value }}</span>
+          </template>
+          <template #cell-actions="{ row }">
+            <Button
+              severity="danger"
+              size="small"
+              data-testid="settings-mcp-revoke-oauth-client"
+              @click="confirmRevokeOauth(row.client as OAuthClientItem)"
+            >
+              {{ $t('views.SettingsMcpView.revoke') }}
+            </Button>
+          </template>
+        </DataTable>
       </template>
       </div>
   </DataCard>
@@ -334,6 +336,7 @@ import { formatApiError } from '../../lib/api/formatError'
 import type { components } from '../../lib/api/client'
 import Button from 'primevue/button'
 import DataCard from '../ui/DataCard.vue'
+import { DataTable, type Column, type DataTableRow } from '../ui/data-table'
 import Dialog from 'primevue/dialog'
 import EmptyState from '../shared/EmptyState.vue'
 import FormDialog from '../shared/FormDialog.vue'
@@ -393,7 +396,7 @@ const registerOauthError = ref<string | null>(null)
 // is fetched from `GET /api/v1/mcp/oauth/scopes` (registry -> `is_delegable`
 // -> filtered to the caller's role) when the register dialog opens, and the
 // picker groups it by namespace and filters it by search term.
-const { te: translationExists, t: translate } = useI18n()
+const { te: translationExists, t } = useI18n()
 const scopeFilter = ref('')
 const availableScopes = ref<OAuthScopeItem[]>([])
 const scopesLoading = ref(false)
@@ -463,7 +466,7 @@ const filteredScopeCount = computed(() => filteredScopes.value.length)
 /** Namespace heading: reuse the grants group label when one exists, else title-case. */
 function scopeGroupLabel(namespace: string): string {
   const key = `views.SettingsMcpView.grants_group_${namespace}`
-  if (translationExists(key)) return translate(key)
+  if (translationExists(key)) return t(key)
   return namespace.charAt(0).toUpperCase() + namespace.slice(1).replaceAll('_', ' ')
 }
 
@@ -499,6 +502,32 @@ function formatDate(iso: string): string {
     return iso
   }
 }
+
+// Read-only client table (FAR-2728): DataTable owns the shell, the header row
+// and the rows. The last column keeps its empty header (the revoke action) and
+// stays right-aligned via `numeric`, and every cell whose content is styled or
+// composed beyond plain text is a cell slot. `id` carries the source key so the
+// row key stays stable; `client` keeps the raw row for the revoke action.
+const clientColumns: Column[] = [
+  { key: 'name', label: t('views.SettingsMcpView.name') },
+  { key: 'client_id', label: t('views.SettingsMcpView.client_id') },
+  { key: 'scopes', label: t('views.SettingsMcpView.scopes') },
+  { key: 'redirect_uris', label: t('views.SettingsMcpView.redirect_uris') },
+  { key: 'created', label: t('views.SettingsMcpView.created') },
+  { key: 'actions', label: '', numeric: true },
+]
+
+const clientRows = computed<DataTableRow[]>(() =>
+  props.clients.map((client) => ({
+    id: client.id,
+    name: client.name,
+    client_id: client.client_id,
+    scopes: client.scopes,
+    redirect_uris: client.redirect_uris.join(', '),
+    created: formatDate(client.created_at),
+    client,
+  })),
+)
 
 // ─── OAuth client registration ─────────────────────────────────────────
 
