@@ -801,7 +801,7 @@ if [[ -n "${FROM_BUNDLE}" ]]; then
   VERSION_NUM="${BASH_REMATCH[1]}"
   RELEASE_TAG="(offline: extracted bundle)"
   tarball_name="farna-control-${VERSION_NUM}-${OS}-${ARCH}.tar.gz"
-  bundle_dir="$(CDPATH= cd -- "${FROM_BUNDLE}" && pwd)"
+  bundle_dir="$(CDPATH='' cd -- "${FROM_BUNDLE}" && pwd)"
 elif [[ -n "${FROM_FILE}" ]]; then
   [[ -f "${FROM_FILE}" ]] || die "--from-file: no such file: ${FROM_FILE}"
   tarball_name="$(basename "${FROM_FILE}")"
@@ -1025,7 +1025,7 @@ PYEOF
 
 
 if [[ -n "${FROM_BUNDLE}" ]]; then
-  bundle_parent="$(CDPATH= cd -- "${FROM_BUNDLE}/.." && pwd)"
+  bundle_parent="$(CDPATH='' cd -- "${FROM_BUNDLE}/.." && pwd)"
   adjacent_tarball="${bundle_parent}/${tarball_name}"
   manifest_file="${bundle_parent}/RELEASE_MANIFEST.json"
   signature_file="${manifest_file}.sig"

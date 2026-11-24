@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import shutil
+import signal
+import subprocess
+import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -2735,67 +2739,99 @@ class TestRestoreCheckpointWritesSyncErrorPaths:
             _restore_checkpoint_writes_sync("postgresql://localhost/db", writes)
 
 
-class TestNativeRestoreRequiresAReachableExplicitTarget:
-    """FAR-2667: a --data-dir restore stops the launcher, so its target must be
-    an explicitly-named database that survives the stop.
+class TestNativeRestoreServesItsOwnBundledTarget:
+    """FAR-2667: a --data-dir restore stops the launcher, and with it the bundled
+    PostgreSQL that the dump and the replay both need.
 
-    The launcher supervises the bundled PostgreSQL (``shutdown_priority=1``), so
-    a restore that silently resolved the bundled ``DATABASE_URL`` stopped the
-    server and then tried to replay into nothing. These tests pin the fix: refuse
-    before any side effect when the target is implicit, and prove a REAL
-    connection succeeds after the stop when the target is explicit.
+    The fix has two halves, both pinned here: the native run resolves the
+    bundled endpoints from the data dir's OWN ``config.env`` (a native operator's
+    shell exports none of them, and Settings would refuse to construct without
+    them), and the restore keeps ONLY the bundled cluster up for the dump and
+    replay window, then leaves the writers stopped.
+
+    The real-connection proof against a real PostgreSQL server lives in
+    ``tests/integration/test_restore_bundled_cluster_window.py``.
     """
 
     @staticmethod
-    def _guard_options(tmp_path: Path, db_url: str | None) -> Any:
+    def _options(
+        tmp_path: Path,
+        *,
+        db_url: str | None = None,
+        app_db_url: str | None = None,
+        data_dir: Path | None = None,
+        backup_dir: Path | None = None,
+    ) -> Any:
         from farna.cli import backup as backup_mod
 
+        return backup_mod._RestoreOptions(
+            backup_dir=backup_dir if backup_dir is not None else tmp_path,
+            db_url=db_url,
+            app_db_url=app_db_url,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=data_dir if data_dir is not None else tmp_path / "data",
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+
+    @staticmethod
+    def _bootstrapped_data_dir(tmp_path: Path) -> Path:
+        """A data dir whose config.env names the bundled cluster and its key."""
         data_dir = tmp_path / "data"
         data_dir.mkdir(exist_ok=True)
-        return backup_mod._RestoreOptions(
-            backup_dir=tmp_path,
-            db_url=db_url,
-            app_db_url=None,
-            yes=True,
-            previous_fernet_key=None,
-            dry_run=False,
-            data_dir=data_dir,
-            replace_cluster=False,
-            no_safety_dump=False,
+        (data_dir / "config.env").write_text(
+            "\n".join(
+                [
+                    "DATABASE_URL=postgresql+asyncpg://farna_control_app:apppw@127.0.0.1:15432/farna_control",
+                    "DATABASE_ADMIN_URL=postgresql+asyncpg://farna_control:ownerpw@127.0.0.1:15432/farna_control",
+                    "FERNET_KEY=launcher-persisted-key",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
         )
+        return data_dir
 
-    def test_a_database_admin_url_in_the_environment_counts_as_explicit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_the_bundled_endpoints_and_key_come_from_the_data_dirs_own_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A native shell exports nothing, so the data dir is the only source."""
         from farna.cli import backup as backup_mod
 
-        monkeypatch.setattr(backup_mod, "_live_launcher_holder", lambda _d: MagicMock(pid=4242))
-        options = self._guard_options(tmp_path, db_url=None)
-        monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql://admin@db:5432/farna_control")
-        backup_mod._require_reachable_target_for_native_restore(options)  # no raise
+        # Exactly the native operator shell: no DATABASE_* exported at all.
+        monkeypatch.delenv("DATABASE_ADMIN_URL", raising=False)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        data_dir = self._bootstrapped_data_dir(tmp_path)
+        options = self._options(tmp_path, data_dir=data_dir)
 
-        monkeypatch.delenv("DATABASE_ADMIN_URL")
-        with pytest.raises(click.ClickException, match="independently reachable"):
-            backup_mod._require_reachable_target_for_native_restore(options)
+        assert backup_mod._resolve_url(options.db_url, data_dir=options.data_dir) == "postgresql://farna_control:ownerpw@127.0.0.1:15432/farna_control"
+        assert backup_mod._resolve_restore_app_url(None, options.app_db_url, data_dir=options.data_dir) == ("postgresql+asyncpg://farna_control_app:apppw@127.0.0.1:15432/farna_control")
+        assert backup_mod._restore_fernet_key(options.data_dir) == "launcher-persisted-key"
 
-    def test_a_data_dir_restore_without_a_target_needs_no_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_an_exported_url_outranks_the_data_dir_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An operator override still wins over the installation's pinned config."""
         from farna.cli import backup as backup_mod
 
-        # data_dir=None: nothing is stopped, so the guard short-circuits before it
-        # ever probes for a live launcher — regardless of what the probe would find.
-        holder_lookup = MagicMock(return_value=MagicMock(pid=4242))
-        monkeypatch.setattr(backup_mod, "_live_launcher_holder", holder_lookup)
-        options = backup_mod._RestoreOptions(
-            backup_dir=tmp_path,
-            db_url=None,
-            app_db_url=None,
-            yes=True,
-            previous_fernet_key=None,
-            dry_run=False,
-            data_dir=None,
-            replace_cluster=False,
-            no_safety_dump=False,
-        )
-        backup_mod._require_reachable_target_for_native_restore(options)
-        assert holder_lookup.call_count == 0, "data_dir=None must short-circuit before probing for a live launcher"
+        data_dir = self._bootstrapped_data_dir(tmp_path)
+        monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql://admin:pw@db.example.com:5432/farna_control")
+        monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://farna_control_app:pw@db.example.com:5432/farna_control")
+
+        assert backup_mod._resolve_url(None, data_dir=data_dir) == "postgresql://admin:pw@db.example.com:5432/farna_control"
+        assert backup_mod._resolve_restore_app_url(None, None, data_dir=data_dir) == "postgresql+asyncpg://farna_control_app:pw@db.example.com:5432/farna_control"
+
+    def test_the_bundled_target_is_recognised_only_on_the_bundled_loopback_endpoint(self) -> None:
+        from farna.cli import backup as backup_mod
+
+        launcher_admin = "postgresql+asyncpg://farna_control:ownerpw@127.0.0.1:15432/farna_control"
+        assert backup_mod._target_is_bundled_cluster("postgresql://farna_control:ownerpw@127.0.0.1:15432/farna_control", launcher_admin) is True
+        assert backup_mod._target_is_bundled_cluster("postgresql://farna_control:ownerpw@localhost:15432/farna_control", launcher_admin) is True
+        # A different port, a remote host, an unparseable target, or no launcher
+        # config at all (a fresh/migrated data dir) are all "not the bundled
+        # cluster": the restore must not start a cluster for them.
+        assert backup_mod._target_is_bundled_cluster("postgresql://farna_control:ownerpw@127.0.0.1:5432/farna_control", launcher_admin) is False
+        assert backup_mod._target_is_bundled_cluster("postgresql://farna_control:ownerpw@db.example.com:15432/farna_control", launcher_admin) is False
+        assert backup_mod._target_is_bundled_cluster("postgresql://[bad:5432/farna_control", launcher_admin) is False
+        assert backup_mod._target_is_bundled_cluster("postgresql://farna_control:ownerpw@127.0.0.1:15432/farna_control", None) is False
 
     def test_live_holder_is_none_off_posix_or_when_the_pid_is_gone(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from farna.cli import backup as backup_mod
@@ -2812,35 +2848,70 @@ class TestNativeRestoreRequiresAReachableExplicitTarget:
         monkeypatch.setattr(upgrade_module, "_pid_alive", lambda _pid: False)
         assert backup_mod._live_launcher_holder(data_dir) is None, "a stale lock record is not a live launcher"
 
-    def test_refuses_without_an_explicit_url_when_a_launcher_would_be_stopped(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_a_bundled_restore_keeps_only_the_cluster_up_across_dump_and_replay(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The stop takes the bundled cluster down, so the window brings it back
+        BEFORE the dump and the replay, and closes it again afterwards."""
+        import contextlib as contextlib_module
+
         from farna.cli import backup as backup_mod
 
         archive = _restore_archive(tmp_path)
-        data_dir = tmp_path / "data"
-        data_dir.mkdir()
-        calls: list[str] = []
+        data_dir = self._bootstrapped_data_dir(tmp_path)
+        order: list[str] = []
+
+        @contextlib_module.contextmanager
+        def _window(cluster_data_dir: Path, _raw_url: str) -> Any:
+            assert cluster_data_dir == data_dir, "the window must serve the data dir the stop tore down"
+            order.append("window_up")
+            try:
+                yield
+            finally:
+                order.append("window_down")
+
         monkeypatch.delenv("DATABASE_ADMIN_URL", raising=False)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
         monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
-        monkeypatch.setattr(backup_mod, "_live_launcher_holder", lambda _d: MagicMock(pid=4242))
-        monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: calls.append("safety_dump"))
-        monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda *_a, **_k: calls.append("stop") or True)
-        monkeypatch.setattr(backup_mod, "get_settings", lambda: type("S", (), {"fernet_key": _TEST_FERNET_KEY, "database_url": _TEST_APP_DB_URL})())
+        monkeypatch.setattr(backup_mod, "_acquire_data_lock", lambda *_a, **_k: MagicMock())
+        monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda _d: order.append("stop") or True)
+        monkeypatch.setattr(backup_mod, "_bundled_cluster_for_restore", _window)
+        monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: order.append("safety_dump"))
+        monkeypatch.setattr(backup_mod, "_restore_cluster", lambda *_a, **_k: order.append("replay"))
+        monkeypatch.setattr(backup_mod, "_ensure_restore_posture", lambda *_a, **_k: order.append("posture"))
+        monkeypatch.setattr(backup_mod, "_restore_data_dir", lambda *_a, **_k: order.append("adopt"))
 
-        options = backup_mod._RestoreOptions(
-            backup_dir=archive,
-            db_url=None,
-            app_db_url=None,
-            yes=True,
-            previous_fernet_key=None,
-            dry_run=False,
+        backup_mod._run_restore(self._options(tmp_path, data_dir=data_dir, backup_dir=archive))
+
+        assert order == ["stop", "window_up", "safety_dump", "replay", "posture", "window_down", "adopt"], order
+
+    def test_an_external_target_never_starts_the_bundled_cluster(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A target the stop did not take down must not be shadowed by a cluster
+        this command started."""
+        from farna.cli import backup as backup_mod
+
+        archive = _restore_archive(tmp_path)
+        data_dir = self._bootstrapped_data_dir(tmp_path)
+        order: list[str] = []
+        window = MagicMock()
+        monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
+        monkeypatch.setattr(backup_mod, "_acquire_data_lock", lambda *_a, **_k: MagicMock())
+        monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda _d: order.append("stop") or True)
+        monkeypatch.setattr(backup_mod, "_bundled_cluster_for_restore", window)
+        monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: order.append("safety_dump"))
+        monkeypatch.setattr(backup_mod, "_restore_cluster", lambda *_a, **_k: order.append("replay"))
+        monkeypatch.setattr(backup_mod, "_ensure_restore_posture", lambda *_a, **_k: order.append("posture"))
+        monkeypatch.setattr(backup_mod, "_restore_data_dir", lambda *_a, **_k: order.append("adopt"))
+        options = self._options(
+            tmp_path,
+            db_url="postgresql://admin:pw@db.example.com:5432/farna_control",
+            app_db_url=_TEST_APP_DB_URL,
             data_dir=data_dir,
-            replace_cluster=False,
-            no_safety_dump=False,
+            backup_dir=archive,
         )
-        with pytest.raises(click.ClickException, match="independently reachable"):
-            backup_mod._run_restore(options)
 
-        assert calls == [], "the refusal must precede the safety dump and the stop (side-effect free)"
+        backup_mod._run_restore(options)
+
+        assert window.call_count == 0, "an external target needs no bundled cluster"
+        assert order == ["stop", "safety_dump", "replay", "posture", "adopt"], order
 
     def test_with_an_explicit_url_the_replay_connects_really_after_the_stop(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         import socket
@@ -2906,4 +2977,344 @@ class TestNativeRestoreRequiresAReachableExplicitTarget:
         finally:
             listener.close()
 
-        assert order == ["safety_dump", "stop", "connect"], order
+        # The dump and the replay now run INSIDE the window, i.e. AFTER the stop
+        # (the window is what keeps the target reachable past it).
+        assert order == ["stop", "safety_dump", "connect"], order
+
+
+class TestBundledClusterWindowInternals:
+    """The pieces the restore window is built from, pinned one at a time.
+
+    ``_run_restore``'s ordering test and the real-connection integration test
+    both stand in for ``_bundled_cluster_for_restore`` as a WHOLE, which is how
+    a break inside it can stay invisible. These pin its seams: how the target
+    endpoint is parsed, whose configuration the child may inherit, how
+    "accepting connections" is decided, and that the cluster this window starts
+    is stopped on EVERY exit path.
+    """
+
+    _RAW_URL = "postgresql://farna_control:ownerpw@127.0.0.1:15432/farna_control"
+
+    @staticmethod
+    def _bootstrapped_data_dir(tmp_path: Path) -> Path:
+        """A data dir the launcher has initialised (pgdata/PG_VERSION present)."""
+        data_dir = tmp_path / "data"
+        pgdata = data_dir / "pgdata"
+        pgdata.mkdir(parents=True)
+        (pgdata / "PG_VERSION").write_text("16\n", encoding="utf-8")
+        return data_dir
+
+    @staticmethod
+    def _bin_dir(tmp_path: Path) -> Path:
+        """A bin dir holding the one binary the window executes."""
+        from farna.launcher.initdb import _binary
+
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        Path(_binary(bin_dir, "postgres")).write_text("#!/bin/sh\n", encoding="utf-8")
+        return bin_dir
+
+    def _armed_window(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, MagicMock]:
+        """Arm a window that WOULD start a cluster, with a fake child process."""
+        from farna.cli import backup as backup_mod
+        from farna.launcher import entry as entry_module
+
+        data_dir = self._bootstrapped_data_dir(tmp_path)
+        bin_dir = self._bin_dir(tmp_path)
+        monkeypatch.setattr(entry_module, "resolve_bin_dir", lambda: bin_dir)
+        # The operator's own shell may carry service endpoints; the bundled
+        # child must not inherit them (the supervisor's allowlist is the
+        # contract this window reuses).
+        monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql://leak:leak@evil.example.com/farna_control")
+        monkeypatch.setenv("DATABASE_URL", "postgresql://leak:leak@evil.example.com/farna_control")
+        monkeypatch.setattr(backup_mod, "_port_accepting", lambda *_a, **_k: False)
+        monkeypatch.setattr(backup_mod, "_bundled_cluster_ready", lambda *_a, **_k: True)
+        process = MagicMock()
+        process.poll.return_value = None
+        monkeypatch.setattr(backup_mod.subprocess, "Popen", MagicMock(return_value=process))
+        return data_dir, process
+
+    def test_the_endpoint_parses_the_port_and_refuses_an_unparseable_url(self) -> None:
+        from farna.cli import backup as backup_mod
+
+        assert backup_mod._postgres_endpoint("postgresql://u:p@db.example.com/farna_control") == ("db.example.com", 5432)
+        assert backup_mod._postgres_endpoint("postgresql://u:p@127.0.0.1:15432/farna_control") == ("127.0.0.1", 15432)
+        # A malformed authority or a non-numeric port is "not a PostgreSQL
+        # target" -- never a guessed endpoint the window would start a cluster on.
+        assert backup_mod._postgres_endpoint("postgresql://[bad:5432/farna_control") is None
+        assert backup_mod._postgres_endpoint("postgresql://u:p@127.0.0.1:notaport/farna_control") is None
+        assert backup_mod._postgres_endpoint("not-a-url") is None
+
+    def test_the_launcher_config_supplies_only_the_keys_the_restore_needs(self, tmp_path: Path) -> None:
+        from farna.cli import backup as backup_mod
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "config.env").write_text(
+            "\n".join(
+                [
+                    "# the launcher's pinned configuration",
+                    "",
+                    'DATABASE_URL="postgresql+asyncpg://app:pw@127.0.0.1:15432/farna_control"',
+                    "DATABASE_ADMIN_URL='postgresql+asyncpg://owner:pw@127.0.0.1:15432/farna_control'",
+                    "FERNET_KEY=persisted-key",
+                    "SECRET_KEY=must-not-be-exposed",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        values = backup_mod._launcher_config_values(data_dir)
+
+        assert values == {
+            "DATABASE_URL": "postgresql+asyncpg://app:pw@127.0.0.1:15432/farna_control",
+            "DATABASE_ADMIN_URL": "postgresql+asyncpg://owner:pw@127.0.0.1:15432/farna_control",
+            "FERNET_KEY": "persisted-key",
+        }
+        # No data dir (the compose path) and an un-bootstrapped one are both
+        # "nothing to read", never an error and never an endpoint.
+        assert not backup_mod._launcher_config_values(None)
+        assert not backup_mod._launcher_config_values(tmp_path / "missing")
+
+    def test_port_accepting_is_a_real_connection_attempt(self) -> None:
+        import socket
+
+        from farna.cli import backup as backup_mod
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        try:
+            port = listener.getsockname()[1]
+            assert backup_mod._port_accepting("127.0.0.1", port) is True
+            # Port 1 on loopback: nothing listens there, so the probe reports the
+            # endpoint unavailable rather than assuming a server is present.
+            assert backup_mod._port_accepting("127.0.0.1", 1) is False
+        finally:
+            listener.close()
+
+    def test_readiness_without_the_bundled_probe_falls_back_to_a_real_connection(self, tmp_path: Path) -> None:
+        import socket
+
+        from farna.cli import backup as backup_mod
+
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        try:
+            port = listener.getsockname()[1]
+            assert backup_mod._bundled_cluster_ready("127.0.0.1", port, bin_dir) is True
+            assert backup_mod._bundled_cluster_ready("127.0.0.1", 1, bin_dir) is False
+        finally:
+            listener.close()
+
+    def test_readiness_uses_the_bundled_pg_isready_and_its_exit_status(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from types import SimpleNamespace
+
+        from farna.cli import backup as backup_mod
+        from farna.launcher import initdb
+
+        probe = tmp_path / "pg_isready"
+        probe.write_text("", encoding="utf-8")
+        monkeypatch.setattr(initdb, "_binary", lambda _bin_dir, _name: str(probe))
+        calls: list[list[str]] = []
+
+        def _accepting(argv: list[str], **_kwargs: Any) -> Any:
+            calls.append(argv)
+            return SimpleNamespace(returncode=0)
+
+        monkeypatch.setattr(backup_mod.subprocess, "run", _accepting)
+
+        assert backup_mod._bundled_cluster_ready("127.0.0.1", 15432, tmp_path) is True
+        assert calls == [[str(probe), "-h", "127.0.0.1", "-p", "15432"]]
+
+        # "Listening but not answering" (57P03 during crash recovery) is exactly
+        # what pg_isready reports, and it must keep the replay from starting.
+        monkeypatch.setattr(backup_mod.subprocess, "run", lambda *_a, **_k: SimpleNamespace(returncode=1))
+        assert backup_mod._bundled_cluster_ready("127.0.0.1", 15432, tmp_path) is False
+
+        def _unexecutable(*_args: Any, **_kwargs: Any) -> Any:
+            raise OSError("cannot execute the probe")
+
+        monkeypatch.setattr(backup_mod.subprocess, "run", _unexecutable)
+        # An unexecutable probe is NOT readiness: fail towards not-replaying.
+        assert backup_mod._bundled_cluster_ready("127.0.0.1", 15432, tmp_path) is False
+
+    def test_the_server_log_tail_is_the_last_lines_or_a_clear_marker(self, tmp_path: Path) -> None:
+        from farna.cli import backup as backup_mod
+
+        log_path = tmp_path / "restore-postgres.log"
+        log_path.write_text("\n".join(f"line-{n}" for n in range(1, 26)), encoding="utf-8")
+
+        assert backup_mod._logged_tail(log_path).splitlines() == [f"line-{n}" for n in range(6, 26)]
+        assert backup_mod._logged_tail(tmp_path / "absent.log") == "<no server log>"
+        empty = tmp_path / "empty.log"
+        empty.write_text("", encoding="utf-8")
+        assert backup_mod._logged_tail(empty) == "<server log is empty>"
+
+    def test_the_window_waits_for_an_accepting_cluster_and_fails_loudly_otherwise(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        log_path = tmp_path / "restore-postgres.log"
+        log_path.write_text("FATAL: could not bind to address\n", encoding="utf-8")
+        readiness = MagicMock(return_value=True)
+        monkeypatch.setattr(backup_mod, "_bundled_cluster_ready", readiness)
+        process = MagicMock()
+        process.poll.return_value = None
+
+        backup_mod._await_bundled_cluster(process, "127.0.0.1", 15432, tmp_path, log_path)
+
+        readiness.assert_called_once_with("127.0.0.1", 15432, tmp_path)
+
+        # A cluster that EXITS before answering is reported with its own log
+        # tail: the operator needs the reason, not a bare timeout.
+        process.poll.return_value = 3
+        with pytest.raises(click.ClickException) as exited:
+            backup_mod._await_bundled_cluster(process, "127.0.0.1", 15432, tmp_path, log_path)
+        assert "status 3" in exited.value.message
+        assert "FATAL: could not bind to address" in exited.value.message
+
+        # And the wait is bounded: with the deadline already spent it refuses
+        # instead of hanging on a cluster that never answers.
+        monkeypatch.setattr(backup_mod, "_RESTORE_PG_READY_TIMEOUT", 0.0)
+        monkeypatch.setattr(backup_mod, "_bundled_cluster_ready", MagicMock(return_value=False))
+        with pytest.raises(click.ClickException) as timed_out:
+            backup_mod._await_bundled_cluster(process, "127.0.0.1", 15432, tmp_path, log_path)
+        assert "did not accept connections" in timed_out.value.message
+
+    def test_the_window_polls_a_cluster_that_is_not_ready_yet(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        log_path = tmp_path / "restore-postgres.log"
+        log_path.write_text("", encoding="utf-8")
+        readiness = MagicMock(side_effect=[False, True])
+        monkeypatch.setattr(backup_mod, "_bundled_cluster_ready", readiness)
+        monkeypatch.setattr(backup_mod, "_RESTORE_PROBE_INTERVAL", 0.0)
+        process = MagicMock()
+        process.poll.return_value = None
+
+        backup_mod._await_bundled_cluster(process, "127.0.0.1", 15432, tmp_path, log_path)
+
+        # "Not ready on the first probe" is a POLL, not a failure: a cluster that
+        # is still starting must be waited for, not reported as dead.
+        assert readiness.call_count == 2
+
+    def test_stopping_the_cluster_escalates_and_never_leaves_a_child(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        log_path = Path(backup_mod._RESTORE_PG_LOG)
+
+        # Already gone: nothing to signal, nothing to escalate.
+        exited = MagicMock()
+        exited.poll.return_value = 0
+        backup_mod._stop_bundled_cluster(exited, log_path)
+        exited.terminate.assert_not_called()
+        exited.kill.assert_not_called()
+
+        # POSIX fast shutdown (SIGINT) is the first rung on the packaged host.
+        monkeypatch.setattr(sys, "platform", "linux")
+        graceful = MagicMock()
+        graceful.poll.return_value = None
+        backup_mod._stop_bundled_cluster(graceful, log_path)
+        graceful.send_signal.assert_called_once_with(signal.SIGINT)
+        graceful.terminate.assert_not_called()
+
+        # A fast shutdown that does not finish escalates terminate -> kill.
+        stubborn = MagicMock()
+        stubborn.poll.return_value = None
+        stubborn.wait.side_effect = [
+            subprocess.TimeoutExpired("postgres", 60),
+            subprocess.TimeoutExpired("postgres", 30),
+            None,
+        ]
+        backup_mod._stop_bundled_cluster(stubborn, log_path)
+        stubborn.terminate.assert_called_once()
+        stubborn.kill.assert_called_once()
+
+    def test_the_window_starts_only_postgres_with_the_supervisors_argv_and_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+        from farna.launcher import entry as entry_module
+        from farna.launcher.initdb import postgres_server_argv
+
+        data_dir, process = self._armed_window(tmp_path, monkeypatch)
+        popen = backup_mod.subprocess.Popen
+
+        with backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
+            pass
+
+        bin_dir = entry_module.resolve_bin_dir()
+        assert popen.call_args.args[0] == postgres_server_argv(data_dir / "pgdata", entry_module.POSTGRES_HOST, 15432, bin_dir)
+        child_env = popen.call_args.kwargs["env"]
+        assert "DATABASE_ADMIN_URL" not in child_env
+        assert "DATABASE_URL" not in child_env
+        assert "PATH" in child_env
+        assert (data_dir / backup_mod._RESTORE_PG_LOG).exists()
+        # The cluster this window started is stopped again when it closes.
+        process.wait.assert_called_once()
+
+    def test_the_window_stops_the_cluster_even_when_the_restore_body_fails(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        data_dir, process = self._armed_window(tmp_path, monkeypatch)
+
+        with pytest.raises(RuntimeError, match="replay blew up"), backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
+            raise RuntimeError("replay blew up")
+
+        process.wait.assert_called_once()
+
+    def test_the_window_reuses_a_cluster_that_is_already_accepting(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        data_dir = self._bootstrapped_data_dir(tmp_path)
+        monkeypatch.setattr(backup_mod, "_port_accepting", lambda *_a, **_k: True)
+        popen = MagicMock()
+        monkeypatch.setattr(backup_mod.subprocess, "Popen", popen)
+
+        with backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
+            pass
+
+        # A cluster that was ALREADY up is not this command's to stop, and is
+        # not restarted: the restore only stops what it started.
+        popen.assert_not_called()
+
+    def test_the_window_reports_a_cluster_it_cannot_spawn(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        data_dir, _process = self._armed_window(tmp_path, monkeypatch)
+
+        def _cannot_spawn(*_args: Any, **_kwargs: Any) -> Any:
+            raise OSError("permission denied")
+
+        monkeypatch.setattr(backup_mod.subprocess, "Popen", _cannot_spawn)
+        # A spawn failure names the binary and shows the server log's tail, so
+        # the operator can tell a missing permission from a broken cluster.
+        with pytest.raises(click.ClickException, match="Cannot start the bundled PostgreSQL"), contextlib.ExitStack() as stack:
+            stack.enter_context(backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL))
+
+    def test_the_window_refuses_a_data_dir_it_cannot_serve(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+        from farna.launcher import entry as entry_module
+
+        monkeypatch.setattr(backup_mod, "_port_accepting", lambda *_a, **_k: False)
+        # Not bootstrapped: there is no cluster to bring back, and the refusal
+        # tells the operator how to get one.
+        empty_data_dir = tmp_path / "fresh"
+        empty_data_dir.mkdir()
+        with pytest.raises(click.ClickException, match="no initialised cluster"), contextlib.ExitStack() as stack:
+            stack.enter_context(backup_mod._bundled_cluster_for_restore(empty_data_dir, self._RAW_URL))
+
+        # A target that is not a PostgreSQL endpoint at all is refused: starting
+        # a cluster for a URL this command cannot parse would be a guess.
+        with pytest.raises(click.ClickException, match="Cannot parse"), contextlib.ExitStack() as stack:
+            stack.enter_context(backup_mod._bundled_cluster_for_restore(tmp_path / "unused", "not-a-url"))
+
+        # Bootstrapped, but this host has no bundled postgres binary.
+        data_dir = self._bootstrapped_data_dir(tmp_path)
+        empty_bin = tmp_path / "empty-bin"
+        empty_bin.mkdir()
+        monkeypatch.setattr(entry_module, "resolve_bin_dir", lambda: empty_bin)
+        with pytest.raises(click.ClickException, match="missing at"), contextlib.ExitStack() as stack:
+            stack.enter_context(backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL))

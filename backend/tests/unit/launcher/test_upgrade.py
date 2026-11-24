@@ -1496,6 +1496,25 @@ class TestRestoreGuidance:
         assert "ln -sfn versions/1.0.0" in result
         assert "1.1.0" not in result.split("ln -sfn")[1]
 
+    def test_the_emitted_restore_command_is_copy_pasteable_on_a_native_install(self, tmp_path):
+        """FAR-2667: a native operator's shell has no DATABASE_ADMIN_URL.
+
+        The command must name the data dir only — the restore resolves the
+        bundled cluster from that dir's own config.env — and must never carry a
+        shell variable the native shell cannot expand.
+        """
+        data_dir = tmp_path / "data"
+        result = upgrade_module.restore_guidance(
+            snapshot=tmp_path / "snapshot",
+            previous_version="1.0.0",
+            install_root=tmp_path,
+            data_dir=data_dir,
+        )
+        restore_line = result.split("Exact manual restore command:")[1].strip()
+        assert f"farna-control restore {tmp_path / 'snapshot'} --data-dir {data_dir} --yes" in restore_line
+        assert "--db-url" not in restore_line
+        assert "$" not in restore_line
+
 
 class TestAssertNotHeldWindows:
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows branch only")

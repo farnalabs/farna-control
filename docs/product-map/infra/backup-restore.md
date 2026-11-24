@@ -231,6 +231,25 @@ operator-facing contract lives in `docs/operations/backup.md`.
       `--safety-dump-dir` keeps the pre-restore safety dump on a persistent
       path when restore runs in a disposable container (`cli/backup.py`;
       `test_backup.py::TestRestoreStartGuidance`).
+- [x] The stop does not leave the restore without a database: the launcher's
+      ordered teardown stops the bundled PostgreSQL it supervises, so when the
+      resolved target IS that bundled cluster the restore starts ONLY the
+      cluster (the supervisor's own argv and readiness probe) for the duration
+      of the safety dump, the replay, the credential re-encryption, the
+      collation check and the posture re-run, then stops it again and leaves the
+      writers stopped. A target the stop did not take down (an explicitly named
+      external database) is never shadowed by a cluster the restore started, and
+      a cluster already accepting connections is reused and left running. The
+      target and application URLs come from `--db-url`/`--app-db-url`, an
+      exported `DATABASE_ADMIN_URL`/`DATABASE_URL`, or the data dir's own
+      `config.env`, in that order — a native operator's shell exports none of
+      them (`cli/backup.py::_bundled_cluster_for_restore`,
+      `::_target_is_bundled_cluster`, `::_launcher_config_values`;
+      `test_restore_bundled_cluster_window.py` — a REAL PostgreSQL 16 stopped
+      and restarted under the real `_run_restore`; prove-the-fix: with the
+      window removed the replay fails with a connection timeout;
+      `test_backup.py::TestNativeRestoreServesItsOwnBundledTarget`,
+      `::TestBundledClusterWindowInternals`).
 - [x] Restore refuses a MISSING dump when the archive describes one (a silent
       no-op restore is worse than a refusal), refuses a manifest filename that
       escapes the archive directory (absolute, `..`, or a symlink — the
@@ -333,6 +352,22 @@ operator-facing contract lives in `docs/operations/backup.md`.
 
 ## QA History
 
+- 2026-11-24 (FAR-2667 sixth review round): the native `--data-dir` restore
+  stopped the database it then needed. Its own launcher stop is the ordered
+  teardown that stops the bundled PostgreSQL, so the safety dump, the replay,
+  the credential re-encryption, the collation check and the posture re-run all
+  connected to a server the same command had just stopped — and nothing
+  restarted it. The earlier "mitigation" (refuse unless an explicit,
+  independently reachable `--db-url` is given) only dodged it: a native
+  operator's shell has no `DATABASE_ADMIN_URL`, which is also what the printed
+  recovery command named, so the documented native recovery could not run.
+  Now: the target and application URLs resolve from the data dir's own
+  `config.env` when nothing is exported, and when the target IS the bundled
+  cluster the restore starts ONLY that cluster for the dump-and-replay window
+  and stops it again, leaving the writers stopped. Proven against a REAL
+  PostgreSQL 16 with the window removed as the negative control (the replay
+  fails with a connection timeout); `restore_guidance` no longer prints a
+  `--db-url` the operator does not have.
 - 2026-11-23 (FAR-2667 fifth review round): the printed compose rollback command
   did not roll back — the packaged bundle rewrites the image line to a literal
   release tag, so `TAG=<previous-version> docker compose up -d` only set

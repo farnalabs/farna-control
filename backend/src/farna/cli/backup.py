@@ -44,6 +44,7 @@ Data-safety semantics (FAR-672 / ADR 031 Decision 6/7):
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -51,11 +52,15 @@ import os
 import random
 import re
 import shutil
+import signal
+import socket
 import stat
 import subprocess  # nosec B404 -- subprocess is used only to shell out to pg_dump/psql with a hardcoded argv list (never shell=True, never user-supplied commands); see _run_pg_dump/_run_psql
 import sys
+import time
 import urllib.parse
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
@@ -98,6 +103,24 @@ _BACKUP_INFO_FILE = "backup-info.json"
 _LAUNCHER_STATE_FILE = "state.json"
 _LAUNCHER_SECRETS_FILE = "secrets.json"
 _LAUNCHER_CONF_FILE = "config.env"
+
+# What a native run resolves from the data dir's own config.env: the two
+# endpoints and the key the installation actually encrypts credentials with.
+_LAUNCHER_CONFIG_KEYS = frozenset({"DATABASE_ADMIN_URL", "DATABASE_URL", "FERNET_KEY"})
+
+# Hosts that can only mean "this machine": a target on one of these is the
+# bundled cluster when its port is the bundled port (see _target_is_bundled).
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_DEFAULT_PG_PORT = 5432
+
+# The restore window: how long to wait for a started bundled cluster to accept
+# connections, how long a fast shutdown may take, and where its server log
+# lands (inside the data dir, beside launcher.log).
+_RESTORE_PG_READY_TIMEOUT = 180.0
+_RESTORE_PG_STOP_TIMEOUT = 60.0
+_RESTORE_PG_KILL_TIMEOUT = 30.0
+_RESTORE_PG_LOG = "restore-postgres.log"
+_RESTORE_PROBE_INTERVAL = 0.2
 _TLS_DIRNAME = "tls"
 
 # A backup placed inside a cloud-synced folder risks silent corruption (sync
@@ -122,11 +145,49 @@ __all__ = ["MANIFEST_VERSION", "backup", "cli", "restore"]
 # imported from db/url_utils.py so the contract has a single declaration.
 
 
-def _resolve_url(db_url: str | None) -> str:
+def _launcher_config_values(data_dir: Path | None) -> dict[str, str]:
+    """Read the database endpoints the launcher itself runs with.
+
+    A bootstrapped data dir carries ``config.env`` — the launcher's OWN pinned
+    settings, written at every boot — holding ``DATABASE_URL``/``DATABASE_ADMIN_URL``
+    for the bundled cluster (with the generated credentials). It is the only
+    place a native operator's shell can learn the bundled endpoints from: the
+    launcher exports them to its children, never to the operator's shell, and
+    the generated passwords appear nowhere else the operator can read without
+    the data dir.
+
+    Only the keys this module needs are returned (the two endpoints and
+    ``FERNET_KEY``), parsed with the same dotenv rules the launcher's own source
+    uses (blank lines and ``#`` comments ignored, quotes stripped). An absent or
+    unreadable file yields an empty mapping: the caller then falls back to the
+    environment/Settings and says so, rather than treating "no config" as an
+    endpoint.
+    """
+    values: dict[str, str] = {}
+    if data_dir is None:
+        return values
+    try:
+        text = (data_dir / _LAUNCHER_CONF_FILE).read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return values
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("'\"")
+        if key in _LAUNCHER_CONFIG_KEYS and value:
+            values.setdefault(key, value)
+    return values
+
+
+def _resolve_url(db_url: str | None, *, data_dir: Path | None = None) -> str:
     """Resolve the maintenance connection string for pg_dump / psql / psycopg.
 
-    Order: an explicit ``--db-url`` (an operator's argv), then
-    ``DATABASE_ADMIN_URL``, then the configured ``DATABASE_URL``.
+    Order: an explicit ``--db-url`` (an operator's argv), then an exported
+    ``DATABASE_ADMIN_URL``, then — when a data dir is in play — that data dir's
+    own launcher config (``config.env``), then the configured ``DATABASE_URL``.
 
     ``DATABASE_ADMIN_URL`` sits SECOND on purpose. It is the owner/migration
     role, and it is the role these commands need: the application role is
@@ -137,13 +198,21 @@ def _resolve_url(db_url: str | None) -> str:
     ``restore`` with no URL argument at all, so the password never appears in a
     host argv (world-readable via ``/proc/<pid>/cmdline``).
 
+    The data-dir arm is what makes a NATIVE ``--data-dir`` run target the
+    bundled cluster at all: a native operator's shell has no
+    ``DATABASE_ADMIN_URL`` (the launcher only exports it to its own children),
+    so relying on the environment silently resolved the process defaults —
+    a different, usually empty database. It sits BELOW an exported variable so
+    an operator override still wins.
+
     Normalised through the ONE shared libpq normaliser (``farna.db.url_utils``):
     the application is configured with ``postgresql+asyncpg://`` while
     ``psycopg``/``pg_dump``/``psql`` speak libpq only, and the pre-upgrade
     snapshot path normalises the same way — so the two dump producers cannot
     disagree about which schemes work.
     """
-    raw = db_url or os.environ.get("DATABASE_ADMIN_URL") or get_settings().database_url
+    launcher_admin_url = _launcher_config_values(data_dir).get("DATABASE_ADMIN_URL")
+    raw = db_url or os.environ.get("DATABASE_ADMIN_URL") or launcher_admin_url or get_settings().database_url
     from farna.db.url_utils import normalise_libpq_url
 
     try:
@@ -767,38 +836,187 @@ def _stop_launcher_writers(data_dir: Path) -> bool:
     return True
 
 
-def _require_reachable_target_for_native_restore(opts: _RestoreOptions) -> None:
-    """Refuse a ``--data-dir`` restore that would tear down its own target.
+def _postgres_endpoint(url: str) -> tuple[str, int] | None:
+    """``(host, port)`` of a Postgres URL (port defaults to 5432), or None."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = parts.hostname
+        port = parts.port or _DEFAULT_PG_PORT
+    except ValueError:
+        return None
+    return (host, port) if host else None
 
-    A native restore stops the launcher, and the launcher supervises the
-    bundled PostgreSQL (``launcher/entry.py``: the postgres child has
-    ``shutdown_priority=1``), so a replay through the silently-resolved
-    ``DATABASE_URL`` would connect to a server that the same command just
-    stopped — nothing is listening and nothing restarts it. The target must be
-    named EXPLICITLY (``--db-url`` or ``DATABASE_ADMIN_URL``) so it is an
-    independently reachable admin database the stop does not take down.
 
-    This runs AFTER the read-only verification and BEFORE any destructive step,
-    so a refusal has no side effects. ``--dry-run`` never reaches here (the
-    preview short-circuits in ``_validate_targets``), and a data dir with no
-    live launcher is left alone: nothing is stopped, so the resolved target is
-    whatever the operator already has running.
+def _target_is_bundled_cluster(raw_url: str, launcher_admin_url: str | None) -> bool:
+    """True when *raw_url* addresses the data dir's OWN bundled cluster.
+
+    Only then may the restore start that cluster itself (see
+    :func:`_bundled_cluster_for_restore`): the bundled port on a loopback host
+    is the same endpoint the launcher composed, so a stop took it down and the
+    replay needs it back. A target anywhere else — an operator's explicit URL
+    to a separate database — is untouched by the stop and must never be
+    shadowed by a cluster this command started.
     """
-    if opts.data_dir is None:
+    if not launcher_admin_url:
+        return False
+    target = _postgres_endpoint(raw_url)
+    bundled = _postgres_endpoint(launcher_admin_url)
+    if target is None or bundled is None:
+        return False
+    target_host, target_port = target
+    bundled_host, bundled_port = bundled
+    return target_port == bundled_port and target_host in _LOOPBACK_HOSTS and bundled_host in _LOOPBACK_HOSTS
+
+
+def _port_accepting(host: str, port: int, *, timeout: float = 2.0) -> bool:
+    """True when something accepts a TCP connection on ``host:port``."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _bundled_cluster_ready(host: str, port: int, bin_dir: Path) -> bool:
+    """True once the bundled cluster ACCEPTS CONNECTIONS (not merely listens).
+
+    ``pg_isready`` is the launcher's own readiness signal: a postmaster that is
+    still in crash recovery binds its port but answers 57P03, so a bare TCP
+    accept would let the replay start too early and fail. The TCP probe is
+    only the fallback for a bundle that does not ship the tool.
+    """
+    from farna.launcher.initdb import _binary
+
+    probe = _binary(bin_dir, "pg_isready")
+    if Path(probe).is_file():
+        try:
+            result = subprocess.run([probe, "-h", host, "-p", str(port)], capture_output=True, check=False, timeout=30)  # noqa: S603 -- fixed argv from the launcher's own builder
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            _log.warning("restore.pg_isready_failed host=%s port=%s error=%s", host, port, exc)
+            return False
+        return result.returncode == 0
+    return _port_accepting(host, port)
+
+
+def _logged_tail(log_path: Path, *, lines: int = 20) -> str:
+    """The last *lines* of a server log, for an actionable failure message."""
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "<no server log>"
+    tail = [line for line in text.splitlines() if line.strip()][-lines:]
+    return "\n".join(tail) or "<server log is empty>"
+
+
+def _await_bundled_cluster(process: subprocess.Popen[bytes], host: str, port: int, bin_dir: Path, log_path: Path) -> None:
+    """Block until the started cluster accepts connections, or fail loudly."""
+    deadline = time.monotonic() + _RESTORE_PG_READY_TIMEOUT
+    while time.monotonic() < deadline:
+        status = process.poll()
+        if status is not None:
+            raise click.ClickException(f"The bundled PostgreSQL exited (status {status}) before it accepted connections, so the restore cannot replay into it. Last lines of {log_path}:\n{_logged_tail(log_path)}")
+        if _bundled_cluster_ready(host, port, bin_dir):
+            return
+        time.sleep(_RESTORE_PROBE_INTERVAL)
+    raise click.ClickException(f"The bundled PostgreSQL did not accept connections on {host}:{port} within {_RESTORE_PG_READY_TIMEOUT:.0f}s. Last lines of {log_path}:\n{_logged_tail(log_path)}")
+
+
+def _stop_bundled_cluster(process: subprocess.Popen[bytes], log_path: Path) -> None:
+    """Stop the cluster this window started: fast shutdown, then escalate.
+
+    SIGINT is Postgres's FAST shutdown — it rolls back the open transactions
+    and exits cleanly, which is what the NEXT start wants (no crash-recovery
+    replay). Windows cannot deliver SIGINT to a child, so it falls back to
+    ``terminate()``; the packaged native launcher is POSIX-only anyway.
+    """
+    if process.poll() is not None:
         return
-    if opts.db_url or os.environ.get("DATABASE_ADMIN_URL"):
+    if sys.platform != "win32":
+        with contextlib.suppress(OSError, ValueError):
+            process.send_signal(signal.SIGINT)
+    try:
+        process.wait(timeout=_RESTORE_PG_STOP_TIMEOUT)
         return
-    holder = _live_launcher_holder(opts.data_dir)
-    if holder is None:
-        return
-    raise click.ClickException(
-        "Refusing to restore: a --data-dir restore stops the running launcher "
-        f"(holder PID {holder.pid}), and the launcher supervises the bundled "
-        "PostgreSQL — so the database the restore would connect to is taken down "
-        "by the same command. Pass --db-url pointing at an independently reachable "
-        "admin database (or export DATABASE_ADMIN_URL) so the target survives the "
-        "stop. See docs/operations/backup.md."
+    except subprocess.TimeoutExpired:
+        _log.warning("restore.bundled_cluster_fast_shutdown_timeout log=%s", log_path)
+    process.terminate()
+    try:
+        process.wait(timeout=_RESTORE_PG_KILL_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        _log.warning("restore.bundled_cluster_terminate_timeout log=%s", log_path)
+        process.kill()
+        process.wait(timeout=_RESTORE_PG_KILL_TIMEOUT)
+
+
+@contextlib.contextmanager
+def _bundled_cluster_for_restore(data_dir: Path, raw_url: str) -> Iterator[None]:
+    """Keep the bundled PostgreSQL UP for the restore's dump-and-replay window.
+
+    The launcher supervises the bundled cluster and its ordered teardown stops
+    it (``launcher/entry.py``: the postgres child has ``shutdown_priority=1``),
+    so the stop that makes a restore safe ALSO takes the target's server down —
+    and the safety dump, the psql/psycopg replay, the credential re-encryption,
+    the collation check and the posture re-run all connect to it. Without a
+    window the documented native recovery connects to nothing.
+
+    So: while the application writers stay stopped, start ONLY the bundled
+    cluster (the supervisor's own argv, the launcher's own readiness probe) for
+    the duration of the dumping and replaying, then stop it again. The operator
+    still starts the release deliberately afterwards — nothing here restarts the
+    stack, and the printed start command is the only way back.
+
+    A cluster that is ALREADY accepting connections is left alone and NOT
+    stopped on exit: this window only stops what it started.
+    """
+    from farna.launcher.entry import (
+        PG_VERSION_FILE,
+        PGDATA_DIRNAME,
+        POSTGRES_HOST,
+        _bundled_service_env,
+        resolve_bin_dir,
     )
+    from farna.launcher.initdb import _binary, postgres_server_argv
+
+    endpoint = _postgres_endpoint(raw_url)
+    if endpoint is None:
+        raise click.ClickException(f"Cannot parse {_url_display(raw_url)} as a PostgreSQL target, so the bundled cluster cannot be started for the restore.")
+    host, port = endpoint
+    if _port_accepting(host, port):
+        click.echo(f"  The bundled PostgreSQL is already accepting connections on {host}:{port}; the restore reuses it.")
+        yield
+        return
+
+    pgdata = data_dir / PGDATA_DIRNAME
+    if not (pgdata / PG_VERSION_FILE).is_file():
+        raise click.ClickException(f"Cannot bring the bundled PostgreSQL back up: {pgdata} holds no initialised cluster. Start it with `farna-control start --data-dir {data_dir}` first, or restore with --db-url pointing at a database that is already running.")
+    bin_dir = resolve_bin_dir()
+    binary = Path(_binary(bin_dir, "postgres"))
+    if not binary.is_file():
+        raise click.ClickException(f"The bundled PostgreSQL server is missing at {binary}. Reinstall the release, or pass --db-url pointing at a running database.")
+    log_path = data_dir / _RESTORE_PG_LOG
+    click.echo(f"Starting ONLY the bundled PostgreSQL ({POSTGRES_HOST}:{port}) for the restore; the API and workers stay stopped...")
+    argv = postgres_server_argv(pgdata, POSTGRES_HOST, port, bin_dir)
+    # The SAME environment allowlist the supervisor hands the postgres child, so
+    # the operator's shell (proxy vars, secrets, PG*) cannot leak into it.
+    child_env = _bundled_service_env(dict(os.environ))
+    with log_path.open("ab") as server_log:
+        try:
+            process = subprocess.Popen(  # nosec B603 -- argv comes from the launcher's own builder, never shell=True  # noqa: S603
+                argv,
+                stdout=server_log,
+                stderr=subprocess.STDOUT,
+                env=child_env,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            raise click.ClickException(f"Cannot start the bundled PostgreSQL ({binary}): {exc}. Last lines of {log_path}:\n{_logged_tail(log_path)}") from exc
+        try:
+            _await_bundled_cluster(process, POSTGRES_HOST, port, bin_dir, log_path)
+            click.echo(f"  Bundled PostgreSQL is accepting connections on {POSTGRES_HOST}:{port}.")
+            yield
+        finally:
+            _stop_bundled_cluster(process, log_path)
+            click.echo("  Bundled PostgreSQL stopped again; the application writers stay stopped.")
 
 
 def _start_command(opts: _RestoreOptions) -> str:
@@ -1521,7 +1739,7 @@ def _as_asyncpg_url(url: str) -> str:
     return _POSTGRES_ASYNC_PREFIX + suffix
 
 
-def _resolve_restore_app_url(settings: Any, app_db_url: str | None) -> str:
+def _resolve_restore_app_url(settings: Any | None, app_db_url: str | None, *, data_dir: Path | None = None) -> str:
     """Resolve the APP role URL independently of the restore target URL.
 
     ``bootstrap_roles`` (and its ``main()``) take the application role from
@@ -1530,13 +1748,56 @@ def _resolve_restore_app_url(settings: Any, app_db_url: str | None) -> str:
     privileged role. Deriving the app URL from the target would configure the
     ADMIN role as ``farna_control_app`` and leave the real application role with
     whatever posture the restored cluster carried — so the source is always
-    configuration (``--app-db-url``, else ``DATABASE_URL`` from settings) and
+    configuration (``--app-db-url``, else an exported ``DATABASE_URL``, else the
+    data dir's own launcher config, else ``DATABASE_URL`` from settings) and
     never the target URL.
+
+    The data-dir arm is the native operator's only source: nothing exported
+    ``DATABASE_URL`` into their shell, so without it the posture step could not
+    resolve the application role at all (and refused the whole restore).
+
+    *settings* may be None, in which case Settings is constructed only if no
+    explicit, exported or data-dir value exists — a native ``--data-dir`` run
+    never needs it, and constructing it on a shell that exports none of the keys
+    it requires would refuse the run.
     """
-    source = app_db_url or settings.database_url
+    exported = os.environ.get("DATABASE_URL") or None
+    launcher_app_url = _launcher_config_values(data_dir).get("DATABASE_URL")
+    source = app_db_url or exported or launcher_app_url
+    if not source:
+        source = settings.database_url if settings is not None else get_settings().database_url
     if not isinstance(source, str) or not source:
         raise click.ClickException("Cannot resolve the application role for the restore: --app-db-url was not given and DATABASE_URL is unset or empty. Pass --app-db-url with the app role's connection URL.")
     return _as_asyncpg_url(source)
+
+
+@dataclass(frozen=True)
+class _RestoreKeys:
+    """The one Settings value a restore needs: the key it re-encrypts TO.
+
+    Carrying just this instead of the whole Settings object lets a native
+    ``--data-dir`` restore resolve the key from the installation's own pinned
+    config (see :func:`_restore_fernet_key`) without constructing Settings at
+    all — a native operator's shell exports none of the keys Settings requires,
+    so ``get_settings()`` would refuse the run outright.
+    """
+
+    fernet_key: str
+
+
+def _restore_fernet_key(data_dir: Path | None) -> str:
+    """The FERNET_KEY the TARGET installation runs with.
+
+    The data dir's ``config.env`` is authoritative when it names a key: that is
+    the key the launcher persists and boots with (``install.sh`` writes it
+    there, and it is what the archived ``fernet_key_hash`` is compared
+    against). Without a data-dir key — the compose path, or a data dir that has
+    not been bootstrapped — Settings is the source, exactly as before.
+    """
+    launcher_key = _launcher_config_values(data_dir).get("FERNET_KEY")
+    if launcher_key:
+        return launcher_key
+    return get_settings().fernet_key
 
 
 def _ensure_restore_posture(admin_url: str, app_url: str) -> None:
@@ -1643,7 +1904,7 @@ def _check_collation_versions_sync(raw_url: str) -> None:
 def _preview_restore(
     backup_dir: Path,
     manifest: dict[str, Any],
-    settings: Any,
+    keys: _RestoreKeys,
     previous_fernet_key: str | None,
 ) -> None:
     """Preview every restore step without touching the database.
@@ -1657,7 +1918,7 @@ def _preview_restore(
 
     _preview_db_restore(backup_dir)
     _preview_json_exports(backup_dir)
-    _preview_credential_restore(backup_dir, manifest, settings, previous_fernet_key)
+    _preview_credential_restore(backup_dir, manifest, keys, previous_fernet_key)
 
     click.echo("\nDry run complete — no changes were made.")
 
@@ -1689,7 +1950,7 @@ def _preview_json_exports(backup_dir: Path) -> None:
 def _preview_credential_restore(
     backup_dir: Path,
     manifest: dict[str, Any],
-    settings: Any,
+    keys: _RestoreKeys,
     previous_fernet_key: str | None,
 ) -> None:
     """Describe the credential re-encryption step of a dry run."""
@@ -1698,7 +1959,7 @@ def _preview_credential_restore(
         click.echo("  No credentials_references.json found — WOULD skip credential restore")
         return
     creds: dict[str, list[dict[str, Any]]] = json.loads(creds_json.read_text(encoding="utf-8"))
-    if _fernet_key_hash(settings.fernet_key) == manifest.get("fernet_key_hash", ""):
+    if _fernet_key_hash(keys.fernet_key) == manifest.get("fernet_key_hash", ""):
         click.echo("  FERNET_KEY unchanged — WOULD skip credential re-encryption")
         return
     if not previous_fernet_key:
@@ -1747,7 +2008,8 @@ class _RestoreOptions:
 def _run_restore(opts: _RestoreOptions) -> None:
     """Execute a restore from ``opts`` — the CLI command's whole body.
 
-    Both connection URLs are resolved first (the target from ``--db-url`` /
+    Both connection URLs are resolved first (the target from ``--db-url`` / an
+    exported ``DATABASE_ADMIN_URL`` / the data dir's own ``config.env`` /
     settings, the APP role from ``--app-db-url`` / ``DATABASE_URL``), so a
     configuration typo fails BEFORE anything destructive happens.
 
@@ -1755,21 +2017,31 @@ def _run_restore(opts: _RestoreOptions) -> None:
     ``--dry-run`` short-circuit — and only then are the writers stopped and the
     data-dir lock taken. A preview or validation failure must have NO side
     effects: stopping a live launcher to print a plan would be a side effect
-    the operator never agreed to. After the lock: the pre-restore safety dump,
-    the database-cluster restore (SQL dump, checkpoint JSON exports, credential
-    re-encryption, collation drift check), launcher data-dir adoption, and the
-    promoted bootstrap role-posture re-run. The app role is never derived from
-    the restore target URL, and a posture failure FAILS the restore. Any
-    failure is logged, echoed, and re-raised as a ClickException; a data-dir
-    lock is always released. On success the exact START command is printed and
-    nothing is auto-restarted.
+    the operator never agreed to.
+
+    After the lock the restore runs inside ONE server window: when the target
+    IS this data dir's bundled cluster, only that cluster is started (the API
+    and workers stay stopped) and stopped again when the window closes, so the
+    safety dump, the SQL/JSON replay, the credential re-encryption, the
+    collation check and the posture re-run all have a server to talk to. The
+    window matters because the stop that makes a restore safe is the same
+    ordered teardown that stops the bundled PostgreSQL — the replay used to run
+    against a server the same command had just stopped. Launcher data-dir
+    adoption happens after the database restore succeeded, and a posture
+    failure FAILS the restore. Any failure is logged, echoed, and re-raised as
+    a ClickException; a data-dir lock is always released. On success the exact
+    START command is printed and nothing is auto-restarted.
     """
-    raw_url = _resolve_url(opts.db_url)
-    settings = get_settings()
+    raw_url = _resolve_url(opts.db_url, data_dir=opts.data_dir)
+    # The key the restore re-encrypts archived credentials to. Resolved from the
+    # data dir's own config when there is one, so a native operator needs
+    # nothing exported (see _restore_fernet_key).
+    keys = _RestoreKeys(fernet_key=_restore_fernet_key(opts.data_dir))
     # Resolve the APPLICATION role URL up front. It is pure configuration
     # (``--app-db-url`` / ``DATABASE_URL``), so a typo or an unset value must
     # fail BEFORE the safety dump and the cluster wipe — never after them.
-    app_url = _resolve_restore_app_url(settings, opts.app_db_url)
+    app_url = _resolve_restore_app_url(None, opts.app_db_url, data_dir=opts.data_dir)
+    bundled_target = _target_is_bundled_cluster(raw_url, _launcher_config_values(opts.data_dir).get("DATABASE_ADMIN_URL"))
     from farna.launcher.env_safety import scrub_os_environment
 
     scrub_os_environment()
@@ -1785,23 +2057,12 @@ def _run_restore(opts: _RestoreOptions) -> None:
     # READ-ONLY verification first (nothing is stopped, nothing is locked):
     # the dry run returns here and the real run has proven the archive before
     # it takes a lock or touches the stack.
-    if not _validate_targets(opts, manifest, raw_url, settings):
+    if not _validate_targets(opts, manifest, raw_url, keys):
         return
-
-    # Before ANY destructive step: a native --data-dir restore stops the
-    # launcher (and with it the bundled PostgreSQL), so it needs an explicitly
-    # named, independently reachable target. Refuse here, side-effect free.
-    _require_reachable_target_for_native_restore(opts)
 
     lock = None
     stopped = False
     try:
-        # The safety dump MUST run BEFORE the stop: a bundled deployment's
-        # Postgres is a launcher child, so `stop_running_stack` (below) takes
-        # the server down and a dump from a stopped cluster cannot run.
-        # pg_dump is transactionally consistent, so a dump while the old
-        # writers are still live is safe.
-        _safety_dump(opts, raw_url)
         if opts.data_dir is not None:
             # FAR-2667 item 5: a VIABLE restore stops the writers itself (it
             # never asks the operator to remember a stop) and leaves them
@@ -1811,11 +2072,22 @@ def _run_restore(opts: _RestoreOptions) -> None:
             # proves they really are gone.
             stopped = _stop_launcher_writers(opts.data_dir)
             lock = _acquire_data_lock(opts.data_dir, mode="restore")
-        _restore_cluster(opts, manifest, raw_url, settings)
-        _restore_data_dir(opts, manifest)
 
-        admin_url = os.environ.get("DATABASE_ADMIN_URL") or raw_url
-        _ensure_restore_posture(admin_url, app_url)
+        # The stop above ALSO stopped the bundled PostgreSQL (the launcher
+        # supervises it), and the dump and the replay both need it. Keep only
+        # that cluster up for the window when it is this data dir's own target;
+        # an explicitly named external database is untouched by the stop.
+        data_dir = opts.data_dir
+        with contextlib.ExitStack() as window:
+            if data_dir is not None and bundled_target:
+                window.enter_context(_bundled_cluster_for_restore(data_dir, raw_url))
+            _safety_dump(opts, raw_url)
+            _restore_cluster(opts, manifest, raw_url, keys)
+
+            admin_url = os.environ.get("DATABASE_ADMIN_URL") or raw_url
+            _ensure_restore_posture(admin_url, app_url)
+
+        _restore_data_dir(opts, manifest)
 
         click.echo("\nRestore complete.")
         _print_start_guidance(opts, stopped=stopped)
@@ -1839,7 +2111,7 @@ def _run_restore(opts: _RestoreOptions) -> None:
             lock.release()
 
 
-def _validate_targets(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, settings: Any) -> bool:
+def _validate_targets(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, keys: _RestoreKeys) -> bool:
     """Verify-before-wipe phase: nothing is mutated until every check passes.
 
     Runs the instance-identity check (when a data dir is in play), the disk
@@ -1874,7 +2146,7 @@ def _validate_targets(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: 
     _verify_json_exports(opts.backup_dir)
 
     if opts.dry_run:
-        _preview_restore(opts.backup_dir, manifest, settings, opts.previous_fernet_key)
+        _preview_restore(opts.backup_dir, manifest, keys, opts.previous_fernet_key)
         return False
 
     _check_schema_downgrade(manifest)
@@ -2016,7 +2288,7 @@ def _safety_dump(opts: _RestoreOptions, raw_url: str) -> None:
     _take_safety_dump(raw_url, output_dir=opts.safety_dump_dir)
 
 
-def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, settings: Any) -> None:
+def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, keys: _RestoreKeys) -> None:
     """Restore the database cluster from the archive.
 
     Applies the SQL dump via psql, re-inserts the checkpoint_blobs /
@@ -2062,7 +2334,7 @@ def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: s
     else:
         click.echo("  No checkpoint_writes.json found — skipping")
 
-    _re_encrypt_credentials_if_needed(opts, manifest, raw_url, settings)
+    _re_encrypt_credentials_if_needed(opts, manifest, raw_url, keys)
 
     if db_sql.exists():
         _check_collation_versions_sync(raw_url)
@@ -2072,7 +2344,7 @@ def _re_encrypt_credentials_if_needed(
     opts: _RestoreOptions,
     manifest: dict[str, Any],
     raw_url: str,
-    settings: Any,
+    keys: _RestoreKeys,
 ) -> None:
     """Re-encrypt archived credentials when the FERNET_KEY changed since backup.
 
@@ -2082,7 +2354,7 @@ def _re_encrypt_credentials_if_needed(
     unchanged (parity with the pre-refactor command).
     """
     creds_json = opts.backup_dir / _CREDS_JSON_FILE
-    current_key_hash = _fernet_key_hash(settings.fernet_key)
+    current_key_hash = _fernet_key_hash(keys.fernet_key)
     backup_key_hash = manifest.get("fernet_key_hash", "")
 
     if creds_json.exists() and current_key_hash != backup_key_hash:
@@ -2090,7 +2362,7 @@ def _re_encrypt_credentials_if_needed(
             raise click.ClickException("FERNET_KEY has changed since backup. Provide --previous-fernet-key to re-encrypt credentials.")
         click.echo("Re-encrypting credentials with current FERNET_KEY...")
         creds_data: dict[str, list[dict[str, Any]]] = json.loads(creds_json.read_text(encoding="utf-8"))
-        counts = _re_encrypt_credentials_sync(raw_url, creds_data, opts.previous_fernet_key, settings.fernet_key)
+        counts = _re_encrypt_credentials_sync(raw_url, creds_data, opts.previous_fernet_key, keys.fernet_key)
         for table, cnt in counts.items():
             click.echo(f"  {cnt} {table} re-encrypted")
     elif current_key_hash == backup_key_hash:
@@ -2157,7 +2429,7 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
     by design). Taking a data dir requires its exclusive lock — a running
     launcher refuses with its holder PID.
     """
-    raw_url = _resolve_url(db_url)
+    raw_url = _resolve_url(db_url, data_dir=data_dir)
     settings = get_settings()
     from farna.launcher.env_safety import scrub_os_environment
 
@@ -2385,9 +2657,15 @@ def restore(
     dump-time completeness is re-verified now. With --dry-run, validates
     integrity and previews every step without touching the database. Against
     a launcher data dir, once validation passes it STOPS a running launcher
-    itself, takes the exclusive lock, and leaves the stack stopped: on success
-    it prints the exact start command and never auto-restarts. A --dry-run
-    preview or a failed validation never stops a running launcher.
+    itself, takes the exclusive lock, and leaves the stack stopped: when that
+    stop took the bundled PostgreSQL down with it, only that cluster is started
+    for the duration of the dump and replay and stopped again afterwards. The
+    target and application URLs come from ``--db-url``/``--app-db-url``, an
+    exported ``DATABASE_ADMIN_URL``/``DATABASE_URL``, or the data dir's own
+    ``config.env`` (the launcher's pinned configuration), in that order — so a
+    native operator does not need to export anything. On success it prints the
+    exact start command and never auto-restarts. A --dry-run preview or a
+    failed validation never stops a running launcher.
     """
     _run_restore(
         _RestoreOptions(

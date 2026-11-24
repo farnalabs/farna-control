@@ -1406,14 +1406,14 @@ def restore_guidance(
         body = "Manual restore - this re-points `current` back to the previous binary ONLY.\nNo pre-upgrade snapshot was taken for this attempt (no migration was pending), so the\nDATABASE IS NOT RESTORED by this command and no data restore is needed."
         return f"{fault}\n{body}\nExact manual restore command:\n  {link_cmd}"
     head = "Manual restore - this restores BOTH the binary AND the data. The attempted upgrade's\nboot may have forward-migrated the database schema past the old bundle's migration\nhead, so restoring the old binary ALONE is not sufficient."
-    # `--db-url "$DATABASE_ADMIN_URL"` (a shell reference, never a literal
-    # credential) names the OWNER/admin database explicitly. It is REQUIRED for
-    # a --data-dir restore: the restore stops the launcher, which supervises the
-    # bundled PostgreSQL, so the target must be independently reachable and must
-    # NOT be the bundled launcher's database. Without the explicit URL a native
-    # operator shell with no DATABASE_URL would resolve the bundled one and the
-    # replay would connect to a server the restore just stopped.
-    restore_cmd = f'farna-control restore {snapshot} --data-dir {data_dir} --yes --db-url "$DATABASE_ADMIN_URL"'
+    # NO `--db-url`: a native operator's shell has no DATABASE_ADMIN_URL (the
+    # launcher exports the bundled endpoints to its own children, never to the
+    # operator), so naming `"$DATABASE_ADMIN_URL"` printed a command that could
+    # not run. `restore --data-dir` resolves the bundled cluster from the data
+    # dir's own config.env, stops the writers itself, brings ONLY the bundled
+    # PostgreSQL back for the dump and replay, then leaves the stack stopped —
+    # that is the whole copy-pasteable recovery.
+    restore_cmd = f"farna-control restore {snapshot} --data-dir {data_dir} --yes"
     compound = link_cmd + " && " + restore_cmd
     return f"{fault}\n{head}\nPre-upgrade snapshot: {snapshot}\nExact manual restore command:\n  {compound}"
 

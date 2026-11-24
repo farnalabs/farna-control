@@ -601,6 +601,9 @@ def test_restore_resolves_app_role_from_configuration_not_db_url(tmp_path: Path,
     the application role — assert the RESOLVED roles, not that a call happened.
     """
     monkeypatch.delenv("DATABASE_ADMIN_URL", raising=False)
+    # An EXPORTED DATABASE_URL outranks Settings (it is the same value in a real
+    # install); clear it so the patched Settings below is the only source.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
     posture_mock = MagicMock()
     with contextlib.ExitStack() as stack:
@@ -755,8 +758,11 @@ def test_as_asyncpg_url_survives_an_unparseable_url() -> None:
     assert "<unparseable URL>" in excinfo.value.message
 
 
-def test_resolve_restore_app_url_falls_back_to_the_configured_database_url() -> None:
+def test_resolve_restore_app_url_falls_back_to_the_configured_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """FAR-2021: with no --app-db-url the settings DATABASE_URL is the source."""
+    # An exported DATABASE_URL outranks Settings (same value in a real install);
+    # clear it so the fallback this test names is the one exercised.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     settings = SimpleNamespace(database_url="postgresql+psycopg://modulo:pw@127.0.0.1:5432/farna_control")
     resolved = backup_mod._resolve_restore_app_url(settings, None)
     assert resolved == "postgresql+asyncpg://modulo:pw@127.0.0.1:5432/farna_control"
@@ -770,8 +776,9 @@ def test_resolve_restore_app_url_prefers_the_explicit_app_db_url() -> None:
 
 
 @pytest.mark.parametrize("configured", ["", None])
-def test_resolve_restore_app_url_refuses_a_missing_source(configured: Any) -> None:
+def test_resolve_restore_app_url_refuses_a_missing_source(configured: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """FAR-2021: an unset/empty DATABASE_URL is a refusal, not a silent default."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     settings = SimpleNamespace(database_url=configured)
     with pytest.raises(click.ClickException, match="--app-db-url"):
         backup_mod._resolve_restore_app_url(settings, None)
@@ -787,6 +794,7 @@ def test_restore_validates_the_app_url_before_touching_the_target(tmp_path: Path
     admin connection.
     """
     monkeypatch.setenv("DATABASE_ADMIN_URL", "postgresql://farna_control:pw@127.0.0.1:5432/farna_control")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
     restore_cluster = MagicMock()
     safety_dump = MagicMock()

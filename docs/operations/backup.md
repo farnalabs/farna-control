@@ -331,13 +331,33 @@ stack with nothing to copy — and never restarts anything. Without `--data-dir`
 it prints the compose start command instead. Nothing is auto-restarted: a
 half-verified database must not be handed to an application.
 
-Because that stop also takes down the bundled PostgreSQL the launcher
-supervises, a `--data-dir` restore **requires an explicit, independently
-reachable target** (`--db-url`, or `DATABASE_ADMIN_URL` exported): the replay
-must not fall back to the bundled `DATABASE_URL`, which the restore's own stop
-has just shut down. If no explicit URL is given while a launcher is running, the
-restore refuses before touching anything and names the fix — point `--db-url` at
-an admin database the stop does not take down.
+That stop also takes down the bundled PostgreSQL the launcher supervises, and
+the safety dump and the replay both need a server. So a `--data-dir` restore
+whose target IS that bundled cluster **starts only the cluster** for the
+duration of the dump and the replay (the API and the SAQ workers stay stopped),
+then stops it again: a native recovery needs no extra flag, and the operator
+still starts the release deliberately with the printed command.
+
+```
+# native recovery, after a failed upgrade
+farna-control restore <snapshot-dir> --data-dir <data-dir> --yes
+#   ... writers stopped, bundled PostgreSQL started for the dump+replay, stopped again
+#   -> then run the printed: farna-control start --data-dir <data-dir>
+```
+
+Where the connection settings come from, in order:
+
+1. `--db-url` / `--app-db-url` (the operator's own arguments);
+2. an exported `DATABASE_ADMIN_URL` / `DATABASE_URL`;
+3. the data dir's own `config.env` — the launcher's pinned configuration, the
+   only place a native installation's generated credentials live;
+4. the process `DATABASE_URL` (the compose path, where the service environment
+   supplies it).
+
+A target the stop did not take down — an explicitly named external database —
+is never shadowed by a cluster the restore started. A bundled cluster that is
+already accepting connections is reused and left running, because the restore
+only stops what it started.
 
 Note the two different versions in play. The manifest's `schema_versions` field
 records the **migration head of the code that wrote the backup** (`alembic`
