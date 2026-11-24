@@ -105,17 +105,20 @@
       </div>
     </template>
 
-    <Dialog
-      v-model:visible="publishDialogVisible"
-      modal
-      :header="$t('views.EvalProposalsQueueView.publish_dialog_title')"
-      :style="{ width: '32rem' }"
-      :draggable="false"
-      :dismissable-mask="true"
-      data-testid="publish-proposal-dialog"
-      @hide="closePublishDialog"
+    <FormDialog
+      :open="publishDialogVisible"
+      :title="$t('views.EvalProposalsQueueView.publish_dialog_title')"
+      :confirm-text="$t('views.EvalProposalsQueueView.publish_confirm')"
+      :confirm-disabled="!canSubmitPublish"
+      :cancel-disabled="publishSubmitting"
+      :loading="publishSubmitting"
+      cancel-test-id="publish-cancel"
+      confirm-test-id="publish-confirm"
+      width="32rem"
+      @update:open="onPublishDialogOpenChange"
+      @confirm="submitPublish"
     >
-      <div v-if="publishTarget" class="space-y-4">
+      <div v-if="publishTarget" class="space-y-4" data-testid="publish-proposal-dialog">
         <div>
           <label for="publish-proposal-name" class="mb-1 block text-sm font-medium">
             {{ $t('views.EvalProposalsQueueView.name_label') }}
@@ -182,28 +185,7 @@
         </div>
       </div>
 
-      <template #footer>
-        <div v-if="publishTarget" class="flex justify-end gap-2">
-          <Button
-            severity="secondary"
-            outlined
-            :disabled="publishSubmitting"
-            data-testid="publish-cancel"
-            @click="closePublishDialog"
-          >
-            {{ $t('common.cancel') }}
-          </Button>
-          <Button
-            :disabled="!canSubmitPublish"
-            :loading="publishSubmitting"
-            data-testid="publish-confirm"
-            @click="submitPublish"
-          >
-            {{ $t('views.EvalProposalsQueueView.publish_confirm') }}
-          </Button>
-        </div>
-      </template>
-    </Dialog>
+    </FormDialog>
   </div>
   </FeatureGate>
 </template>
@@ -220,8 +202,8 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import AppSelect from '../components/shared/AppSelect.vue'
+import FormDialog from '../components/shared/FormDialog.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import DataCard from '../components/ui/DataCard.vue'
@@ -455,6 +437,15 @@ function closePublishDialog() {
   publishDialogVisible.value = false
   publishTarget.value = null
   publishDialogError.value = null
+}
+
+/**
+ * FormDialog's close path (Cancel, the header close, mask click or Escape)
+ * emits `update:open`; run the same teardown the old `@hide` handler used so a
+ * closed dialog never leaves the previous proposal's target behind.
+ */
+function onPublishDialogOpenChange(open: boolean | undefined): void {
+  if (!open) closePublishDialog()
 }
 
 async function submitPublish() {

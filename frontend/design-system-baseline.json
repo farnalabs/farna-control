@@ -91,13 +91,9 @@
   "raw_dialog": {
     "frontend/src/components/licence/LicenceRenewalNotice.vue": 1,
     "frontend/src/components/settings/McpOauthClientsCard.vue": 1,
-    "frontend/src/views/AdminRunRetentionView.vue": 1,
     "frontend/src/views/AdminUsersView.vue": 1,
-    "frontend/src/views/EvalProposalsQueueView.vue": 1,
     "frontend/src/views/RunDetailView.vue": 1,
     "frontend/src/views/SettingsMcpView.vue": 1,
-    "frontend/src/views/SettingsTriggersView.vue": 1,
-    "frontend/src/views/SystemMapsView.vue": 1,
-    "frontend/src/views/lifecycle-map/LifecycleMapView.vue": 1
+    "frontend/src/views/SettingsTriggersView.vue": 1
   }
 }
