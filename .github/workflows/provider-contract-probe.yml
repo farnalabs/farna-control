@@ -9,8 +9,10 @@ name: "Provider contract probe (nightly)"
 #
 # Read-only: scripts/provider_contract_probe.py never issues a write (GET/HEAD,
 # plus read-only POSTs pinned in code to their exact URL and body). Each
-# provider id is pinned to its host in code (PROVIDER_HOST_PINS), so a config
-# edit cannot redirect a credential or introduce a new host.
+# provider id is pinned in code to its host (PROVIDER_HOST_PINS) and to the
+# exact credential env vars / header / query-param names it may read
+# (PROVIDER_CREDENTIAL_PINS), so a config edit can neither redirect a credential
+# nor make one provider's probe read another provider's secret.
 #
 # Fail-closed: a golden that has not been recorded live, a missing golden, or a
 # missing credential FAILS the run. Nothing is excused in the committed config -

@@ -29,7 +29,11 @@
 #   auth:                 credential declaration (see below)
 #   env_vars:             the ONLY env var names this probe may read; auth.env,
 #                         auth.params values and extra_headers values must be a
-#                         subset (a config edit cannot pull in another secret)
+#                         subset. Every one of them must ALSO be in the provider
+#                         id's PROVIDER_CREDENTIAL_PINS entry in
+#                         scripts/provider_contract_probe.py (a code pin, the
+#                         authority), so a config edit cannot make this probe
+#                         read another provider's secret.
 #   success_status_class: optional override
 #   max_depth:            optional override
 #   strict_shape:         optional override
@@ -69,10 +73,13 @@
 # declaration that must AGREE with the host pinned for the same provider id in
 # scripts/provider_contract_probe.py (PROVIDER_HOST_PINS) - the code pin is the
 # authority. A new host, or a URL pointing anywhere else, is rejected, so a
-# config edit alone cannot redirect a credential. The few read-only POSTs are
-# pinned to their exact URL and body in the same script
-# (READ_ONLY_POST_ENDPOINTS); any other POST is rejected, so a config edit
-# cannot turn a probe into a write.
+# config edit alone cannot redirect a credential. The credential SET is pinned
+# per provider id too (PROVIDER_CREDENTIAL_PINS): every env var, header name and
+# query-param name the probe reads must be in that pin, so a `github` probe
+# cannot be edited to read MODULO_PROBE_SLACK_TOKEN and send it to
+# api.github.com. The few read-only POSTs are pinned to their exact URL and body
+# in the same script (READ_ONLY_POST_ENDPOINTS); any other POST is rejected, so
+# a config edit cannot turn a probe into a write.
 #
 # A secret value never enters a golden: goldens store a response SHAPE (key
 # names + value types), never response values.

@@ -45,7 +45,11 @@ hatch when a provider routinely adds fields.
 Arrays are compared as a **union of every element** (not just `value[0]`), so a
 polymorphic listing is described in full. A key present in only some elements is
 marked optional and its later absence is not drift. An array that goes from
-having items to `[]` (or the reverse) is always breaking drift.
+having items to `[]` (or the reverse) is always breaking drift. A union may
+**narrow** without drift (the actual loses a member type the golden permits),
+but it may never **widen**: an `object` array that now also holds a string or a
+`null` is `type_changed` drift, even though `object` is still one member of the
+actual union.
 
 Because goldens hold key names and type names only, **a secret or customer value
 can never reach a golden**. Request and response headers are never persisted,
@@ -118,8 +122,8 @@ Even with excused skips, a run that attempts **zero** probes fails.
 ## Read-only and credential confinement
 
 The config names the URL, method and env var names, so the loader enforces the
-read-only guarantee before any request. Two things are pinned **in code**, so a
-config edit alone cannot widen them:
+read-only guarantee before any request. Three things are pinned **in code**, so
+a config edit alone cannot widen them:
 
 - **Host pin.** `PROVIDER_HOST_PINS` in the script maps every provider id to its
   one permitted host. A probe whose id is not in that mapping is rejected, and a
@@ -127,6 +131,13 @@ config edit alone cannot widen them:
   must agree with the pin, but the pin is the authority: changing the URL and
   `allowed_host` together is still rejected, so a config edit cannot redirect a
   credential to a new host.
+- **Credential pin.** `PROVIDER_CREDENTIAL_PINS` in the script maps every
+  provider id to the credential env vars, header names and query-param names it
+  may read. Used-vs-declared alone is not enough: a `github` probe declaring
+  `auth.env: MODULO_PROBE_SLACK_TOKEN` is internally consistent and would send
+  Slack's token to api.github.com. Every used env var, every `env_vars` entry,
+  every header name and every query-param name must fall inside the provider's
+  pin, or the config is rejected at load.
 - **POST endpoint pin.** Only a handful of providers use a POST, and each is a
   read query. `READ_ONLY_POST_ENDPOINTS` in the script pins every one of them to
   its exact URL and exact body (`dropbox_paper`, `linear`, `monday`, `slack`). A
@@ -139,8 +150,9 @@ Also enforced:
   string (use `auth.params`).
 - Only `GET` and `HEAD` are accepted, except the pinned POSTs above.
 - `auth.env`, every `auth.params` value and every `extra_headers` value must
-  appear in the probe's `env_vars`. A config edit cannot pull in an undeclared
-  secret.
+  appear in the probe's `env_vars`, and all of them must be inside the
+  provider's `PROVIDER_CREDENTIAL_PINS` entry. A config edit cannot pull in an
+  undeclared secret or another provider's credential.
 - `auth.template` may reference only `{token}`; header names are validated.
 
 ## Transient failures, timeouts and deadlines
@@ -166,7 +178,10 @@ the in-script deadline.
 2. Add the provider id to `PROVIDER_HOST_PINS` in
    `scripts/provider_contract_probe.py`, mapped to its one permitted host. The
    loader rejects a probe whose id is unpinned, so this code change is the only
-   way to introduce a host.
+   way to introduce a host. Add the same id to `PROVIDER_CREDENTIAL_PINS`,
+   listing every credential env var it may read and every header / query-param
+   name it may populate; the loader rejects an id with no credential pin and any
+   credential name outside it.
 3. Add a probe under `providers:`:
 
    ```yaml
@@ -372,14 +387,18 @@ missing credential / missing golden / unrecorded golden each fail by default and
 pass only via an allow list; a run that attempts **zero** probes fails even when
 every skip is excused; `429` is retried honouring `Retry-After` and a
 persistent `5xx` ends as `provider_unavailable` (not drift); an emptied or
-populated array is breaking and array shapes are unioned; `added` is breaking by
-default; the loader rejects a POST that is not pinned in code (including a
-probe renamed onto Slack `chat.delete`), a pinned POST whose body differs, a URL
-host that differs from the code pin, a config that changes the URL and
-`allowed_host` together to a new host, an unpinned provider id, embedded URL
-credentials and an undeclared header env var; one probe's exception does not
-abort the run and still writes the report; record mode rewrites only the
-selected provider in the committed format.
+populated array is breaking and array shapes are unioned; a union that widens to
+`mixed` (an `object` array that also holds a string or a null) is drift while a
+narrowed union is not; `added` is breaking by default; the loader rejects a POST
+that is not pinned in code (including a probe renamed onto Slack `chat.delete`),
+a pinned POST whose body differs, a URL host that differs from the code pin, a
+config that changes the URL and `allowed_host` together to a new host, an
+unpinned provider id, embedded URL credentials, an undeclared header env var,
+and any credential env var / header name / query-param name outside the
+provider's credential pin (including a `github` probe reading
+`MODULO_PROBE_SLACK_TOKEN`); one probe's exception does not abort the run and
+still writes the report; record mode rewrites only the selected provider in the
+committed format.
 
 Two further tests load the real artefacts: `configs/provider-contract-probes.yaml`
 and `contract-goldens/provider-shapes.json` (unique ids, valid status classes,

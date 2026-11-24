@@ -19,9 +19,13 @@ Design notes
 ------------
 * Read-only calls only. Each provider id is pinned to its host IN CODE
   (``PROVIDER_HOST_PINS``), so a config edit cannot introduce a host or redirect
-  a credential elsewhere. The loader rejects any non-GET/HEAD method, and pins
-  each read-only POST to its exact URL and body (``READ_ONLY_POST_ENDPOINTS``),
-  so a config edit cannot rename a probe onto a write endpoint.
+  a credential elsewhere. Each provider id is also pinned to the exact credential
+  env vars (and header / query-param names) it may read
+  (``PROVIDER_CREDENTIAL_PINS``), so a config edit cannot make a github probe
+  read Slack's token and send it to api.github.com. The loader rejects any
+  non-GET/HEAD method, and pins each read-only POST to its exact URL and body
+  (``READ_ONLY_POST_ENDPOINTS``), so a config edit cannot rename a probe onto a
+  write endpoint.
 * A run that attempts ZERO probes is a failure, however many of its skips are
   explicitly excused: counting attempts (not passes) is what stops an all-skipped
   run from looking clean.
@@ -140,6 +144,78 @@ READ_ONLY_POST_ENDPOINTS: dict[str, ReadOnlyPost] = {
     "linear": ReadOnlyPost("https://api.linear.app/graphql", "json", {"query": "{ viewer { id name email } }"}),
     "monday": ReadOnlyPost("https://api.monday.com/v2", "json", {"query": "{ me { id name email } }"}),
     "slack": ReadOnlyPost("https://slack.com/api/auth.test", "none"),
+}
+
+
+@dataclass(frozen=True)
+class CredentialPin:
+    """The ONLY credentials a provider id may read, pinned IN CODE.
+
+    ``env_vars`` are the env var names the probe may read (``auth.env``, the
+    values of ``auth.params`` and ``extra_headers``, and ``env_vars`` itself).
+    ``headers`` and ``params`` are the header / query-parameter NAMES it may
+    populate. Unknown names are rejected, so a config edit cannot repurpose a
+    probe to read (and send) another provider's secret.
+    """
+
+    env_vars: frozenset[str] = frozenset()
+    headers: frozenset[str] = frozenset()
+    params: frozenset[str] = frozenset()
+
+
+#: The credential set of every provider id, pinned IN CODE. ``_validate_env_vars``
+#: only proves that what is USED is DECLARED, which a merged config edit can
+#: satisfy while declaring ANOTHER provider's secret (a ``github`` probe with
+#: ``auth.env: MODULO_PROBE_SLACK_TOKEN`` would load it and send Slack's token to
+#: api.github.com). This pin makes the credential set a property of the provider
+#: id instead of the config: every env var, header name and query-param name the
+#: probe touches must be listed here. Adding a credential is a reviewed code
+#: change, never a config-only edit.
+PROVIDER_CREDENTIAL_PINS: dict[str, CredentialPin] = {
+    # connectors
+    "asana": CredentialPin(env_vars=frozenset({"MODULO_PROBE_ASANA_TOKEN"})),
+    "bitbucket": CredentialPin(env_vars=frozenset({"MODULO_PROBE_BITBUCKET_TOKEN"})),
+    "buildkite": CredentialPin(env_vars=frozenset({"MODULO_PROBE_BUILDKITE_TOKEN"})),
+    "circleci": CredentialPin(env_vars=frozenset({"MODULO_PROBE_CIRCLECI_TOKEN"}), headers=frozenset({"Circle-Token"})),
+    "codeclimate": CredentialPin(env_vars=frozenset({"MODULO_PROBE_CODECLIMATE_TOKEN"})),
+    "datadog": CredentialPin(
+        env_vars=frozenset({"MODULO_PROBE_DATADOG_API_KEY", "MODULO_PROBE_DATADOG_APP_KEY"}),
+        headers=frozenset({"DD-API-KEY", "DD-APPLICATION-KEY"}),
+    ),
+    "discord": CredentialPin(env_vars=frozenset({"MODULO_PROBE_DISCORD_TOKEN"}), headers=frozenset({"Authorization"})),
+    "dropbox_paper": CredentialPin(env_vars=frozenset({"MODULO_PROBE_DROPBOX_TOKEN"})),
+    "github": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GITHUB_TOKEN"})),
+    "gitlab": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GITLAB_TOKEN"}), headers=frozenset({"PRIVATE-TOKEN"})),
+    "linear": CredentialPin(env_vars=frozenset({"MODULO_PROBE_LINEAR_TOKEN"}), headers=frozenset({"Authorization"})),
+    "microsoft_teams": CredentialPin(env_vars=frozenset({"MODULO_PROBE_MICROSOFT_TEAMS_TOKEN"})),
+    "monday": CredentialPin(env_vars=frozenset({"MODULO_PROBE_MONDAY_TOKEN"})),
+    "notion": CredentialPin(env_vars=frozenset({"MODULO_PROBE_NOTION_TOKEN"})),
+    "npm": CredentialPin(env_vars=frozenset({"MODULO_PROBE_NPM_TOKEN"})),
+    "opsgenie": CredentialPin(env_vars=frozenset({"MODULO_PROBE_OPSGENIE_TOKEN"}), headers=frozenset({"Authorization"})),
+    "pagerduty": CredentialPin(env_vars=frozenset({"MODULO_PROBE_PAGERDUTY_TOKEN"}), headers=frozenset({"Authorization"})),
+    "pypi": CredentialPin(),
+    "sentry": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SENTRY_TOKEN"})),
+    "shortcut": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SHORTCUT_TOKEN"}), headers=frozenset({"Shortcut-Token"})),
+    "slack": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SLACK_TOKEN"})),
+    "snyk": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SNYK_TOKEN"}), headers=frozenset({"Authorization"})),
+    "sonarqube": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SONARQUBE_TOKEN"})),
+    "trello": CredentialPin(
+        env_vars=frozenset({"MODULO_PROBE_TRELLO_KEY", "MODULO_PROBE_TRELLO_TOKEN"}),
+        params=frozenset({"key", "token"}),
+    ),
+    # model backends
+    "anthropic": CredentialPin(env_vars=frozenset({"MODULO_PROBE_ANTHROPIC_TOKEN"}), headers=frozenset({"x-api-key"})),
+    "cohere": CredentialPin(env_vars=frozenset({"MODULO_PROBE_COHERE_TOKEN"})),
+    "deepseek": CredentialPin(env_vars=frozenset({"MODULO_PROBE_DEEPSEEK_TOKEN"})),
+    "fireworks": CredentialPin(env_vars=frozenset({"MODULO_PROBE_FIREWORKS_TOKEN"})),
+    "gemini": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GEMINI_TOKEN"}), params=frozenset({"key"})),
+    "grok": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GROK_TOKEN"})),
+    "groq": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GROQ_TOKEN"})),
+    "mistral": CredentialPin(env_vars=frozenset({"MODULO_PROBE_MISTRAL_TOKEN"})),
+    "openai": CredentialPin(env_vars=frozenset({"MODULO_PROBE_OPENAI_TOKEN"})),
+    "openrouter": CredentialPin(env_vars=frozenset({"MODULO_PROBE_OPENROUTER_TOKEN"})),
+    "qwen": CredentialPin(env_vars=frozenset({"MODULO_PROBE_QWEN_TOKEN"})),
+    "togetherai": CredentialPin(env_vars=frozenset({"MODULO_PROBE_TOGETHERAI_TOKEN"})),
 }
 
 #: A 429 or any 5xx means "cannot verify right now", never "the contract
@@ -307,15 +383,24 @@ def shape_of(value: Any, depth: int, max_depth: int) -> dict[str, Any]:
 
 
 def _shapes_equal(expected: dict[str, Any], actual: dict[str, Any]) -> bool:
-    """True when *actual* satisfies *expected* (used for ``mixed`` unions)."""
+    """True when *actual* satisfies *expected* (used for ``mixed`` unions).
+
+    Widening is drift, narrowing is not:
+
+    * a concrete expected type is NEVER satisfied by a ``mixed`` actual - an
+      array whose elements were all objects and now also holds a string or a
+      null has changed type, even though ``object`` is one member of the union;
+    * a ``mixed`` actual only satisfies a ``mixed`` expected whose type set is a
+      SUPERSET of the actual one - the actual may lose a member (narrowing) but
+      may never add one.
+    """
     expected_type = expected.get("type")
     actual_type = actual.get("type")
     if expected_type == "mixed":
+        expected_types = set(expected.get("types") or [])
         if actual_type == "mixed":
-            return True
-        return actual_type in set(expected.get("types") or [])
-    if actual_type == "mixed":
-        return expected_type in set(actual.get("types") or [])
+            return set(actual.get("types") or []) <= expected_types
+        return actual_type in expected_types
     return expected_type == actual_type
 
 
@@ -515,6 +600,7 @@ def _validate_probe(probe: Any, defaults: dict[str, Any]) -> None:
     _validate_request(probe)
     _validate_auth(probe)
     _validate_env_vars(probe)
+    _validate_credential_pins(probe)
 
     status_class = probe.get("success_status_class", defaults.get("success_status_class", "2xx"))
     if not _valid_status_class(status_class):
@@ -666,6 +752,47 @@ def _validate_env_vars(probe: dict[str, Any]) -> None:
     for name in declared:
         if not name.replace("_", "").isalnum() or name.upper() != name:
             raise ProbeConfigError(f"{probe['id']}: invalid env var name {name!r}")
+
+
+def _format_pinned(names: frozenset[str]) -> str:
+    return ", ".join(sorted(names)) or "none"
+
+
+def _validate_credential_pins(probe: dict[str, Any]) -> None:
+    """Reject any credential name outside the provider's code pin.
+
+    Used-vs-declared is not enough: a merged config edit can declare ANOTHER
+    provider's secret and have ``_resolve_credentials`` read it, sending (e.g.)
+    Slack's token to api.github.com from a ``github`` probe. ``env_vars``, every
+    used env var, every header name and every query-param name must fall inside
+    the provider's ``CredentialPin``, so the credential set belongs to the
+    provider id, not to the config.
+    """
+    pin = PROVIDER_CREDENTIAL_PINS.get(probe["id"])
+    if pin is None:
+        raise ProbeConfigError(f"{probe['id']}: no credential pin exists for this provider id in scripts/provider_contract_probe.py (PROVIDER_CREDENTIAL_PINS); add the pin there deliberately")
+
+    used_outside = sorted(_used_env_vars(probe) - pin.env_vars)
+    if used_outside:
+        raise ProbeConfigError(f"{probe['id']}: credential env vars {', '.join(used_outside)} are not permitted for this provider (pinned in code: {_format_pinned(pin.env_vars)}); a config edit cannot read another provider's credential")
+
+    declared_outside = sorted(set(probe["env_vars"]) - pin.env_vars)
+    if declared_outside:
+        raise ProbeConfigError(f"{probe['id']}: env_vars {', '.join(declared_outside)} are not permitted for this provider (pinned in code: {_format_pinned(pin.env_vars)})")
+
+    auth = probe["auth"]
+    if auth["kind"] == "header":
+        header = auth.get("header", "Authorization")
+        if header not in pin.headers:
+            raise ProbeConfigError(f"{probe['id']}: auth.header {header!r} is not permitted for this provider (pinned in code: {_format_pinned(pin.headers)})")
+    if auth["kind"] == "query":
+        for name in auth["params"]:
+            if name not in pin.params:
+                raise ProbeConfigError(f"{probe['id']}: auth.params name {name!r} is not permitted for this provider (pinned in code: {_format_pinned(pin.params)})")
+
+    for header_name in probe.get("extra_headers") or {}:
+        if header_name not in pin.headers:
+            raise ProbeConfigError(f"{probe['id']}: extra_headers name {header_name!r} is not permitted for this provider (pinned in code: {_format_pinned(pin.headers)})")
 
 
 def _probe_settings(probe: dict[str, Any], defaults: dict[str, Any]) -> tuple[str, int]:

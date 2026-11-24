@@ -16,8 +16,12 @@ Proves the behaviours that make a nightly live probe safe:
   breaking drift, and array element shapes are unioned;
 * addition of an object key is breaking by default;
 * the loader enforces read-only host/method/env restrictions, and pins every
-  provider id to its host - and every read-only POST to its exact URL and body -
-  in code, so a config edit cannot redirect a credential or issue a write;
+  provider id to its host, its credential env vars / header / param names, and
+  every read-only POST to its exact URL and body - all in code, so a config edit
+  cannot redirect a credential, read another provider's secret, or issue a
+  write;
+* array element-union widening (a concrete expected type met by a ``mixed``
+  actual, or a ``mixed`` actual adding a type) is drift, while narrowing is not;
 * one probe's unexpected exception cannot abort the run and always leaves a
   report;
 * record mode rewrites only the selected provider, in the committed format;
@@ -64,17 +68,27 @@ _RECORDED_AT = "2026-01-01T00:00:00+00:00"
 #: live in ``PROVIDER_HOST_PINS``; a production config cannot add one.
 _TEST_HOST_PINS = {"acme": "api.acme.test", "acme_ok": "api.acme.test", "boom": "api.boom.test"}
 
+#: Credentials pinned IN CODE for the same synthetic ids - the analogue of
+#: ``PROVIDER_CREDENTIAL_PINS`` for real providers.
+_TEST_CREDENTIAL_PINS = {
+    "acme": probe.CredentialPin(env_vars=frozenset({"ACME_TOKEN"})),
+    "acme_ok": probe.CredentialPin(env_vars=frozenset({"OK_TOKEN"})),
+    "boom": probe.CredentialPin(env_vars=frozenset({"SECOND_TOKEN"})),
+}
+
 
 @pytest.fixture(autouse=True)
 def _pin_test_provider_hosts(monkeypatch: Any) -> None:
-    """Give the synthetic test ids a code-level host pin.
+    """Give the synthetic test ids code-level host and credential pins.
 
-    The loader now rejects any provider id whose host is not pinned in the
-    script, which is exactly what stops a merged config edit from redirecting a
-    credential. Tests that use a made-up provider therefore pin it the same way
-    production does - in code, not in the config under test.
+    The loader rejects any provider id whose host or credential set is not
+    pinned in the script, which is exactly what stops a merged config edit from
+    redirecting a credential or reading another provider's secret. Tests that
+    use a made-up provider therefore pin it the same way production does - in
+    code, not in the config under test.
     """
     monkeypatch.setattr(probe, "PROVIDER_HOST_PINS", {**probe.PROVIDER_HOST_PINS, **_TEST_HOST_PINS})
+    monkeypatch.setattr(probe, "PROVIDER_CREDENTIAL_PINS", {**probe.PROVIDER_CREDENTIAL_PINS, **_TEST_CREDENTIAL_PINS})
 
 
 def _probe(**overrides: Any) -> dict[str, Any]:
@@ -245,6 +259,42 @@ def test_optional_key_absence_is_not_drift() -> None:
     expected = {"type": "object", "keys": {"id": {"type": "string"}, "name": {"type": "string", "optional": True}}}
     actual = {"type": "object", "keys": {"id": {"type": "string"}}}
     assert not probe.diff_shape(expected, actual)
+
+
+def test_array_element_type_widened_to_mixed_is_drift() -> None:
+    """A mixed actual must not satisfy a concrete expected element type.
+
+    Repro of the reported defect against the ``togetherai/models`` golden: its
+    items are pinned to ``object``, and ``[{...}, "oops"]`` used to pass because
+    ``object`` is one member of the actual ``mixed`` union.
+    """
+    golden = {"type": "array", "items": {"type": "object"}}
+    actual = probe.shape_of([{"id": "a"}, "oops"], 0, 1)
+    assert actual["items"] == {"type": "mixed", "types": ["object", "string"]}
+    assert probe.diff_shape(golden, actual) == [{"path": "$[]", "kind": "type_changed", "expected": "object", "actual": "mixed"}]
+
+
+def test_array_element_type_widened_with_null_is_drift() -> None:
+    """The same widening via a null element: ``[{...}, null]`` is drift too."""
+    golden = {"type": "array", "items": {"type": "object"}}
+    actual = probe.shape_of([{"id": "a"}, None], 0, 1)
+    assert actual["items"] == {"type": "mixed", "types": ["null", "object"]}
+    assert probe.diff_shape(golden, actual) == [{"path": "$[]", "kind": "type_changed", "expected": "object", "actual": "mixed"}]
+
+
+def test_mixed_actual_narrowing_to_an_expected_member_is_not_drift() -> None:
+    """Narrowing is allowed: the actual may lose a member the golden permits."""
+    expected = {"type": "array", "items": {"type": "mixed", "types": ["object", "string"]}}
+    actual = probe.shape_of([{"id": "a"}], 0, 1)
+    assert not probe.diff_shape(expected, actual)
+
+
+def test_mixed_actual_adding_a_type_is_drift() -> None:
+    """A mixed actual may never add a type the golden does not permit."""
+    expected = {"type": "array", "items": {"type": "mixed", "types": ["object", "string"]}}
+    actual = probe.shape_of([{"id": "a"}, 1], 0, 1)
+    assert actual["items"] == {"type": "mixed", "types": ["integer", "object"]}
+    assert probe.diff_shape(expected, actual) == [{"path": "$[]", "kind": "type_changed", "expected": "mixed", "actual": "mixed"}]
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +625,57 @@ def test_undeclared_extra_header_env_is_rejected(tmp_path: Path) -> None:
         probe.load_config(config)
 
 
+def test_credential_pin_rejects_another_providers_env_var(tmp_path: Path) -> None:
+    """Repro of the reported defect: used-vs-declared alone let this load.
+
+    A ``github`` probe that declares Slack's credential is internally
+    consistent, so it used to pass the loader and send Slack's token to
+    api.github.com. The per-provider credential pin rejects it at load.
+    """
+    github = _probe(
+        id="github",
+        request={"method": "GET", "url": "https://api.github.com/rate_limit"},
+        allowed_host="api.github.com",
+        auth={"kind": "bearer", "env": "MODULO_PROBE_SLACK_TOKEN"},
+        env_vars=["MODULO_PROBE_SLACK_TOKEN"],
+    )
+    config = _write_config(tmp_path, [github])
+    with pytest.raises(probe.ProbeConfigError, match="not permitted for this provider"):
+        probe.load_config(config)
+
+
+def test_credential_pin_rejects_an_undeclared_but_unpinned_env_var(tmp_path: Path) -> None:
+    config = _write_config(tmp_path, [_probe(auth={"kind": "bearer", "env": "ACME_OTHER_SECRET"}, env_vars=["ACME_OTHER_SECRET"])])
+    with pytest.raises(probe.ProbeConfigError, match="not permitted for this provider"):
+        probe.load_config(config)
+
+
+def test_credential_pin_rejects_an_unpinned_header_name(tmp_path: Path) -> None:
+    github = _probe(
+        id="github",
+        request={"method": "GET", "url": "https://api.github.com/rate_limit"},
+        allowed_host="api.github.com",
+        auth={"kind": "header", "env": "MODULO_PROBE_GITHUB_TOKEN", "header": "X-Slack-Only"},
+        env_vars=["MODULO_PROBE_GITHUB_TOKEN"],
+    )
+    config = _write_config(tmp_path, [github])
+    with pytest.raises(probe.ProbeConfigError, match="not permitted for this provider"):
+        probe.load_config(config)
+
+
+def test_credential_pin_rejects_an_unpinned_query_param_name(tmp_path: Path) -> None:
+    trello = _probe(
+        id="trello",
+        request={"method": "GET", "url": "https://api.trello.com/1/members/me"},
+        allowed_host="api.trello.com",
+        auth={"kind": "query", "params": {"org": "MODULO_PROBE_TRELLO_KEY"}},
+        env_vars=["MODULO_PROBE_TRELLO_KEY"],
+    )
+    config = _write_config(tmp_path, [trello])
+    with pytest.raises(probe.ProbeConfigError, match="not permitted for this provider"):
+        probe.load_config(config)
+
+
 def test_bad_header_template_is_rejected_at_load(tmp_path: Path) -> None:
     config = _write_config(tmp_path, [_probe(auth={"kind": "header", "env": "ACME_TOKEN", "header": "X-Key", "template": "{bogus}"})])
     with pytest.raises(probe.ProbeConfigError, match="may only reference"):
@@ -582,9 +683,11 @@ def test_bad_header_template_is_rejected_at_load(tmp_path: Path) -> None:
 
 
 def test_form_body_is_sent(tmp_path: Path, monkeypatch: Any) -> None:
-    monkeypatch.setenv("ACME_TOKEN", "test-token")
+    monkeypatch.setenv("MODULO_PROBE_MONDAY_TOKEN", "test-token")
     # The real monday pin is a JSON body; pin a form body here so the transport
-    # path for ``form`` is exercised without weakening the production pin.
+    # path for ``form`` is exercised without weakening the production pin. The
+    # credential names are monday's real ones, because the credential pin is
+    # keyed on the provider id and is not patched for a real provider.
     monkeypatch.setattr(
         probe,
         "READ_ONLY_POST_ENDPOINTS",
@@ -594,6 +697,8 @@ def test_form_body_is_sent(tmp_path: Path, monkeypatch: Any) -> None:
         id="monday",
         request={"method": "POST", "url": "https://api.monday.com/v2", "form": {"query": "{ me { id } }"}},
         allowed_host="api.monday.com",
+        auth={"kind": "bearer", "env": "MODULO_PROBE_MONDAY_TOKEN"},
+        env_vars=["MODULO_PROBE_MONDAY_TOKEN"],
     )
     config = _write_config(tmp_path, [form_probe])
     goldens = tmp_path / "goldens.json"
