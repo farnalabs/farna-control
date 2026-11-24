@@ -441,6 +441,42 @@ describe('JsonViewer override contract', () => {
     expect(new Set(expandedIds).size).toBe(2)
   })
 
+  it('gives two long nodes inside ONE viewer distinct ids (FAR-2719)', async () => {
+    // A single viewer can hold more than one long string (a realistic
+    // run-output/config payload). Keying the ids on the viewer alone would
+    // emit duplicate data-testid values for every long node after the first,
+    // so the id must also identify the value node within the tree.
+    const twoLong = { agent_stdout: longValue, agent_stderr: 'B'.repeat(1200) }
+    const wrapper = mount(JsonViewer, { props: { data: twoLong } })
+
+    const ids = (re: RegExp) =>
+      wrapper
+        .findAll('[data-testid]')
+        .map((el) => el.attributes('data-testid') ?? '')
+        .filter((id) => re.test(id))
+
+    const truncatedIds = ids(/^json-viewer-string-truncated-/)
+    expect(truncatedIds).toHaveLength(2)
+    expect(new Set(truncatedIds).size).toBe(2)
+
+    const expandIds = ids(/^json-viewer-string-expand-/)
+    expect(expandIds).toHaveLength(2)
+    expect(new Set(expandIds).size).toBe(2)
+
+    for (const toggle of wrapper.findAll('[data-testid^="json-viewer-string-expand-"]')) {
+      await toggle.trigger('click')
+    }
+    await nextTick()
+
+    const expandedIds = ids(/^json-viewer-string-expanded-/)
+    expect(expandedIds).toHaveLength(2)
+    expect(new Set(expandedIds).size).toBe(2)
+
+    const collapseIds = ids(/^json-viewer-string-collapse-/)
+    expect(collapseIds).toHaveLength(2)
+    expect(new Set(collapseIds).size).toBe(2)
+  })
+
   it('short string values are not truncated', () => {
     const wrapper = mountSimple()
     expect(wrapper.find('[data-testid^="json-viewer-string-truncated-"]').exists()).toBe(false)

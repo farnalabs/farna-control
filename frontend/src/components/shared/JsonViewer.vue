@@ -223,6 +223,7 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
   if (full.length <= props.stringTruncateLength) return defaultValue
 
   const path = node.path
+  const nodeUid = `${viewerUid}-${path}`
   const expanded = expandedPaths.value.has(path)
   const toggle = (event: MouseEvent) => {
     event.stopPropagation()
@@ -233,14 +234,14 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
   }
 
   if (expanded) {
-    return h('span', { class: 'json-viewer-string-expanded', 'data-testid': `json-viewer-string-expanded-${viewerUid}` }, [
+    return h('span', { class: 'json-viewer-string-expanded', 'data-testid': `json-viewer-string-expanded-${nodeUid}` }, [
       h('span', { class: 'json-viewer-string-expanded-text', role: 'status' }, full),
       h(
         'button',
         {
           type: 'button',
           class: 'json-viewer-string-toggle',
-          'data-testid': `json-viewer-string-collapse-${viewerUid}`,
+          'data-testid': `json-viewer-string-collapse-${nodeUid}`,
           'aria-expanded': 'true',
           'aria-label': t('components.JsonViewer.collapse_string'),
           onClick: toggle,
@@ -250,14 +251,14 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
     ])
   }
 
-  return h('span', { class: 'json-viewer-string-truncated', 'data-testid': `json-viewer-string-truncated-${viewerUid}` }, [
+  return h('span', { class: 'json-viewer-string-truncated', 'data-testid': `json-viewer-string-truncated-${nodeUid}` }, [
     h('span', { class: 'json-viewer-string-truncated-text' }, full.slice(0, props.stringTruncateLength)),
     h(
       'button',
       {
         type: 'button',
         class: 'json-viewer-string-toggle',
-        'data-testid': `json-viewer-string-expand-${viewerUid}`,
+        'data-testid': `json-viewer-string-expand-${nodeUid}`,
         'aria-expanded': 'false',
         'aria-label': t('components.JsonViewer.expand_string'),
         onClick: toggle,
