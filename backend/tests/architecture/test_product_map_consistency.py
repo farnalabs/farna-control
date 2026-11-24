@@ -99,6 +99,33 @@ _TESTID_LITERAL = re.compile(
     r"|:data-testid=\"`([a-zA-Z0-9_-]+)`\""
 )
 
+#: A testid is not only ever the ``data-testid`` attribute: shared components
+#: accept it as a PROP and forward it to the rendered control, e.g.
+#: ``<Pagination prev-testid="runs-list-prev-page" />`` or
+#: ``<DataTable row-testid="admin-errors-row" />``. That value ships as a real
+#: testid but carries no ``data-testid`` spelling, so the literal scan above is
+#: blind to it and a documented element fails ``test_element_testids_exist_in_frontend``
+#: even though the surface exists. Collect any attribute name ending in
+#: ``testid`` or ``test-id`` as well. Three static shapes count:
+#:
+#: - a plain attribute value ``x-testid="lit"`` (either quote style);
+#: - a bound string literal ``:x-testid="'lit'"`` / ``:x-testid='"lit"'`` /
+#:   ``:x-testid="`lit`"``;
+#: - a simple ternary whose BOTH branches are string literals, e.g.
+#:   ``:row-testid="open ? 'row-open' : 'row-closed'"``.
+#:
+#: A computed binding (an identifier, concatenation, interpolated template
+#: literal, or a ternary with a dynamic branch) evaluates to a value the scanner
+#: cannot know, so it is never collected - the guard stays conservative.
+_TESTID_ATTR_NAME = r"[A-Za-z][\w-]*(?:testid|test-id)"
+_TESTID_ATTR_STATIC = re.compile(rf"""(?<![\w.:@-]){_TESTID_ATTR_NAME}\s*=\s*(?:"([a-zA-Z0-9_-]+)"|'([a-zA-Z0-9_-]+)')""")
+_TESTID_ATTR_BOUND = re.compile(rf"""(?<![\w.:@-])(?:v-bind:|:){_TESTID_ATTR_NAME}\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+_TESTID_STRING_LITERAL = re.compile(r"""^(?:'([a-zA-Z0-9_-]+)'|"([a-zA-Z0-9_-]+)"|`([a-zA-Z0-9_-]+)`)$""")
+_TESTID_TERNARY = re.compile(
+    r"""^[^?:]+\?\s*(?:'([a-zA-Z0-9_-]+)'|"([a-zA-Z0-9_-]+)"|`([a-zA-Z0-9_-]+)`)"""
+    r"""\s*:\s*(?:'([a-zA-Z0-9_-]+)'|"([a-zA-Z0-9_-]+)"|`([a-zA-Z0-9_-]+)`)$"""
+)
+
 #: The repo's element-coverage guard above and Playwright's ``getByTestId``
 #: both key on the exact attribute ``data-testid`` (``_TESTID_LITERAL``
 #: deliberately matches only that spelling). A ``data-test-id`` typo renders a
@@ -230,17 +257,80 @@ def _load_elements() -> dict[str, list[dict]]:
     return elements
 
 
+def _static_testids_in_expression(expression: str) -> set[str]:
+    """The literal testid(s) a bound attribute expression statically names.
+
+    Returns the empty set for anything computed (an identifier, a concatenation,
+    an interpolated template literal, a ternary with a dynamic branch), so a
+    dynamic value is never mistaken for a shipped literal.
+    """
+    stripped = expression.strip()
+    literal = _TESTID_STRING_LITERAL.match(stripped)
+    if literal is not None:
+        return {group for group in literal.groups() if group}
+    ternary = _TESTID_TERNARY.match(stripped)
+    if ternary is not None:
+        return {group for group in ternary.groups() if group}
+    return set()
+
+
+def _static_testids_in_text(text: str) -> set[str]:
+    """Every statically-known testid literal in one source file's text.
+
+    Unions the exact ``data-testid`` literal forms with the testid-valued
+    component-prop forms (see ``_TESTID_ATTR_STATIC`` / ``_TESTID_ATTR_BOUND``),
+    so a testid forwarded through a prop is recognised as shipped.
+    """
+    found: set[str] = set()
+    for match in _TESTID_LITERAL.finditer(text):
+        found.update(group for group in match.groups() if group)
+    for match in _TESTID_ATTR_STATIC.finditer(text):
+        found.update(group for group in match.groups() if group)
+    for match in _TESTID_ATTR_BOUND.finditer(text):
+        expression = match.group(1) if match.group(1) is not None else match.group(2)
+        found.update(_static_testids_in_expression(expression))
+    return found
+
+
 def _static_testids_in_frontend() -> frozenset[str]:
-    """Every static ``data-testid`` literal shipped anywhere in the frontend."""
+    """Every static testid literal shipped anywhere in the frontend."""
     src = set()
     for path in (REPO_ROOT / "frontend" / "src").rglob("*"):
         if path.suffix not in {".vue", ".ts", ".js"}:
             continue
         try:
-            src.update(t for match in _TESTID_LITERAL.findall(path.read_text(encoding="utf-8")) for t in match if t)
+            src.update(_static_testids_in_text(path.read_text(encoding="utf-8")))
         except (OSError, UnicodeDecodeError):
             continue
     return frozenset(src)
+
+
+def test_static_testid_scanner_recognises_prop_forms():
+    """Positive control: each accepted testid-prop shape is collected."""
+    cases = {
+        '<Pagination prev-testid="runs-list-prev-page" />': "runs-list-prev-page",
+        "<Thing x-test-id='thing-x' />": "thing-x",
+        """<Pagination :prev-testid="'runs-list-prev-page'" />""": "runs-list-prev-page",
+        """<Pagination :prev-testid='"runs-list-prev-page"' />""": "runs-list-prev-page",
+        '<Pagination :prev-testid="`runs-list-prev-page`" />': "runs-list-prev-page",
+        """<Thing :row-testid="isOpen ? 'row-open' : 'row-closed'" />""": {"row-open", "row-closed"},
+    }
+    for source, expected in cases.items():
+        collected = _static_testids_in_text(source)
+        wanted = {expected} if isinstance(expected, str) else expected
+        assert wanted <= collected, f"expected {sorted(wanted)} from {source!r}, got {sorted(collected)}"
+
+
+def test_static_testid_scanner_ignores_computed_values():
+    """Negative control: a computed testid is never collected as a literal."""
+    cases = (
+        """<Pagination :prev-testid="computedTestid" />""",
+        '<Pagination :prev-testid="`page-${n}`" />',
+        """<Pagination :prev-testid="'a' + suffix" />""",
+        """<Thing :row-testid="isOpen ? 'row-open' : dynamic" />""",
+    )
+    for source in cases:
+        assert not _static_testids_in_text(source), f"computed value wrongly collected from {source!r}"
 
 
 def test_element_entries_have_core_fields():
