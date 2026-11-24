@@ -74,14 +74,21 @@ _SPEC_RE = re.compile(r"^(?P<file>frontend/(?:src|tests)/[A-Za-z0-9_./-]+\.spec\
 #: modifier chain (``it.skip``, ``it.each([...])(``, ``test.describe``) first.
 _TS_TEST_CALL_RE = re.compile(r"\b(?:it|test)(?:\.[A-Za-z_$][\w$]*(?:\s*\((?:[^()]|\([^()]*\))*\))?)*\s*\(\s*(?P<quote>['\"`])(?P<name>(?:\\.|(?!\1).)*)\1")
 
+#: A ``describe`` block that is disabled as a whole. Vitest/Playwright skip every
+#: test inside it, so a test call inside one proves nothing even though the call
+#: itself carries no ``.skip`` modifier.
+_DESCRIBE_SKIP_RE = re.compile(r"\bdescribe\s*\.\s*(?:skip|skipIf)\s*\(")
+
 #: Fenced markdown code blocks and HTML comments: documenting the convention
 #: must not satisfy it.
 _FENCE_RE = re.compile(r"(?P<fence>```|~~~).*?(?P=fence)", re.DOTALL)
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 #: Decorators and body openers that mean "this test does not run (or is expected
-#: to fail)", so it cannot prove anything.
-_SKIP_MARKER_RE = re.compile(r"^pytest\.mark\.(?:skip|skipif|xfail)\b")
+#: to fail)", so it cannot prove anything. Covers the pytest spelling AND the
+#: ``unittest`` spelling (``@unittest.skip`` / ``skipIf`` / ``skipUnless``), which
+#: the class-based suites use and which the pytest-only pattern silently missed.
+_SKIP_MARKER_RE = re.compile(r"^(?:pytest\.mark\.(?:skip|skipif|xfail)|unittest\.skip(?:If|Unless)?)\b")
 _SKIP_BODY_CALLS = frozenset({"pytest.skip", "pytest.xfail"})
 
 
@@ -185,14 +192,16 @@ def _skip_marker(node: ast.AST) -> str | None:
     return text if _SKIP_MARKER_RE.match(text) else None
 
 
-def _module_pytestmark_markers(tree: ast.Module) -> list[ast.AST]:
-    """The marker expressions assigned to module-level ``pytestmark``.
+def _pytestmark_markers(body: list[ast.stmt]) -> list[ast.AST]:
+    """The marker expressions assigned to a ``pytestmark`` in *body*.
 
-    A module-level ``pytestmark`` applies to every test in the module, so a
-    module carrying it silently skips (or xfails) all of its tests. It may be a
-    single marker or a list of markers.
+    ``pytestmark`` applies to every test in the scope it is assigned in: at
+    module level it skips (or xfails) the whole module, and inside a class body it
+    skips every method of that class. Both spellings matter - a class-level
+    ``pytestmark`` was where a skipped test slipped through. It may be a single
+    marker or a list of markers.
     """
-    for node in tree.body:
+    for node in body:
         value: ast.expr | None = None
         targets: list[ast.expr] = []
         if isinstance(node, ast.Assign):
@@ -215,9 +224,9 @@ def _skip_reason(
     """Why *fn* cannot prove anything (skipped/xfail), or ``None``.
 
     Every scope pytest lets a skip attach to is inspected: the function's own
-    decorators, the enclosing class's decorators, the module-level
-    ``pytestmark`` assignment, and a ``pytest.skip()``/``xfail()`` opening the
-    body.
+    decorators (pytest OR unittest spelling), the enclosing class's decorators,
+    a ``pytestmark`` in the class body, the module-level ``pytestmark``
+    assignment, and a ``pytest.skip()``/``xfail()`` opening the body.
     """
     for decorator in fn.decorator_list:
         text = _skip_marker(decorator)
@@ -228,7 +237,11 @@ def _skip_reason(
             text = _skip_marker(decorator)
             if text is not None:
                 return f"its class is decorated with @{text.split('(')[0]}"
-    for marker in _module_pytestmark_markers(tree):
+        for marker in _pytestmark_markers(owner_class.body):
+            text = _skip_marker(marker)
+            if text is not None:
+                return f"its class sets pytestmark = {text.split('(')[0]}"
+    for marker in _pytestmark_markers(tree.body):
         text = _skip_marker(marker)
         if text is not None:
             return f"its module sets pytestmark = {text.split('(')[0]}"
@@ -263,12 +276,69 @@ def _verify_pytest_ref(ref: str, match: re.Match[str], module: Path) -> str | No
     return None
 
 
+def _matching_paren(source: str, open_index: int) -> int | None:
+    """Index of the ``)`` closing the ``(`` at *open_index*.
+
+    Quote- and comment-aware: a ``)`` inside a string, a ``//`` comment or a
+    ``/* */`` block comment must not close the call early (an apostrophe in a
+    comment is the common case in these specs).
+    """
+    depth = 0
+    index = open_index
+    quote: str | None = None
+    while index < len(source):
+        char = source[index]
+        if quote is not None:
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+        elif char in "'\"`":
+            quote = char
+        elif char == "/" and source.startswith("//", index):
+            newline = source.find("\n", index)
+            index = len(source) if newline == -1 else newline
+            continue
+        elif char == "/" and source.startswith("/*", index):
+            end = source.find("*/", index + 2)
+            index = len(source) if end == -1 else end + 1
+            continue
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _skipped_describe_ranges(source: str) -> list[tuple[int, int]]:
+    """Character ranges spanned by a ``describe.skip(...)`` call's arguments.
+
+    A test nested anywhere inside a disabled ``describe`` block never runs, even
+    when its own call is a plain ``it(...)``. The block is delimited by matching
+    the wrapper call's parentheses so only its real body counts.
+    """
+    ranges: list[tuple[int, int]] = []
+    for match in _DESCRIBE_SKIP_RE.finditer(source):
+        open_index = source.find("(", match.start())
+        if open_index == -1:
+            continue
+        close_index = _matching_paren(source, open_index)
+        if close_index is not None:
+            ranges.append((open_index, close_index))
+    return ranges
+
+
 def _verify_spec_ref(ref: str, match: re.Match[str], module: Path) -> str | None:
     try:
         source = module.read_text(encoding="utf-8")
     except OSError as exc:
         return f"{ref!r} names a spec that cannot be read: {exc}"
     name = match.group("name").strip()
+    skipped_ranges = _skipped_describe_ranges(source)
     found = False
     for call in _TS_TEST_CALL_RE.finditer(source):
         text = call.group(0)
@@ -280,6 +350,8 @@ def _verify_spec_ref(ref: str, match: re.Match[str], module: Path) -> str | None
         found = True
         if re.search(r"\.(?:skip|fixme|todo)\b", prefix):
             return f"{ref!r} names a spec test that cannot prove anything: it is marked skipped/fixme/todo"
+        if any(start <= call.start() <= end for start, end in skipped_ranges):
+            return f"{ref!r} names a spec test that cannot prove anything: it sits inside a describe.skip block"
     if not found:
         return f"{ref!r} names a test title that is not defined in {match.group('file')}"
     return None

@@ -935,6 +935,33 @@ def _resolve_feature_path(raw: str, entry: Entry, index: TestIndex) -> str | Non
     return None
 
 
+_ID_SUFFIX_RE = re.compile(r"^(?P<stem>.+)-(?P<num>\d+)$")
+
+
+def _allocate_marker_id(stem: str, used: set[str]) -> str:
+    """The first ``<stem>-NN`` id not already taken anywhere in the product map.
+
+    A POSITIONAL id (``<stem>-<ordinal>``) collided the moment a behaviour was
+    inserted mid-entry: the new bullet inherited the ordinal of the bullet it
+    pushed down, which still carried that id in its own marker, so
+    ``--write-markers`` emitted a duplicate (``probe-01, probe-02, probe-02,
+    probe-03``) and could never repair the map again. Filling the first free
+    suffix keeps every id unique wherever the bullet lands, and reuses a gap left
+    by a removed behaviour before opening a new number.
+    """
+    taken: set[int] = set()
+    for name in used:
+        match = _ID_SUFFIX_RE.match(name)
+        if match is not None and match.group("stem") == stem:
+            taken.add(int(match.group("num")))
+    number = 1
+    while True:
+        candidate = f"{stem}-{number:02d}"
+        if number not in taken and candidate not in used:
+            return candidate
+        number += 1
+
+
 def assign_markers(root: Path) -> dict[str, int]:
     """Add a marker to every behaviour that lacks one; returns a per-entry count.
 
@@ -947,20 +974,40 @@ def assign_markers(root: Path) -> dict[str, int]:
     entries = load_entries(root)
     derived: dict[tuple[str, int], tuple[list[str], str, bool]] = {}
     candidate_modules: set[str] = set()
+
+    # Parse each entry once and seed ``used_ids`` from every marker already in the
+    # map (across entries, so two files sharing a stem cannot collide either).
+    parsed: list[tuple[Entry, list[str], list[tuple[int, int]]]] = []
+    used_ids: set[str] = set()
     for entry in entries:
         lines = entry.path.read_text(encoding="utf-8").splitlines()
         _fm, fm_end = _frontmatter(lines)
         heading = next((i for i in range(fm_end, len(lines)) if _HEADING_RE.match(lines[i])), None)
         if heading is None:
             continue
-        for ordinal, (first, last) in enumerate(_behaviour_blocks(lines, heading + 1), start=1):
+        blocks = _behaviour_blocks(lines, heading + 1)
+        parsed.append((entry, lines, blocks))
+        for first, last in blocks:
+            for line in lines[first : last + 1]:
+                found = MARKER_RE.search(line)
+                if found is not None:
+                    used_ids.add(found.group("id"))
+
+    for entry, lines, blocks in parsed:
+        stem = entry.path.stem
+        for ordinal, (first, last) in enumerate(blocks, start=1):
             block = lines[first : last + 1]
-            marker_id = f"{entry.path.stem}-{ordinal:02d}"
+            found = next((match for line in block if (match := MARKER_RE.search(line)) is not None), None)
+            if found is not None:
+                marker_id = found.group("id")
+            else:
+                marker_id = _allocate_marker_id(stem, used_ids)
+                used_ids.add(marker_id)
             body = "\n".join(line for line in block if not MARKER_RE.search(line))
             behaviour = Behaviour(id=marker_id, ticked=block[0][3].lower() == "x", text=body, refs=(), start_line=first + 1, end_line=last + 1)
             refs, _notes = derive_marker_refs(behaviour, entry, index, entry_hints(entry))
             candidate_modules.update(ref.partition("::")[0] for ref in refs if ref.endswith(".py"))
-            derived[(entry.rel, ordinal)] = (refs, marker_id, any(MARKER_RE.search(line) for line in block))
+            derived[(entry.rel, ordinal)] = (refs, marker_id, found is not None)
 
     modules = sorted(rel for rel in candidate_modules if index.has_module(rel))
     # The shared lenses run over every candidate module, so a derived node

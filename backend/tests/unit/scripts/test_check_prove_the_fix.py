@@ -47,6 +47,8 @@ _PRODUCT_FILE = "backend/src/farna/thing.py"
 _PROBE_SOURCE = '''\
 """Fake pytest module used by the prove-the-fix unit tests."""
 
+import unittest
+
 import pytest
 
 
@@ -80,6 +82,19 @@ class TestGroup:
 @pytest.mark.skip
 class TestSkippedGroup:
     def test_member_of_skipped_class(self):
+        assert True
+
+
+class TestClassBodyMarked:
+    pytestmark = pytest.mark.skip(reason="class harness unavailable")
+
+    def test_member_of_class_body_pytestmark(self):
+        assert True
+
+
+class TestUnittestSkipped:
+    @unittest.skip("legacy suite")
+    def test_member_unittest_skip(self):
         assert True
 '''
 
@@ -123,6 +138,18 @@ describe('ActionRow', () => {
 })
 """
 
+_DISABLED_SPEC_MODULE = "frontend/src/__tests__/DisabledBlock.spec.ts"
+_DISABLED_SPEC_SOURCE = """\
+import { describe, expect, it } from 'vitest'
+
+// A whole block parked behind a disabled describe: nothing inside it runs.
+describe.skip('DisabledBlock', () => {
+  it('never runs in CI', () => {
+    expect(true).toBe(true)
+  })
+})
+"""
+
 
 def _make_repo(root: Path) -> Path:
     """A minimal repo holding both test trees the checker resolves against."""
@@ -132,6 +159,7 @@ def _make_repo(root: Path) -> Path:
     (root / _MARKED_MODULE).write_text(_MARKED_SOURCE, encoding="utf-8")
     (root / _LIST_MARKED_MODULE).write_text(_LIST_MARKED_SOURCE, encoding="utf-8")
     (root / _SPEC_MODULE).write_text(_SPEC_SOURCE, encoding="utf-8")
+    (root / _DISABLED_SPEC_MODULE).write_text(_DISABLED_SPEC_SOURCE, encoding="utf-8")
     return root
 
 
@@ -278,6 +306,22 @@ def test_a_member_skip_decorator_inside_a_clean_class_is_rejected(tmp_path: Path
     assert "@pytest.mark.skipif" in problem
 
 
+def test_a_unittest_skip_decorator_is_rejected(tmp_path: Path):
+    """The class-based suites spell it ``@unittest.skip``, not ``@pytest.mark``."""
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(f"{_PROBE_MODULE}::TestUnittestSkipped::test_member_unittest_skip", root, _changed(_PROBE_MODULE))
+    assert problem is not None
+    assert "it is decorated with @unittest.skip" in problem
+
+
+def test_a_class_body_pytestmark_is_rejected(tmp_path: Path):
+    """A ``pytestmark`` assigned in the CLASS body skips every method of it."""
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(f"{_PROBE_MODULE}::TestClassBodyMarked::test_member_of_class_body_pytestmark", root, _changed(_PROBE_MODULE))
+    assert problem is not None
+    assert "its class sets pytestmark = pytest.mark.skip" in problem
+
+
 def test_a_module_level_pytestmark_is_rejected(tmp_path: Path):
     """The real regression: ``pytestmark = pytest.mark.skipif(...)`` at module level."""
     root = _make_repo(tmp_path)
@@ -320,6 +364,14 @@ def test_a_skipped_frontend_spec_title_is_rejected(tmp_path: Path):
     problem = _module.verify_ref(f"{_SPEC_MODULE}::is paused for now", root, _changed(_SPEC_MODULE))
     assert problem is not None
     assert "skipped/fixme/todo" in problem
+
+
+def test_a_test_inside_a_skipped_describe_block_is_rejected(tmp_path: Path):
+    """A plain ``it(...)`` inside ``describe.skip(...)`` never runs either."""
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(f"{_DISABLED_SPEC_MODULE}::never runs in CI", root, _changed(_DISABLED_SPEC_MODULE))
+    assert problem is not None
+    assert "describe.skip" in problem
 
 
 # --- a named test that does not exist --------------------------------------

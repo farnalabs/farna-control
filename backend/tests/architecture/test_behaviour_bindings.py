@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import functools
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -51,6 +52,7 @@ from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -473,3 +475,107 @@ def test_regeneration_runs_against_a_throwaway_product_map(tmp_path: Path):
     assert "probe-02" in baseline["entries"], baseline
     report = (tmp_path / _bindings.REPORT_RELPATH).read_text(encoding="utf-8")
     assert "`probe-02`" in report, report
+
+
+def test_write_markers_allocates_a_unique_id_for_a_mid_entry_insert(tmp_path: Path):
+    """A bullet inserted mid-entry must not duplicate the id below it.
+
+    ``assign_markers`` numbered an unmarked bullet by its POSITION
+    (``<stem>-<ordinal>``). Inserting a bullet in the middle therefore handed the
+    new bullet the ordinal of the bullet it pushed down, which still carried that
+    id in its own marker: ``--write-markers`` emitted two ``probe-02`` markers
+    (``probe-01, probe-02, probe-02, probe-03``) and could never repair the map
+    again. The regenerator now allocates the first unused suffix, so the inserted
+    bullet takes ``probe-04`` and every id stays unique.
+
+    The real CLI runs in a subprocess (as the regeneration test does) so the
+    vacuity-lens module imported for the temp tree cannot poison this process.
+    """
+    _probe_product_map(tmp_path)
+    entry = tmp_path / _bindings.PRODUCT_MAP_DIR / "probe.md"
+    entry.write_text(
+        "---\nid: " + "feat-" + "probe" + "\nstatus: partial\n---\n\n# Probe\n\n## Behaviors\n\n"
+        "- [x] the first probe behaviour\n"
+        "      <!-- behaviour: probe-01 | tests: backend/tests/unit/test_probe.py::test_probe -->\n"
+        "- [x] an inserted behaviour that carried no marker when it landed\n"
+        "- [x] the second probe behaviour\n"
+        "      <!-- behaviour: probe-02 | tests: none -->\n"
+        "- [x] the third probe behaviour\n"
+        "      <!-- behaviour: probe-03 | tests: none -->\n\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(  # noqa: S603 - fixed argv; the repo's own script, no shell
+        [sys.executable, str(REPO_ROOT / "scripts" / "run_behaviour_bindings_baseline.py"), "--root", str(tmp_path), "--write-markers"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert completed.returncode == 0, f"--write-markers exited {completed.returncode}\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+    ids = re.findall(r"<!-- behaviour: (?P<id>[^ ]+) \|", entry.read_text(encoding="utf-8"))
+    assert ids == ["probe-01", "probe-04", "probe-02", "probe-03"], f"the inserted bullet must take the first unused suffix, got {ids!r}"
+    assert len(ids) == len(set(ids)), f"the regenerator emitted duplicate behaviour ids: {ids!r}"
+
+
+# ---------------------------------------------------------------------------
+# The workflow properties this gate depends on
+# ---------------------------------------------------------------------------
+def _load_workflow(filename: str) -> dict:
+    """Parse a workflow file, tolerating PyYAML's boolean parse of the ``on`` key."""
+    path = REPO_ROOT / ".github" / "workflows" / filename
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert isinstance(data, dict), f".github/workflows/{filename} is not a YAML mapping"
+    return data
+
+
+def _on_block(workflow: dict) -> dict:
+    on = workflow.get("on", workflow.get(True))
+    assert isinstance(on, dict), "the workflow declares no trigger mapping"
+    return on
+
+
+def _job_named(workflow: dict, name: str) -> dict:
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict), "the workflow declares no jobs mapping"
+    for job in jobs.values():
+        if isinstance(job, dict) and job.get("name") == name:
+            return job
+    raise AssertionError(f"no job named {name!r}")
+
+
+def test_prove_the_fix_workflow_reruns_on_a_body_edit_without_a_path_filter():
+    """The marker gate must fire on a body edit, on every PR.
+
+    The gate's fix is a line added to the PR BODY, so it only works if the
+    workflow listens for ``edited`` - and a ``paths:`` filter would skip exactly
+    the product PRs the check exists for. Both are load-bearing: without them the
+    check is green because it never ran.
+    """
+    workflow = _load_workflow("prove-the-fix.yml")
+    pull_request = _on_block(workflow).get("pull_request")
+    assert isinstance(pull_request, dict), "prove-the-fix.yml must trigger on pull_request"
+    types = pull_request.get("types")
+    assert isinstance(types, list), "prove-the-fix.yml pull_request must declare an explicit types list"
+    assert "edited" in types, f"prove-the-fix.yml must re-run when the PR body is edited, got types={types!r}"
+    assert "paths" not in pull_request, "prove-the-fix.yml must not carry a paths: filter - the gate applies to every PR"
+    assert "paths-ignore" not in pull_request, "prove-the-fix.yml must not carry a paths-ignore: filter - it would skip product PRs"
+
+
+def test_backend_lint_job_runs_the_behaviour_bindings_gate_unconditionally():
+    """The bindings gate runs on every PR: no job-level ``if:``/``needs:``.
+
+    ``docs/product-map`` is the specification, so a PR that skips this gate could
+    let a behaviour go unbound. A job-level ``if:`` or ``needs:`` is how such a
+    gate silently stops running (the same failure class as a ``paths:`` filter),
+    so the job must be unconditional and must actually invoke the test module.
+    """
+    workflow = _load_workflow("ci.yml")
+    job = _job_named(workflow, "Lint (Backend)")
+    assert "if" not in job, "the Lint (Backend) job must not carry a job-level if: - it would stop running on some PRs"
+    assert "needs" not in job, "the Lint (Backend) job must not carry a job-level needs: - a skipped dependency would skip the gate"
+    steps = job.get("steps") or []
+    runs = " ".join(str(step.get("run", "")) for step in steps if isinstance(step, dict))
+    assert "tests/architecture/test_behaviour_bindings.py" in runs, "the Lint (Backend) job must run tests/architecture/test_behaviour_bindings.py"
