@@ -7,7 +7,7 @@ const getMock = vi.hoisted(() => vi.fn())
 // FAR-2723: the route decides whether the layout title is the page heading or
 // a context label above a nested editor that renders its own <h1>.
 const routeState = vi.hoisted(() => ({
-  name: 'admin-runners-profiles' as string,
+  name: 'admin-runners-profiles' as string | undefined,
   path: '/admin/runners/profiles',
   params: {} as Record<string, string>,
   query: {} as Record<string, string>,
@@ -120,6 +120,18 @@ describe('AdminRunnersView', () => {
       const headings = wrapper.findAll('h1')
       expect(headings).toHaveLength(1)
       expect(headings[0].text()).toBe('Runners')
+    })
+
+    it('keeps the Runners title as the heading when the matched route has no name', async () => {
+      routeState.name = undefined
+
+      const wrapper = mountWithEditorChild()
+      await flushPromises()
+
+      const headings = wrapper.findAll('h1')
+      expect(headings).toHaveLength(1)
+      expect(headings[0].text()).toBe('Runners')
+      expect(wrapper.findAll('[data-page-heading]')).toHaveLength(1)
     })
 
     it('renders exactly one <h1> on the new-profile editor route — the form title, not the layout title', async () => {
