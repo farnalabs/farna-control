@@ -1432,7 +1432,7 @@ jobs:
           LAUNCH_RC=1
           while [ "$launch_attempt" -lt "$LAUNCH_ATTEMPTS" ]; do
             launch_attempt=$(( launch_attempt + 1 ))
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --env ALEMBIC_REHEARSAL=1 \
@@ -1441,6 +1441,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/prerehearse-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             if grep -qi 'failed to reach desired start state' \
@@ -1749,7 +1758,7 @@ jobs:
             # --detach means RC=0 iff creation succeeded, so a retried attempt
             # does not leak a second machine; the single destroy below is
             # sufficient to clean up the one machine this loop creates.
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --detach \
@@ -1757,6 +1766,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/premigrate-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             # FAR-486: even with --detach, flyctl can still exit non-zero with
@@ -2668,7 +2686,7 @@ jobs:
           LAUNCH_RC=1
           while [ "$launch_attempt" -lt "$LAUNCH_ATTEMPTS" ]; do
             launch_attempt=$(( launch_attempt + 1 ))
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --env ALEMBIC_REHEARSAL=1 \
@@ -2677,6 +2695,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/prerehearse-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             if grep -qi 'failed to reach desired start state' \
@@ -3024,7 +3051,7 @@ jobs:
             # --detach means RC=0 iff creation succeeded, so a retried attempt
             # does not leak a second machine; the single destroy below is
             # sufficient to clean up the one machine this loop creates.
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --detach \
@@ -3032,6 +3059,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/premigrate-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             # FAR-486: even with --detach, flyctl can still exit non-zero with
@@ -3520,13 +3556,20 @@ jobs:
             done
             echo "TIMEOUT"; return 1
           }
-          if wait_healthy "https://control.farna.dev" "$HEALTH_GATE_MIN"; then
+          # FAR-2656: verify the app this job actually deployed. The production
+          # target moved to farna-control, but the custom domain
+          # (control.farna.dev) stays on the old app until the domain move, so
+          # resolving through the domain here would read the old app in that
+          # window and could report a false green for a broken new release.
+          # The app's own <app>.fly.dev host always serves the machine this job
+          # just rolled out.
+          if wait_healthy "https://farna-control.fly.dev" "$HEALTH_GATE_MIN"; then
             echo "deploy_healthy=true" >> "$GITHUB_OUTPUT"
             echo "rolled_back=false" >> "$GITHUB_OUTPUT"
-            echo "control.farna.dev healthy - new release deployed."
+            echo "farna-control.fly.dev healthy - new release deployed."
             exit 0
           fi
-          echo "::error::control.farna.dev not healthy after deploy - rolling back to last complete release"
+          echo "::error::farna-control.fly.dev not healthy after deploy - rolling back to last complete release"
           LAST_GOOD=$(fly releases --app farna-control --json 2>/dev/null | python3 -c 'import json,sys
           try:
               rels=json.load(sys.stdin)
@@ -3559,7 +3602,10 @@ jobs:
         shell: pwsh
         run: |
           $expectedSha = "${{ steps.git.outputs.git-sha }}".Substring(0, 7)
-          $info = curl -s -m 10 "https://control.farna.dev/api/v1/deployment" 2>$null
+          # FAR-2656: the deployed-SHA check must read the app this job
+          # deployed (farna-control), not the custom domain, which still points
+          # at the old app until the domain move.
+          $info = curl -s -m 10 "https://farna-control.fly.dev/api/v1/deployment" 2>$null
           if (-not $info) { Write-Host "No deployment info"; exit 1 }
           $deployInfo = $info | ConvertFrom-Json
           $deployedSha = if ($deployInfo.git_sha) { $deployInfo.git_sha.Substring(0, 7) } else { "?" }
@@ -3567,7 +3613,7 @@ jobs:
             Write-Host "SHA MISMATCH: deployed=$deployedSha expected=$expectedSha"
             exit 1
           }
-          Write-Host "control.farna.dev SHA match: $deployedSha"
+          Write-Host "farna-control.fly.dev SHA match: $deployedSha"
           "deployed_sha=$deployedSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       # FAR-954: annotate the deployed SHA on the job log so the Actions UI
@@ -3576,7 +3622,7 @@ jobs:
         if: steps.verify.outputs.rolled_back == 'false' && steps.deployed.outputs.deployed_sha
         shell: bash
         run: |
-          echo "::notice::DEPLOYED: control.farna.dev is now running ${{ steps.deployed.outputs.deployed_sha }} (commit ${{ steps.git.outputs.git-sha }})"
+          echo "::notice::DEPLOYED: farna-control is now running ${{ steps.deployed.outputs.deployed_sha }} (commit ${{ steps.git.outputs.git-sha }})"
 
       - name: Ensure worker machine exists (production)
         if: steps.verify.outputs.rolled_back == 'false'
@@ -3940,12 +3986,16 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install chromium
 
-      - name: Run @smoke Playwright tests against control.farna.dev
+      - name: Run @smoke Playwright tests against farna-control.fly.dev
         id: smoke-tests
         run: pnpm run test:e2e:smoke -- --reporter=line
         timeout-minutes: 10
         env:
           E2E_TARGET: app
+          # FAR-2656: exercise the app deploy-production just rolled out, not the
+          # old app still behind control.farna.dev until the domain move.
+          # `E2E_BASE_URL` overrides the app base URL in getBaseUrl().
+          E2E_BASE_URL: https://farna-control.fly.dev
           E2E_NO_WEBSERVER: "true"
           E2E_ADMIN_EMAIL: ${{ secrets.E2E_PROD_ADMIN_EMAIL }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_PROD_ADMIN_PASSWORD }}
