@@ -291,32 +291,32 @@ def test_every_manifest_feature_has_a_behaviour_tracker():
     )
 
 
-#: Status values the two product-map layers are allowed to carry. A manifest
-#: feature WITH an explicit ``status:`` must agree with its behaviour-tracker;
-#: every manifest feature today carries one (34 ``covered`` + 3 ``partial``).
-def test_graph_tracker_status_matches_manifest_registry():
-    """A behaviour-tracker's ``status:`` must agree with its manifest registry status.
+#: Status values the two product-map layers are allowed to carry. The manifest
+#: ``status:`` is the product-shipping claim (which listed behaviours ship); the
+#: tracker ``status:`` is now DERIVED from the behaviour bindings (FAR-2701), so
+#: it measures provability, a different and stricter question.
+def test_graph_tracker_status_does_not_overclaim_against_manifest_registry():
+    """A behaviour-tracker's derived status may not claim more than the manifest.
 
     Both product-map layers carry a ``status:`` for features that live in the
     manifest ``features:`` registry. The manifest is the machine-readable
     source of truth Assistant indexes from; the ``docs/product-map/`` tracker is
-    the human-readable layer keyed by the same ``feat-*`` id. When they
-    disagree, a reader of the graph gets the opposite coverage answer from the
-    machine layer — exactly the drift the 2026-09-26 walks left behind:
-    ``feat-guardrails`` / ``feat-license`` / ``feat-plugins`` /
-    ``feat-product-analytics`` were sharpened to ``status: partial`` in the
-    manifest (an unshipped sub-surface — cross-org guardrail inheritance,
-    universal license gating, registry-API lifecycle management, in-product
-    analytics export — stays tracked as an unchecked deferral) while each
-    tracker's frontmatter still read ``status: covered`` despite its own QA
-    note saying "Status stays ``partial``". Keep the two layers honest with
-    each other. Infra-only entries that have no manifest feature are
-    unconstrained — the manifest registry is the source of truth for trackers
-    that reference it.
+    the human-readable layer keyed by the same ``feat-*`` id.
+
+    Since FAR-2701 the tracker value is not typed: it is derived from the
+    behaviour bindings (``covered`` only when every ticked behaviour resolves to
+    a non-vacuous test outside the shrink-only baseline). Proof is necessarily
+    narrower than shipping, so a tracker may legitimately read ``partial`` under
+    a manifest ``covered``. What must never happen is the opposite: the tracker
+    claiming ``covered`` while the manifest says the feature is ``partial`` or
+    ``gap`` - a reader of the graph would get a stronger coverage answer from the
+    human layer than the machine layer claims the product ships. Infra-only
+    entries that have no manifest feature are unconstrained.
     """
     with MANIFEST_PATH.open() as handle:
         manifest_features = yaml.safe_load(handle)["features"]
 
+    rank = {"gap": 0, "partial": 1, "covered": 2}
     mismatches: dict[str, dict[str, object]] = {}
     for entry in _product_map_entry_paths():
         entry_id = _frontmatter_id(entry)
@@ -325,7 +325,9 @@ def test_graph_tracker_status_matches_manifest_registry():
             continue
         manifest_status = spec.get("status")
         tracker_status = (_entry_frontmatter(entry) or {}).get("status")
-        if manifest_status == tracker_status:
+        if manifest_status is None or tracker_status is None:
+            continue
+        if rank.get(str(tracker_status), -1) <= rank.get(str(manifest_status), -1):
             continue
         mismatches[entry_id] = {
             "manifest": manifest_status,
@@ -333,11 +335,8 @@ def test_graph_tracker_status_matches_manifest_registry():
             "entry": entry.relative_to(REPO_ROOT).as_posix(),
         }
 
-    assert not mismatches, (
-        "behaviour-tracker frontmatter 'status' disagrees with the manifest "
-        "features registry for the same feat-* id — a reader of the graph gets "
-        "the opposite coverage answer from the machine layer Assistant indexes "
-        "(aligned for the 2026-09-29 walk; keep the two layers in step):\n" + "\n".join(f"  {feat} -> manifest={info['manifest']!r} tracker={info['tracker']!r} in {info['entry']}" for feat, info in sorted(mismatches.items()))
+    assert not mismatches, "behaviour-tracker derived status claims MORE coverage than the manifest features registry for the same feat-* id - the human layer may prove less than the machine layer ships, never more:\n" + "\n".join(
+        f"  {feat} -> manifest={info['manifest']!r} tracker={info['tracker']!r} in {info['entry']}" for feat, info in sorted(mismatches.items())
     )
 
 

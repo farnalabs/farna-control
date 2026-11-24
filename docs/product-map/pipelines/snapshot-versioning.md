@@ -35,7 +35,7 @@ bdd:
   - backend/tests/bdd/steps/test_pipelines.py
 depends-on:
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Pipeline Snapshot Versioning

@@ -15,7 +15,7 @@ bdd:
 depends-on:
   - feat-evals
   - feat-runs
-status: covered
+status: partial
 ---
 
 # Feedback Inbox

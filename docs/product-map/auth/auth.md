@@ -26,7 +26,7 @@ bdd:
   - backend/tests/bdd/features/auth/sso_saml.feature
   - backend/tests/bdd/features/auth/sso_team_mapping.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Auth

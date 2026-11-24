@@ -12,7 +12,7 @@ unit-tests:
 bdd: []
 delivery-tasks: []
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Governance Stack (`/governance`)

@@ -58,7 +58,7 @@ depends-on:
   - feat-schemas
   - feat-model-backends
   - feat-connectors
-status: covered
+status: partial
 ---
 
 # Visual Pipeline Editor and Pipeline Graph

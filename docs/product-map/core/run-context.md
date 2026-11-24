@@ -18,7 +18,7 @@ bdd:
   - backend/tests/bdd/features/pipelines/run_context.feature
   - backend/tests/bdd/steps/test_run_context.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Run Context

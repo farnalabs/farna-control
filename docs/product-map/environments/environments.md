@@ -40,7 +40,7 @@ bdd:
 depends-on:
   - feat-runtime
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Environment Profiles

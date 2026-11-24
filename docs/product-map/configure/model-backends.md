@@ -44,7 +44,7 @@ bdd:
   - backend/tests/bdd/steps/test_alpha_model_backends.py
 depends-on:
   - feat-auth
-status: covered
+status: partial
 ---
 
 # Model Backend Management

@@ -11,7 +11,7 @@ bdd:
 depends-on:
   - feat-model-backends
   - feat-schemas
-status: covered
+status: partial
 ---
 
 # Onboarding

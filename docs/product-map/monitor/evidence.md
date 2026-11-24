@@ -24,7 +24,7 @@ unit-tests:
   - frontend/src/__tests__/AdminEvidenceRedactionView.spec.ts
 depends-on:
   - feat-core-evidence-store
-status: covered
+status: partial
 ---
 
 # Evidence Dashboard, Compliance Index & Redaction Boundary

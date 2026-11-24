@@ -30,7 +30,7 @@ depends-on:
   - feat-core-saml-integration
   - feat-core-ssrf
   - feat-teams-org-entity
-status: covered
+status: partial
 ---
 
 # SSO Provider UI

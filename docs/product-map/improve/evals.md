@@ -51,7 +51,7 @@ bdd:
   - backend/tests/bdd/steps/test_eval_block_steps.py
   - backend/tests/bdd/steps/test_eval_scorer_gates.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Evals

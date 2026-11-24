@@ -26,7 +26,7 @@ unit-tests:
   - backend/tests/unit/db/test_evidence_first_producer.py
   - backend/tests/unit/pipeline_engine/test_evidence_probes.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Core Evidence Store

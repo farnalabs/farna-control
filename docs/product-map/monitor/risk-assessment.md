@@ -21,7 +21,7 @@ unit-tests:
 depends-on:
   - feat-evidence
   - feat-core-evidence-store
-status: covered
+status: partial
 ---
 
 # Risk Assessment Dashboard

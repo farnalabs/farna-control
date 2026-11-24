@@ -31,7 +31,7 @@ bdd:
   - backend/tests/bdd/steps/test_schemas.py
 depends-on:
   - feat-connectors
-status: covered
+status: partial
 ---
 
 # Typed JSON Schemas

@@ -54,7 +54,7 @@ unit-tests:
   - backend/tests/unit/launcher/test_env_contract.py
 bdd:
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Container Deployment (Docker Compose and Kubernetes)

@@ -41,7 +41,7 @@ bdd:
   - backend/tests/bdd/features/runtime_providers/provider_matrix.feature
   - backend/tests/bdd/features/runtime_providers/file_io.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Runtime Provider Core

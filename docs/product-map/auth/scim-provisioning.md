@@ -18,7 +18,7 @@ bdd:
 depends-on:
   - feat-sso
   - feat-teams-org-entity
-status: covered
+status: partial
 ---
 
 # SCIM 2.0 Provisioning

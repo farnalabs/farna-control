@@ -40,7 +40,7 @@ bdd:
   - backend/tests/bdd/steps/test_mcp_onboarding_steps.py
   - backend/tests/bdd/steps/test_mcp_oauth.py
 depends-on: [feat-auth, feat-model-backends]
-status: covered
+status: partial
 ---
 
 # Model Context Protocol (MCP)

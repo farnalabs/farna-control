@@ -61,7 +61,7 @@ bdd:
   - backend/tests/bdd/steps/test_audit_append_only.py
   - backend/tests/bdd/features/admin/test_audit_export_steps.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Audit Trail & Audit Log

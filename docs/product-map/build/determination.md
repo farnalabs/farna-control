@@ -56,7 +56,7 @@ delivery-tasks: []
 depends-on:
   - feat-connectors
   - feat-core-evidence-store
-status: covered
+status: partial
 ---
 
 # Determination (`/determination`)

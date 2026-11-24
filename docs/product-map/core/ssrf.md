@@ -10,7 +10,7 @@ unit-tests:
 bdd:
   - backend/tests/bdd/features/security/ssrf_guard.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # SSRF-safe Outbound URL Validation

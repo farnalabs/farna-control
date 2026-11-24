@@ -50,7 +50,7 @@ bdd:
   - backend/tests/bdd/features/error_tracking/error_ingestion.feature
   - backend/tests/bdd/features/error_tracking/error_notifications.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Observability

@@ -22,7 +22,7 @@ bdd:
   - backend/tests/bdd/features/organisation/multi_backend.feature
   - backend/tests/bdd/steps/test_multi_backend.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Database Abstraction Core

@@ -20,7 +20,7 @@ bdd:
 depends-on:
   - feat-runs
   - feat-feedback
-status: covered
+status: partial
 ---
 
 # Analytics

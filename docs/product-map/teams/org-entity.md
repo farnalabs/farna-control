@@ -34,7 +34,7 @@ depends-on:
   - feat-auth-jwt-auth
   - feat-core-db-abstraction-core
   - feat-core-run-context
-status: covered
+status: partial
 ---
 
 # Teams Org Entity

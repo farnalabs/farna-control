@@ -21,7 +21,7 @@ depends-on:
   - feat-library
   - feat-pipelines
   - feat-schemas
-status: covered
+status: partial
 ---
 
 # Library Collections

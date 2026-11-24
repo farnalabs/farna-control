@@ -23,7 +23,7 @@ bdd:
   - backend/tests/bdd/features/pipelines/router_nodes.feature
 depends-on:
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Router & HITL Execution-Graph Nodes

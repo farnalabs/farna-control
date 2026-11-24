@@ -35,7 +35,7 @@ bdd:
   - backend/tests/bdd/steps/test_rate_limiting.py
 depends-on:
   - feat-system-config
-status: covered
+status: partial
 ---
 
 # Runtime Configuration

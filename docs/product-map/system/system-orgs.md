@@ -15,7 +15,7 @@ bdd:
   - backend/tests/bdd/features/system_admin/system_admin_users.feature
 depends-on:
   - feat-teams
-status: covered
+status: partial
 ---
 
 # System Orgs

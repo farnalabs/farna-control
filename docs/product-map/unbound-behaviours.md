@@ -10,7 +10,8 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 443 of 869 ticked behaviours.
+Bound today: 443 of 869 ticked behaviours (79 node, 137 feature, 227 module strength).
+Weak bindings (module-only): 227. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
 
@@ -42,7 +43,7 @@ Derived status: `partial`
 - `plugins-10` - The routes are gated behind `require_feature("plugin_management")` and
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `plugins-12` - The `/admin/plugins` view is READ-ONLY: it lists plugins and their health
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/admin/product-analytics.md
 
@@ -112,7 +113,7 @@ Derived status: `partial`
 
 ## docs/product-map/auth/jwt-auth.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `jwt-auth-01` - `create_access_token` issues a signed JWT carrying user identity (`sub`),
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -133,7 +134,7 @@ Derived status: `gap`
 
 ## docs/product-map/auth/oidc-integration.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `oidc-integration-01` - Provider `jwks_uri` is discovered from the OpenID Connect discovery document
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -165,11 +166,11 @@ Derived status: `partial`
 - `onboarding-06` - `POST /starter-pipeline` creates a starter pipeline for the org
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `onboarding-08` - Onboarding telemetry is wired into the wizard as a dedicated Telemetry
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/auth/saml-integration.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `saml-integration-01` - `AuthnRequest` generation from the IdP metadata (optional SP signing)
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -184,9 +185,9 @@ Derived status: `gap`
 - `saml-integration-06` - An assertion that parses but fails validation (bad signature, expired
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `saml-integration-07` - Cross-org assertion reuse fails closed (FAR-1010): an assertion minted
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `saml-integration-08` - Per-organization provider isolation: metadata XML and the ACS surface
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/auth/scim-provisioning.md
 
@@ -203,7 +204,7 @@ Derived status: `partial`
 
 ## docs/product-map/auth/sso-provider-ui.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `sso-provider-ui-01` - Admin can view the list of all configured SSO providers with type badges (O / S)
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -247,7 +248,7 @@ Derived status: `partial`
 
 ## docs/product-map/build/determination.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `determination-01` - The `/determination` route runs `GET /api/v1/determination` and renders every sampled source (connector type, resource, record count, connector id, error) and e
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -297,7 +298,7 @@ Derived status: `partial`
 - `runs-23` - Every run carries WHERE its work was executed (FAR-1141, ADR-042):
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `runs-27` - The run detail page renders the attempt history
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/configure/assistant.md
 
@@ -318,7 +319,7 @@ Derived status: `partial`
 - `assistant-09` - The UI-driving configuration surface was removed with FAR-2232: the org
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `assistant-10` - Guidance tuning ships end to end: `additional_guidance` is a first-class field on
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `assistant-11` - BDD coverage across sessions, messages, context window, context sources, skills,
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
@@ -373,7 +374,7 @@ Derived status: `partial`
 - `guardrails-13` - Packs ship as versioned policy packs (e.g. SOC2 pack, policy pack) that
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `guardrails-15` - The in-page Import control ships on `/settings/guardrails`: an
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `guardrails-16` - Output-side interception (FAR-209 Track B): a guardrail may declare
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `guardrails-17` - Destroy redaction mode (FAR-209 Track B): `mode: destroy` replaces each
@@ -416,7 +417,7 @@ Derived status: `partial`
 Derived status: `partial`
 
 - `model-backends-08` - Per-provider adapters (openai, anthropic, and peers) share the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/core/db-abstraction-core.md
 
@@ -458,7 +459,7 @@ Derived status: `partial`
 
 ## docs/product-map/core/run-context.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `run-context-01` - Run context is seeded from pipeline defaults plus the trigger input payload;
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -490,7 +491,7 @@ Derived status: `partial`
 - `runtime-provider-core-04` - Environment profiles CRUD (`/api/v1/environment-profiles`): list, create, get,
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `runtime-provider-core-05` - Graph validator rejects pipelines whose nodes need a capability the profile lacks
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `runtime-provider-core-06` - `sandbox_agent` node dispatch, crash-resume, and output-handling contracts
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `runtime-provider-core-07` - `ShellConnector` (a deprecated *connector type*, not a node type) is
@@ -508,7 +509,7 @@ Derived status: `partial`
 
 ## docs/product-map/core/secrets-backend.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `secrets-backend-01` - ``SecretsBackend`` ABC with async ``get_secret`` / ``set_secret`` /
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -537,7 +538,7 @@ Derived status: `gap`
 
 ## docs/product-map/core/ssrf.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `ssrf-01` - Strict URL pre-parsing before any resolution: rejects non-http(s)
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -591,11 +592,11 @@ Derived status: `partial`
 - `environments-12` - The frontend surfaces the whole lifecycle on the Runners page (FAR-591 D5):
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `environments-13` - The environment-profile create/edit form offers the `kubernetes` provider
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/governance/governance-stack.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `governance-stack-01` - `/governance` renders the seven-level hierarchy as one read-only
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -629,7 +630,7 @@ Derived status: `partial`
 - `hitl-gates-02` - Pending-gate queues: `GET /api/v1/runs/{run_id}/hitl/pending` (per run)
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `hitl-gates-05` - Same-account re-claim (FAR-686 token recovery): a reviewer who reloaded
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-06` - Approve resumes the run (`action: approved`, optional notes) – gated by
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `hitl-gates-07` - Reject records the decision and resumes the graph with one of three
@@ -641,33 +642,33 @@ Derived status: `partial`
 - `hitl-gates-10` - The reviewer briefing (`consequences.reject.disposition`) states the
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `hitl-gates-11` - Modify-then-approve applies the reviewer's modified output into state
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-17` - The fired gate's config is stamped on the claim row at fire time – the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-18` - Team-scoped gates restrict claiming to members whose team role is
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `hitl-gates-19` - Stale gates warn their owners and expired claims are reset to unclaimed
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-20` - Configurable HITL review window (FAR-1257, org tiering FAR-1269): the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-21` - Approaching-deadline warning (FAR-1270): while an undecided, unclaimed
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-22` - Conditional HITL: an eval condition decides whether a gate activates at
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-23` - Fire-time decision briefing: a fired gate captures a bounded, redacted
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-24` - The pipeline editor surfaces legacy gates whose descriptions predate
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-25` - Decisions and deliveries are audited (`hitl.output_delivered`,
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `hitl-gates-26` - Decision endpoints enforce per-action permissions
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-27` - Audit events carry the caller's client type when known (FAR-611):
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-28` - Approve-sweep anomaly alarm (FAR-611): when one actor's committed
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-29` - HITL review actions are rate limited at 20/min per identity,
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/improve/evals.md
 
@@ -680,7 +681,7 @@ Derived status: `partial`
 - `evals-03` - Each eval carries an internal-only `failure_behaviour` (`warn` | `block`);
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `evals-05` - The `/evals` list shows every eval in the organisation in one table
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `evals-06` - The eval surface is three route-per-tab destinations rendered by the
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `evals-07` - Eval definitions are org-scoped CRUD whose permissions come from the
@@ -732,11 +733,11 @@ Derived status: `partial`
 - `variants-09` - Variant groups are created and batch-fired from the inline builder on
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `variants-11` - `/variants/compare` lists comparison groups in the shared `DataTable`
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `variants-12` - User-visible copy on the variants surface standardises on "comparison"
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `variants-13` - The comparison builder exposes the group-level `degraded_evals` flag
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/infra/backup-restore.md
 
@@ -808,9 +809,9 @@ Derived status: `partial`
 Derived status: `partial`
 
 - `support-diagnostics-01` - A failed run exposes one canonical support reference built by the shared
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `support-diagnostics-02` - An error group exposes one canonical support reference built by
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `support-diagnostics-10` - Kubernetes / Helm needs no extra install: the same module runs inside the
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
@@ -829,7 +830,7 @@ Derived status: `partial`
 - `library-collections-09` - Collection authors cut a new version via
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `library-collections-11` - The collection detail view surfaces the FAR-759 flow: an update-available
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/licensing/license.md
 
@@ -843,9 +844,9 @@ Derived status: `partial`
 Derived status: `partial`
 
 - `costs-02` - The `/admin/costs` "Per-Team Cost Breakdown" card is supported and reads the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `costs-03` - The four Costs pages are navigable from each other by CLICKING the page tabs
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `costs-04` - `GET/PUT /limits/org` and `PUT /limits/teams/{id}` read and set daily spend
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `costs-05` - `GET/PUT /controls` read/update the full cost-controls payload: budget,
@@ -861,7 +862,7 @@ Derived status: `partial`
 
 ## docs/product-map/monitor/evidence.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `evidence-01` - `GET /api/v1/evidence` lists a run's evidence rows (required `run_id` UUID;
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -882,14 +883,14 @@ Derived status: `gap`
 
 ## docs/product-map/monitor/risk-assessment.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `risk-assessment-01` - The `/risk-assessment` route renders under the RUNS sidebar group;
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `risk-assessment-02` - Facet filters (key prefix, pipeline, time window, action) drive
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `risk-assessment-03` - The pipeline facet loads EVERY selectable pipeline, not just the first
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `risk-assessment-04` - Summary card displays total rows and per-action counts (block, warn,
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `risk-assessment-05` - Sortable table renders evidence rows with timestamp, key, action badge,
@@ -900,7 +901,7 @@ Derived status: `gap`
 Derived status: `partial`
 
 - `observability-03` - Error reads and error mutations are separate permissions (FAR-2373 /
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `observability-09` - Frontend views behind the shipped routes render the settings and the admin
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
@@ -909,9 +910,9 @@ Derived status: `partial`
 Derived status: `partial`
 
 - `lifecycle-maps-09` - Frontend visual editor with auto-layout (Sugiyama-style layered graph),
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `lifecycle-maps-10` - Journey display on the map detail view is double-gated (FAR-654 +
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/pipelines/pipeline-diff-rollback.md
 
@@ -926,13 +927,13 @@ Derived status: `partial`
 - `pipeline-diff-rollback-04` - Tag and annotate a snapshot via PATCH (custom tag + notes)
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `pipeline-diff-rollback-05` - Rollback to a previous snapshot creates a NEW live-edit snapshot tagged
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `pipeline-diff-rollback-06` - The editor's restore flow is ONE shared FormDialog opened from the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `pipeline-diff-rollback-07` - The historic version view and the restore flow are reachable from the
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `pipeline-diff-rollback-11` - Rollback runs the connector-team gate under the same row lock via the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `pipeline-diff-rollback-19` - Non-existent snapshot or pipeline id → 404; invalid UUID → 422
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `pipeline-diff-rollback-20` - Delete snapshot (versioned) is supported
@@ -947,13 +948,13 @@ Derived status: `partial`
 Derived status: `partial`
 
 - `pipelines-01` - Pipeline creation supports minimal, LLM-node, manual-node and run_context-default
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `pipelines-03` - Folder security model (ADR 038): `PipelineFolder` is org-scoped only – no
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
 ## docs/product-map/pipelines/router-hitl-nodes.md
 
-Derived status: `gap`
+Derived status: `partial`
 
 - `router-hitl-nodes-01` - `router` is an API-authorable `PipelineGraphNode.node_type` (with a
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -1003,11 +1004,11 @@ Derived status: `partial`
 - `snapshot-versioning-07` - Versioning CRUD is the back-end of the `snapshots` endpoints under
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `snapshot-versioning-08` - An explicit pipeline graph save records the save as an immutable live-edit
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `snapshot-versioning-09` - The editor opens a saved version READ-ONLY from `?snapshot=<uuid>` (the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `snapshot-versioning-10` - Run surfaces link to the version the run executed (FAR-1813): the runs
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/pipelines/system-maps.md
 
@@ -1018,40 +1019,40 @@ Derived status: `partial`
 - `system-maps-04` - The permission vocabulary is registered and enforced on every shipped
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `system-maps-10` - Discovery is deterministic and explainable: sources are sorted by
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-11` - Unsupported or unresolvable sources are reported, never guessed: an
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-16` - Archiving closes the revision's effective window and clears
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `system-maps-22` - The routed UI is wired to the shipped backend: `/system-maps` lists maps
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-23` - "Discover My System" is a real operation in the routed UI: the store
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-24` - The graph editor is bounded to the backend vocabularies
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-25` - The dashboard card renders the real overview aggregate for the default
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-26` - The store's access probe fails closed and rejects stale principals: it
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-31` - The revision sidebar switches between the current and a historical
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-32` - The revision sidebar reads `GET /revisions/history` when a map opens and
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `system-maps-33` - The revision sidebar exposes the existing revision diff and restore-as-new
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `system-maps-36` - The dashboard card's "Discover My System" control runs the real
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/schemas/schemas.md
 
 Derived status: `partial`
 
 - `schemas-01` - A schema is created with a name that must be unique within the org – duplicate
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `schemas-02` - Create accepts an optional initial `definition_json`; a structurally-invalid
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `schemas-06` - Inference at `/api/v1/schemas/infer` builds a `definition_json` draft from a
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/system/runtime.md
 
@@ -1060,9 +1061,9 @@ Derived status: `partial`
 - `runtime-02` - POST `/api/v1/admin/runtime-config/reload` refreshes config from
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `runtime-03` - GET/PUT `/api/v1/admin/rate-limits` returns and replaces rate-limit rules;
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `runtime-04` - The rate-limit middleware enforces independent per-endpoint budgets
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `runtime-11` - Org sandbox concurrency is viewable/updatable on
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
@@ -1112,9 +1113,9 @@ Derived status: `partial`
 - `trigger-engine-01` - Per-funnel queueing is bounded per state class, and the capacity queue
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `trigger-engine-03` - Trigger CRUD via `/api/v1/triggers` (list, create, PUT update, delete,
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `trigger-engine-06` - Every trigger has a REQUIRED name (FAR-2227): trimmed, 1-255 characters,
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `trigger-engine-07` - Manual run trigger: `POST /api/v1/runs` returns 202 and starts a pending
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `trigger-engine-08` - Webhook delivery (`POST /api/v1/triggers/{id}/webhook`): HMAC-SHA256
@@ -1142,4 +1143,474 @@ Derived status: `partial`
 - `trigger-engine-19` - Webhook replay (`POST /api/v1/triggers/{id}/webhook/replay/{event_id}`)
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `trigger-engine-23` - The streak badge in `SettingsTriggersView` renders for every trigger type
-  - why: behaviour text names no test; only code paths (or nothing) are cited
+  - why: behaviour text cites a test artefact that does not resolve to a proving test
+
+## Binding strength
+
+Every clean binding is one of three strengths:
+
+- `node` - names one test (`<module>.py::test_name`, or `<spec>.spec.ts::<title>`); the strong form.
+- `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
+- `module` - the test module as a whole; the weak form, tolerated while backfilling.
+
+Node: 79  Feature: 137  Module (weak): 227
+
+### Weak (module-only) bindings
+
+These behaviours are counted as bound, but only by a whole test module rather than a named
+test. The list is ratcheted shrink-only in the baseline: it may not grow.
+
+- `analytics-01` - Analytics facts are built from run outputs and cost components into structured
+  - refs: backend/tests/unit/test_analytics_builder.py
+- `analytics-02` - Fact ingestion (`record_facts`) persists run-derived facts for later query
+  - refs: backend/tests/unit/test_analytics_record_facts.py
+- `analytics-03` - Analytics deltas and guardrail outcomes are reconciled into the report surface
+  - refs: backend/tests/unit/test_analytics_delta.py, backend/tests/unit/test_analytics_guardrails.py
+- `analytics-04` - The analytics service executes queries against the aggregated fact model
+  - refs: backend/tests/unit/test_analytics_service.py, backend/tests/unit/test_analytics_service_execution.py
+- `analytics-05` - `/analytics` (UI route) and `GET /api/v1/analytics/query` expose the
+  - refs: backend/tests/integration/test_analytics_endpoint.py
+- `analytics-10` - Scan export (`/scan`) streams the WHOLE matching fact set in one response
+  - refs: backend/tests/unit/test_analytics_service_execution.py
+- `analytics-11` - Claim→dispatch latency (FAR-1421): every bucket carries
+  - refs: backend/tests/unit/api/test_analytics_export_contract.py
+- `analytics-12` - Node-deadline watchdog firings (FAR-1463): every query bucket carries
+  - refs: backend/tests/unit/test_analytics_facts.py
+- `apply-01` - `farna-control apply -f <file>` loads single- or multi-document YAML
+  - refs: backend/tests/unit/cli/test_apply_loader.py
+- `apply-02` - Secrets are refs-only: backend `api_key` / `credential_ref` and trigger
+  - refs: backend/tests/unit/cli/test_apply_models.py
+- `apply-03` - A model backend credential may instead be declared as
+  - refs: backend/tests/unit/cli/test_apply_credential_ref.py
+- `apply-04` - A model backend may declare the custom endpoint FAR-2046 introduced:
+  - refs: backend/tests/unit/cli/test_apply_base_url.py
+- `apply-05` - Planning is name-based upsert scoped to the org (the HTTP transport is
+  - refs: backend/tests/unit/cli/test_apply_plan.py
+- `apply-06` - Entities apply in dependency order `schemas -> model_backends ->
+  - refs: backend/tests/unit/cli/test_apply_executor.py, backend/tests/unit/cli/test_apply_pipeline.py, backend/tests/unit/cli/test_apply_trigger.py
+- `apply-07` - Backend writes are verified: the server-side health-check endpoint
+  - refs: backend/tests/unit/cli/test_apply_executor.py
+- `apply-08` - `--refresh-secrets` re-sends trigger configs whose secrets rotated,
+  - refs: backend/tests/unit/cli/test_apply_executor.py
+- `apply-09` - Exit codes: `--dry-run`/`--plan` always exits 0; real apply exits 1 when
+  - refs: backend/tests/unit/cli/test_apply_cli.py
+- `apply-10` - `--diff` (drift mode) is read-only: it fetches the live org state and
+  - refs: backend/tests/unit/cli/test_apply_drift.py
+- `apply-11` - Git-sourced content (FAR-220): a sandbox_agent node's `agent_prompt` /
+  - refs: backend/tests/unit/cli/test_apply_git_content.py, backend/tests/unit/core/test_git_content.py, backend/tests/unit/pipeline_engine/test_sandbox_git_content.py, backend/tests/unit/graph_validator/test_edges_and_sandbox_validation.py
+- `apply-12` - `--diff` covers git-sourced content: the resolved pin is hashed into
+  - refs: backend/tests/unit/cli/test_apply_git_content.py
+- `apply-13` - At run time the agent-command rendering point replaces a whole-field
+  - refs: backend/tests/unit/pipeline_engine/test_sandbox_git_content.py
+- `apply-14` - Output: human-friendly table (`render_table`: create/update/block/fail/
+  - refs: backend/tests/unit/cli/test_apply_cli.py
+- `apply-15` - The API-key transport is org-scoped and operator-role gated; an
+  - refs: backend/tests/unit/api/test_apply_api_key_auth.py
+- `apply-16` - Pipeline runtime limits (FAR-1294): `farna-control apply` manages
+  - refs: backend/tests/unit/cli/test_apply_models.py
+- `apply-17` - Pipeline Paused execution state (FAR-1530): `farna-control apply` can PAUSE a
+  - refs: backend/tests/unit/cli/test_apply_run_enabled.py
+- `assistant-06` - Admin skills CRUD (`GET/POST /api/v1/admin/assistant/skills`,
+  - refs: backend/tests/unit/api/test_me_assistant_skills.py
+- `audit-trail-07` - `GET /api/v1/admin/audit/scan` streams the WHOLE matching event set in
+  - refs: backend/tests/unit/api/test_audit_scan_route.py
+- `audit-trail-09` - An audit export can be emitted as offline-verifiable evidence
+  - refs: backend/tests/unit/core/evidence_pack/test_evidence_pack.py, backend/tests/unit/api/test_audit_evidence_pack_route.py
+- `audit-trail-12` - Pipeline graph mutations are ALWAYS audited (FAR-1471): every successful
+  - refs: backend/tests/unit/db/crud/test_pipeline_graph_updated_audit.py
+- `audit-trail-13` - Pre-auth and webhook routes are audited through the actor-less
+  - refs: backend/tests/unit/api/test_audit_coverage.py, backend/tests/unit/api/test_webhooks_endpoint.py
+- `audit-trail-14` - Org-lifecycle audit records survive a hard delete via an org-independent
+  - refs: backend/tests/integration/test_system_audit_org_deletion.py, backend/tests/unit/core/test_system_audit_logger.py
+- `audit-trail-15` - Background, cron and boot write paths are audited or explicitly
+  - refs: backend/tests/architecture/test_background_audit_coverage.py, backend/tests/unit/audit_logger/test_background_audit.py, backend/tests/unit/core/test_background_audit_wiring.py, backend/tests/unit/db/test_seed_users.py, backend/tests/unit/core/eval_engine/test_execute_suite_run.py, backend/tests/unit/cli/test_users_cli.py
+- `audit-trail-16` - The durable org-lifecycle ledger has a system-admin read surface
+  - refs: backend/tests/unit/api/test_admin_system_audit.py, backend/tests/unit/crud/test_system_audit_event.py
+- `auth-01` - Login authenticates credentials, resolves org membership, and mints JWT
+  - refs: backend/tests/unit/api/test_auth_routes_coverage.py
+- `backup-restore-10` - The legacy `scripts/backup.py` / `scripts/restore.py` pair produces and
+  - refs: backend/tests/unit/scripts/test_restore.py
+- `backup-restore-11` - `scripts/backup-prune.py` applies the documented retention policy (7 daily,
+  - refs: backend/tests/unit/scripts/test_backup_prune.py, backend/tests/unit/scripts/test_backup_prune_classify_one.py
+- `connectors-01` - A REST connector is creatable with a declarative endpoint (base_url + path
+  - refs: backend/tests/unit/api/test_connectors_endpoint.py
+- `connectors-26` - A connector's operation scope is UNRESTRICTED unless a non-empty
+  - refs: backend/tests/unit/connectors/test_acl.py, backend/tests/unit/api/test_connectors_endpoint.py, backend/tests/unit/core/test_guardrail_conformance_midrun.py
+- `connectors-27` - Capability spellings reduce through ONE canonical vocabulary shared by
+  - refs: backend/tests/unit/connectors/test_acl.py, backend/tests/unit/core/test_guardrail_conformance_midrun.py
+- `connectors-28` - A connector binding that crosses a team boundary is refused at graph
+  - refs: backend/tests/unit/api/test_pipeline_team_visibility.py, backend/tests/unit/core/test_team_visibility.py, backend/tests/unit/mcp/test_team_binding_enforcement.py, backend/tests/unit/db/crud/test_team_scope.py, backend/tests/integration/test_pipeline_team_gate_parity.py
+- `costs-01` - `GET /api/v1/admin/costs?group_by=team|org&period=day|week|month|year` returns
+  - refs: backend/tests/unit/api/test_costs.py
+- `costs-09` - Declared (self-reported) agent cost is DISPLAYED but never billed (FAR-1780):
+  - refs: backend/tests/unit/core/test_sandbox_envelope_provenance.py, backend/tests/unit/core/cost_controller/test_cost_finalize.py, backend/tests/unit/core/cost_controller/test_cost_probe.py, backend/tests/unit/core/cost_controller/test_cost_controller.py
+- `costs-10` - Pipeline cost circuit breaker (§8.10): a pipeline crossing its monthly spend
+  - refs: backend/tests/unit/core/cost_controller/test_circuit_breaker.py, backend/tests/unit/api/test_pipelines_routes_coverage.py
+- `costs-11` - The breaker threshold is user-configurable and Community-tier (FAR-1182):
+  - refs: backend/tests/unit/core/cost_controller/test_org_auto_pause.py, backend/tests/unit/core/cost_controller/test_cost_finalize_auto_pause.py
+- `costs-14` - Rolling spend-anomaly detection: days whose org spend exceeds 2x the trailing
+  - refs: backend/tests/unit/api/test_costs_routes_coverage.py, backend/tests/unit/db/crud/test_spend_anomaly.py
+- `costs-15` - Cost-component admin CRUD (attribution of spend to named components) in
+  - refs: backend/tests/unit/core/cost_controller/test_cost_components_crud.py
+- `dashboard-01` - `GET /api/v1/dashboard/summary` returns `total_runs` (excluding pending/claimed),
+  - refs: backend/tests/unit/api/test_dashboard.py
+- `dashboard-03` - `GET /api/v1/dashboard/daily-run-counts` returns daily counts grouped by run
+  - refs: backend/tests/unit/api/test_daily_run_counts.py
+- `db-abstraction-core-07` - Multi-backend conformance is exercised by the `multi_backend` BDD feature and
+  - refs: backend/tests/unit/db/test_multi_backend_bdd.py
+- `environments-01` - A profile is createable with a name, description, provider_type, image_ref,
+  - refs: backend/tests/integration/crud/test_environment_profiles.py
+- `environments-06` - The GraphValidator resolves a snapshot's `environment_profile_id` into the
+  - refs: backend/tests/unit/graph_validator/test_environment_capabilities.py
+- `environments-07` - A profile carries a provider wall-clock capability (FAR-1359):
+  - refs: backend/tests/unit/graph_validator/test_environment_capabilities.py, backend/tests/unit/core/bundled_runner/test_dispatch_route.py
+- `environments-14` - The pipeline to environment-profile binding is settable per pipeline
+  - refs: backend/tests/unit/api/test_pipeline_environment_profile_binding.py, backend/tests/unit/api/test_environment_profiles_routes.py, backend/tests/integration/test_environment_profile_scope_rls_guard.py
+- `environments-15` - The FAR-1558 team rule has a dispatch-time backstop as its last line of
+  - refs: backend/tests/integration/test_dispatch_team_scope_backstop.py, backend/tests/unit/core/bundled_runner/test_dispatch_route.py
+- `environments-16` - The binding is exposed on the read and non-REST surfaces (FAR-1599):
+  - refs: backend/tests/unit/cli/test_apply_environment_profile.py, backend/tests/unit/api/test_mcp_update_pipeline.py, backend/tests/unit/api/test_snapshot_environment_profile_coercion.py
+- `evals-04` - Policy-gate decision records (`PolicyGateDecision`, FAR-1060 / FAR-1102):
+  - refs: backend/tests/unit/core/eval_engine/test_policy_gate_decision_row.py, backend/tests/unit/core/test_eval_persist_order_failopen.py, backend/tests/unit/db/crud/test_policy_gate_decision_purge.py, backend/tests/integration/api/test_policy_gate_acceptance.py, backend/tests/unit/api/test_admin_housekeeping_decision_block.py
+- `evals-09` - Policy-gate binding (`POST`/`PUT /api/v1/evals/{eval_id}/policy-gate`)
+  - refs: backend/tests/unit/core/evidence/test_author_warnings.py
+- `evals-10` - Policy-gate operator control and pin-set integrity (FAR-967 chunk 10):
+  - refs: backend/tests/unit/core/test_policy_gate_pin.py, backend/tests/unit/core/pipeline_engine/test_policy_gate_eval_wiring.py, backend/tests/unit/api/test_policy_gate_routes_coverage.py
+- `evidence-store-02` - RLS org-isolation is enforced by the baseline RLS migration
+  - refs: backend/tests/architecture/test_evidence_deletion_carveout.py
+- `evidence-store-04` - First production write path (FAR-1293): `append_evidence()` in
+  - refs: backend/tests/unit/db/test_evidence_first_producer.py
+- `evidence-store-09` - The sweep purges oldest rows older than `max_age_days` in batched
+  - refs: backend/tests/unit/core/evidence/test_retention.py
+- `external-agent-registry-01` - CRUD over `/api/v1/external-agents`: `GET ""` lists paginated rows
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `external-agent-registry-03` - Access is permission-floored per verb: `external_agent.list` (viewer
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `external-agent-registry-04` - Reads and writes are org-scoped twice: the route sets the RLS org and
+  - refs: backend/tests/unit/db/test_external_agent_mcp_server_crud.py
+- `external-agent-registry-05` - Team visibility is a DB-RLS boundary, not a request-time gate: the
+  - refs: backend/tests/integration/test_rls_isolation.py
+- `external-agent-registry-06` - Team assignment is validated at the write: create refuses an
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `external-agent-registry-07` - Create, update and delete emit `external_agent_created` /
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `external-agent-registry-08` - Delete is a soft delete: `deleted_at` is stamped, the global soft-delete
+  - refs: backend/tests/unit/db/test_external_agent_mcp_server_crud.py
+- `external-agent-registry-09` - Error handling is typed and never leaks internals: a missing table
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `feedback-01` - `POST /runs/{run_id}/feedback` creates a feedback record (type `human`,
+  - refs: backend/tests/unit/api/test_feedback_endpoint.py
+- `guardrails-07` - Creation-time materialization (FAR-1593): a pipeline created AFTER an
+  - refs: backend/tests/integration/test_guardrail_pipeline_creation_freshness.py
+- `guardrails-10` - The bridge handoff is newline-safe (FAR-664): the rendered agent command
+  - refs: backend/tests/unit/pipeline_engine/test_node_runner_residual.py
+- `health-checks-22` - Readiness-degradation email alert (FAR-1446): the `health_readiness_alert`
+  - refs: backend/tests/unit/core/test_health_alerts.py
+- `health-checks-23` - Advisory / dead-sweep failures alert in-app (FAR-1571): the readiness
+  - refs: backend/tests/unit/core/test_health_alerts.py
+- `health-checks-24` - Out-of-process Gatus health sentinel in the compose deployment (PR #1260):
+  - refs: backend/tests/unit/test_watchdog_config.py, backend/tests/docker/test_watchdog_container.py
+- `health-checks-25` - In-process worker-liveness watchdog (ADR 021): a plain asyncio task in the
+  - refs: backend/tests/unit/core/watchdog/test_worker_liveness.py
+- `health-checks-26` - Shared operator-alert context (FAR-1495 / FAR-1499): every operator alert
+  - refs: backend/tests/unit/core/test_alert_context.py, backend/tests/unit/core/test_health_alerts.py, backend/tests/unit/core/watchdog/test_worker_liveness.py
+- `hitl-gates-03` - HITL reads are viewer-level and team-membership bounded (PR #2552):
+  - refs: backend/tests/unit/api/test_hitl_routes_coverage.py, backend/tests/unit/mcp/test_team_scope_enforcement.py
+- `library-08` - Composite library-primitive credential masking (FAR-1380): the shared
+  - refs: backend/tests/unit/api/test_library_primitive_masking.py
+- `library-09` - Library collections (FAR-760): a `library_collection` primitive can be created as a
+  - refs: backend/tests/unit/api/test_library_collection.py
+- `library-collections-01` - Install resolves manifest pins to visible org primitives, materializes
+  - refs: backend/tests/integration/test_library_collection_lifecycle.py
+- `library-collections-03` - Re-install of the same version is idempotent: missing entities are
+  - refs: backend/tests/integration/test_library_collection_lifecycle.py
+- `library-collections-10` - Installed orgs preview and apply the upgrade (FAR-759, operator-initiated
+  - refs: backend/tests/unit/library_service/test_collection_upgrade.py, backend/tests/unit/library_service/test_collection_upgrade_service.py, backend/tests/unit/library_service/test_install_snapshot.py
+- `license-01` - The license trust anchor is explicit and fails closed (FAR-2091). The
+  - refs: backend/tests/unit/core/test_license_anchor.py, backend/tests/unit/api/test_admin_license.py
+- `license-07` - Caller-scoped plan bootstrap: GET `/api/v1/plan` answers 200 for ANY
+  - refs: backend/tests/unit/api/test_viewmodel_plan.py, backend/tests/integration/test_plan_bootstrap.py
+- `license-09` - Keys are cryptographically verified (`core/license_signing.py`) and exercised
+  - refs: backend/tests/unit/test_license_adversarial.py, backend/tests/unit/core/test_license_key.py
+- `license-10` - Tier activation feeds licensing/feature parity for team surfaces
+  - refs: backend/tests/unit/test_team_license_activation.py
+- `license-13` - Stripe fulfilment fails CLOSED on an unverifiable generated key: if the key
+  - refs: backend/tests/unit/core/test_stripe_fulfilment.py
+- `license-14` - Every commercially meaningful Stripe event also alerts the operator,
+  - refs: backend/tests/unit/api/test_stripe_webhook.py, backend/tests/unit/core/test_event_dedup.py
+- `license-15` - License-status cache is invalidated on every license mutation: the admin
+  - refs: backend/tests/unit/api/test_admin_license.py, backend/tests/unit/api/test_admin_orgs_coverage_gaps.py
+- `license-16` - Env-var license keys are VERIFIED (Ed25519 signature + expiry via
+  - refs: backend/tests/unit/api/test_viewmodel_resolve_tier.py, backend/tests/unit/api/test_admin_feature_flags.py, backend/tests/unit/mcp/test_mcp_governance_read_tools.py
+- `license-17` - License state never gates authentication (FAR-2059/FAR-2060). A
+  - refs: backend/tests/unit/api/test_sso_licence_admin_invariant.py, backend/tests/integration/test_sso_licence_degradation.py
+- `lifecycle-maps-04` - Content validation rejects duplicate stage/edge IDs, dangling edges,
+  - refs: backend/tests/unit/core/test_lifecycle_map_versions.py
+- `lifecycle-maps-08` - Canonical work-item ref canonicalization (GitHub, Linear, JIRA) with
+  - refs: backend/tests/unit/db/test_lifecycle_refs.py
+- `mcp-05` - Completion setup handoff: `POST /api/v1/model-backends/{backend_id}/complete-setup`
+  - refs: backend/tests/unit/api/test_mcp_setup.py
+- `mcp-07` - The MCP API-keys card distinguishes a **revoked** key from an
+  - refs: backend/tests/unit/api/test_api_keys_endpoint.py
+- `mcp-11` - Viewer-level MCP reads are team-membership bounded (PR #2552): `run.list`,
+  - refs: backend/tests/unit/mcp/test_team_scope_enforcement.py, backend/tests/unit/mcp/test_get_trigger_events.py
+- `mcp-18` - MCP tool errors carry specific, branchable codes (FAR-1502): `_tool_error`
+  - refs: backend/tests/unit/mcp/test_mcp_tool_exception_error.py, backend/tests/unit/mcp/test_mcp_session_contract_errors.py
+- `mcp-19` - The run WebSocket control-frame vocabulary aligns to the MCP codes
+  - refs: backend/tests/unit/api/test_run_ws.py, backend/tests/architecture/test_mcp_error_codes.py
+- `mcp-20` - OAuth discovery metadata (2026-10-07, FAR-1476): two unauthenticated
+  - refs: backend/tests/unit/api/test_oauth_metadata.py
+- `mcp-21` - Browser OAuth consent screen (2026-10-10, FAR-1476): the SPA consent
+  - refs: backend/tests/unit/api/test_mcp_oauth_bdd.py
+- `mcp-22` - Widened OAuth scope vocabulary + delegated HITL decisions (2026-10-10,
+  - refs: backend/tests/unit/mcp/test_hitl_delegation_boundary.py, backend/tests/unit/api/test_mcp_oauth.py, backend/tests/unit/auth/test_oauth.py
+- `mcp-23` - MCP manages model backends (FAR-2329): `list_model_backends`
+  - refs: backend/tests/unit/mcp/test_mcp_schema_tools.py, backend/tests/unit/api/test_model_backend_fallback_validation.py
+- `mcp-server-registry-01` - CRUD over `/api/v1/mcp-servers`: `GET ""` lists paginated rows
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `mcp-server-registry-04` - Access is permission-floored per verb: `mcp_server.list` (viewer floor)
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `mcp-server-registry-05` - Reads and writes are org-scoped twice: the route sets the RLS org and
+  - refs: backend/tests/unit/db/test_external_agent_mcp_server_crud.py, backend/tests/integration/test_rls_isolation.py
+- `mcp-server-registry-06` - Team assignment is validated at the write: create refuses an
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `mcp-server-registry-07` - Create, update and delete emit `mcp_server_created` /
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `mcp-server-registry-08` - The tool-definition hash is canonical and idempotent: it folds each tool
+  - refs: backend/tests/unit/core/test_mcp_tool_pinning.py
+- `mcp-server-registry-14` - Error handling is typed and never leaks internals: `ToolPinningError` is
+  - refs: backend/tests/unit/api/routes/test_far1692_registry_routes.py
+- `model-backends-03` - A model backend's custom endpoint (`base_url`) is endpoint configuration in the
+  - refs: backend/tests/unit/api/test_model_backend_base_url_helpers.py, backend/tests/unit/cli/test_backfill_model_backend_base_url.py
+- `model-backends-09` - `POST /api/v1/model-backends/{backend_id}/health-check` re-runs the PRD 8.1 check on
+  - refs: backend/tests/bdd/steps/test_alpha_model_backends.py
+- `model-backends-10` - A pipeline graph save that pins a model backend with `visibility: team`
+  - refs: backend/tests/unit/core/test_team_visibility.py, backend/tests/unit/api/test_pipeline_team_visibility.py
+- `model-backends-11` - The management surface is also exposed over MCP (FAR-2329):
+  - refs: backend/tests/unit/mcp/test_mcp_schema_tools.py, backend/tests/unit/api/test_model_backend_fallback_validation.py
+- `notifications-04` - Delivery attempts are recorded against `NotificationDeliveryLog` and are
+  - refs: backend/tests/unit/api/test_admin_notifications_webhooks.py
+- `notifications-05` - In-app notifications stream over SSE with a dashboard panel, per-user filters and a
+  - refs: backend/tests/bdd/steps/test_in_app_notifications.py
+- `notifications-06` - Email delivery settings and message sending are configured under `/settings/email`
+  - refs: backend/tests/unit/api/test_admin_email.py
+- `notifications-07` - **`expires_at` is enforced on every live read (TTL is not decorative).** A
+  - refs: backend/tests/unit/api/test_in_app_notifications_lifecycle.py
+- `notifications-08` - **The `status` query param is constrained to its vocabulary.** The
+  - refs: backend/tests/unit/api/test_in_app_notifications_routes.py, backend/tests/unit/db/crud/test_notifications.py
+- `notifications-09` - **Dismissals hide on EVERY live view, including the default inbox.**
+  - refs: backend/tests/unit/api/test_in_app_notifications_lifecycle.py
+- `notifications-10` - **Dismissal scope is honored in the active filter.**
+  - refs: backend/tests/unit/api/test_in_app_notifications_lifecycle.py
+- `notifications-11` - **A `self` dismissal can be escalated to `scope`.** A user who filed
+  - refs: backend/tests/unit/api/test_in_app_notifications_lifecycle.py, backend/tests/unit/db/crud/test_notifications.py
+- `notifications-12` - **No fresh `hitl.awaiting` for an already-terminal run.** The sole
+  - refs: backend/tests/unit/notifier/test_hitl_awaiting_terminal_suppression.py
+- `notifications-13` - **The approaching-deadline HITL sweep has a webhook + in-app leg
+  - refs: backend/tests/unit/hitl_manager/test_deadline_warning.py, backend/tests/integration/test_hitl_deadline_warning.py, backend/tests/unit/notifier/test_event_mapper.py
+- `observability-04` - Scheduler-starvation detection (FAR-604):
+  - refs: backend/tests/unit/error_tracking/test_error_dashboard.py
+- `observability-05` - Two-partition read boundary (FAR-1547): error rows live in two partitions
+  - refs: backend/tests/unit/error_tracking/test_error_instance_scope.py
+- `observability-07` - The forwarder and notification-rule LIST reads are admin-gated, not just
+  - refs: backend/tests/unit/api/test_error_forwarder_config.py, backend/tests/unit/api/test_error_notification_rules_route.py
+- `observability-12` - HTTP errors carry route-specific RFC 9457 problem types (FAR-1545): the
+  - refs: backend/tests/unit/api/models/test_problem.py
+- `onboarding-07` - All mutations run under org RLS (`set_rls_org` / `set_rls_user_context`); the
+  - refs: backend/tests/unit/api/test_onboarding.py
+- `org-03` - Admin endpoints handle org CRUD, license management, trigger pause/unpause,
+  - refs: backend/tests/unit/api/test_admin_orgs.py
+- `org-05` - Org feature-flag overrides are governance-audited: every set/clear/toggle
+  - refs: backend/tests/unit/api/test_admin_feature_flags.py
+- `org-06` - Retired internal flags stay off the customer-facing catalog:
+  - refs: backend/tests/unit/api/test_admin_feature_flags.py, backend/tests/unit/core/test_feature_flag_registry.py
+- `org-07` - Org admins govern their own organization's low-sensitivity community
+  - refs: backend/tests/unit/api/test_admin_org_feature_flags.py
+- `org-09` - Self-service org profile (`GET`/`PUT /api/v1/admin/org` in
+  - refs: backend/tests/unit/api/test_admin.py
+- `org-entity-06` - Org-lifecycle evidence survives a hard delete (FAR-1517): because the
+  - refs: backend/tests/integration/test_system_audit_org_deletion.py
+- `pipeline-diff-rollback-08` - Snapshot diff and rollback are Community-tier: the
+  - refs: backend/tests/unit/api/test_pipeline_snapshot_gating.py
+- `pipeline-diff-rollback-10` - Rollback reconciles declared `policy_gate` blocks against the pre-rollback
+  - refs: backend/tests/unit/db/crud/test_far1666_policy_gate_graph_writers.py
+- `pipeline-diff-rollback-12` - Rollback emits the same `pipeline.graph_updated` audit event a graph write
+  - refs: backend/tests/unit/db/crud/test_pipeline_graph_updated_audit.py
+- `pipeline-diff-rollback-13` - Tag / diff / delete scope their snapshot reads to the `{pipeline_id}` path
+  - refs: backend/tests/unit/api/test_snapshot_path_scoping_and_residual_gates.py
+- `pipeline-diff-rollback-14` - Diff two snapshots returns added / removed / modified nodes and edges with
+  - refs: backend/tests/unit/db/crud/test_snapshot_versioning_far402.py
+- `pipeline-diff-rollback-15` - A node that differs ONLY in behavior-bearing config is reported as
+  - refs: backend/tests/unit/pipelines/test_snapshot_versioning.py
+- `pipeline-diff-rollback-16` - A conditional edge that differs only in its routing expression is reported
+  - refs: backend/tests/unit/pipelines/test_snapshot_versioning.py
+- `pipeline-diff-rollback-17` - The snapshot read paths carry an explicit `organisation_id` scope on top
+  - refs: backend/tests/unit/pipelines/test_snapshot_versioning.py
+- `pipelines-02` - Pipeline CRUD is team/org scoped and versioned, with copy errors surfaced
+  - refs: backend/tests/unit/api/test_pipeline_copy_errors.py, backend/tests/unit/api/test_pipeline_patch_updated_at.py
+- `pipelines-09` - Per-pipeline Paused execution state (FAR-1530): a pipeline can be PRESENT and
+  - refs: backend/tests/unit/db/test_pipeline_pause_resume_crud.py, backend/tests/unit/api/test_pipelines_routes_coverage.py, backend/tests/unit/db/test_pipeline_state_gate.py
+- `pipelines-11` - Graph validation and run-time enforcement are unit-covered under
+  - refs: backend/tests/unit/test_pipeline_execution.py, backend/tests/unit/test_pipeline_node_conversion.py
+- `pipelines-12` - Pipeline graphs are written against a canonical node/edge contract
+  - refs: backend/tests/unit/core/test_graph_cache.py
+- `pipelines-13` - Sandbox `agent_commands` LIST items ending with a heredoc terminator are
+  - refs: backend/tests/unit/graph_validator/test_edges_and_sandbox_validation.py
+- `pipelines-15` - Governed CI-runner dispatch (FAR-1141, ADR-042): the `dispatch` node
+  - refs: backend/tests/unit/pipeline_engine/test_dispatch_guards.py, backend/tests/unit/pipeline_engine/test_dispatch_composed_e2e.py, backend/tests/unit/connectors/test_ci_runner.py, backend/tests/unit/graph_validator/test_graph_validator.py
+- `plugins-11` - The `plugin_management` feature gate FIRES: all three endpoints return 402
+  - refs: backend/tests/unit/api/test_plugin_registry_bdd.py
+- `product-analytics-01` - Usage metrics are collected and dumped per reporting window under explicit
+  - refs: backend/tests/unit/product_analytics/test_consent.py, backend/tests/unit/product_analytics/test_metrics_dump.py
+- `product-analytics-03` - The outbound batch request carries its HMAC signature, timestamp and sequence in
+  - refs: backend/tests/unit/product_analytics/test_vendor_client_coverage_batch_14.py
+- `product-analytics-04` - A stable instance identity is generated and persisted per install
+  - refs: backend/tests/unit/product_analytics/test_instance_identity.py
+- `product-analytics-05` - The system-admin surface at `/admin/product-analytics` reads the transparency
+  - refs: backend/tests/unit/api/routes/test_product_analytics_transparency.py
+- `product-analytics-07` - The instance switch is operator-writable and license-defaulted
+  - refs: backend/tests/unit/product_analytics/test_license_enforcement.py, backend/tests/unit/api/routes/test_product_analytics_transparency.py
+- `product-analytics-08` - Analytics never degrades an organization's plan or tier. A partner
+  - refs: backend/tests/unit/product_analytics/test_metrics_dump.py
+- `product-analytics-10` - The transparency endpoint reports the instance's REAL product-analytics
+  - refs: backend/tests/unit/api/routes/test_product_analytics_transparency.py
+- `product-analytics-13` - Staged frontend events are consumed and purged end to end (FAR-1717): the
+  - refs: backend/tests/unit/product_analytics/test_metrics_staging_consumer.py, backend/tests/unit/product_analytics/test_routes.py
+- `runs-01` - `POST /api/v1/runs` triggers a run (202) carrying `thread_id`; 404 for a missing
+  - refs: backend/tests/unit/api/test_runs_endpoint.py
+- `runs-03` - Viewer run reads are team-membership bounded (PR #2552): `run.list` floors at
+  - refs: backend/tests/unit/test_runs_stats.py, backend/tests/unit/api/test_runs_endpoint.py
+- `runs-04` - A connector node that reports failure is a failed RUN, not a completed run with
+  - refs: backend/tests/unit/pipeline_engine/test_executor.py
+- `runs-08` - `GET /runs/{id}/events` streams chunked run events since a sequence number
+  - refs: backend/tests/unit/api/test_run_events_endpoint.py, backend/tests/unit/api/test_run_ws.py
+- `runs-10` - Only authenticated/authorized principals can trigger/inspect runs; api-key
+  - refs: backend/tests/unit/api/test_run_api_key_auth.py
+- `runs-12` - Run-level cost warnings (missing self-report surfacing, FAR-1305): a
+  - refs: backend/tests/unit/core/cost_controller/test_run_warnings.py, backend/tests/unit/api/test_runs_endpoint.py, backend/tests/unit/api/test_mcp_server_coverage_gaps.py
+- `runs-14` - Error-state handling: failed states and node recovery flows are covered by
+  - refs: backend/tests/bdd/steps/test_alpha_errors.py
+- `runs-16` - Run-outcome delivery signal (FAR-189/228): every terminal run carries a
+  - refs: backend/tests/unit/pipeline_engine/test_run_classification.py
+- `runs-17` - Business-expected run outcomes (FAR-707): a pipeline may declare explicit
+  - refs: backend/tests/unit/pipeline_engine/test_run_classification.py, backend/tests/unit/api/test_pipelines_endpoint.py, backend/tests/unit/test_analytics_builder.py, backend/tests/unit/test_analytics_record_facts.py, backend/tests/unit/test_runs_stats.py
+- `runs-18` - The delivery signal is agent-reported and honestly labelled (FAR-1336,
+  - refs: backend/tests/unit/pipeline_engine/test_run_classification.py
+- `runs-19` - Run detail serializes the stored classification record and the derived
+  - refs: backend/tests/unit/api/test_runs_endpoint.py
+- `runs-20` - Node-deadline watchdog firings are recorded distinctly from terminal
+  - refs: backend/tests/unit/core/test_watchdog_firing_record_writer.py, backend/tests/unit/core/test_pipeline_execution_watchdog_retry.py
+- `runs-21` - The node-deadline watchdog gates re-dispatch on durable forward progress
+  - refs: backend/tests/unit/core/test_per_node_completion.py, backend/tests/unit/core/test_pipeline_execution_watchdog_retry.py, backend/tests/unit/db/test_migration_0337_per_node_completion.py
+- `runs-22` - A run is refused for a pipeline that may not run (FAR-1528, extended by
+  - refs: backend/tests/unit/api/test_runs_endpoint.py, backend/tests/unit/api/test_runs_rerun_endpoint.py, backend/tests/unit/db/test_pipeline_state_gate.py, backend/tests/integration/test_pipeline_state_gate_rls.py
+- `runs-24` - The governed-run provenance VOCABULARY is ONE taxonomy (FAR-1693,
+  - refs: backend/tests/unit/core/test_provenance_taxonomy.py
+- `runs-25` - Durable per-attempt execution history (FAR-2078): every execution ATTEMPT
+  - refs: backend/tests/unit/db/crud/test_run_attempts.py, backend/tests/unit/core/test_far2078_attempt_instrumentation.py
+- `runs-26` - `GET /api/v1/runs/{run_id}/attempts` returns the run's attempt history
+  - refs: backend/tests/unit/api/test_run_attempts_endpoint.py
+- `runs-28` - `GET /api/v1/runs/{run_id}/schema-enforcement` returns the run's per-node
+  - refs: backend/tests/unit/api/test_runs_schema_enforcement.py
+- `runtime-06` - Housekeeping includes an `edit_snapshot_retention` category (FAR-1815):
+  - refs: backend/tests/unit/core/test_edit_snapshot_retention.py, backend/tests/unit/core/test_housekeeping_scanners.py, backend/tests/integration/test_far1815_edit_snapshot_retention.py
+- `runtime-07` - Housekeeping deletes fail closed with a typed `blocked_by` reason when a
+  - refs: backend/tests/unit/api/test_admin_housekeeping_decision_block.py, backend/tests/unit/mcp/test_housekeeping_decision_block.py
+- `runtime-09` - The run-retention export wire contract (FAR-1924): the body is NDJSON
+  - refs: backend/tests/unit/api/test_admin_run_data_retention.py
+- `runtime-10` - All three streaming exports (run-retention export, audit `/scan`,
+  - refs: backend/tests/unit/api/test_db_error_handling.py, backend/tests/unit/api/test_admin_run_data_retention.py, backend/tests/unit/api/test_audit_scan_route.py, backend/tests/unit/api/test_analytics_scan_route.py
+- `runtime-provider-core-14` - Run-scoped one-PR-per-run `gh` guard (FAR-1264; trigger made explicit by
+  - refs: backend/tests/unit/pipeline_engine/test_sandbox_policy.py, backend/tests/unit/pipeline_engine/test_e2b_isolation_provider.py, backend/tests/unit/core/runtime_provider/test_e2b_apply_isolation.py
+- `runtime-provider-core-15` - The one-PR claim is RUN-scoped across MULTIPLE flagged nodes (FAR-1315):
+  - refs: backend/tests/unit/pipeline_engine/test_sandbox_policy.py, backend/tests/unit/pipeline_engine/test_e2b_isolation_provider.py, backend/tests/unit/core/bundled_runner/test_runner_dispatch_node.py, backend/tests/unit/core/runtime_provider/test_e2b_apply_isolation.py
+- `runtime-provider-core-16` - One-PR-per-run: POST-RUN detection + an admin alert outside the sandbox
+  - refs: backend/tests/unit/db/test_run_one_pr_per_run.py, backend/tests/unit/db/test_notification_preferences.py
+- `schemas-08` - Runtime input/output validation and sanitization of schema definitions live in
+  - refs: backend/tests/unit/core/test_schema_validation.py, backend/tests/unit/core/test_schema_sanitize.py
+- `schemas-10` - Parameter-schema CRUD for pipeline parameters is an admin surface under the same
+  - refs: backend/tests/unit/api/test_parameter_schemas_endpoint.py
+- `scim-provisioning-04` - `POST /scim/v2/Users` JIT-provisions a Farna Control user: a brand-new account is
+  - refs: backend/tests/unit/scim/test_scim_provisioning.py
+- `scim-provisioning-07` - `POST /scim/v2/Groups` maps an IdP group to a Farna Control team (duplicate
+  - refs: backend/tests/unit/api/test_scim_route_branch.py, backend/tests/unit/db/crud/test_scim.py
+- `snapshot-versioning-11` - Snapshot save, list, get, diff and rollback are Community-tier: the
+  - refs: backend/tests/unit/api/test_pipeline_snapshot_gating.py
+- `snapshot-versioning-12` - Snapshots carry FAR-402 P6 live-edit history + release-channel tagging:
+  - refs: backend/tests/unit/api/test_pipeline_snapshot_gating.py
+- `snapshot-versioning-13` - A trigger bound to a routable channel (`stable`/`canary` in its
+  - refs: backend/tests/unit/db/crud/test_snapshot_versioning_far402.py
+- `support-diagnostics-03` - `farna-control support` builds the redacted bundle and prints the
+  - refs: backend/tests/unit/cli/test_support_command.py
+- `support-diagnostics-06` - Bundle contents are bounded and honest: settings carry a full key
+  - refs: backend/tests/unit/support/test_bundle.py, backend/tests/unit/support/test_support_coverage_gaps.py
+- `support-diagnostics-07` - Redaction is five ordered layers and fails closed: (1) the fixed member
+  - refs: backend/tests/unit/support/test_bundle.py, backend/tests/unit/support/test_bundle_withholding.py
+- `support-diagnostics-08` - Docker Compose has its own collector, `scripts/support-bundle.sh`: it
+  - refs: backend/tests/unit/scripts/test_support_bundle_sh.py
+- `support-diagnostics-09` - A failed native install still leaves a diagnosable artefact before any
+  - refs: backend/tests/unit/scripts/test_install_support_block.py
+- `system-maps-03` - Published reads are a distinct, viewer-level surface (FAR-2363):
+  - refs: backend/tests/unit/api/test_system_maps_routes.py, backend/tests/unit/auth/test_permissions.py, backend/tests/unit/core/test_feature_flag_registry.py
+- `system-maps-05` - Every handler is organization-scoped: it binds `set_rls_org` and
+  - refs: backend/tests/unit/api/test_system_maps_routes.py
+- `system-maps-06` - Map visibility is team-aware: `system_maps` carries `visibility`
+  - refs: backend/tests/unit/api/test_system_maps_routes.py, backend/tests/architecture/test_team_scope_wiring.py, backend/tests/integration/test_rls_isolation.py
+- `system-maps-07` - One published revision per map is a database invariant: a partial unique
+  - refs: backend/tests/unit/db/test_system_map_models.py
+- `system-maps-08` - `POST /api/v1/system-maps/discover` inspects only the caller's
+  - refs: backend/tests/unit/api/test_system_maps_discovery_routes.py
+- `system-maps-09` - Discovery is bounded, not an unbounded tenant scan: every per-kind
+  - refs: backend/tests/unit/api/test_system_maps_discovery_routes.py
+- `system-maps-12` - The draft's lifecycle-map-shaped `stages` / `edges` compatibility
+  - refs: backend/tests/unit/api/test_system_maps_routes.py
+- `system-maps-13` - Discovery persists a draft in the System Maps tables, not `lifecycle_maps`:
+  - refs: backend/tests/unit/core/test_system_map_persistence.py
+- `system-maps-14` - A draft revision is authored from a bounded payload: `POST
+  - refs: backend/tests/unit/api/test_system_maps_routes.py
+- `system-maps-15` - Publishing validates before it publishes: relationship endpoints resolve
+  - refs: backend/tests/integration/test_system_maps_publish_audit.py
+- `system-maps-17` - Revision diff and restore ship: `POST .../revisions/{rev_id}/diff` reports
+  - refs: backend/tests/integration/test_system_maps_version_aware.py
+- `system-maps-18` - Version-aware reads let runs and metrics be interpreted against the map
+  - refs: backend/tests/integration/test_system_maps_version_aware.py
+- `system-maps-19` - `GET /system-maps/{map_id}/overview` is a read model over the trailing
+  - refs: backend/tests/integration/test_system_maps_overview_metrics.py
+- `system-maps-20` - Attribution bindings attach live triggers and loop action pipelines to
+  - refs: backend/tests/unit/api/test_system_maps_routes.py
+- `system-maps-21` - `farna-control apply` treats a System Map as a name-keyed declarative entity
+  - refs: backend/tests/unit/cli/apply/test_system_map_apply.py
+- `system-maps-27` - MCP flag listings include `system_maps` for every caller since FAR-2595
+  - refs: backend/tests/unit/mcp/test_mcp_config_tools.py
+- `system-maps-28` - Discovery is exposed over MCP: the `discover_system_map` tool drives the
+  - refs: backend/tests/unit/mcp/test_mcp_system_map_discovery.py
+- `system-maps-29` - System Maps overview is exposed over MCP through the canonical REST
+  - refs: backend/tests/unit/mcp/test_mcp_system_map_discovery.py
+- `system-maps-30` - MCP exposes the revision-aware overview in addition to discovery: agents
+  - refs: backend/tests/unit/mcp/test_mcp_system_map_discovery.py
+- `system-orgs-05` - Hard-deleting an organization records a durable `org_deletion_completed`
+  - refs: backend/tests/integration/test_system_audit_org_deletion.py
+- `teams-07` - Viewer reads are bounded by team membership (PR #2552): `run.list`,
+  - refs: backend/tests/unit/db/crud/test_team_scope.py, backend/tests/unit/mcp/test_team_scope_enforcement.py, backend/tests/unit/api/test_triggers_routes_coverage.py
+- `teams-08` - DB team RLS covers every team-scoped table (FAR-1514):
+  - refs: backend/tests/integration/test_rls_isolation.py, backend/tests/architecture/test_team_scope_wiring.py
+- `teams-09` - MCP `set_resource_owner_team` (FAR-2298) sets or clears `owner_team_id` on a
+  - refs: backend/tests/unit/api/test_mcp_set_resource_owner_team.py
+- `trigger-engine-02` - A **wedged** pipeline (queued runs, no progress) stops accepting NEW
+  - refs: backend/tests/unit/test_run_admission.py, backend/tests/unit/core/test_cron_helpers_residual.py, backend/tests/unit/api/test_webhooks_endpoint.py
+- `trigger-engine-04` - Trigger reads are viewer-level and team-bounded (PR #2552): `trigger.list` and
+  - refs: backend/tests/unit/api/test_triggers_routes_coverage.py
+- `trigger-engine-05` - MCP trigger reads carry the same viewer clamp (PR #2552):
+  - refs: backend/tests/unit/mcp/test_get_trigger_events.py, backend/tests/unit/mcp/test_team_scope_enforcement.py
+- `trigger-engine-20` - Streak/outcomes readout surfaces delivery health per trigger (`streak_status`:
+  - refs: backend/tests/unit/core/test_trigger_streak_engine.py
+- `trigger-engine-21` - The no-delivery streak engine covers cron triggers as well as ongoing
+  - refs: backend/tests/unit/core/test_trigger_streak_engine.py
+- `trigger-engine-22` - The streak walk treats a `no_delivery` run with reason `no_work` (a
+  - refs: backend/tests/integration/test_trigger_streak_engine_sql.py
+- `trigger-engine-25` - A polling trigger's connector reference is team-scoped at BOTH save and
+  - refs: backend/tests/unit/trigger_engine/test_polling_acl.py, backend/tests/unit/api/test_triggers_routes_coverage.py, backend/tests/unit/mcp/test_trigger_crud_tools.py, backend/tests/unit/mcp/test_trigger_mgmt_tools.py
+- `variants-07` - Per-token breakdown comparison across variants ships: each variant's
+  - refs: backend/tests/unit/api/test_variant_batches.py, backend/tests/unit/api/test_variants.py
+- `variants-10` - A terminal `rejected` run (FAR-1487) aggregates exactly like `cancelled`
+  - refs: backend/tests/unit/api/test_variant_batches.py

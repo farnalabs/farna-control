@@ -31,16 +31,18 @@ test references that prove it::
     - [x] ``GET /healthz`` returns ``{"status": "ok"}`` ...
           <!-- behaviour: health-checks-01 | tests: backend/tests/unit/api/test_health.py::test_liveness_ok -->
 
-* The id is ``<entry-file-stem>-<NN>`` (``health-checks-01``), stable because it
-  is written into the file: moving a behaviour takes its id with it, and a
-  renumbering shows up as a baseline stale-entry failure rather than silently
-  rebinding.
-* ``tests:`` takes a comma-separated list of three reference kinds, or ``none``:
+* The id is ``<entry-file-stem>-<NN>``, assigned when first written and stable
+  because it lives in the file: moving a behaviour takes its id with it. The
+  baseline records an id -> text fingerprint, so an id cannot silently attach to
+  different prose.
+* ``tests:`` takes a comma-separated list of four reference kinds, or ``none``:
 
-  - ``<file>.py::<test_name>`` (node binding, the strong form; a trailing
+  - ``<file>.py::<test_name>`` (pytest node binding, the strong form; a trailing
     ``*`` glob is allowed when backfilled from prose),
+  - ``frontend/(src|tests)/.../<file>.spec.ts::<test title>`` (Vitest or
+    Playwright node binding - the strong form for the frontend),
   - ``<file>.py`` (module binding: the behaviour is proven by that module's
-    suite - the weaker form, tolerated while the graph is backfilled),
+    suite - the weak form, ratcheted shrink-only),
   - ``<file>.feature`` (feature binding: the behaviour is proven by a BDD
     feature file that a step module registers).
 * The comment is invisible when the markdown renders, so the behaviour text
@@ -48,7 +50,10 @@ test references that prove it::
 
 A behaviour that is ticked but has no resolvable, non-vacuous binding is
 recorded in the baseline with a one-line reason (see
-``docs/product-map/unbound-behaviours.md`` for the generated, current list).
+``docs/product-map/unbound-behaviours.md`` for the generated, current list). The
+baseline also records each id's text fingerprint, the shrink-only list of
+module-only (weak) bindings, its owning ticket and a review-by date. Frontmatter
+``status:`` is derived from the bindings (``--write-status``), never trusted.
 
 Why not frontmatter?
 --------------------
@@ -82,7 +87,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import datetime as dt
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -101,8 +108,16 @@ PRODUCT_MAP_DIR = "docs/product-map"
 GRAPH_INDEX = "docs/product-map/README.md"
 TESTS_DIR = "backend/tests"
 BDD_FEATURES_DIR = "backend/tests/bdd/features"
+#: The frontend test roots a ``*.spec.ts::<name>`` binding may name.
+FRONTEND_TEST_ROOTS = ("frontend/src", "frontend/tests")
 BASELINE_RELPATH = "backend/tests/architecture/behaviour_bindings_baseline.json"
 REPORT_RELPATH = "docs/product-map/unbound-behaviours.md"
+
+#: Baseline governance: the ticket that owns the frozen debt, and the date by
+#: which the list must be reviewed (the gate fails once it has passed, so the
+#: baseline cannot become a permanent exemption nobody looks at).
+BASELINE_TICKET = "FAR-2701"
+BASELINE_REVIEW_BY = "2027-06-30"
 
 #: ``<!-- behaviour: <id> | tests: <refs|none> -->``
 MARKER_RE = re.compile(r"<!--\s*behaviour:\s*(?P<id>[A-Za-z0-9][A-Za-z0-9._-]*)\s*\|\s*tests:\s*(?P<refs>.*?)\s*-->")
@@ -113,7 +128,19 @@ _BACKTICK_RE = re.compile(r"`([^`]+)`")
 _NODE_TOKEN_RE = re.compile(r"(?P<file>[A-Za-z0-9_./-]+\.py)::(?P<name>[A-Za-z0-9_*]+)")
 _MODULE_TOKEN_RE = re.compile(r"(?P<file>[A-Za-z0-9_./-]+\.py)\b")
 _FEATURE_TOKEN_RE = re.compile(r"(?P<file>[A-Za-z0-9_./-]+\.feature)\b")
+#: ``frontend/.../X.spec.ts::<test title>`` - a Vitest or Playwright test node.
+_SPEC_TOKEN_RE = re.compile(r"(?P<file>[A-Za-z0-9_./-]+\.spec\.ts)::(?P<name>[^,`\n]+)")
 _FUNC_NAME_RE = re.compile(r"^\s*(?:async\s+)?def\s+(?P<name>test_[A-Za-z0-9_]+)", re.MULTILINE)
+#: A JS/TS test call whose first string argument is the test title. Handles the
+#: modifiers Vitest and Playwright support (``it.skip(``, ``it.each([...])(``,
+#: ``test.describe(``): the modifier chain is consumed before the title.
+_TS_TEST_CALL_RE = re.compile(r"\b(?:it|test)(?:\.[A-Za-z_$][\w$]*(?:\s*\((?:[^()]|\([^()]*\))*\))?)*\s*\(\s*(?P<quote>['\"`])(?P<name>(?:\\.|(?!\1).)*)\1")
+#: Any citation shaped like a test artefact, in either language (a ``.py::`` node
+#: id, a ``.feature`` file, a ``.spec.ts`` spec, or a ``test_*`` name). Plain
+#: ``.py`` only counts when it is part of one of those - a source path is a code
+#: citation, not a test. Used to keep the frozen "names no test" reason honest
+#: (see ``_unbound_reason``).
+_TEST_SHAPED_RE = re.compile(r"\.py::|\.feature\b|\.spec\.ts\b|\btest_[A-Za-z0-9_]+")
 
 NONE_TOKEN = "none"
 
@@ -169,12 +196,14 @@ class Resolution:
 
 @dataclass
 class TestIndex:
-    """Lazy index over ``backend/tests``: modules, and functions per module."""
+    """Lazy index over the test trees: modules, functions, and frontend specs."""
 
     root: Path
     modules: dict[str, str] = field(default_factory=dict)
     by_basename: dict[str, list[str]] = field(default_factory=dict)
+    specs: dict[str, str] = field(default_factory=dict)
     _functions: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    _titles: dict[str, tuple[str, ...]] = field(default_factory=dict)
     _scenario_modules: dict[str, bool] = field(default_factory=dict)
     _all_functions: dict[str, tuple[str, ...]] | None = None
 
@@ -186,7 +215,33 @@ class TestIndex:
             rel = path.relative_to(root).as_posix()
             index.modules[rel] = rel
             index.by_basename.setdefault(path.name, []).append(rel)
+        for base in FRONTEND_TEST_ROOTS:
+            directory = root / base
+            if not directory.is_dir():
+                continue
+            for path in sorted(directory.rglob("*.spec.ts")):
+                rel = path.relative_to(root).as_posix()
+                index.specs[rel] = rel
         return index
+
+    def resolve_spec(self, ref: str) -> str | None:
+        """Normalise a frontend spec path, or ``None`` when it is not a test root."""
+        cleaned = ref.strip().strip("`").lstrip("./").replace("\\", "/")
+        if cleaned.startswith("..") or "/../" in cleaned:
+            return None
+        if cleaned in self.specs:
+            return cleaned
+        return None
+
+    def spec_titles(self, rel: str) -> tuple[str, ...]:
+        """Every test title a Vitest/Playwright spec declares (cached)."""
+        if rel not in self._titles:
+            try:
+                text = (self.root / rel).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                text = ""
+            self._titles[rel] = tuple(match.group("name") for match in _TS_TEST_CALL_RE.finditer(text))
+        return self._titles[rel]
 
     def functions_in(self, rel: str) -> tuple[str, ...]:
         """Every ``test_*`` function defined in *rel* (cached)."""
@@ -410,12 +465,23 @@ def resolve_ref(ref: str, index: TestIndex, root: Path, registered_features: set
         return Resolution(ref=ref, ok=True, kind="feature", detail="registered feature file with executing scenarios")
     if ref.endswith(".py"):
         return _resolve_module_ref(ref, index)
-    return Resolution(ref=ref, ok=False, kind="none", detail="not a pytest node id, a test module or a BDD feature file")
+    if ref.endswith(".spec.ts"):
+        return Resolution(
+            ref=ref,
+            ok=False,
+            kind="node",
+            detail="a frontend spec binding must name a test title: <spec>.spec.ts::<title>",
+        )
+    return Resolution(ref=ref, ok=False, kind="none", detail="not a pytest node id, a test module, a BDD feature file or a frontend spec test")
 
 
 def _resolve_node_ref(ref: str, index: TestIndex) -> Resolution:
     parts = ref.split("::")
-    file_part, name = parts[0], parts[-1]
+    file_part, name = parts[0], "::".join(parts[1:]).strip()
+    if file_part.endswith(".spec.ts"):
+        return _resolve_spec_node_ref(ref, file_part, name, index)
+    if not file_part.endswith(".py"):
+        return Resolution(ref=ref, ok=False, kind="none", detail="not a pytest node id or a frontend spec binding")
     rel = index.resolve_module(file_part)
     if rel is None:
         return Resolution(ref=ref, ok=False, kind="node", detail=f"test module {file_part!r} does not exist under {TESTS_DIR}")
@@ -428,6 +494,24 @@ def _resolve_node_ref(ref: str, index: TestIndex) -> Resolution:
             return Resolution(ref=ref, ok=True, kind="node", detail=f"glob resolves to {len(matches)} test(s) in {rel}")
         return Resolution(ref=ref, ok=False, kind="node", detail=f"no test in {rel} matches {name!r}")
     return Resolution(ref=ref, ok=False, kind="node", detail=f"{name!r} is not defined in {rel}")
+
+
+def _resolve_spec_node_ref(ref: str, file_part: str, name: str, index: TestIndex) -> Resolution:
+    """Resolve ``frontend/(src|tests)/.../*.spec.ts::<title>`` (Vitest or Playwright)."""
+    rel = index.resolve_spec(file_part)
+    if rel is None:
+        return Resolution(
+            ref=ref,
+            ok=False,
+            kind="node",
+            detail=f"frontend spec {file_part!r} does not exist under {' or '.join(FRONTEND_TEST_ROOTS)}",
+        )
+    if not name:
+        return Resolution(ref=ref, ok=False, kind="node", detail="a frontend spec binding must name a test title")
+    titles = index.spec_titles(rel)
+    if name in titles:
+        return Resolution(ref=ref, ok=True, kind="node", detail=f"spec test title resolves in {rel}")
+    return Resolution(ref=ref, ok=False, kind="node", detail=f"no test titled {name!r} in {rel}")
 
 
 def _resolve_module_ref(ref: str, index: TestIndex) -> Resolution:
@@ -509,23 +593,21 @@ def load_quality_lenses(root: Path, scope: list[str]) -> ModuleType:
 _SCOPE_CAP = 80
 
 
-def vacuity_flags(root: Path, modules: list[str], duplicate_scope: list[str] | None = None) -> VacuityFlags:
-    """Run the shared vacuity lenses over the modules that carry bindings.
+def vacuity_flags(root: Path, modules: list[str]) -> VacuityFlags:
+    """Run the shared vacuity lenses over every module that carries a binding.
 
-    Every bound module is checked for no-op ``@then`` steps and self-asserting
-    BDD steps (the two claims a *module* binding can be fooled by). The
-    duplicate-body lens - by far the most expensive, it fingerprints every test
-    body - runs only over ``duplicate_scope``: the modules a NODE binding points
-    at, where a bound duplicate twin is a precise, nameable defect.
+    Every bound module is checked for no-op ``@then`` steps, self-asserting BDD
+    steps, and duplicate test bodies. Running the duplicate-body lens over the
+    whole bound set (not only node-bound modules) closes the hole where a
+    module-bound behaviour rested on a copy-paste twin. Both names of a matched
+    pair are flagged: either twin can be the one a marker names.
     """
     scope = sorted(set(modules))
     lens = load_quality_lenses(root, scope)
-    duplicate_scope_set = set(scope if duplicate_scope is None else duplicate_scope)
     # A ``@then``/``@given`` step decorator can only exist in a module that
     # imports pytest_bdd, so the two BDD lenses are skipped for the rest (they
-    # walk every node of the module for nothing). The duplicate-body lens runs
-    # only where a NODE binding names a specific test.
-    scanned = sorted({rel for rel in scope if _imports_pytest_bdd(root, rel)} | duplicate_scope_set)
+    # walk every node of the module for nothing).
+    scanned = sorted({rel for rel in scope if _imports_pytest_bdd(root, rel)} | set(scope))
     noop: dict[str, frozenset[str]] = {}
     asserting: dict[str, frozenset[str]] = {}
     duplicates: dict[str, frozenset[str]] = {}
@@ -539,10 +621,9 @@ def vacuity_flags(root: Path, modules: list[str], duplicate_scope: list[str] | N
         asserting_names = {name for name, _line, _detail in lens._self_asserting_bdd_step_violation_functions(tree)}
         if asserting_names:
             asserting[rel] = frozenset(asserting_names)
-        if rel in duplicate_scope_set:
-            duplicate_names = {second for _scope_name, _first, second, _line in lens._duplicate_test_body_functions(tree)}
-            if duplicate_names:
-                duplicates[rel] = frozenset(duplicate_names)
+        duplicate_names = {name for _scope_name, first, second, _line in lens._duplicate_test_body_functions(tree) for name in (first, second)}
+        if duplicate_names:
+            duplicates[rel] = frozenset(duplicate_names)
     return VacuityFlags(noop_then=noop, self_asserting=asserting, duplicate_body=duplicates)
 
 
@@ -588,65 +669,122 @@ def bound_modules(entries: list[Entry]) -> list[str]:
     return [ref.partition("::")[0] for entry in entries for behaviour in entry.behaviours for ref in behaviour.refs if ref.endswith(".py")]
 
 
-def node_bound_modules(entries: list[Entry]) -> list[str]:
-    """Every ``.py`` module named by a NODE binding (``file::test``)."""
-    return [ref.partition("::")[0] for entry in entries for behaviour in entry.behaviours for ref in behaviour.refs if "::" in ref]
-
-
 # ---------------------------------------------------------------------------
 # Baseline + derived status
 # ---------------------------------------------------------------------------
-def load_baseline(root: Path) -> dict[str, dict[str, str]]:
-    """The shrink-only baseline: id -> {entry, reason}."""
+def load_baseline_payload(root: Path) -> dict:
+    """The whole baseline document (entries, governance metadata, ratchets)."""
     path = root / BASELINE_RELPATH
     payload = json.loads(path.read_text(encoding="utf-8"))
-    entries = payload.get("entries") if isinstance(payload, dict) else None
+    if not isinstance(payload, dict):
+        raise ValueError(f"{BASELINE_RELPATH} must be a JSON object")
+    entries = payload.get("entries")
     if not isinstance(entries, dict):
         raise ValueError(f"{BASELINE_RELPATH} must declare an 'entries' mapping")
-    return {str(key): dict(value) for key, value in entries.items()}
+    return payload
 
 
-def render_baseline(entries: dict[str, dict[str, str]]) -> str:
+def load_baseline(root: Path) -> dict[str, dict[str, str]]:
+    """The shrink-only baseline: id -> {entry, reason}."""
+    return {str(key): dict(value) for key, value in load_baseline_payload(root)["entries"].items()}
+
+
+def review_due_error(review_by: str, today: dt.date | None = None) -> str | None:
+    """A message when *review_by* has passed, else ``None``.
+
+    A frozen baseline is a loan against future work, not a permanent exemption:
+    once the review date passes the gate fails until a human re-reviews the list
+    and moves the date.
+    """
+    today = today or dt.datetime.now(tz=dt.UTC).date()
+    try:
+        due = dt.date.fromisoformat(review_by)
+    except ValueError:
+        return f"review_by {review_by!r} is not an ISO date (YYYY-MM-DD)"
+    if due < today:
+        return f"the behaviour-bindings baseline review date {review_by} has passed (today is {today.isoformat()}); review the frozen behaviours and move 'review_by' forward"
+    return None
+
+
+def behaviour_text_fingerprint(text: str) -> str:
+    """A short, whitespace-insensitive fingerprint of a behaviour's prose.
+
+    The id is stable because it lives in the file, but an id must not silently
+    attach to *different* behaviour: the fingerprint recorded for every id in the
+    baseline is what catches a renumber/reuse.
+    """
+    normalised = " ".join(text.split())
+    return hashlib.sha256(normalised.encode("utf-8")).hexdigest()[:16]
+
+
+def id_fingerprints(entries: list[Entry]) -> dict[str, str]:
+    """Every behaviour id -> the fingerprint of the text it is attached to."""
+    return {behaviour.id: behaviour_text_fingerprint(behaviour.text) for entry in entries for behaviour in entry.behaviours if behaviour.id}
+
+
+def render_baseline(
+    entries: dict[str, dict[str, str]],
+    *,
+    fingerprints: dict[str, str] | None = None,
+    weak_bindings: list[str] | None = None,
+    ticket: str = BASELINE_TICKET,
+    review_by: str = BASELINE_REVIEW_BY,
+) -> str:
     payload = {
-        "schema_version": 1,
-        "description": "Product-map behaviours that cannot be bound to a resolving, non-vacuous test yet. Shrink-only: see docs/product-map/README.md.",
+        "schema_version": 2,
+        "ticket": ticket,
+        "review_by": review_by,
+        "description": "Product-map behaviours that cannot be bound to a resolving, non-vacuous test yet, plus the shrink-only ratchets that govern them. See docs/product-map/README.md.",
         "generated_by": "scripts/run_behaviour_bindings_baseline.py --write-baseline",
         "entries": {key: entries[key] for key in sorted(entries)},
+        "weak_bindings": sorted(weak_bindings or []),
+        "id_fingerprints": {key: (fingerprints or {})[key] for key in sorted(fingerprints or {})},
     }
     return json.dumps(payload, indent=2, ensure_ascii=True, sort_keys=False) + "\n"
 
 
-def derive_status(behaviours: tuple[Behaviour, ...], vacuous_ids: frozenset[str], vacuous: dict[str, list[str]]) -> str:
-    """Derive an entry's coverage status from its bindings, not from its frontmatter.
+def derive_status(
+    behaviours: tuple[Behaviour, ...],
+    *,
+    resolutions: dict[str, list[Resolution]],
+    vacuous: dict[str, list[str]],
+    baselined_ids: frozenset[str],
+) -> str:
+    """Derive an entry's coverage status from its bindings, not its frontmatter.
 
-    ``covered`` requires every behaviour ticked AND carrying at least one binding
-    that resolves and is not vacuous. ``gap`` is nothing ticked or bound.
+    ``covered`` requires every behaviour ticked and carrying at least one binding
+    that resolves, is not vacuous, and is not frozen in the baseline. ``gap`` is
+    nothing ticked at all; anything in between (including a ticked behaviour that
+    is frozen) is ``partial``.
     """
     if not behaviours:
         return "gap"
-    any_progress = False
-    all_covered = True
-    for behaviour in behaviours:
-        if _behaviour_ok(behaviour, vacuous_ids, vacuous):
-            any_progress = True
-        else:
-            all_covered = False
-            if behaviour.ticked and behaviour.refs:
-                any_progress = True
-    if all_covered:
+    if all(_behaviour_ok(behaviour, resolutions, vacuous, baselined_ids) for behaviour in behaviours):
         return "covered"
-    return "partial" if any_progress else "gap"
+    if any(behaviour.ticked for behaviour in behaviours):
+        return "partial"
+    return "gap"
 
 
-def _behaviour_ok(behaviour: Behaviour, vacuous_ids: frozenset[str], vacuous: dict[str, list[str]]) -> bool:
-    """A behaviour counts as covered when ticked and its bindings resolve cleanly."""
+def _behaviour_ok(
+    behaviour: Behaviour,
+    resolutions: dict[str, list[Resolution]],
+    vacuous: dict[str, list[str]],
+    baselined_ids: frozenset[str],
+) -> bool:
+    """A behaviour counts as covered when ticked and at least one binding resolves cleanly.
+
+    A behaviour frozen in the baseline counts as unbound even if a reference
+    happens to resolve, so an entry cannot claim ``covered`` while the ratchet
+    still excuses one of its behaviours.
+    """
     if not behaviour.ticked:
         return False
-    if behaviour.id in vacuous_ids:
+    if behaviour.id in baselined_ids:
         return False
-    if not behaviour.refs:
+    if vacuous.get(behaviour.id):
         return False
-    return not vacuous.get(behaviour.id)
+    return bool(_clean_refs(behaviour, resolutions, vacuous))
 
 
 # ---------------------------------------------------------------------------
@@ -713,12 +851,24 @@ def derive_marker_refs(behaviour: Behaviour, entry: Entry, index: TestIndex, hin
             resolved = _resolve_feature_path(feature.group("file"), entry, index)
             if resolved is not None:
                 _add(resolved)
+        for spec in _SPEC_TOKEN_RE.finditer(token):
+            spec_rel = index.resolve_spec(spec.group("file"))
+            title = spec.group("name").strip()
+            if spec_rel is None:
+                notes.append(f"cites {spec.group('file')}, which is not a spec under {' or '.join(FRONTEND_TEST_ROOTS)}")
+                continue
+            if title in index.spec_titles(spec_rel):
+                _add(f"{spec_rel}::{title}")
+            else:
+                notes.append(f"cites {title!r}, which is not a test title in {spec_rel}")
         for candidate in _candidate_modules(token, index, hints):
             if candidate not in node_modules:
                 _add(candidate)
 
-    if not refs:
-        _add_bare_function_refs(behaviour.text, index, hints, _add)
+    # Always attempt the bare-citation backfill: a behaviour can name both a
+    # module and a resolvable bare ``test_<name>``, and the node binding is the
+    # stronger proof. Appending (never replacing) keeps every other reference.
+    _add_bare_function_refs(behaviour.text, index, hints, _add)
 
     return refs, notes
 
@@ -877,20 +1027,28 @@ class BindingAudit:
     unbound: dict[str, dict[str, str]]
     derived: dict[str, str]
     index: TestIndex
+    baseline_ids: frozenset[str] = frozenset()
+    strengths: dict[str, str] = field(default_factory=dict)
+    weak_bindings: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def bound_count(self) -> int:
         """Ticked behaviours with at least one clean binding."""
-        total = 0
-        for entry in self.entries:
-            for behaviour in entry.behaviours:
-                if behaviour.ticked and _clean_refs(behaviour, self.resolutions, self.vacuous_reasons):
-                    total += 1
-        return total
+        return sum(1 for entry in self.entries for behaviour in entry.behaviours if behaviour.ticked and _clean_refs(behaviour, self.resolutions, self.vacuous_reasons))
 
     @property
     def ticked_count(self) -> int:
         return sum(1 for entry in self.entries for behaviour in entry.behaviours if behaviour.ticked)
+
+    def strength_counts(self) -> dict[str, int]:
+        """How many cleanly bound ticked behaviours rest on each strength."""
+        counts = {"node": 0, "feature": 0, "module": 0}
+        for entry in self.entries:
+            for behaviour in entry.behaviours:
+                strength = self.strengths.get(behaviour.id)
+                if behaviour.ticked and strength:
+                    counts[strength] += 1
+        return counts
 
 
 def _clean_refs(behaviour: Behaviour, resolutions: dict[str, list[Resolution]], vacuous: dict[str, list[str]]) -> list[str]:
@@ -900,19 +1058,33 @@ def _clean_refs(behaviour: Behaviour, resolutions: dict[str, list[Resolution]], 
     return [resolution.ref for resolution in resolutions.get(behaviour.id, []) if resolution.ok]
 
 
+def _strength(behaviour: Behaviour, resolutions: dict[str, list[Resolution]], vacuous: dict[str, list[str]]) -> str | None:
+    """The strongest clean binding (node > feature > module), or ``None``."""
+    clean = [resolution for resolution in resolutions.get(behaviour.id, []) if resolution.ok]
+    if vacuous.get(behaviour.id) or not clean:
+        return None
+    kinds = {resolution.kind for resolution in clean}
+    for kind in ("node", "feature", "module"):
+        if kind in kinds:
+            return kind
+    return None
+
+
 def audit(root: Path) -> BindingAudit:
     """Resolve every behaviour, flag vacuity, and record what cannot be bound."""
     entries = load_entries(root)
     index = TestIndex.build(root)
     registered = _registered_bdd_features(root)
     modules = sorted({rel for rel in bound_modules(entries) if index.has_module(rel)})
-    duplicate_scope = sorted({rel for rel in node_bound_modules(entries) if index.has_module(rel)})
-    flags = vacuity_flags(root, modules, duplicate_scope)
+    flags = vacuity_flags(root, modules)
+    baseline_ids = frozenset(load_baseline(root))
 
     resolutions: dict[str, list[Resolution]] = {}
     vacuous_reasons: dict[str, list[str]] = {}
     unbound: dict[str, dict[str, str]] = {}
     derived: dict[str, str] = {}
+    strengths: dict[str, str] = {}
+    weak_bindings: dict[str, list[str]] = {}
 
     for entry in entries:
         for behaviour in entry.behaviours:
@@ -934,9 +1106,18 @@ def audit(root: Path) -> BindingAudit:
                     if flags.all_vacuous(resolution.ref, functions):
                         reasons.append(f"every test in {resolution.ref} is vacuous")
             vacuous_reasons[behaviour.id] = reasons
+            strength = _strength(behaviour, resolutions, vacuous_reasons)
+            if strength:
+                strengths[behaviour.id] = strength
+            if strength == "module":
+                weak_bindings[behaviour.id] = _clean_refs(behaviour, resolutions, vacuous_reasons)
 
-        vacuous_ids = frozenset(behaviour.id for behaviour in entry.behaviours if vacuous_reasons.get(behaviour.id))
-        derived[entry.rel] = derive_status(entry.behaviours, vacuous_ids, vacuous_reasons)
+        derived[entry.rel] = derive_status(
+            entry.behaviours,
+            resolutions=resolutions,
+            vacuous=vacuous_reasons,
+            baselined_ids=baseline_ids,
+        )
         for behaviour in entry.behaviours:
             if not behaviour.ticked:
                 continue
@@ -944,12 +1125,24 @@ def audit(root: Path) -> BindingAudit:
                 continue
             unbound[behaviour.id] = {"entry": entry.rel, "reason": _unbound_reason(behaviour, resolutions, vacuous_reasons, index, root)}
 
-    return BindingAudit(entries=entries, resolutions=resolutions, vacuous_reasons=vacuous_reasons, unbound=unbound, derived=derived, index=index)
+    return BindingAudit(
+        entries=entries,
+        resolutions=resolutions,
+        vacuous_reasons=vacuous_reasons,
+        unbound=unbound,
+        derived=derived,
+        index=index,
+        baseline_ids=baseline_ids,
+        strengths=strengths,
+        weak_bindings=weak_bindings,
+    )
 
 
 def _unbound_reason(behaviour: Behaviour, resolutions: dict[str, list[Resolution]], vacuous: dict[str, list[str]], index: TestIndex, root: Path) -> str:
     """One line explaining why a ticked behaviour carries no usable binding."""
     if not behaviour.refs:
+        if _TEST_SHAPED_RE.search(behaviour.text):
+            return "behaviour text cites a test artefact that does not resolve to a proving test"
         return "behaviour text names no test; only code paths (or nothing) are cited"
     if vacuous.get(behaviour.id):
         return "; ".join(dict.fromkeys(vacuous[behaviour.id]))
@@ -961,6 +1154,8 @@ def _unbound_reason(behaviour: Behaviour, resolutions: dict[str, list[Resolution
 
 def render_report(audit_result: BindingAudit) -> str:
     """The generated ``docs/product-map/unbound-behaviours.md``."""
+    counts = audit_result.strength_counts()
+    weak = sorted(audit_result.weak_bindings)
     lines = [
         "# Unbound behaviours",
         "",
@@ -974,19 +1169,50 @@ def render_report(audit_result: BindingAudit) -> str:
         "A behaviour whose intended test genuinely does not exist is a real coverage gap, not a",
         "paperwork gap. Write the test and bind it; do not delete the behaviour.",
         "",
-        f"Bound today: {audit_result.bound_count} of {audit_result.ticked_count} ticked behaviours.",
+        f"Bound today: {audit_result.bound_count} of {audit_result.ticked_count} ticked behaviours ({counts['node']} node, {counts['feature']} feature, {counts['module']} module strength).",
+        f"Weak bindings (module-only): {len(weak)}. This count is ratcheted shrink-only in the baseline.",
         "",
     ]
-    by_entry: dict[str, list[tuple[str, str, str]]] = {}
-    for behaviour_id, info in audit_result.unbound.items():
-        by_entry.setdefault(info["entry"], []).append((behaviour_id, info["reason"], ""))
     behaviours_by_id = {behaviour.id: behaviour for entry in audit_result.entries for behaviour in entry.behaviours}
+    by_entry: dict[str, list[str]] = {}
+    for behaviour_id, info in audit_result.unbound.items():
+        by_entry.setdefault(info["entry"], []).append(behaviour_id)
     for entry_rel in sorted(by_entry):
         lines.extend([f"## {entry_rel}", "", f"Derived status: `{audit_result.derived.get(entry_rel, 'gap')}`", ""])
-        for behaviour_id, reason, _ in sorted(by_entry[entry_rel]):
+        for behaviour_id in sorted(by_entry[entry_rel]):
             behaviour = behaviours_by_id[behaviour_id]
             lines.append(f"- `{behaviour_id}` - {behaviour.headline}")
-            lines.append(f"  - why: {reason}")
+            lines.append(f"  - why: {audit_result.unbound[behaviour_id]['reason']}")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Binding strength",
+            "",
+            "Every clean binding is one of three strengths:",
+            "",
+            "- `node` - names one test (`<module>.py::test_name`, or `<spec>.spec.ts::<title>`); the strong form.",
+            "- `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.",
+            "- `module` - the test module as a whole; the weak form, tolerated while backfilling.",
+            "",
+            f"Node: {counts['node']}  Feature: {counts['feature']}  Module (weak): {counts['module']}",
+            "",
+        ]
+    )
+    if weak:
+        lines.extend(
+            [
+                "### Weak (module-only) bindings",
+                "",
+                "These behaviours are counted as bound, but only by a whole test module rather than a named",
+                "test. The list is ratcheted shrink-only in the baseline: it may not grow.",
+                "",
+            ]
+        )
+        for behaviour_id in weak:
+            behaviour = behaviours_by_id[behaviour_id]
+            lines.append(f"- `{behaviour_id}` - {behaviour.headline}")
+            lines.append(f"  - refs: {', '.join(audit_result.weak_bindings[behaviour_id])}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -995,10 +1221,50 @@ def write_outputs(root: Path, *, write_baseline: bool, write_report: bool) -> tu
     """Regenerate the baseline and/or report; returns ``(bound, unbound)``."""
     audit_result = audit(root)
     if write_baseline:
-        (root / BASELINE_RELPATH).write_text(render_baseline(audit_result.unbound), encoding="utf-8", newline="\n")
+        text = render_baseline(
+            audit_result.unbound,
+            fingerprints=id_fingerprints(audit_result.entries),
+            weak_bindings=sorted(audit_result.weak_bindings),
+        )
+        (root / BASELINE_RELPATH).write_text(text, encoding="utf-8", newline="\n")
     if write_report:
         (root / REPORT_RELPATH).write_text(render_report(audit_result), encoding="utf-8", newline="\n")
     return audit_result.bound_count, len(audit_result.unbound)
+
+
+def write_statuses(root: Path) -> dict[str, tuple[str, str]]:
+    """Rewrite every entry's frontmatter ``status:`` to the derived value.
+
+    Coverage status is a measurement of the bindings, not a hand-typed claim:
+    this keeps the frontmatter honest mechanically, and
+    ``test_frontmatter_status_matches_derivation`` fails when a hand edit drifts
+    from what the bindings say.
+    """
+    audit_result = audit(root)
+    changed: dict[str, tuple[str, str]] = {}
+    status_re = re.compile(r"^status:\s*(?P<value>.*?)\s*$")
+    for entry in audit_result.entries:
+        derived = audit_result.derived.get(entry.rel, "gap")
+        lines = entry.path.read_text(encoding="utf-8").splitlines()
+        _fm, fm_end = _frontmatter(lines)
+        if fm_end == 0:
+            continue
+        previous = entry.status
+        replaced = False
+        for index in range(1, fm_end):
+            match = status_re.match(lines[index])
+            if match is None:
+                continue
+            replaced = True
+            if match.group("value") != derived:
+                lines[index] = f"status: {derived}"
+            break
+        if not replaced:
+            lines.insert(fm_end, f"status: {derived}")
+        if previous != derived or not replaced:
+            entry.path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+            changed[entry.rel] = (previous or "", derived)
+    return changed
 
 
 def baseline_loosenings(base_ids: set[str], current_ids: set[str]) -> list[str]:
@@ -1007,23 +1273,33 @@ def baseline_loosenings(base_ids: set[str], current_ids: set[str]) -> list[str]:
 
 
 def _git_show(root: Path, rev: str, relpath: str) -> str | None:
-    """The file at *rev*; ``None`` when the path is absent at that revision.
+    """The file at *rev*; ``None`` only when the path is GENUINELY absent there.
 
-    A revision that cannot be read is a hard failure: an unreadable base must
-    never look like a pass (the same fail-closed rule
-    ``scripts/run_check_ratchet_baseline.py`` applies).
+    A transient git failure must never look like "the file did not exist" - that
+    would silently disable the shrink-only ratchet. ``git cat-file -e`` is the
+    only probe allowed to answer "absent"; a failed ``git show`` on a path that
+    ``cat-file`` says exists is a hard error (fail closed).
     """
     if not rev or rev.startswith("-"):
         raise ValueError(f"refusing to pass {rev!r} to git as a revision")
-    exists = subprocess.run(
+    resolved = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}"],
         cwd=root,
         check=False,
         capture_output=True,
         text=True,
     )
-    if exists.returncode != 0:
+    if resolved.returncode != 0:
         raise ValueError(f"base revision {rev!r} does not resolve to a commit")
+    present = subprocess.run(
+        ["git", "cat-file", "-e", f"{rev}:{relpath}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if present.returncode != 0:
+        return None
     shown = subprocess.run(
         ["git", "show", f"{rev}:{relpath}"],
         cwd=root,
@@ -1032,7 +1308,7 @@ def _git_show(root: Path, rev: str, relpath: str) -> str | None:
         text=True,
     )
     if shown.returncode != 0:
-        return None
+        raise ValueError(f"git could not read {relpath} at {rev} even though the path exists: {shown.stderr.strip() or 'unknown git error'}")
     return shown.stdout
 
 
@@ -1042,7 +1318,8 @@ def check_base(root: Path, rev: str) -> int:
     ``test_baseline_can_only_shrink`` catches the accidental case (an entry that
     has since become bound). This is the deliberate case: unbinding a behaviour
     and freezing it in the same change. The baseline is a shrink-only ratchet, so
-    an added id is a loosening whatever else the change does.
+    an added id is a loosening whatever else the change does. The weak-binding
+    ratchet and the review-by date are enforced in the same pass.
     """
     relpath = BASELINE_RELPATH
     try:
@@ -1056,20 +1333,37 @@ def check_base(root: Path, rev: str) -> int:
     try:
         base_payload = json.loads(base_text)
         base_ids = set(base_payload.get("entries") or {})
-    except (ValueError, AttributeError) as exc:
+        # A base revision predating the weak-binding ratchet is treated as
+        # "the ratchet does not exist there yet" and the comparison skipped.
+        base_weak = set(base_payload["weak_bindings"]) if "weak_bindings" in base_payload else None
+    except (ValueError, AttributeError, TypeError) as exc:
         print(f"behaviour-bindings baseline: FAILED CLOSED - cannot parse {relpath} at {rev}: {exc}", file=sys.stderr)
         return 1
-    current_ids = set(load_baseline(root))
+    payload = load_baseline_payload(root)
+    current_ids = set(payload["entries"])
+    current_weak = set(payload.get("weak_bindings") or [])
+    review_by = payload.get("review_by")
+    if not isinstance(review_by, str):
+        print(f"behaviour-bindings baseline: FAILED - {relpath} has no top-level 'review_by' date", file=sys.stderr)
+        return 1
+    due = review_due_error(review_by)
+    if due:
+        print(f"behaviour-bindings baseline: FAILED - {due}", file=sys.stderr)
+        return 1
     added = baseline_loosenings(base_ids, current_ids)
-    if added:
+    added_weak = [] if base_weak is None else baseline_loosenings(base_weak, current_weak)
+    if added or added_weak:
+        detail = "\n".join([f"  ADDED unbound {behaviour_id}" for behaviour_id in added] + [f"  ADDED weak {behaviour_id}" for behaviour_id in added_weak])
         print(
-            f"behaviour-bindings baseline: FAILED - {relpath} is a shrink-only ratchet and this change ADDS {len(added)} entr(y/ies) relative to {rev}:\n"
-            + "\n".join(f"  ADDED {behaviour_id}" for behaviour_id in added)
-            + "\nBind the behaviour to a test instead of freezing it (docs/product-map/README.md).",
+            f"behaviour-bindings baseline: FAILED - {relpath} is a shrink-only ratchet and this change ADDS {len(added) + len(added_weak)} entr(y/ies) relative to {rev}:\n" + detail + "\nBind the behaviour to a test instead of freezing it (docs/product-map/README.md).",
             file=sys.stderr,
         )
         return 1
-    print(f"behaviour-bindings baseline: OK - no entry added relative to {rev} ({len(base_ids)} at base, {len(current_ids)} now).", file=sys.stderr)
+    weak_note = "ratchet introduced here" if base_weak is None else f"{len(base_weak)} at base, {len(current_weak)} now"
+    print(
+        f"behaviour-bindings baseline: OK - no entry added relative to {rev} ({len(base_ids)} unbound at base, {len(current_ids)} now; weak {weak_note}; review by {review_by}).",
+        file=sys.stderr,
+    )
     return 0
 
 
@@ -1078,19 +1372,20 @@ def _repo_root() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Product-map behaviour bindings: backfill markers, regenerate the baseline and report.")
+    parser = argparse.ArgumentParser(description="Product-map behaviour bindings: backfill markers, regenerate the baseline, report and derived statuses.")
     parser.add_argument("--root", default=None, help="Repository root (defaults to the parent of this script's directory).")
     parser.add_argument("--write-markers", action="store_true", help="Add a marker to every behaviour bullet that lacks one.")
     parser.add_argument("--write-baseline", action="store_true", help=f"Regenerate {BASELINE_RELPATH}.")
     parser.add_argument("--write-report", action="store_true", help=f"Regenerate {REPORT_RELPATH}.")
-    parser.add_argument("--all", action="store_true", help="--write-markers --write-baseline --write-report.")
+    parser.add_argument("--write-status", action="store_true", help="Rewrite every entry's frontmatter status: to the derived status.")
+    parser.add_argument("--all", action="store_true", help="--write-markers --write-baseline --write-report --write-status.")
     parser.add_argument("--check-base", default=None, metavar="REV", help=f"Fail when this change ADDS an entry to {BASELINE_RELPATH} relative to REV (shrink-only ratchet).")
     args = parser.parse_args(argv)
 
     if args.all:
-        args.write_markers = args.write_baseline = args.write_report = True
-    if not (args.write_markers or args.write_baseline or args.write_report or args.check_base):
-        parser.error("nothing to do: pass --write-markers, --write-baseline, --write-report, --check-base or --all")
+        args.write_markers = args.write_baseline = args.write_report = args.write_status = True
+    if not (args.write_markers or args.write_baseline or args.write_report or args.write_status or args.check_base):
+        parser.error("nothing to do: pass --write-markers, --write-baseline, --write-report, --write-status, --check-base or --all")
 
     root = Path(args.root).resolve() if args.root else _repo_root()
     if args.write_markers:
@@ -1099,6 +1394,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.write_baseline or args.write_report:
         bound, unbound = write_outputs(root, write_baseline=args.write_baseline, write_report=args.write_report)
         print(f"bound {bound} ticked behaviour(s); {unbound} unbound")
+    if args.write_status:
+        changed = write_statuses(root)
+        print(f"rewrote the derived status of {len(changed)} entr(y/ies)")
     if args.check_base:
         return check_base(root, args.check_base)
     return 0

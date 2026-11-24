@@ -17,7 +17,7 @@ bdd:
   - backend/tests/bdd/features/assistant
 depends-on:
   - feat-model-backends
-status: covered
+status: partial
 ---
 
 # Assistant Configuration & Skills

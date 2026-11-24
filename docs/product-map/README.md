@@ -37,7 +37,7 @@ bdd: [tests/.../feature]           # BDD feature files (missing = coverage gap)
 unit-tests: [tests/...]            # unit/integration test files
 delivery-tasks: [task-...]         # delivery-plan task ids
 depends-on: [feat-...]             # prerequisite features
-status: covered | partial | gap    # coverage status of the behaviours below
+status: covered | partial | gap    # derived from the behaviour bindings (never typed)
 ---
 
 # <Feature Name>
@@ -101,37 +101,65 @@ HTML comment at the end of the bullet (invisible when the page renders).
       <!-- behaviour: health-checks-01 | tests: backend/tests/unit/api/test_health.py::test_healthz_ready_mounted -->
 ```
 
-- **The id** is `<entry-file-stem>-<NN>`, numbered from the top of the entry's
-  Behaviors section. It is stable because it lives in the file: moving a
-  behaviour carries its id, and renumbering shows up as a baseline
-  stale-entry failure rather than silently rebinding to a different behaviour.
+- **The id** is `<entry-file-stem>-<NN>`, assigned when the behaviour is first
+  written. It is stable because it lives in the file: moving a behaviour within
+  (or between) entries carries its id with it, so a reorder never forces a
+  renumber. Position is not asserted. The baseline records an
+  `id -> fingerprint(normalised behaviour text)` for every behaviour, so an
+  existing id cannot silently attach to different prose: a reused or renumbered
+  id fails `test_behaviour_id_does_not_rebind_different_text` until the baseline
+  is regenerated deliberately and the rebinding is reviewed.
 - **`tests:`** is a comma-separated list of references, or `none`:
 
   | Form | Meaning | Resolution |
   | --- | --- | --- |
   | `backend/tests/.../test_x.py::test_name` | node binding (the strong form) | the module exists and the function is defined in it |
-  | `backend/tests/.../test_x.py` | module binding (weaker, tolerated while backfilling) | the module exists and defines at least one test (or registers `scenarios(...)`) |
-  | `backend/tests/bdd/features/<x>.feature` | feature binding | a step module registers the file via `scenarios(...)` and at least one scenario executes |
+  | `frontend/src/.../X.spec.ts::<test title>` (or under `frontend/tests/`) | node binding for a Vitest/Playwright test | the spec exists and declares a test with that title |
+  | `backend/tests/.../test_x.py` | module binding (weakest, tolerated while backfilling) | the module exists and defines at least one test (or registers `scenarios(...)`) |
+  | `backend/tests/bdd/features/<x>.feature` | feature binding (scenario-level) | a step module registers the file via `scenarios(...)` and at least one scenario executes |
 
   A binding may not name a test the shared test-style lenses report as vacuous
   (a pass-only `@then` step, a self-asserting BDD step, a duplicate test body).
   `docs/product-map/unbound-behaviours.md` lists, per entry, every ticked
-  behaviour that has no clean binding yet and why.
+  behaviour that has no clean binding yet and why, plus the strength mix and the
+  weak (module-only) bindings.
 
 ### Coverage status is derived, not typed
 
-`status: covered` is now checked against the bindings: every behaviour in the
-entry must be ticked and bound to a resolving, non-vacuous test. Any remaining
-shortfall is frozen in the shrink-only baseline
-`backend/tests/architecture/behaviour_bindings_baseline.json`, which can only
-shrink – binding a frozen behaviour fails the stale-entry check until its entry
-is removed, so an entry moves towards a provable `covered` and can never move
-away from one. `partial`/`gap` remain typed by a human.
+`status:` is a measurement of the bindings, not a human claim:
+
+- `covered` – every behaviour in the entry is ticked, carries at least one
+  binding that resolves, is not vacuous, and is not frozen in the baseline;
+- `partial` – at least one behaviour is ticked but the entry is not `covered`
+  (a ticked behaviour may still be frozen, or a reference may not resolve);
+- `gap` – nothing in the entry is ticked.
+
+A baselined (frozen) behaviour counts as unbound for status purposes, so
+`status: covered` cannot survive a behaviour the shrink-only baseline still
+excuses. The regenerator rewrites the value (`--write-status`), and
+`test_frontmatter_status_matches_derivation` fails on any hand edit that drifts
+from the derivation.
+
+The baseline (`backend/tests/architecture/behaviour_bindings_baseline.json`) has
+two ratchets:
+
+- `entries` – ticked behaviours that cannot be bound yet. Shrink-only: binding a
+  frozen behaviour fails the stale-entry check until its entry is removed, so an
+  entry can only move towards a provable `covered`.
+- `weak_bindings` – ticked behaviours counted as bound by a whole test module
+  rather than a named test. Also shrink-only: a new module-only binding fails
+  (name the test instead).
+
+The baseline also names its owner (`ticket`) and a `review_by` ISO date; once
+that date passes the gate fails until the frozen debt is re-reviewed and the date
+moved forward.
 
 The gate is `backend/tests/architecture/test_behaviour_bindings.py`. It fails
 when a ticked behaviour has no resolvable binding and is not in the baseline,
 when any reference does not resolve, when a reference is vacuous, when a
-baseline entry has since become bound, and when the baseline or
+baseline entry has since become bound, when an id is reused for different text,
+when the derived status disagrees with the frontmatter, when a weak binding was
+added, when the review date has passed, and when the baseline or
 `unbound-behaviours.md` are not exactly what the regenerator produces.
 
 ### Regenerating bindings, the baseline and the report
@@ -143,7 +171,8 @@ uv run --project backend --no-sync python scripts/run_behaviour_bindings_baselin
 `--write-markers` adds a marker to any behaviour that lacks one (backfilling
 from the test names in its text, the entry's `unit-tests:`/`bdd:` citations for
 disambiguation, and the test tree); `--write-baseline` and `--write-report`
-regenerate the baseline JSON and `unbound-behaviours.md`. Both artefacts are
+regenerate the baseline JSON and `unbound-behaviours.md`; `--write-status`
+rewrites every frontmatter `status:` to the derived value. The artefacts are
 generated: never hand-edit them, and never widen the baseline to get green – a
 behaviour that genuinely has no test is a coverage gap, not a paperwork gap.
 
@@ -156,18 +185,31 @@ the PR body of the form:
 
 ```
 Proves: backend/tests/unit/api/test_health.py::test_healthz_ready_mounted
+Proves: frontend/src/__tests__/ActionRow.spec.ts::stacks below sm and becomes a row at sm
 ```
 
 - One marker suffices; repeat the line for as many tests as the change needs.
   Name one test per line.
-- Every named reference must be a pytest node id under `backend/tests/` and must
-  exist in the tree (the module defines that test). The check is deterministic
-  and uses no LLM: it reads the PR body and the changed-file list.
+- Every named reference must be a pytest node id under `backend/tests/`, or a
+  Vitest/Playwright test title under `frontend/src/**/*.spec.ts` or
+  `frontend/tests/**/*.spec.ts`. It must exist in the tree, and the module that
+  holds it must be part of the PR's changed-file list – a proving test is added
+  or updated by the same change, never an untouched test that happened to pass
+  before.
+- A test that is skipped or expected to fail cannot prove anything: a pytest
+  test carrying `@pytest.mark.skip` / `skipif` / `xfail`, whose body starts with
+  `pytest.skip()` / `pytest.xfail()`, or a spec test marked
+  `.skip` / `.fixme` / `.todo` is rejected.
+- Paths are resolved and confined to the repository and the test roots; a `..`
+  traversal is rejected.
+- Fenced code blocks and HTML comments are stripped before the `Proves:` lines
+  are read, so documenting the convention in a PR body cannot satisfy it.
+- The check is deterministic and uses no LLM: it reads the PR body and the
+  changed-file list.
 - Only `backend/src/**` and `frontend/src/**` trigger the requirement. A PR
   confined to `docs/`, `backend/tests/`, `frontend/tests/` or the repo root needs
   no marker.
-- The test named should be the one that would FAIL without the change. A test
-  that already passed before the change proves nothing about it.
+- The test named should be the one that would FAIL without the change.
 
 ## Index – manifest feature registry (single source of truth)
 
@@ -957,10 +999,13 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > coverage answer from the machine layer Assistant indexes from. The trackers
 > now read `partial` (`configure/guardrails.md`, `licensing/license.md`,
 > `admin/plugins.md`, `admin/product-analytics.md`), the guardrail/license
-> trackers also name the exact deferral in Known Gaps, and the new
-> `test_graph_tracker_status_matches_manifest_registry` guard makes
-> manifest↔tracker status agreement an invariant so the two layers can never
-> drift again. `_ORPHANED_BDD_FEATURES` stays empty.
+> trackers also name the exact deferral in Known Gaps, and a manifest↔tracker
+> status guard was added. FAR-2701 later made the tracker `status:` derived from
+> the behaviour bindings (proof, which is narrower than the manifest's ship
+> claim), so that guard is now
+> `test_graph_tracker_status_does_not_overclaim_against_manifest_registry`:
+> the tracker may prove less than the manifest ships, never more.
+> `_ORPHANED_BDD_FEATURES` stays empty.
 >
 > **Closed this walk (2026-09-30):** closed four stale sub-surface gaps –
 > shipped behavior that neither product-map layer described. `feat-apply`

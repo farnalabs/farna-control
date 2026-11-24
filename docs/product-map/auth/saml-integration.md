@@ -15,7 +15,7 @@ bdd:
   - backend/tests/bdd/steps/test_sso_saml.py
 depends-on:
   - feat-auth-jwt-auth
-status: covered
+status: partial
 ---
 
 # SAML Integration

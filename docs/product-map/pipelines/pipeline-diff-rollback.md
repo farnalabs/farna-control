@@ -33,7 +33,7 @@ bdd:
   - backend/tests/bdd/steps/test_pipelines.py
 depends-on:
   - feat-pipelines-pipeline-versioning
-status: covered
+status: partial
 ---
 
 # Pipeline Snapshot Diff & Rollback

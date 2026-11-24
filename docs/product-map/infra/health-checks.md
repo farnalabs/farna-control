@@ -22,7 +22,7 @@ bdd:
   - backend/tests/bdd/features/infra/health.feature
   - backend/tests/bdd/features/infra/test_health_steps.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Health Checks

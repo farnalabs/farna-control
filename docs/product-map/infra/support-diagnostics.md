@@ -28,7 +28,7 @@ unit-tests:
   - frontend/src/__tests__/AdminErrorDetailView.spec.ts
 bdd:
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Support Diagnostics

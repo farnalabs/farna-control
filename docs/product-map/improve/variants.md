@@ -11,7 +11,7 @@ bdd:
 depends-on:
   - feat-runs
   - feat-evals
-status: covered
+status: partial
 ---
 
 # Variants

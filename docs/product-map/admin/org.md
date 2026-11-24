@@ -24,7 +24,7 @@ bdd:
   - backend/tests/bdd/features/organisation/org_deletion.feature
 depends-on:
   - feat-teams
-status: covered
+status: partial
 ---
 
 # Organization Settings

@@ -71,7 +71,7 @@ bdd:
   - backend/tests/bdd/steps/test_connector_crud.py
 depends-on:
   - feat-model-backends
-status: covered
+status: partial
 ---
 
 # Connectors

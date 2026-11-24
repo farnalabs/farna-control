@@ -56,7 +56,7 @@ bdd:
 depends-on:
   - feat-audit
   - feat-teams
-status: covered
+status: partial
 ---
 
 # Human-in-the-loop (HITL) Gates & Review

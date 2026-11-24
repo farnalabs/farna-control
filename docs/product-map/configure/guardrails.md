@@ -33,7 +33,7 @@ bdd:
   - backend/tests/bdd/steps/test_guardrails_steps.py
   - backend/tests/bdd/steps/test_guardrail_config_steps.py
 depends-on: [feat-evals]
-status: covered
+status: partial
 ---
 
 # Guardrails

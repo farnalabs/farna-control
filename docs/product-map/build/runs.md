@@ -54,7 +54,7 @@ bdd:
   - backend/tests/bdd/steps/test_alpha_users.py
 depends-on:
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Run Execution, History & Detail

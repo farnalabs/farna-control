@@ -24,7 +24,7 @@ unit-tests:
   - backend/tests/unit/scripts/test_backup_prune_classify_one.py
 bdd:
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Backup and Restore

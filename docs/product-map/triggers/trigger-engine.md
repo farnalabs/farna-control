@@ -59,7 +59,7 @@ bdd:
   - backend/tests/bdd/steps/test_polling_triggers.py
   - backend/tests/bdd/steps/test_ongoing_triggers.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Triggers

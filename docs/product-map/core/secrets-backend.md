@@ -18,7 +18,7 @@ unit-tests:
 bdd:
   - backend/tests/bdd/features/infra/secrets_backend.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Secrets Backend

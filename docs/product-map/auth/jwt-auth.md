@@ -15,7 +15,7 @@ bdd:
   - backend/tests/bdd/features/auth/jwt_auth_crypto.feature
   - backend/tests/bdd/features/auth/jwt_security.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # JWT Auth

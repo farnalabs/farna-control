@@ -13,7 +13,7 @@ bdd:
   - backend/tests/bdd/steps/test_sso_oidc.py
 depends-on:
   - feat-auth-jwt-auth
-status: covered
+status: partial
 ---
 
 # OIDC Integration

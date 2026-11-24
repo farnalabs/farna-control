@@ -11,7 +11,7 @@ unit-tests:
 bdd:
   - backend/tests/bdd/features/system_admin/system_admin_config.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # System Config

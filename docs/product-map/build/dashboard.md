@@ -14,7 +14,7 @@ bdd:
   - backend/tests/bdd/features/dashboard/daily_run_counts.feature
 depends-on:
   - feat-evals
-status: covered
+status: partial
 ---
 
 # Home Dashboard & Metrics Overview

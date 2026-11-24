@@ -18,17 +18,23 @@ the same implementation the regenerator uses
 (``scripts/run_behaviour_bindings_baseline.py``), so the gate and the backfill
 tool can never drift into enforcing different rules:
 
-- every behaviour carries a stable, unique id in the right ordinal position;
+- every behaviour carries a stable, unique id, and an existing id cannot
+  silently attach to different behaviour text (the baseline records an id ->
+  text fingerprint for every behaviour);
 - every reference a marker names RESOLVES against the collected test tree (a
-  pytest node id, a test module, or a registered BDD feature file);
+  pytest node id, a test module, a registered BDD feature file, or a frontend
+  ``*.spec.ts`` test title);
 - no reference names a test the shared test-suite-quality lenses flag as vacuous
   (no-op ``@then``, self-asserting BDD step, duplicate test body);
 - every ticked behaviour is bound to at least one clean reference, or is frozen
   in ``backend/tests/architecture/behaviour_bindings_baseline.json``;
 - the baseline is shrink-only: an entry that has since become bound (or whose
   behaviour disappeared or was unticked) fails, so it can never be widened;
-- ``status: covered`` is derived from the bindings, not trusted: a covered entry
-  may not carry a ticked behaviour that is unbound outside the baseline;
+- the frontmatter ``status:`` equals the status derived from the bindings, so a
+  hand-typed ``covered`` cannot outlive the test that backed it;
+- the weak (module-only) binding ratchet can only shrink, so a new behaviour
+  cannot be "proved" by pointing at a whole test module;
+- the baseline has a review-by date that must not be in the past;
 - the baseline and ``docs/product-map/unbound-behaviours.md`` are exactly what
   the regenerator produces, so neither can be hand-edited into a weaker claim.
 """
@@ -71,6 +77,11 @@ def _baseline() -> dict[str, dict[str, str]]:
     return _bindings.load_baseline(REPO_ROOT)
 
 
+@functools.cache
+def _baseline_payload() -> dict:
+    return _bindings.load_baseline_payload(REPO_ROOT)
+
+
 def _entries() -> list[object]:
     return _audit().entries
 
@@ -85,31 +96,54 @@ def _format_unbound(rows: list[tuple[str, str, str]]) -> str:
 
 
 def test_every_behaviour_carries_a_stable_unique_id():
-    """Every behaviour bullet names an id, in the ordinal position it occupies.
+    """Every behaviour bullet names an id that is present and globally unique.
 
-    The id is what the baseline and ``Proves:`` links refer to, so it must be
-    present, unique, and pinned to its position: a renumbering that silently
-    rebinds a baseline entry to a different behaviour would make the ratchet lie.
+    The id is what the baseline and ``Proves:`` links refer to (and what a
+    behaviour keeps when it moves within an entry), so presence and uniqueness
+    are the two hard requirements. Position is *not* asserted: an id travels with
+    its behaviour, so a reordering must not force a renumber. That a reused id
+    cannot silently point at different prose is pinned by
+    ``test_behaviour_id_does_not_rebind_different_text``.
     """
     missing: list[str] = []
-    misplaced: list[str] = []
     seen: dict[str, str] = {}
     duplicated: list[str] = []
     for entry in _entries():
-        for ordinal, behaviour in enumerate(entry.behaviours, start=1):
-            expected = f"{entry.path.stem}-{ordinal:02d}"
+        for behaviour in entry.behaviours:
             if not behaviour.id:
-                missing.append(f"  {entry.rel}:{behaviour.start_line} ({expected})")
+                missing.append(f"  {entry.rel}:{behaviour.start_line}")
                 continue
-            if behaviour.id != expected:
-                misplaced.append(f"  {entry.rel}:{behaviour.start_line} has {behaviour.id!r}, expected {expected!r}")
             if behaviour.id in seen:
                 duplicated.append(f"  {behaviour.id}: {seen[behaviour.id]} and {entry.rel}")
             seen[behaviour.id] = entry.rel
 
     assert not missing, "behaviour bullets with no `<!-- behaviour: <id> | tests: ... -->` marker. Add one with `uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --write-markers`:\n" + "\n".join(missing)
-    assert not misplaced, "behaviour ids do not match their ordinal position (renumbering rebinds the shrink-only baseline):\n" + "\n".join(misplaced)
     assert not duplicated, "duplicate behaviour ids across the product map:\n" + "\n".join(duplicated)
+
+
+def test_behaviour_id_does_not_rebind_different_text():
+    """A behaviour id may not silently attach to different prose.
+
+    The baseline records ``id -> fingerprint(normalised behaviour text)`` for
+    every behaviour. Reusing an existing id for a different claim (a renumber
+    after reordering, or a rewritten behaviour that kept its marker) changes the
+    fingerprint and fails until the baseline is regenerated deliberately, which
+    is the only path that can rebind a frozen id and is visible in review.
+    """
+    fingerprints = _baseline_payload().get("id_fingerprints")
+    assert isinstance(fingerprints, dict), "behaviour_bindings_baseline.json must declare an 'id_fingerprints' mapping (regenerate with --write-baseline)"
+    drifted: list[str] = []
+    for entry, behaviour in _all_behaviours():
+        recorded = fingerprints.get(behaviour.id)
+        actual = _bindings.behaviour_text_fingerprint(behaviour.text)
+        if recorded is None:
+            drifted.append(f"  {entry.rel}: {behaviour.id} has no recorded text fingerprint")
+        elif recorded != actual:
+            drifted.append(f"  {entry.rel}: {behaviour.id} text changed since the baseline recorded its id (recorded {recorded}, now {actual})")
+    assert not drifted, (
+        "behaviour ids are attached to text the baseline did not record - a reuse/renumber would rebind the shrink-only baseline. Regenerate with `uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --write-baseline --write-report` and review the diff:\n"
+        + "\n".join(drifted)
+    )
 
 
 def test_every_referenced_binding_resolves():
@@ -188,32 +222,71 @@ def test_baseline_can_only_shrink():
     assert not now_bound, "behaviour_bindings_baseline.json entries that are no longer unbound - the baseline is shrink-only. Regenerate it with `uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --write-baseline --write-report`:\n" + "\n".join(now_bound)
 
 
-def test_covered_status_is_derived_from_bindings():
-    """``status: covered`` may not survive a ticked behaviour that no test proves.
+def test_frontmatter_status_matches_derivation():
+    """Every entry's frontmatter ``status:`` must equal the status its bindings derive.
 
-    The frontmatter value used to be the only statement of coverage. It is now
-    checked against the bindings: an entry claiming ``covered`` must have every
-    behaviour ticked and bound, with any remaining shortfall frozen in the
-    baseline (which can only shrink).
+    The frontmatter value used to be the only statement of coverage, typed by
+    hand. It is now a measurement: ``covered`` only when every behaviour is
+    ticked, resolving, non-vacuous, and not frozen in the baseline; ``partial``
+    when at least one behaviour is ticked but not all are proven; ``gap`` when
+    nothing is ticked. The regenerator rewrites it (``--write-status``), and this
+    test fails if a hand edit drifts from what the bindings say - including a
+    ``covered`` that survives a behaviour the baseline still excuses.
     """
-    baseline = _baseline()
-    offenders: list[str] = []
+    drifted: list[str] = []
     for entry in _entries():
-        if entry.status != "covered":
-            continue
-        for behaviour in entry.behaviours:
-            if not behaviour.ticked:
-                offenders.append(f"  {entry.rel}: {behaviour.id} is unticked but the entry claims status: covered")
-            elif behaviour.id in _audit().unbound and behaviour.id not in baseline:
-                offenders.append(f"  {entry.rel}: {behaviour.id} has no clean binding and is not in the baseline")
+        derived = _audit().derived.get(entry.rel, "gap")
+        if entry.status != derived:
+            drifted.append(f"  {entry.rel}: frontmatter says {entry.status!r}, the bindings derive {derived!r}")
+    assert not drifted, "product-map frontmatter status disagrees with the status derived from the behaviour bindings. Regenerate it with `uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --write-status`:\n" + "\n".join(drifted)
 
-    assert not offenders, "entries claiming 'status: covered' carry behaviours their bindings do not prove:\n" + "\n".join(offenders)
+
+def test_weak_bindings_ratchet_only_shrinks():
+    """A module-only binding is a loan: the frozen list may not grow.
+
+    ``weak_bindings`` in the baseline lists every ticked behaviour counted as
+    bound by a whole test module rather than a named test. A NEW weak binding
+    fails (name the test instead), and a listed one that is no longer weak (it
+    gained a node binding, or stopped being bound) fails as a stale entry, so the
+    list can only shrink.
+    """
+    recorded = set(_baseline_payload().get("weak_bindings") or [])
+    current = set(_audit().weak_bindings)
+    added = sorted(current - recorded)
+    stale = sorted(recorded - current)
+    assert not added, "weak (module-only) bindings were added. Bind a named test instead of the whole module:\n" + "\n".join(f"  {behaviour_id}" for behaviour_id in added)
+    assert not stale, (
+        "weak_bindings entries that are no longer weak (they gained a node binding, stopped being bound, or vanished) - the ratchet is shrink-only. Regenerate with `uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --write-baseline --write-report`:\n"
+        + "\n".join(f"  {behaviour_id}" for behaviour_id in stale)
+    )
+
+
+def test_baseline_review_date_is_current():
+    """The baseline names its owner and a review date that has not passed.
+
+    A frozen list with no owner and no expiry is a permanent exemption. The
+    baseline carries ``ticket`` and ``review_by``; once the date passes the gate
+    fails until a human re-reviews the debt and moves it forward.
+    """
+    payload = _baseline_payload()
+    ticket = payload.get("ticket")
+    assert isinstance(ticket, str), "behaviour_bindings_baseline.json must declare the owning 'ticket'"
+    assert ticket.strip(), "behaviour_bindings_baseline.json must declare the owning 'ticket'"
+    review_by = payload.get("review_by")
+    assert isinstance(review_by, str), "behaviour_bindings_baseline.json must declare an ISO 'review_by' date"
+    assert review_by.strip(), "behaviour_bindings_baseline.json must declare an ISO 'review_by' date"
+    due = _bindings.review_due_error(review_by)
+    assert due is None, due
 
 
 def test_baseline_file_is_the_canonical_rendering():
     """The baseline on disk is exactly what the regenerator emits."""
     current = (REPO_ROOT / _bindings.BASELINE_RELPATH).read_text(encoding="utf-8")
-    expected = _bindings.render_baseline(_baseline())
+    expected = _bindings.render_baseline(
+        _baseline(),
+        fingerprints=_bindings.id_fingerprints(_entries()),
+        weak_bindings=sorted(_audit().weak_bindings),
+    )
     assert current == expected, "backend/tests/architecture/behaviour_bindings_baseline.json is not in canonical form - regenerate it with `uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --write-baseline --write-report`"
 
 
@@ -257,3 +330,77 @@ def test_vacuity_lenses_are_wired_to_the_frozen_baselines():
     flags = _bindings.vacuity_flags(REPO_ROOT, modules)
     unwired = sorted(rel for rel in modules if not flags.noop_then.get(rel))
     assert not unwired, "the no-op @then lens reports nothing for modules the frozen baseline still lists (the vacuity rejection is not wired):\n" + "\n".join(f"  {rel}" for rel in unwired)
+
+
+def test_frontend_spec_bindings_resolve():
+    """A ``frontend/**/*.spec.ts::<title>`` binding resolves by file + test title.
+
+    Without this ref kind a frontend behaviour could not be bound at all, so the
+    whole frontend half of the product map was unbound by construction. The
+    resolver indexes the two frontend test roots, matches the declared test title,
+    and rejects a title that does not exist.
+    """
+    spec_rel = "frontend/src/__tests__/FarnaLabsProbe.spec.ts"
+    index = _bindings.TestIndex.build(REPO_ROOT)
+    index.specs[spec_rel] = spec_rel
+    index._titles[spec_rel] = ("renders the probe",)
+
+    ok = _bindings.resolve_ref(f"{spec_rel}::renders the probe", index, REPO_ROOT, set())
+    missing = _bindings.resolve_ref(f"{spec_rel}::something else", index, REPO_ROOT, set())
+    unnamed = _bindings.resolve_ref(f"{spec_rel}", index, REPO_ROOT, set())
+    traversal = _bindings.resolve_ref("frontend/src/../../backend/src/farna/main.spec.ts::x", index, REPO_ROOT, set())
+
+    assert ok.ok, f"a real spec test title must resolve, got {ok.detail}"
+    assert not missing.ok, "an absent spec test title must not resolve"
+    assert not unnamed.ok, "a spec reference must name a test title"
+    assert not traversal.ok, "a '..' traversal must not resolve to a spec outside the test roots"
+
+
+def test_behaviour_ok_requires_at_least_one_resolving_ref():
+    """A non-empty ref list is not enough: one reference must actually resolve."""
+    behaviour = _bindings.Behaviour(
+        id="probe-01",
+        ticked=True,
+        text="- [x] probe",
+        refs=("backend/tests/does_not_exist.py",),
+        start_line=1,
+        end_line=1,
+    )
+    dead = {"probe-01": [_bindings.Resolution(ref="backend/tests/does_not_exist.py", ok=False, kind="module", detail="no such module")]}
+    live = {"probe-01": [_bindings.Resolution(ref="backend/tests/does_not_exist.py", ok=True, kind="module", detail="ok")]}
+
+    assert not _bindings._behaviour_ok(behaviour, dead, {}, frozenset()), "a behaviour whose only reference fails to resolve must not count as covered"
+    assert _bindings._behaviour_ok(behaviour, live, {}, frozenset()), "a behaviour with a resolving reference must count as covered"
+    assert not _bindings._behaviour_ok(behaviour, live, {}, frozenset({"probe-01"})), "a baselined-unbound behaviour must count as unbound for status purposes"
+
+
+def test_git_show_distinguishes_absent_path_from_git_failure(monkeypatch):
+    """``_git_show`` returns ``None`` only for a genuinely absent path.
+
+    A transient git failure must fail closed: treating it as "the path did not
+    exist at the base revision" would silently disable the shrink-only ratchet
+    for that run.
+    """
+    import subprocess
+    from types import SimpleNamespace
+
+    def fake_run(args, **_kwargs):
+        if args[:2] == ["git", "rev-parse"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if args[:2] == ["git", "cat-file"]:
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+        raise AssertionError(f"git show must not be attempted for an absent path: {args}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert _bindings._git_show(REPO_ROOT, "HEAD", "no/such/path.json") is None
+
+    def failing_show(args, **_kwargs):
+        if args[:2] == ["git", "rev-parse"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if args[:2] == ["git", "cat-file"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(returncode=128, stdout="", stderr="fatal: unable to read tree")
+
+    monkeypatch.setattr(subprocess, "run", failing_show)
+    with pytest.raises(ValueError, match="could not read"):
+        _bindings._git_show(REPO_ROOT, "HEAD", "backend/tests/architecture/behaviour_bindings_baseline.json")

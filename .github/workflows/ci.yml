@@ -443,10 +443,14 @@ jobs:
         # A PR that changes product source (backend/src/** or frontend/src/**)
         # must name the test that proves it, as a line in the PR body:
         #     Proves: backend/tests/<path>/test_<module>.py::test_<name>
+        #     Proves: frontend/(src|tests)/<path>/<name>.spec.ts::<test title>
         # The check is deterministic (no model): it reads the body and the
         # changed-file list, then verifies every named reference is a test that
-        # exists in the tree. A green PR whose new behaviour nothing asserts is
-        # the exact failure this closes; docs/product-map/README.md documents the
+        # exists, that the PR actually changes the module holding it, and that it
+        # is not skipped or expected to fail. Fenced code blocks and HTML
+        # comments in the body are ignored, so documenting the convention cannot
+        # satisfy it. A green PR whose new behaviour nothing asserts is the exact
+        # failure this closes; docs/product-map/README.md documents the
         # convention. PR-only: a push to main has no PR body, and main is gated
         # by the PR that merged it.
         if: github.event_name == 'pull_request'

@@ -28,7 +28,7 @@ bdd:
   - backend/tests/bdd/features/costs/cost_controls.feature
 depends-on:
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Cost Tracking, Spend Limits & Cost Controls
