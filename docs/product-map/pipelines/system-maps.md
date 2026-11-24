@@ -97,17 +97,26 @@ REST gate (FAR-2595).
 
 The published-read routes sit on their own router
 (`published_router` in `api/routes/system_maps.py`) with
-`_require_published_system_maps_read` (viewer floor + API-key grant check) and
+`_require_published_system_maps_read` (viewer role floor plus a grant check) and
 `require_feature("system_maps_read")`, and the repository is asked for
 `published_only=True` maps/revisions; a draft or an unpublished map is a 404 to
 a viewer. The authoring routes keep the operator gate: the operator role
-floor, the `system_maps_access` grant for grant-bearing API keys, and the
-`system_maps` feature flag, all resolved server-side on each request. Developer
-mode is deliberately NOT part of this API gate (FAR-2595); the
-`private_preview` route visibility described above is a separate UI release
-gate, not an API one.
-Legacy JWTs and keys with no grant set keep the role-based behavior rather
+floor, the `system_maps_access` grant, and the `system_maps` feature flag, all
+resolved server-side on each request. Developer mode is deliberately NOT part
+of this API gate (FAR-2595); the `private_preview` route visibility described
+above is a separate UI release gate, not an API one.
+Legacy JWTs and callers with no grant set keep the role-based behavior rather
 than being refused for the missing grant. Nothing publishes automatically.
+
+Credential contract (FAR-2730): both route groups authenticate the HTTP caller
+with a user JWT. Each endpoint's `require_permission(...)` and the plan/feature
+gate (`get_plan_context` resolves through `get_current_user`) reject an `mk_`
+org API key with 401 before the internal-access probe is reached, so the probe
+no longer implies an API-key path the routes cannot deliver. The
+`farna-control apply` CLI is documented to authenticate with an `mk_` key and
+does read `GET /api/v1/system-maps`; because the whole System Maps family —
+reads and writes — is JWT-only, making that CLI path work is a family-wide
+change rather than a single-read one.
 
 The map is stored in dedicated System Maps tables (baseline schema,
 `0350_baseline_schema.py`: `system_maps`, `system_map_revisions`,
