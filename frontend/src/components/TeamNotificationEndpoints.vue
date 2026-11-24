@@ -1,6 +1,10 @@
 <template>
   <div>
-    <LoadingSpinner v-if="loading" />
+    <!-- Inline spinner: keep the panel's original py-4 rhythm and 20px ring
+         rather than the page-level py-16 / 32px default. -->
+    <div v-if="loading" class="py-4">
+      <LoadingSpinner size="sm" :padded="false" />
+    </div>
 
     <div v-else-if="error" class="mb-3 text-sm text-destructive">
       {{ error }}
