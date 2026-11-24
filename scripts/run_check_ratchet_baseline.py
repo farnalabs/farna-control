@@ -1177,6 +1177,52 @@ def _print_unreadable_base(ratchet_key: str, rev: str, why: str, exc: RatchetErr
     )
 
 
+def _check_ratchet(repo_root: Path, rev: str, why: str, ratchet: Ratchet) -> tuple[str, list[str]]:
+    """Classify one ratchet against the base, isolating its fail/skip branches.
+
+    Returns ``(status, findings)`` where status is one of ``"fatal"`` (already
+    reported; the caller must fail), ``"introduced"``, ``"skipped"``, ``"ok"``
+    or ``"loosened"``.
+    """
+    # A malformed WORKING-TREE file is this change's doing: fail closed.
+    try:
+        current = ratchet.parse(_read_working_tree(repo_root, ratchet.path), source=ratchet.path)
+    except RatchetError as exc:
+        print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
+        return "fatal", []
+
+    # A git failure reading a resolved base is a hard failure.
+    try:
+        base_text = read_baseline_at_rev(repo_root, rev, ratchet.path)
+    except RatchetError as exc:
+        print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
+        return "fatal", []
+
+    if base_text is None:
+        return "introduced", []
+
+    # A malformed BASE file is not this change's doing: warn and skip.
+    try:
+        base = ratchet.parse(base_text, source=f"{ratchet.path}@{rev}")
+    except RatchetError as exc:
+        _print_unreadable_base(ratchet.key, rev, why, exc)
+        return "skipped", []
+
+    try:
+        comparison_current = _without_new_file_entries(repo_root, rev, base, current) if ratchet.allow_new_file_entries else current
+        findings = ratchet.loosenings(base, comparison_current)
+    except RatchetError as exc:
+        # A working-tree-side comparison failure (e.g. an unclassified mypy
+        # option polarity) is the change's own defect: still fail closed.
+        print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
+        return "fatal", []
+
+    if findings:
+        return "loosened", findings
+    print(f"ratchet-baseline guard: OK - [{ratchet.key}] {ratchet.path} is not loosened against {rev}.", file=sys.stderr)
+    return "ok", []
+
+
 def _run_all(repo_root: Path, explicit_base: str | None) -> int:
     """Check every enabled ratchet against one base revision."""
     try:
@@ -1191,43 +1237,15 @@ def _run_all(repo_root: Path, explicit_base: str | None) -> int:
     skipped: list[Ratchet] = []
 
     for ratchet in RATCHETS:
-        # A malformed WORKING-TREE file is this change's doing: fail closed.
-        try:
-            current = ratchet.parse(_read_working_tree(repo_root, ratchet.path), source=ratchet.path)
-        except RatchetError as exc:
-            print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
+        status, findings = _check_ratchet(repo_root, rev, why, ratchet)
+        if status == "fatal":
             return 1
-
-        # A git failure reading a resolved base is a hard failure.
-        try:
-            base_text = read_baseline_at_rev(repo_root, rev, ratchet.path)
-        except RatchetError as exc:
-            print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
-            return 1
-        if base_text is None:
+        if status == "introduced":
             introduced.append(ratchet)
-            continue
-
-        # A malformed BASE file is not this change's doing: warn and skip.
-        try:
-            base = ratchet.parse(base_text, source=f"{ratchet.path}@{rev}")
-        except RatchetError as exc:
-            _print_unreadable_base(ratchet.key, rev, why, exc)
+        elif status == "skipped":
             skipped.append(ratchet)
-            continue
-
-        try:
-            comparison_current = _without_new_file_entries(repo_root, rev, base, current) if ratchet.allow_new_file_entries else current
-            findings = ratchet.loosenings(base, comparison_current)
-        except RatchetError as exc:
-            # A working-tree-side comparison failure (e.g. an unclassified mypy
-            # option polarity) is the change's own defect: still fail closed.
-            print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
-            return 1
-        if findings:
+        elif status == "loosened":
             failures.append((ratchet, findings))
-        else:
-            print(f"ratchet-baseline guard: OK - [{ratchet.key}] {ratchet.path} is not loosened against {rev}.", file=sys.stderr)
 
     _print_introduced(introduced, rev)
     _print_skipped(skipped, rev)
