@@ -3391,8 +3391,11 @@ class TestBundledClusterWindowInternals:
 
         with backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
             # Recorded while the cluster is up (before the readiness wait), so a
-            # kill at ANY point in the window leaves an identifiable pid.
-            assert pidfile.read_text(encoding="ascii").strip() == "4242"
+            # kill at ANY point in the window leaves an identifiable pid — as an
+            # identity (pid + start time + data dir), never a bare pid.
+            payload = json.loads(pidfile.read_text(encoding="ascii"))
+            assert payload["pid"] == 4242
+            assert payload["data_dir"] == os.path.normcase(str(data_dir.resolve()))
 
         assert not pidfile.exists(), "a window that stopped its cluster leaves no record behind"
 
@@ -3456,7 +3459,7 @@ class TestBundledClusterWindowInternals:
     def test_a_leftover_window_postmaster_is_stopped_by_pid_before_the_window(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
         """The SIGKILL residual: the NEXT restore stops the recorded pid itself."""
         from farna.cli import backup as backup_mod
-        from farna.launcher.supervisor import RESTORE_WINDOW_PIDFILE
+        from farna.launcher.supervisor import RESTORE_WINDOW_PIDFILE, write_restore_window_pidfile
 
         if sys.platform == "win32":
             pytest.skip("the packaged native launcher is POSIX-only; Windows cannot signal a foreign pid")
@@ -3469,7 +3472,10 @@ class TestBundledClusterWindowInternals:
         orphan_pid = int(subprocess.check_output([sys.executable, "-c", launcher], text=True, timeout=30).strip())  # noqa: S603 - fixed argv, test-controlled
         time.sleep(0.5)  # let the orphan bind its cmdline before it is inspected
         pidfile = data_dir / RESTORE_WINDOW_PIDFILE
-        pidfile.write_text(f"{orphan_pid}\n", encoding="ascii")
+        # The REAL identity record for a process this test really started: pid,
+        # its real start time and the data dir — so this is the genuine-match
+        # path, not a hand-built fixture.
+        write_restore_window_pidfile(data_dir, orphan_pid)
         monkeypatch.setattr(backup_mod, "_port_accepting", lambda *_a, **_k: True)
         try:
             with backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
