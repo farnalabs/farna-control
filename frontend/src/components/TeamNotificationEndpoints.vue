@@ -1,9 +1,9 @@
 <template>
   <div>
-    <div v-if="loading" class="flex items-center justify-center py-4">
-      <div
-        class="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent"
-      />
+    <!-- Inline spinner: keep the panel's original py-4 rhythm and 20px ring
+         rather than the page-level py-16 / 32px default. -->
+    <div v-if="loading" class="py-4">
+      <LoadingSpinner size="sm" :padded="false" />
     </div>
 
     <ErrorAlert v-else-if="error" class="mb-3" :message="error" :retryable="false">
@@ -341,6 +341,7 @@ import { api } from "../lib/api/client";
 import { useCurrentUser } from "../composables/useCurrentUser";
 import Button from 'primevue/button'
 import ErrorAlert from './shared/ErrorAlert.vue'
+import LoadingSpinner from './shared/LoadingSpinner.vue'
 import { formatApiError } from "../lib/api/formatError";
 import type { components } from "../lib/api/client";
 import { Pencil, Play, Trash2, Plus } from "@lucide/vue";

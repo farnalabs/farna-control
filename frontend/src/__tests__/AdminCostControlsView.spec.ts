@@ -584,7 +584,7 @@ describe('AdminCostControlsView', () => {
 
     vm.totalSpend = 80
     await nextTick()
-    expect(vm.progressBarClass).toBe('bg-amber-500')
+    expect(vm.progressBarClass).toBe('bg-warning')
   })
 
   it('covers omitted and non-numeric cost totals without producing NaN', async () => {

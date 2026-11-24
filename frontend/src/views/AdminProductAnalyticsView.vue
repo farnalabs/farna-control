@@ -9,7 +9,7 @@
     <template v-else-if="store.transparency">
       <div class="space-y-6">
         <!-- Warning banner -->
-        <div v-if="store.transparency.warning === 'not_reaching_farnalabs'" class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+        <div v-if="store.transparency.warning === 'not_reaching_farnalabs'" class="rounded-lg border border-warning/40 bg-warning/10 p-4 text-warning-text">
           <p class="text-sm font-medium">{{ $t('views.AdminProductAnalyticsView.warning_not_reaching') }}</p>
         </div>
 

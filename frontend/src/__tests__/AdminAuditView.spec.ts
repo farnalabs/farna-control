@@ -1130,6 +1130,34 @@ describe('AdminAuditView — system ledger (system admin)', () => {
     expect(wrapper.find('[data-testid="admin-audit-event-row-evt-1"]').exists()).toBe(true)
   })
 
+  it('renders the source tabs through the shared StateTabs primitive', async () => {
+    const wrapper = await mountLoaded()
+    const tablist = wrapper.get('[data-testid="admin-audit-source-tabs"]')
+
+    expect(tablist.attributes('role')).toBe('tablist')
+    expect(tablist.attributes('aria-label')).toBeTruthy()
+    expect(tablist.attributes('aria-orientation')).toBe('horizontal')
+    // Roving tabindex: only the active tab is in the tab order.
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('tabindex')).toBe('0')
+    expect(wrapper.get('[data-testid="admin-audit-tab-system"]').attributes('tabindex')).toBe('-1')
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-controls')).toBe('admin-audit-source-org')
+  })
+
+  it('switches the audit source from the keyboard (ArrowRight/Home)', async () => {
+    const wrapper = await mountLoaded()
+
+    await wrapper.get('[data-testid="admin-audit-tab-org"]').trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="admin-audit-tab-system"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="admin-audit-system-section"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="admin-audit-tab-system"]').trigger('keydown', { key: 'Home' })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-selected')).toBe('true')
+  })
+
   it('renders the shared table skeleton while the ledger loads (VIS-3/STATE-3)', async () => {
     ;(api.GET as Mock).mockImplementation(async (url: string) => {
       if (url === '/api/v1/admin/system-audit') return new Promise(() => {})

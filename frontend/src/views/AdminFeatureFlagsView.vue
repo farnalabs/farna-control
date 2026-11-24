@@ -4,8 +4,8 @@
       <PageHeader :title="$t('views.AdminFeatureFlagsView.feature_flags')" :subtitle="$t('views.AdminFeatureFlagsView.all_known_feature_flags_and_their_current_activation_status')" />
       <output v-if="planInfoPending" class="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" aria-busy="true" :aria-label="$t('views.AdminFeatureFlagsView.loading_plan_info')">
         <span class="sr-only">{{ $t('views.AdminFeatureFlagsView.loading_plan_info') }}</span>
-        <div aria-hidden="true" class="h-4 w-28 animate-pulse rounded bg-muted/50" />
-        <div aria-hidden="true" class="h-4 w-40 animate-pulse rounded bg-muted/50" />
+        <SkeletonBlock aria-hidden="true" height-class="h-4 w-28" />
+        <SkeletonBlock aria-hidden="true" height-class="h-4 w-40" />
       </output>
       <div v-else-if="planUnavailable" class="mt-2">
         <ErrorAlert
@@ -273,6 +273,7 @@ import { useDataFetch } from '../composables/useDataFetch'
 import { usePlanStore } from '../stores/planStore'
 import { formatApiError } from '../lib/api/formatError'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import DataCard from '../components/ui/DataCard.vue'

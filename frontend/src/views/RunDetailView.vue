@@ -20,7 +20,7 @@
               v-if="isDispatchedRun(run.execution_origin)"
               data-testid="run-detail-dispatched"
               :title="$t('common.execution_origin.dispatched_hint')"
-              class="inline-flex items-center rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300"
+              class="inline-flex items-center rounded-full bg-run-dispatched/10 px-2 py-0.5 text-xs font-medium text-run-dispatched-text dark:bg-run-dispatched-surface"
             >{{ $t('common.execution_origin.dispatched') }}</span>
         </div>
           <p class="mt-1 text-sm text-muted-foreground">
@@ -1319,7 +1319,7 @@ function bucketClass(key: string): string {
     violated: 'bg-destructive/10 text-destructive-text',
     observed: 'bg-warning/10 text-warning-text',
     errored: 'bg-destructive/10 text-destructive-text',
-    redacted: 'bg-purple-500/10 text-purple-600',
+    redacted: 'bg-redaction-marker/10 text-redaction-marker-text',
     skipped: 'bg-muted text-muted-foreground',
   }
   return classes[key] || 'bg-muted text-muted-foreground'

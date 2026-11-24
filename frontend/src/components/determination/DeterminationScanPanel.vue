@@ -133,9 +133,10 @@ const sampleColumns: Column[] = [
   { key: 'error', label: t('views.DeterminationView.sample_error') },
 ]
 
-// The table renders only inside the `v-else` where `scan` is non-null.
+// The table renders only inside the `v-else` where `scan` is non-null; the
+// optional chain keeps the computed safe without a non-null assertion.
 const sampleRows = computed<DataTableRow[]>(() =>
-  props.scan!.samples.map((sample) => ({
+  (props.scan?.samples ?? []).map((sample) => ({
     // The source row key is the connector/resource pair, so the DataTable row
     // key stays stable rather than falling back to the index.
     id: `${sample.connector_id}-${sample.resource}`,

@@ -145,7 +145,7 @@ describe('PipelineEditorView dispatch node-type recognition', () => {
     expect(vm.nodeTypeLabel('dispatch')).not.toBe(vm.nodeTypeLabel('agent'))
 
     // Badge: its own (non-alarming) colour, not the default primary/agent one.
-    expect(vm.nodeTypeBadgeClass('dispatch')).toContain('cyan')
+    expect(vm.nodeTypeBadgeClass('dispatch')).toContain('node-dispatch')
 
     // Canvas type: convertBackendNode must not collapse dispatch into agent.
     const converted = vm.convertBackendNode({ id: 'd1', node_type: 'dispatch', label: 'Fire job', position: { x: 0, y: 0 } })

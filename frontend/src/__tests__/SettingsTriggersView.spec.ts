@@ -662,7 +662,7 @@ describe('SettingsTriggersView — FAR-191 streak surfacing + operator re-enable
 
     const badge = wrapper.find('[data-testid="settings-triggers-streak"]')
     expect(badge.exists()).toBe(true)
-    expect(badge.classes()).toContain('text-amber-600')
+    expect(badge.classes()).toContain('text-warning-text')
   })
 
   it('shows the deactivated badge with reason (a11y: aria-live) for a deactivated ongoing trigger', async () => {
@@ -963,8 +963,8 @@ describe('SettingsTriggersView — FAR-191 streak surfacing + operator re-enable
     const badges = wrapper.findAll('[data-testid="settings-triggers-streak"]')
     expect(badges).toHaveLength(2)
     expect(badges[0].classes()).toContain('text-destructive-text')
-    expect(badges[0].classes()).not.toContain('text-amber-600')
-    expect(badges[1].classes()).not.toContain('text-amber-600')
+    expect(badges[0].classes()).not.toContain('text-warning-text')
+    expect(badges[1].classes()).not.toContain('text-warning-text')
     expect(badges[1].classes()).not.toContain('text-destructive-text')
   })
 })
