@@ -135,6 +135,42 @@ def test_a_non_team_table_is_ignored(caplog: pytest.LogCaptureFixture) -> None:
     assert not [record for record in caplog.records if record.name == _LOGGER]
 
 
+def test_mapper_classes_contribute_their_target_tables(caplog: pytest.LogCaptureFixture) -> None:
+    """A statement carrying mapper classes is inspected for team-scoped tables.
+
+    ``all_mapper_classes`` is the primary source ``_target_tables`` reads, so a
+    team-scoped mapper must trip even when ``column_descriptions`` is empty. A
+    mapper whose class has no ``__table__`` is skipped, not crashed on.
+    """
+
+    class _NoTable:
+        pass
+
+    state = _state(info={}, statement=select(Agent))
+    state.all_mapper_classes = [SimpleNamespace(class_=Pipeline), SimpleNamespace(class_=_NoTable)]
+
+    with caplog.at_level(logging.ERROR, logger=_LOGGER):
+        tripwire._rls_context_tripwire(state)
+
+    messages = [record.getMessage() for record in caplog.records if record.name == _LOGGER]
+    assert len(messages) == 1
+    assert "pipelines" in messages[0]
+
+
+def test_an_unreadable_session_info_is_treated_as_granted(caplog: pytest.LogCaptureFixture) -> None:
+    """A session double with no readable ``info`` must never trip the wire."""
+    session = SimpleNamespace(
+        info=None,
+        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="postgresql")),
+    )
+    state = SimpleNamespace(is_select=True, is_update=False, is_delete=False, statement=select(Pipeline), session=session)
+
+    with caplog.at_level(logging.ERROR, logger=_LOGGER):
+        tripwire._rls_context_tripwire(state)
+
+    assert not [record for record in caplog.records if record.name == _LOGGER]
+
+
 def test_a_non_postgres_bind_is_ignored(caplog: pytest.LogCaptureFixture) -> None:
     """The SQLite test backend has no RLS GUCs — the signal would be noise."""
     with caplog.at_level(logging.ERROR, logger=_LOGGER):

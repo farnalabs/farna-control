@@ -117,6 +117,27 @@ async def test_background_session_builds_its_factory_from_the_callers_engine(sql
         assert session.get_bind().dialect.name == "sqlite"
 
 
+async def test_background_session_falls_back_to_the_process_engine(sqlite_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no factory and no engine, the process session factory is used.
+
+    That is the common case for background code that has no engine of its own:
+    it must reuse ``farna.db.session.AsyncSessionLocal`` rather than build a
+    second engine/pool (ADR 070 §3). The process factory is swapped for the
+    private SQLite factory so the test never touches the real shared engine.
+    """
+    import farna.db.session as db_session
+
+    process_factory = async_sessionmaker(sqlite_engine, expire_on_commit=False, autobegin=False)
+    monkeypatch.setattr(db_session, "AsyncSessionLocal", process_factory)
+
+    async with background_session(_ORG) as session:
+        assert isinstance(session, AsyncSession)
+        assert session.info["org_id"] == _ORG
+        await session.execute(text("INSERT INTO probe (id) VALUES (11)"))
+
+    assert await _count_probe_rows(sqlite_engine) == 1
+
+
 async def test_apply_background_grant_sets_both_markers_on_an_open_transaction(sqlite_engine: AsyncEngine) -> None:
     """The shared grant helper is org + execution context, in that order."""
     factory = async_sessionmaker(sqlite_engine, expire_on_commit=False, autobegin=False)
