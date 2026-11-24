@@ -98,6 +98,45 @@ class TestUnittestSkipped:
         assert True
 '''
 
+_EXPECTED_FAILURE_MODULE = "backend/tests/unit/test_expected_failure.py"
+_EXPECTED_FAILURE_SOURCE = '''\
+"""A module whose test is marked as an expected unittest failure."""
+
+import unittest
+
+
+class TestExpectedFailure(unittest.TestCase):
+    @unittest.expectedFailure
+    def test_known_broken(self):
+        self.assertEqual(1, 2)
+'''
+
+_MODULE_SKIP_CALL_MODULE = "backend/tests/unit/test_module_skip_call.py"
+_MODULE_SKIP_CALL_SOURCE = '''\
+"""A module that skips collection outright."""
+
+import pytest
+
+pytest.skip("suite disabled", allow_module_level=True)
+
+
+def test_never_collected():
+    assert True
+'''
+
+_MODULE_IMPORTORSKIP_MODULE = "backend/tests/unit/test_module_importorskip.py"
+_MODULE_IMPORTORSKIP_SOURCE = '''\
+"""A module that skips collection when an optional dependency is absent."""
+
+import pytest
+
+optional = pytest.importorskip("a_module_that_is_never_installed")
+
+
+def test_never_collected():
+    assert True
+'''
+
 _MARKED_MODULE = "backend/tests/unit/test_module_marked.py"
 _MARKED_SOURCE = '''\
 """A module whose pytestmark skips every test in it."""
@@ -156,6 +195,9 @@ def _make_repo(root: Path) -> Path:
     for rel in (Path(_PROBE_MODULE).parent, Path("frontend/src/__tests__")):
         (root / rel).mkdir(parents=True, exist_ok=True)
     (root / _PROBE_MODULE).write_text(_PROBE_SOURCE, encoding="utf-8")
+    (root / _EXPECTED_FAILURE_MODULE).write_text(_EXPECTED_FAILURE_SOURCE, encoding="utf-8")
+    (root / _MODULE_SKIP_CALL_MODULE).write_text(_MODULE_SKIP_CALL_SOURCE, encoding="utf-8")
+    (root / _MODULE_IMPORTORSKIP_MODULE).write_text(_MODULE_IMPORTORSKIP_SOURCE, encoding="utf-8")
     (root / _MARKED_MODULE).write_text(_MARKED_SOURCE, encoding="utf-8")
     (root / _LIST_MARKED_MODULE).write_text(_LIST_MARKED_SOURCE, encoding="utf-8")
     (root / _SPEC_MODULE).write_text(_SPEC_SOURCE, encoding="utf-8")
@@ -312,6 +354,25 @@ def test_a_unittest_skip_decorator_is_rejected(tmp_path: Path):
     problem = _module.verify_ref(f"{_PROBE_MODULE}::TestUnittestSkipped::test_member_unittest_skip", root, _changed(_PROBE_MODULE))
     assert problem is not None
     assert "it is decorated with @unittest.skip" in problem
+
+
+def test_a_unittest_expected_failure_decorator_is_rejected(tmp_path: Path):
+    """``@unittest.expectedFailure`` passes whether or not the fix exists."""
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(f"{_EXPECTED_FAILURE_MODULE}::TestExpectedFailure::test_known_broken", root, _changed(_EXPECTED_FAILURE_MODULE))
+    assert problem is not None
+    assert "it is decorated with @unittest.expectedFailure" in problem
+
+
+def test_a_module_level_skip_call_or_importorskip_is_rejected(tmp_path: Path):
+    """A module-scope skip/importorskip skips every test in the module."""
+    root = _make_repo(tmp_path)
+    skip_problem = _module.verify_ref(f"{_MODULE_SKIP_CALL_MODULE}::test_never_collected", root, _changed(_MODULE_SKIP_CALL_MODULE))
+    importorskip_problem = _module.verify_ref(f"{_MODULE_IMPORTORSKIP_MODULE}::test_never_collected", root, _changed(_MODULE_IMPORTORSKIP_MODULE))
+    assert skip_problem is not None
+    assert "pytest.skip() at import time" in skip_problem
+    assert importorskip_problem is not None
+    assert "pytest.importorskip() at import time" in importorskip_problem
 
 
 def test_a_class_body_pytestmark_is_rejected(tmp_path: Path):

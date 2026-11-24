@@ -564,6 +564,20 @@ def test_prove_the_fix_workflow_reruns_on_a_body_edit_without_a_path_filter():
     assert "paths-ignore" not in pull_request, "prove-the-fix.yml must not carry a paths-ignore: filter - it would skip product PRs"
 
 
+def test_prove_the_fix_job_actually_invokes_the_checker():
+    """The workflow must RUN the checker, not merely declare the right triggers.
+
+    A trigger test alone stays green if the check step is deleted, so the job's
+    steps must invoke ``scripts/run_check_prove_the_fix.py`` - otherwise the gate
+    never runs and every product PR passes vacuously.
+    """
+    workflow = _load_workflow("prove-the-fix.yml")
+    job = _job_named(workflow, "Prove the fix marker")
+    steps = job.get("steps") or []
+    runs = " ".join(str(step.get("run", "")) for step in steps if isinstance(step, dict))
+    assert "scripts/run_check_prove_the_fix.py" in runs, "the 'Prove the fix marker' job must run scripts/run_check_prove_the_fix.py"
+
+
 def test_backend_lint_job_runs_the_behaviour_bindings_gate_unconditionally():
     """The bindings gate runs on every PR: no job-level ``if:``/``needs:``.
 
@@ -579,3 +593,18 @@ def test_backend_lint_job_runs_the_behaviour_bindings_gate_unconditionally():
     steps = job.get("steps") or []
     runs = " ".join(str(step.get("run", "")) for step in steps if isinstance(step, dict))
     assert "tests/architecture/test_behaviour_bindings.py" in runs, "the Lint (Backend) job must run tests/architecture/test_behaviour_bindings.py"
+
+
+def test_backend_lint_job_checks_the_baseline_against_the_base_revision_on_prs():
+    """The shrink-only ``--check-base`` ratchet must run on PRs.
+
+    Without a step that runs ``scripts/run_behaviour_bindings_baseline.py
+    --check-base``, a PR could WIDEN the baseline (add an entry to excuse a newly
+    unbound behaviour) and every other bindings test would stay green. The step is
+    PR-scoped because a push to main has no base revision to compare against.
+    """
+    workflow = _load_workflow("ci.yml")
+    job = _job_named(workflow, "Lint (Backend)")
+    steps = [step for step in (job.get("steps") or []) if isinstance(step, dict)]
+    pr_scoped = [step for step in steps if "pull_request" in str(step.get("if", "")) and "run_behaviour_bindings_baseline.py" in str(step.get("run", "")) and "--check-base" in str(step.get("run", ""))]
+    assert pr_scoped, "a pull_request-scoped step of the Lint (Backend) job must run scripts/run_behaviour_bindings_baseline.py --check-base"

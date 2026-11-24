@@ -86,10 +86,16 @@ _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 #: Decorators and body openers that mean "this test does not run (or is expected
 #: to fail)", so it cannot prove anything. Covers the pytest spelling AND the
-#: ``unittest`` spelling (``@unittest.skip`` / ``skipIf`` / ``skipUnless``), which
-#: the class-based suites use and which the pytest-only pattern silently missed.
-_SKIP_MARKER_RE = re.compile(r"^(?:pytest\.mark\.(?:skip|skipif|xfail)|unittest\.skip(?:If|Unless)?)\b")
+#: ``unittest`` spelling (``@unittest.skip`` / ``skipIf`` / ``skipUnless`` /
+#: ``expectedFailure``), which the class-based suites use and which the
+#: pytest-only pattern silently missed. ``expectedFailure`` passes whether or not
+#: the fix exists, so it is exactly as vacuous as ``xfail``.
+_SKIP_MARKER_RE = re.compile(r"^(?:pytest\.mark\.(?:skip|skipif|xfail)|unittest\.skip(?:If|Unless)?|unittest\.expectedFailure)\b")
 _SKIP_BODY_CALLS = frozenset({"pytest.skip", "pytest.xfail"})
+
+#: Calls made at module scope that skip collection of the whole module, so every
+#: test in it is vacuous however clean its own decorators and body are.
+_MODULE_SKIP_CALLS = frozenset({"pytest.skip", "pytest.importorskip"})
 
 
 def _read_lines(path: Path) -> list[str]:
@@ -216,6 +222,47 @@ def _pytestmark_markers(body: list[ast.stmt]) -> list[ast.AST]:
     return []
 
 
+def _has_true_keyword(call: ast.Call, name: str) -> bool:
+    """True when *call* passes ``<name>=True`` as a keyword."""
+    return any(keyword.arg == name and isinstance(keyword.value, ast.Constant) and keyword.value.value is True for keyword in call.keywords)
+
+
+def _call_expression_value(node: ast.stmt) -> ast.expr | None:
+    """The expression a top-level ``Expr``/``Assign``/``AnnAssign`` evaluates."""
+    if isinstance(node, ast.Expr):
+        return node.value
+    if isinstance(node, ast.Assign):
+        return node.value
+    if isinstance(node, ast.AnnAssign):
+        return node.value
+    return None
+
+
+def _module_level_skip(tree: ast.Module) -> str | None:
+    """Why importing the module skips every test in it, or ``None``.
+
+    A ``pytest.skip(..., allow_module_level=True)`` or a ``pytest.importorskip()``
+    executed at module scope aborts collection of the whole file, so every test in
+    it is reported skipped regardless of its own decorators and body. Plain
+    ``pytest.skip()`` is only a collection skip when ``allow_module_level=True``
+    is set (bare, it is an error, not a skip).
+    """
+    for node in tree.body:
+        value = _call_expression_value(node)
+        if not isinstance(value, ast.Call):
+            continue
+        try:
+            callee = ast.unparse(value.func)
+        except (ValueError, RecursionError):  # pragma: no cover - defensive
+            continue
+        if callee not in _MODULE_SKIP_CALLS:
+            continue
+        if callee == "pytest.skip" and not _has_true_keyword(value, "allow_module_level"):
+            continue
+        return f"its module calls {callee}() at import time, which skips every test in it"
+    return None
+
+
 def _skip_reason(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
     owner_class: ast.ClassDef | None,
@@ -226,7 +273,9 @@ def _skip_reason(
     Every scope pytest lets a skip attach to is inspected: the function's own
     decorators (pytest OR unittest spelling), the enclosing class's decorators,
     a ``pytestmark`` in the class body, the module-level ``pytestmark``
-    assignment, and a ``pytest.skip()``/``xfail()`` opening the body.
+    assignment, a module-level ``pytest.skip(allow_module_level=True)`` or
+    ``pytest.importorskip()`` that aborts collection, and a
+    ``pytest.skip()``/``xfail()`` opening the body.
     """
     for decorator in fn.decorator_list:
         text = _skip_marker(decorator)
@@ -245,6 +294,9 @@ def _skip_reason(
         text = _skip_marker(marker)
         if text is not None:
             return f"its module sets pytestmark = {text.split('(')[0]}"
+    module_skip = _module_level_skip(tree)
+    if module_skip is not None:
+        return module_skip
     body = list(fn.body)
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
         body = body[1:]
