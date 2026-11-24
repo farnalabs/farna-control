@@ -5,10 +5,13 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
+import os
 import shutil
 import signal
 import subprocess
 import sys
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -2474,6 +2477,51 @@ class TestRestoreStartGuidance:
         assert backup_mod._stop_launcher_writers(data_dir) is True
         assert stopped == [data_dir]
 
+    def test_an_interrupt_mid_restore_still_prints_the_start_command(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Ctrl-C is a BaseException, so guidance that lives in `except` is never printed.
+
+        The interrupt lands AFTER the writers were stopped and the replay began —
+        exactly the state where a silent exit leaves a dark stack.
+        """
+        from farna.cli import backup as backup_mod
+
+        archive = _restore_archive(tmp_path)
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        options = backup_mod._RestoreOptions(
+            backup_dir=archive,
+            db_url=None,
+            app_db_url=None,
+            yes=True,
+            previous_fernet_key=None,
+            dry_run=False,
+            data_dir=data_dir,
+            replace_cluster=False,
+            no_safety_dump=False,
+        )
+        monkeypatch.setattr(backup_mod, "_validate_targets", lambda *_a, **_k: True)
+        monkeypatch.setattr(backup_mod, "_acquire_data_lock", lambda *_a, **_k: MagicMock())
+        monkeypatch.setattr(backup_mod, "_stop_launcher_writers", lambda _d: True)
+        monkeypatch.setattr(backup_mod, "_safety_dump", lambda *_a, **_k: None)
+
+        def _interrupted(*_args: Any, **_kwargs: Any) -> None:
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(backup_mod, "_restore_cluster", _interrupted)
+
+        with pytest.raises(KeyboardInterrupt):
+            backup_mod._run_restore(options)
+
+        captured = capsys.readouterr()
+        assert f"farna-control start --data-dir {data_dir}" in captured.err
+        assert "did NOT complete" in captured.err
+        assert "still stopped" in captured.err
+
 
 #: A syntactically valid Fernet key for the restore paths under test.
 _TEST_FERNET_KEY = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -2494,6 +2542,17 @@ def _restore_archive(root: Path) -> Path:
     (archive / "backup-info.json").write_text(json.dumps(manifest), encoding="utf-8")
     (archive / "checkpoints.json").write_text("[]", encoding="utf-8")
     return archive
+
+
+def _pid_running(pid: int) -> bool:
+    """Liveness of a process this test did NOT spawn (its parent already exited)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 class TestNoPasswordReachesCapturedOutput:
@@ -3031,6 +3090,9 @@ class TestBundledClusterWindowInternals:
         monkeypatch.setattr(backup_mod, "_bundled_cluster_ready", lambda *_a, **_k: True)
         process = MagicMock()
         process.poll.return_value = None
+        # A real Popen always has an int pid, and the window records it in the
+        # restore-window pid file so a SIGKILLed window is identifiable later.
+        process.pid = 4242
         monkeypatch.setattr(backup_mod.subprocess, "Popen", MagicMock(return_value=process))
         return data_dir, process
 
@@ -3318,3 +3380,109 @@ class TestBundledClusterWindowInternals:
         monkeypatch.setattr(entry_module, "resolve_bin_dir", lambda: empty_bin)
         with pytest.raises(click.ClickException, match="missing at"), contextlib.ExitStack() as stack:
             stack.enter_context(backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL))
+
+    def test_the_window_records_the_child_pid_and_clears_it_on_exit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """SIGKILL runs no handler, so the pid file IS the record of the child."""
+        from farna.cli import backup as backup_mod
+        from farna.launcher.supervisor import RESTORE_WINDOW_PIDFILE
+
+        data_dir, _process = self._armed_window(tmp_path, monkeypatch)
+        pidfile = data_dir / RESTORE_WINDOW_PIDFILE
+
+        with backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
+            # Recorded while the cluster is up (before the readiness wait), so a
+            # kill at ANY point in the window leaves an identifiable pid.
+            assert pidfile.read_text(encoding="ascii").strip() == "4242"
+
+        assert not pidfile.exists(), "a window that stopped its cluster leaves no record behind"
+
+    def test_the_window_handles_the_stop_signals_and_restores_the_previous_handlers(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.cli import backup as backup_mod
+
+        data_dir, _process = self._armed_window(tmp_path, monkeypatch)
+        before = {signum: signal.getsignal(signum) for signum in backup_mod._WINDOW_SIGNALS}
+
+        with backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
+            inside = {signum: signal.getsignal(signum) for signum in backup_mod._WINDOW_SIGNALS}
+
+        after = {signum: signal.getsignal(signum) for signum in backup_mod._WINDOW_SIGNALS}
+        # Every stop signal is covered for the window, and the operator's
+        # handlers (pytest's, the shell's) are back afterwards.
+        assert all(inside[signum] is not before[signum] for signum in backup_mod._WINDOW_SIGNALS)
+        assert after == before
+
+    def test_a_real_sigterm_stops_the_cluster_before_the_window_unwinds(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A timeout/OOM/service-manager stop must not leave the postmaster up."""
+        from farna.cli import backup as backup_mod
+        from farna.launcher.supervisor import RESTORE_WINDOW_PIDFILE
+
+        if sys.platform == "win32":
+            pytest.skip("no POSIX signal delivery to the test process")
+        data_dir, process = self._armed_window(tmp_path, monkeypatch)
+        pidfile = data_dir / RESTORE_WINDOW_PIDFILE
+
+        with pytest.raises(KeyboardInterrupt), backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        # The handler stopped the child itself, then the ordinary exit path ran.
+        process.send_signal.assert_called_with(signal.SIGINT)
+        process.wait.assert_called()
+        assert not pidfile.exists()
+
+    def test_a_second_signal_does_not_interrupt_the_stop(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+        """A second Ctrl-C must not abort the shutdown it is trying to reach."""
+        from farna.cli import backup as backup_mod
+
+        if sys.platform == "win32":
+            pytest.skip("no POSIX signal delivery to the test process")
+        data_dir, _process = self._armed_window(tmp_path, monkeypatch)
+        real_stop = backup_mod._stop_bundled_cluster
+        stop_calls: list[int] = []
+
+        def _stop_and_signal_again(proc: Any, log_path: Path) -> None:
+            stop_calls.append(1)
+            if len(stop_calls) == 1:
+                os.kill(os.getpid(), signal.SIGTERM)
+            real_stop(proc, log_path)
+
+        monkeypatch.setattr(backup_mod, "_stop_bundled_cluster", _stop_and_signal_again)
+
+        with caplog.at_level(logging.WARNING, logger="farna.cli.backup"), pytest.raises(KeyboardInterrupt), backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        assert stop_calls, "the handler must run the real stop"
+        assert "restore.window_signal_ignored" in caplog.text
+
+    def test_a_leftover_window_postmaster_is_stopped_by_pid_before_the_window(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+        """The SIGKILL residual: the NEXT restore stops the recorded pid itself."""
+        from farna.cli import backup as backup_mod
+        from farna.launcher.supervisor import RESTORE_WINDOW_PIDFILE
+
+        if sys.platform == "win32":
+            pytest.skip("the packaged native launcher is POSIX-only; Windows cannot signal a foreign pid")
+        data_dir = self._bootstrapped_data_dir(tmp_path)
+        # An ORPHAN in its OWN SESSION (its parent exits, and it holds no pipe
+        # back to this process) — exactly how the window spawns its postmaster —
+        # with "postgres" as its last argv entry, which is what the identity gate
+        # reads: the record is only honoured for a process that is still postgres.
+        launcher = "import subprocess, sys; print(subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)', 'postgres'], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid)"
+        orphan_pid = int(subprocess.check_output([sys.executable, "-c", launcher], text=True, timeout=30).strip())  # noqa: S603 - fixed argv, test-controlled
+        time.sleep(0.5)  # let the orphan bind its cmdline before it is inspected
+        pidfile = data_dir / RESTORE_WINDOW_PIDFILE
+        pidfile.write_text(f"{orphan_pid}\n", encoding="ascii")
+        monkeypatch.setattr(backup_mod, "_port_accepting", lambda *_a, **_k: True)
+        try:
+            with backup_mod._bundled_cluster_for_restore(data_dir, self._RAW_URL):
+                pass
+
+            out = capsys.readouterr().out
+            assert f"PID {orphan_pid}" in out, "the leftover is reported by pid, not a port-in-use mystery"
+            # Fast shutdown, and the record goes with it.
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline and _pid_running(orphan_pid):
+                time.sleep(0.05)
+            assert not _pid_running(orphan_pid), "the leftover postmaster must actually be stopped"
+            assert not pidfile.exists()
+        finally:
+            with contextlib.suppress(OSError):
+                os.kill(orphan_pid, getattr(signal, "SIGKILL", signal.SIGTERM))

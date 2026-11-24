@@ -849,6 +849,59 @@ def test_reconcile_treats_pid_reuse_as_stale(tmp_path: Path, monkeypatch: pytest
     assert not (pgdata / "postmaster.pid").exists()
 
 
+def test_reconcile_names_a_live_restore_window_postmaster_by_pid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A SIGKILLed restore leaves an unsupervised postmaster: name it by pid."""
+    from farna.launcher import supervisor as supervisor_module
+
+    pgdata = tmp_path / "pgdata"
+    pgdata.mkdir()
+    (pgdata / "postmaster.pid").write_text(f"{os.getpid()}\n/pgdata\n12345.0\n5432\n")
+    supervisor_module.write_restore_window_pidfile(tmp_path, os.getpid())
+    monkeypatch.setattr(supervisor_module, "_pid_starttime_epoch", lambda _pid: 12345.0)
+    monkeypatch.setattr(supervisor_module, "_is_postgres_process", lambda _pid: True)
+
+    with pytest.raises(LauncherError) as caught:
+        reconcile_orphans(pgdata)
+
+    message = str(caught.value)
+    # The operator gets a pid and a command, not a cryptic live-postgres refusal.
+    assert str(os.getpid()) in message
+    assert str(tmp_path / "restore-window-postmaster.pid") in message
+    assert f"kill -INT {os.getpid()}" in message
+    assert "farna-control restore" in message
+    assert (pgdata / "postmaster.pid").exists()
+
+
+def test_reconcile_clears_a_dead_restore_window_pidfile(tmp_path: Path) -> None:
+    """A record naming a process that is gone is debris, not a refusal."""
+    from farna.launcher.supervisor import RESTORE_WINDOW_PIDFILE, write_restore_window_pidfile
+
+    pgdata = tmp_path / "pgdata"
+    pgdata.mkdir()
+    write_restore_window_pidfile(tmp_path, _dead_pid())
+
+    assert reconcile_orphans(pgdata) is not None
+    assert not (tmp_path / RESTORE_WINDOW_PIDFILE).exists()
+
+
+def test_live_restore_window_pid_ignores_a_reused_pid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never let a stale record name — or kill — an innocent process."""
+    from farna.launcher import supervisor as supervisor_module
+
+    supervisor_module.write_restore_window_pidfile(tmp_path, 4242)
+    monkeypatch.setattr(supervisor_module, "_pid_alive", lambda _pid: True)
+    monkeypatch.setattr(supervisor_module, "_is_postgres_process", lambda _pid: False)
+    assert supervisor_module.live_restore_window_pid(tmp_path) is None
+
+    monkeypatch.setattr(supervisor_module, "_is_postgres_process", lambda _pid: True)
+    assert supervisor_module.live_restore_window_pid(tmp_path) == 4242
+
+    # An unparseable record is "no record", never a guess at a pid.
+    (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).write_text("not-a-pid\n", encoding="ascii")
+    assert supervisor_module.read_restore_window_pidfile(tmp_path) is None
+    assert supervisor_module.live_restore_window_pid(tmp_path) is None
+
+
 def test_reconcile_sweeps_sigkill_debris(tmp_path: Path) -> None:
     pgdata = tmp_path / "pgdata"
     pgdata.mkdir()

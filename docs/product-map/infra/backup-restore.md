@@ -225,11 +225,19 @@ operator-facing contract lives in `docs/operations/backup.md`.
       `test_plain_dump.py::TestPreambleRewrite`).
 - [x] Restore stops the writers itself and leaves them stopped: with
       `--data-dir` it stops a live launcher (refusing when it survives the stop
-      request), takes the exclusive lock, and on success prints the exact
+      request), takes the exclusive lock, and prints the exact
       `farna-control start --data-dir <dir>` command; without `--data-dir` it
-      prints the compose start command. Nothing is auto-restarted, and
-      `--safety-dump-dir` keeps the pre-restore safety dump on a persistent
-      path when restore runs in a disposable container (`cli/backup.py`;
+      prints the compose start command. The command is printed on EVERY exit —
+      success, a handled failure, and an interrupt: `KeyboardInterrupt` (Ctrl-C,
+      and the window's signal handlers) is a `BaseException`, so guidance that
+      lived only in `except` clauses was never printed on the one path where the
+      writers are already stopped (`cli/backup.py::_run_restore`;
+      `test_backup.py::TestRestoreStartGuidance::test_an_interrupt_mid_restore_still_prints_the_start_command`,
+      prove-the-fix: with the guidance back in the `except` clauses that test
+      prints nothing).
+      Nothing is auto-restarted, and `--safety-dump-dir` keeps the pre-restore
+      safety dump on a persistent path when restore runs in a disposable
+      container (`cli/backup.py`;
       `test_backup.py::TestRestoreStartGuidance`).
 - [x] The stop does not leave the restore without a database: the launcher's
       ordered teardown stops the bundled PostgreSQL it supervises, so when the
@@ -250,6 +258,24 @@ operator-facing contract lives in `docs/operations/backup.md`.
       window removed the replay fails with a connection timeout;
       `test_backup.py::TestNativeRestoreServesItsOwnBundledTarget`,
       `::TestBundledClusterWindowInternals`).
+- [x] An interrupted restore does not leave an unsupervised PostgreSQL behind:
+      the window's postmaster runs in its own session, so nothing supervises it.
+      SIGTERM, SIGINT and SIGHUP are handled for the whole window — each stops
+      that cluster before the command unwinds, and a second signal during that
+      stop is ignored so the shutdown can finish — and the previous handlers are
+      restored afterwards. The window records the child's pid in
+      `<data-dir>/restore-window-postmaster.pid` while it is open. SIGKILL can
+      be handled by no process: the record is then the recovery, so the next
+      `farna-control restore --data-dir` stops that pid itself and says so, and
+      `farna-control start --data-dir` refuses naming the pid, the recorded file
+      and the `kill -INT <pid>` to run — instead of only "belongs to a live
+      postgres process" or a port-in-use failure (`cli/backup.py::_bundled_cluster_for_restore`,
+      `::_restore_window_signal_handlers`, `::_reap_leftover_window_postmaster`;
+      `launcher/supervisor.py::reconcile_orphans`;
+      `test_backup.py::TestBundledClusterWindowInternals::test_a_real_sigterm_stops_the_cluster_before_the_window_unwinds`,
+      `::test_a_second_signal_does_not_interrupt_the_stop`,
+      `::test_a_leftover_window_postmaster_is_stopped_by_pid_before_the_window`;
+      `test_supervisor.py::test_reconcile_names_a_live_restore_window_postmaster_by_pid`).
 - [x] Restore refuses a MISSING dump when the archive describes one (a silent
       no-op restore is worse than a refusal), refuses a manifest filename that
       escapes the archive directory (absolute, `..`, or a symlink — the
@@ -352,6 +378,25 @@ operator-facing contract lives in `docs/operations/backup.md`.
 
 ## QA History
 
+- 2026-11-24 (FAR-2667 seventh review round): three findings on the restore
+  window. (1) The POSIX-only E2E in `test_upgrade.py` still asserted a restore
+  line ending in `--db-url` after `restore_guidance` stopped emitting one, so
+  backend-test on Linux (the only platform the native launcher ships on) failed
+  while Windows skipped the test. (2) The window's postmaster was spawned with
+  `start_new_session=True` and stopped only by the Python `finally`: SIGTERM,
+  SIGKILL or a second Ctrl-C during a window that can run ~18 minutes left an
+  unsupervised postmaster holding `pgdata` and the port, and the next start
+  failed on a stale `postmaster.pid` or a bound port with nothing naming the
+  process. SIGTERM/SIGINT/SIGHUP now stop the window before exiting (handlers
+  restored, a second signal during the stop ignored), the child's pid is
+  recorded in `restore-window-postmaster.pid`, and a later restore stops that
+  pid while a later start refuses naming it; SIGKILL has no handler, so the pid
+  record is the documented recovery. (3) `farna-control start` guidance lived in
+  `except click.ClickException` / `except Exception`, so a Ctrl-C
+  (`BaseException`) during the dump or replay exited silently with the writers
+  stopped and the database possibly part-restored; the guidance now prints from
+  a `finally` on every exit, and a test interrupts the replay and asserts the
+  command appears.
 - 2026-11-24 (FAR-2667 sixth review round): the native `--data-dir` restore
   stopped the database it then needed. Its own launcher stop is the ordered
   teardown that stops the bundled PostgreSQL, so the safety dump, the replay,

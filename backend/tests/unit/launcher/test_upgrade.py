@@ -815,11 +815,15 @@ def test_perform_upgrade_boot_failure_prints_snapshot_and_restore(tmp_path, monk
     )
     assert captured.returncode == 0, captured.stderr
     captured_output = captured.stdout.strip()
-    expected_restore_args = f"restore {data_dir / 'pre-upgrade-dump-fake-1'} --data-dir {data_dir} --yes --db-url"
+    expected_restore_args = f"restore {data_dir / 'pre-upgrade-dump-fake-1'} --data-dir {data_dir} --yes"
     assert captured_output, "the restore command produced no recorded argv"
     assert "restore" in captured_output
     assert str(data_dir / "pre-upgrade-dump-fake-1") in captured_output
     assert expected_restore_args in captured_output
+    # A native operator's shell has no DATABASE_ADMIN_URL, so the emitted
+    # command must never name --db-url (restore --data-dir resolves the
+    # bundled cluster from the data dir's own config.env).
+    assert "--db-url" not in captured_output
 
 
 @pytest.mark.skipif(os.name != "posix", reason="posix symlinks only (TODO(P3) windows seam)")

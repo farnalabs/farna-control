@@ -326,8 +326,9 @@ at the revision it was dumped from.
 
 With `--data-dir`, restore **stops a running launcher itself** and leaves the
 stack stopped; it prints the exact `farna-control start --data-dir <dir>`
-command on failure as well as success — a failed restore must not leave a dark
-stack with nothing to copy — and never restarts anything. Without `--data-dir`
+command on failure as well as success — and on a Ctrl-C / `SIGTERM` interrupt,
+which is the same dark-stack risk — a failed restore must not leave a dark
+stack with nothing to copy, and never restarts anything. Without `--data-dir`
 it prints the compose start command instead. Nothing is auto-restarted: a
 half-verified database must not be handed to an application.
 
@@ -358,6 +359,28 @@ A target the stop did not take down — an explicitly named external database �
 is never shadowed by a cluster the restore started. A bundled cluster that is
 already accepting connections is reused and left running, because the restore
 only stops what it started.
+
+The cluster the window starts runs in its own session, so nothing supervises it.
+For the whole window the restore handles `SIGTERM`, `SIGINT` and `SIGHUP`: each
+stops that cluster (PostgreSQL's fast shutdown, then `SIGTERM`, then `SIGKILL`)
+before the command unwinds, the shell's previous handlers are restored
+afterwards, and a second Ctrl-C while that stop is running is ignored so the
+shutdown can finish. The pid of the cluster the window started is recorded in
+`<data-dir>/restore-window-postmaster.pid` while the window is open.
+
+**If the process is killed with `SIGKILL`** (a timeout wrapper, the OOM killer, a
+service manager) no handler can run: the postmaster keeps its data directory and
+its port with nothing supervising it. The pid file is what makes that
+recoverable rather than cryptic:
+
+- `farna-control restore <snapshot> --data-dir <data-dir>` reports the leftover
+  by pid and stops it before starting a fresh window;
+- `farna-control start --data-dir <data-dir>` refuses with the pid, the file it
+  was recorded in, and the command to run — instead of only "belongs to a live
+  postgres process" or a port-in-use error.
+
+Either way the process to stop is named for you:
+`kill -INT <pid>` is the same fast shutdown the restore performs itself.
 
 Note the two different versions in play. The manifest's `schema_versions` field
 records the **migration head of the code that wrote the backup** (`alembic`

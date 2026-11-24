@@ -57,10 +57,11 @@ import socket
 import stat
 import subprocess  # nosec B404 -- subprocess is used only to shell out to pg_dump/psql with a hardcoded argv list (never shell=True, never user-supplied commands); see _run_pg_dump/_run_psql
 import sys
+import threading
 import time
 import urllib.parse
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
@@ -121,6 +122,9 @@ _RESTORE_PG_STOP_TIMEOUT = 60.0
 _RESTORE_PG_KILL_TIMEOUT = 30.0
 _RESTORE_PG_LOG = "restore-postgres.log"
 _RESTORE_PROBE_INTERVAL = 0.2
+# The signals the window converts into an orderly stop. SIGHUP is POSIX-only;
+# SIGTERM/SIGINT cover a service manager, `kill`, a timeout wrapper and Ctrl-C.
+_WINDOW_SIGNALS: tuple[int, ...] = tuple(signum for signum in (getattr(signal, "SIGHUP", None), signal.SIGINT, signal.SIGTERM) if signum is not None)
 _TLS_DIRNAME = "tls"
 
 # A backup placed inside a cloud-synced folder risks silent corruption (sync
@@ -949,6 +953,127 @@ def _stop_bundled_cluster(process: subprocess.Popen[bytes], log_path: Path) -> N
 
 
 @contextlib.contextmanager
+def _restore_window_signal_handlers(stop_window: Callable[[], None]) -> Iterator[None]:
+    """Turn SIGTERM/SIGINT/SIGHUP into an unwind that stops the window first.
+
+    The window's postmaster runs in its own session, so nothing supervises it.
+    Without this, a timeout, an OOM kill, a service-manager stop or a second
+    Ctrl-C during the (minutes-long) dump-and-replay left it holding ``pgdata``
+    and the port, and the next ``farna-control start`` failed on a stale
+    ``postmaster.pid`` or a bound port with nothing pointing at the process.
+
+    The handler stops the cluster this window started and then raises
+    ``KeyboardInterrupt``, so the ordinary unwinding still runs (the window's
+    own ``finally``, then ``_run_restore``'s start guidance). Handlers are
+    RESTORED on the way out. Once a stop is under way further signals are
+    ignored: a second Ctrl-C must not interrupt the shutdown of the postmaster
+    it is trying to stop.
+
+    SIGKILL cannot be handled by any process. That residual is covered by the
+    pid file the window writes (:func:`_record_restore_window_pid`), which a
+    later start or restore reports by pid — it is documented, not hidden.
+    """
+    stopping = threading.Event()
+    previous: dict[int, Any] = {}
+
+    def _on_signal(signum: int, _frame: object) -> None:
+        if stopping.is_set():
+            _log.warning("restore.window_signal_ignored signum=%s", signum)
+            return
+        stopping.set()
+        _log.warning("restore.window_signal_received signum=%s", signum)
+        try:
+            stop_window()
+        except Exception as exc:
+            _log.exception("restore.window_signal_stop_failed signum=%s error=%s", signum, exc)
+        raise KeyboardInterrupt
+
+    for signum in _WINDOW_SIGNALS:
+        try:
+            previous[signum] = signal.signal(signum, _on_signal)
+        except (OSError, ValueError):  # pragma: no cover - non-main thread, or unsupported on this host
+            continue
+    try:
+        yield
+    finally:
+        for signum, handler in previous.items():
+            with contextlib.suppress(OSError, ValueError):
+                signal.signal(signum, handler)
+
+
+def _record_restore_window_pid(data_dir: Path, pid: int) -> None:
+    """Record the pid of the postmaster this window started (see supervisor)."""
+    from farna.launcher.supervisor import write_restore_window_pidfile
+
+    write_restore_window_pidfile(data_dir, pid)
+
+
+def _clear_restore_window_pid(data_dir: Path) -> None:
+    """Drop the window pid record once the postmaster it names is stopped."""
+    from farna.launcher.supervisor import clear_restore_window_pidfile
+
+    clear_restore_window_pidfile(data_dir)
+
+
+def _stop_identified_pid(pid: int, *, timeout: float = _RESTORE_PG_STOP_TIMEOUT) -> bool:
+    """Stop ONE positively identified pid: fast shutdown, then TERM, then KILL.
+
+    Never a name or wildcard match: *pid* comes from the window's own pid file,
+    which this command wrote. Returns False when the process cannot be stopped
+    (or this platform cannot signal a foreign pid), so the caller can refuse
+    loudly instead of proceeding against a server it does not control.
+    """
+    from farna.launcher.supervisor import _pid_alive
+
+    if sys.platform == "win32":
+        # Windows cannot deliver SIGINT to another process; the packaged native
+        # launcher is POSIX-only, so report rather than pretend.
+        return False
+    for signum, wait_seconds in (
+        (signal.SIGINT, timeout),
+        (signal.SIGTERM, timeout),
+        (getattr(signal, "SIGKILL", signal.SIGTERM), _RESTORE_PG_KILL_TIMEOUT),
+    ):
+        try:
+            os.kill(pid, signum)
+        except ProcessLookupError:
+            return True
+        except OSError as exc:
+            _log.warning("restore.window_stop_signal_failed pid=%s signum=%s error=%s", pid, signum, exc)
+            return False
+        deadline = time.monotonic() + wait_seconds
+        while time.monotonic() < deadline:
+            if not _pid_alive(pid):
+                return True
+            time.sleep(_RESTORE_PROBE_INTERVAL)
+    return not _pid_alive(pid)
+
+
+def _reap_leftover_window_postmaster(data_dir: Path) -> None:
+    """Stop a postmaster an INTERRUPTED restore left behind, naming it by pid.
+
+    A window killed with SIGKILL (no handler can run) leaves its postmaster
+    running with nothing supervising it, recorded in the window pid file. This
+    restore has already stopped the launcher and holds the data-dir lock, so
+    that leftover is nobody's to keep: stop it before starting a fresh window,
+    rather than reusing — or colliding with — a server this command cannot
+    account for.
+    """
+    from farna.launcher.supervisor import live_restore_window_pid, restore_window_pidfile
+
+    pid = live_restore_window_pid(data_dir)
+    if pid is None:
+        _clear_restore_window_pid(data_dir)
+        return
+    pidfile = restore_window_pidfile(data_dir)
+    click.echo(f"Found the PostgreSQL an interrupted restore left behind (PID {pid}, recorded in {pidfile}); stopping it before this restore...")
+    if not _stop_identified_pid(pid):
+        raise click.ClickException(f"The PostgreSQL a previous restore left behind (PID {pid}, recorded in {pidfile}) is still running and this command cannot stop it. Stop it with `kill -INT {pid}`, then re-run the restore.")
+    _clear_restore_window_pid(data_dir)
+    click.echo("  Stopped. This restore owns the bundled cluster again.")
+
+
+@contextlib.contextmanager
 def _bundled_cluster_for_restore(data_dir: Path, raw_url: str) -> Iterator[None]:
     """Keep the bundled PostgreSQL UP for the restore's dump-and-replay window.
 
@@ -967,6 +1092,15 @@ def _bundled_cluster_for_restore(data_dir: Path, raw_url: str) -> Iterator[None]
 
     A cluster that is ALREADY accepting connections is left alone and NOT
     stopped on exit: this window only stops what it started.
+
+    The postmaster this window starts runs in its own session, so nothing
+    supervises it: SIGTERM/SIGINT/SIGHUP are handled for the whole window (they
+    stop the cluster before unwinding, and restore the previous handlers), a
+    pid file names the child for anything a later start or restore has to
+    report, and a window killed earlier is stopped by pid before this one
+    starts. SIGKILL cannot be handled by any process; that window's pid file is
+    what makes the leftover visible instead of a cryptic stale
+    ``postmaster.pid`` or bound-port failure.
     """
     from farna.launcher.entry import (
         PG_VERSION_FILE,
@@ -981,6 +1115,10 @@ def _bundled_cluster_for_restore(data_dir: Path, raw_url: str) -> Iterator[None]
     if endpoint is None:
         raise click.ClickException(f"Cannot parse {_url_display(raw_url)} as a PostgreSQL target, so the bundled cluster cannot be started for the restore.")
     host, port = endpoint
+    # A postmaster a KILLED earlier restore left behind still holds pgdata and
+    # this port, and nothing supervises it: stop it (by pid) before deciding
+    # anything else, so the window never reuses a server it cannot account for.
+    _reap_leftover_window_postmaster(data_dir)
     if _port_accepting(host, port):
         click.echo(f"  The bundled PostgreSQL is already accepting connections on {host}:{port}; the restore reuses it.")
         yield
@@ -1010,13 +1148,27 @@ def _bundled_cluster_for_restore(data_dir: Path, raw_url: str) -> Iterator[None]
             )
         except OSError as exc:
             raise click.ClickException(f"Cannot start the bundled PostgreSQL ({binary}): {exc}. Last lines of {log_path}:\n{_logged_tail(log_path)}") from exc
+        window_pid = getattr(process, "pid", 0)
         try:
-            _await_bundled_cluster(process, POSTGRES_HOST, port, bin_dir, log_path)
-            click.echo(f"  Bundled PostgreSQL is accepting connections on {POSTGRES_HOST}:{port}.")
-            yield
-        finally:
+            # Recorded BEFORE the readiness wait: from this instant the child
+            # exists, so a SIGKILL (which no handler can catch) must be
+            # identifiable by a later start or restore.
+            _record_restore_window_pid(data_dir, window_pid)
+        except OSError as exc:
             _stop_bundled_cluster(process, log_path)
-            click.echo("  Bundled PostgreSQL stopped again; the application writers stay stopped.")
+            raise click.ClickException(f"Cannot record the restore window's PostgreSQL pid in {data_dir}: {exc}. Not leaving an unsupervised server behind; nothing was restored.") from exc
+        # Handlers cover the WHOLE window (readiness wait, dump, replay), and
+        # stop the cluster before unwinding; a second signal during that stop is
+        # ignored. SIGKILL remains uncovered — the pid file above is its record.
+        with _restore_window_signal_handlers(lambda: _stop_bundled_cluster(process, log_path)):
+            try:
+                _await_bundled_cluster(process, POSTGRES_HOST, port, bin_dir, log_path)
+                click.echo(f"  Bundled PostgreSQL is accepting connections on {POSTGRES_HOST}:{port}.")
+                yield
+            finally:
+                _stop_bundled_cluster(process, log_path)
+                _clear_restore_window_pid(data_dir)
+                click.echo("  Bundled PostgreSQL stopped again; the application writers stay stopped.")
 
 
 def _start_command(opts: _RestoreOptions) -> str:
@@ -1050,10 +1202,12 @@ def _print_start_guidance(opts: _RestoreOptions, *, stopped: bool, failed: bool 
     then refuses to boot; the operator starts it deliberately.
 
     ``failed`` routes the text to stderr and says the restore did NOT complete.
-    It is printed on BOTH paths because the failure is exactly the moment the
-    writers are already stopped and the operator needs something to copy: a
-    start command that only appears on success leaves a failed native restore
-    with a dark stack and no command to bring it back.
+    The caller prints this from a ``finally`` for EVERY exit — success, a
+    handled failure, and an interrupt (``KeyboardInterrupt`` is a BaseException,
+    so no ``except Exception`` sees it) — because the failure is exactly the
+    moment the writers are already stopped and the operator needs something to
+    copy: a start command that only appears on success leaves a failed native
+    restore with a dark stack and no command to bring it back.
     """
     stream = sys.stderr if failed else sys.stdout
     click.echo("", file=stream)
@@ -2029,8 +2183,9 @@ def _run_restore(opts: _RestoreOptions) -> None:
     against a server the same command had just stopped. Launcher data-dir
     adoption happens after the database restore succeeded, and a posture
     failure FAILS the restore. Any failure is logged, echoed, and re-raised as
-    a ClickException; a data-dir lock is always released. On success the exact
-    START command is printed and nothing is auto-restarted.
+    a ClickException; a data-dir lock is always released. The exact START
+    command is printed for every exit path — success, failure and interrupt —
+    and nothing is auto-restarted.
     """
     raw_url = _resolve_url(opts.db_url, data_dir=opts.data_dir)
     # The key the restore re-encrypts archived credentials to. Resolved from the
@@ -2062,6 +2217,7 @@ def _run_restore(opts: _RestoreOptions) -> None:
 
     lock = None
     stopped = False
+    completed = False
     try:
         if opts.data_dir is not None:
             # FAR-2667 item 5: a VIABLE restore stops the writers itself (it
@@ -2090,25 +2246,36 @@ def _run_restore(opts: _RestoreOptions) -> None:
         _restore_data_dir(opts, manifest)
 
         click.echo("\nRestore complete.")
-        _print_start_guidance(opts, stopped=stopped)
+        completed = True
     except click.ClickException:
         # Already a user-facing failure (including RestorePostureError) with
         # its own remediation message and non-zero exit — do not re-wrap it.
         _log.exception("Restore failed")
-        _print_start_guidance(opts, stopped=stopped, failed=True)
         raise
     except Exception as exc:
         detail = _redact_url_secrets(str(exc), raw_url)
         _log.error("Restore failed: %s", detail, exc_info=exc)
         click.echo(f"Restore failed: {detail}", err=True)
-        # The writers may already be stopped and the database possibly
-        # part-restored. The start command must be printed on the FAILURE path
-        # too, or a failed native restore leaves a dark stack and no way back.
-        _print_start_guidance(opts, stopped=stopped, failed=True)
         raise click.ClickException(detail) from exc
+    except BaseException:
+        # Ctrl-C and the window's SIGTERM/SIGINT/SIGHUP handlers raise
+        # KeyboardInterrupt, a BaseException that neither handler above sees.
+        # Log it (the launcher log is all an operator has afterwards) and let
+        # it propagate unchanged; the guidance below still prints.
+        _log.exception("Restore interrupted")
+        raise
     finally:
-        if lock is not None:
-            lock.release()
+        # The start command is printed for EVERY exit — success, a handled
+        # failure, or an interrupt. `stopped` may already be true and the
+        # database part-restored by the time a KeyboardInterrupt arrives, so a
+        # guidance line that only appeared on the except paths left a dark
+        # stack with nothing to copy (the docstring's claim of "both paths"
+        # was false until this moved here).
+        try:
+            _print_start_guidance(opts, stopped=stopped, failed=not completed)
+        finally:
+            if lock is not None:
+                lock.release()
 
 
 def _validate_targets(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, keys: _RestoreKeys) -> bool:
