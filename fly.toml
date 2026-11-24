@@ -66,6 +66,17 @@ app = 'farna-control'
 # never auto-cleaned; run `fly machines list -a <app>` after incidents. The limit is
 # enforced by this standing footprint + manual review before scaling up.
 # Do NOT add process groups or machines without updating this block.
+# Web-watchdog start contract (2026-11-24): the web-watchdog's stopped-machine
+# pass starts a stopped app/worker machine ONLY to fill the deficit against an
+# expected STARTED count of 1 per process group - it does NOT start every
+# stopped machine. While the footprint above holds (one started worker + one
+# STOPPED cold standby in the worker group; one app machine), the worker group is
+# already at its expected started count, so the pass does NOT start the standby;
+# a grouped stray in a group that is already started stays stopped too. Recovery
+# starts a machine only when its group is genuinely below 1 started. If you
+# change the expected started count of a group (e.g. scale workers up), update
+# EXPECTED_APP_STARTED / EXPECTED_WORKER_STARTED in
+# .github/scripts/start-stopped-machines.sh in the same change.
 primary_region = 'lhr'
 
 # ===== Shutdown window (FAR-2004) =====
