@@ -860,31 +860,6 @@ export async function deleteTeamBestEffort(apiBase: string, token: string, teamI
   }
 }
 
-export interface LifecycleMapDetail {
-  id: string
-  name: string
-  current_version: number
-  stages: Array<Record<string, unknown>>
-  archived_at: string | null
-}
-
-/** Fetch a lifecycle map's persisted detail. */
-export async function getLifecycleMap(apiBase: string, token: string, mapId: string): Promise<ApiResult<LifecycleMapDetail>> {
-  return apiFetch<LifecycleMapDetail>(apiBase, token, 'GET', `/api/v1/lifecycle-maps/${mapId}`)
-}
-
-/** Best-effort lifecycle map deletion (404-tolerant). Never throws over the caller. */
-export async function deleteLifecycleMapBestEffort(apiBase: string, token: string, mapId: string): Promise<void> {
-  try {
-    const res = await apiFetch(apiBase, token, 'DELETE', `/api/v1/lifecycle-maps/${mapId}`)
-    if (res.status !== 204 && res.status !== 404) {
-      console.warn(`[realstack] cleanup: lifecycle map ${mapId} delete returned ${res.status}`)
-    }
-  } catch (err) {
-    console.warn('[realstack] cleanup: lifecycle map delete failed:', err instanceof Error ? err.message : String(err))
-  }
-}
-
 /**
  * Fire a webhook trigger with a raw HTTP delivery from OUTSIDE the app —
  * the exact boundary an external sender crosses. Deliberately no auth

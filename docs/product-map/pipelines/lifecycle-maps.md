@@ -40,6 +40,11 @@ additionally requires `FARNA_CONTROL_DEV_MODE` plus the `library.search.in_dev`
 operator grant. Maps define the lifecycle stages a pipeline's work items flow
 through, with edges representing transitions between stages.
 
+The Alpha end-to-end suite deliberately does not assert this dev-gated surface
+(FAR-2200): a surface Alpha users cannot reach must not gate a deploy, so
+end-to-end coverage of lifecycle maps is exercised by the unit, BDD and
+integration layers rather than by any `frontend/tests/e2e` spec (FAR-2759).
+
 ## Behaviors
 
 - [x] Internal-only concealment (FAR-2200): the `/lifecycle-maps`,
@@ -116,6 +121,18 @@ for real, so malformed-entry rejection is asserted end to end). The
 journey-detail BDD gap tracked here since the 2026-09-12 walk is closed.
 
 ## QA History
+
+- 2026-11-24: **FAR-2759** – removed the two lifecycle-map E2E specs (the
+  structural lifecycle-maps spec and its real-stack lifecycle-map-journey
+  journey) from the Alpha E2E suite, and dropped the now-unused lifecycle-map
+  helpers and types (`getLifecycleMap`, `deleteLifecycleMapBestEffort`,
+  `LifecycleMapDetail`) from `frontend/tests/e2e/setup/realstack-api.ts`. The
+  surface is dev-gated (FAR-2200: `visibility: in_dev`, empty `sidebar_group`,
+  and the `require_in_dev_operator` API gate), so an Alpha-facing regression
+  suite must not block a production deploy on it. The feature itself is unchanged: its
+  routes, views, store, API and models stay, and its unit, BDD and integration
+  tests stay. No behaviour above cited those specs, so the Behaviors list is
+  unchanged.
 
 - 2026-10-28: **Improve Architecture product-map walk** – reconciled the two
   product-map layers with FAR-2200 and closed a Lens-9 coverage gap. FAR-2200
