@@ -70,6 +70,9 @@ _loader.exec_module(_bindings)
 #: Markers that reference a test which is frozen in one of the vacuity baselines.
 _BASELINE_DIR = Path(__file__).resolve().parent
 
+#: Resolved once: the removal test drives a real ``git init`` / ``git commit``.
+GIT = shutil.which("git")
+
 
 @functools.cache
 def _audit() -> object:
@@ -291,6 +294,7 @@ def test_baseline_file_is_the_canonical_rendering():
         _baseline(),
         fingerprints=_bindings.id_fingerprints(_entries()),
         weak_bindings=sorted(_audit().weak_bindings),
+        approved_removals=_baseline_payload().get(_bindings.BASELINE_APPROVED_REMOVALS_KEY) or [],
     )
     assert current == expected, "backend/tests/architecture/behaviour_bindings_baseline.json is not in canonical form - regenerate it with `uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --write-baseline --write-report`"
 
@@ -518,6 +522,119 @@ def test_write_markers_allocates_a_unique_id_for_a_mid_entry_insert(tmp_path: Pa
     ids = re.findall(r"<!-- behaviour: (?P<id>[^ ]+) \|", entry.read_text(encoding="utf-8"))
     assert ids == ["probe-01", "probe-04", "probe-02", "probe-03"], f"the inserted bullet must take the first unused suffix, got {ids!r}"
     assert len(ids) == len(set(ids)), f"the regenerator emitted duplicate behaviour ids: {ids!r}"
+
+
+# ---------------------------------------------------------------------------
+# Deleting a behaviour is invisible unless the id sets are compared
+# ---------------------------------------------------------------------------
+def _git(root: Path, *args: str) -> str:
+    """Run git in the throwaway repo and return its stdout."""
+    assert GIT is not None, "git must be on PATH: --check-base compares against a git revision"
+    completed = subprocess.run(  # noqa: S603 - resolved git binary, fixed argv, throwaway repo under tmp_path
+        [GIT, *args],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert completed.returncode == 0, f"git {' '.join(args)} failed in {root}:\n{completed.stdout}\n{completed.stderr}"
+    return completed.stdout
+
+
+def _init_probe_repo(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    _git(root, "init", "-q")
+    _git(root, "config", "user.name", "behaviour-probe")
+    _git(root, "config", "user.email", "behaviour-probe@example.invalid")
+    _git(root, "config", "commit.gpgsign", "false")
+
+
+def _write_probe_baseline(
+    root: Path,
+    *,
+    fingerprints: dict[str, str],
+    unbound: dict[str, dict[str, str]] | None = None,
+    approved: list[str] | None = None,
+) -> None:
+    """Write a canonical baseline document describing exactly these ids."""
+    path = root / _bindings.BASELINE_RELPATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        _bindings.render_baseline(unbound or {}, fingerprints=fingerprints, weak_bindings=[], approved_removals=approved or []),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def _commit_probe_baseline(root: Path) -> str:
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "behaviour baseline")
+    return _git(root, "rev-parse", "HEAD").strip()
+
+
+def test_check_base_fails_when_a_behaviour_is_deleted_with_its_marker(tmp_path: Path, capsys):
+    """Deleting a behaviour AND its marker must fail ``--check-base``.
+
+    Every other bindings test and the shrink-only ratchet read the id sets the
+    current tree produces, so a deleted behaviour simply stopped appearing in the
+    baseline entries, the weak ratchet and the fingerprint index: nothing failed
+    while a documented behaviour vanished from the map. ``--check-base`` now
+    compares the id set against the base revision, and the baseline's
+    ``approved_removals`` key is the only way to allow an intended removal.
+
+    The throwaway repo makes this a real git comparison through the real
+    ``check_base`` (no monkeypatched ``git show``).
+    """
+    root = tmp_path / "repo"
+    _init_probe_repo(root)
+    first = _bindings.behaviour_text_fingerprint("- [x] the first probe behaviour")
+    second = _bindings.behaviour_text_fingerprint("- [x] the second probe behaviour")
+    unbound = {"probe-02": {"entry": "docs/product-map/probe.md", "reason": "behaviour text names no test"}}
+
+    _write_probe_baseline(root, fingerprints={"probe-01": first, "probe-02": second}, unbound=unbound)
+    base = _commit_probe_baseline(root)
+
+    # The deletion under test: probe-02 and its marker are gone, so the id is
+    # absent from the entries and from the fingerprint index alike.
+    _write_probe_baseline(root, fingerprints={"probe-01": first})
+    capsys.readouterr()
+    assert _bindings.check_base(root, base) == 1, "deleting a behaviour together with its marker must fail --check-base"
+    assert "REMOVED probe-02" in capsys.readouterr().err
+
+    # The explicit exemption: the same deletion passes once the id is approved.
+    _write_probe_baseline(root, fingerprints={"probe-01": first}, approved=["probe-02"])
+    capsys.readouterr()
+    assert _bindings.check_base(root, base) == 0, "an approved removal must pass --check-base"
+    assert "1 approved removal(s): probe-02" in capsys.readouterr().err
+
+
+def test_write_baseline_preserves_an_approved_removal(tmp_path: Path):
+    """Regenerating the baseline must not silently drop the removal exemption.
+
+    ``approved_removals`` is the only thing that lets a deletion through, so a
+    ``--write-baseline`` that rewrote the document from the audit alone would
+    erase the exemption in the same change that needs it - and the gate would fail
+    on a tree the author had just regenerated.
+    """
+    _probe_product_map(tmp_path)
+    baseline_path = tmp_path / _bindings.BASELINE_RELPATH
+    payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    payload[_bindings.BASELINE_APPROVED_REMOVALS_KEY] = ["probe-99"]
+    baseline_path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8", newline="\n")
+
+    completed = subprocess.run(  # noqa: S603 - fixed argv; the repo's own script, no shell
+        [sys.executable, str(REPO_ROOT / "scripts" / "run_behaviour_bindings_baseline.py"), "--root", str(tmp_path), "--write-baseline"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert completed.returncode == 0, f"--write-baseline exited {completed.returncode}\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+    regenerated = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert regenerated[_bindings.BASELINE_APPROVED_REMOVALS_KEY] == ["probe-99"], "regenerating the baseline dropped the approved-removal exemption"
 
 
 # ---------------------------------------------------------------------------

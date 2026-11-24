@@ -452,8 +452,17 @@ jobs:
         # (the accidental case). This catches the deliberate one: unbinding a
         # product-map behaviour and freezing it in the same change. The baseline
         # is a shrink-only ratchet (like the FAR-2699 group), so an ADDED id is a
-        # loosening; a removed id is a legitimate tightening. PR-only: the base
-        # revision is the PR's base commit, which is always resolvable here.
+        # loosening.
+        #
+        # It also catches DELETION: removing a behaviour together with its marker
+        # leaves no trace in the entries, the weak ratchet or the fingerprint
+        # index, so every other bindings test stayed green while a documented
+        # behaviour vanished. The behaviour id set is compared against the base
+        # revision, and a REMOVED id fails unless it is listed in the baseline's
+        # `approved_removals` (the explicit exemption for an intended removal).
+        #
+        # PR-only: the base revision is the PR's base commit, which is always
+        # resolvable here.
         if: github.event_name == 'pull_request'
         working-directory: .
         shell: bash

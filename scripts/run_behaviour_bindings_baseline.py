@@ -119,6 +119,13 @@ REPORT_RELPATH = "docs/product-map/unbound-behaviours.md"
 BASELINE_TICKET = "FAR-2701"
 BASELINE_REVIEW_BY = "2027-06-30"
 
+#: Top-level baseline key listing the behaviour ids this repository has approved
+#: for removal. Deleting a behaviour together with its marker is otherwise
+#: invisible to every other check - the id simply stops appearing - so
+#: ``--check-base`` compares the behaviour id set against the base revision and
+#: fails on a removal that is not named here.
+BASELINE_APPROVED_REMOVALS_KEY = "approved_removals"
+
 #: ``<!-- behaviour: <id> | tests: <refs|none> -->``
 MARKER_RE = re.compile(r"<!--\s*behaviour:\s*(?P<id>[A-Za-z0-9][A-Za-z0-9._-]*)\s*\|\s*tests:\s*(?P<refs>.*?)\s*-->")
 _BULLET_RE = re.compile(r"^- \[(?P<tick>[ xX])\] ")
@@ -681,6 +688,9 @@ def load_baseline_payload(root: Path) -> dict:
     entries = payload.get("entries")
     if not isinstance(entries, dict):
         raise ValueError(f"{BASELINE_RELPATH} must declare an 'entries' mapping")
+    approvals = payload.get(BASELINE_APPROVED_REMOVALS_KEY)
+    if approvals is not None and (not isinstance(approvals, list) or not all(isinstance(value, str) for value in approvals)):
+        raise ValueError(f"{BASELINE_RELPATH} must declare '{BASELINE_APPROVED_REMOVALS_KEY}' as a list of behaviour ids")
     return payload
 
 
@@ -727,6 +737,7 @@ def render_baseline(
     *,
     fingerprints: dict[str, str] | None = None,
     weak_bindings: list[str] | None = None,
+    approved_removals: list[str] | None = None,
     ticket: str = BASELINE_TICKET,
     review_by: str = BASELINE_REVIEW_BY,
 ) -> str:
@@ -739,6 +750,7 @@ def render_baseline(
         "entries": {key: entries[key] for key in sorted(entries)},
         "weak_bindings": sorted(weak_bindings or []),
         "id_fingerprints": {key: (fingerprints or {})[key] for key in sorted(fingerprints or {})},
+        BASELINE_APPROVED_REMOVALS_KEY: sorted(set(approved_removals or [])),
     }
     return json.dumps(payload, indent=2, ensure_ascii=True, sort_keys=False) + "\n"
 
@@ -1274,6 +1286,7 @@ def write_outputs(root: Path, *, write_baseline: bool, write_report: bool) -> tu
             audit_result.unbound,
             fingerprints=id_fingerprints(audit_result.entries),
             weak_bindings=sorted(audit_result.weak_bindings),
+            approved_removals=approved_removals(root),
         )
         (root / BASELINE_RELPATH).write_text(text, encoding="utf-8", newline="\n")
     if write_report:
@@ -1321,6 +1334,51 @@ def baseline_loosenings(base_ids: set[str], current_ids: set[str]) -> list[str]:
     return sorted(current_ids - base_ids)
 
 
+def baseline_removals(base_ids: set[str], current_ids: set[str]) -> list[str]:
+    """Ids the base revision documents and the current tree does not.
+
+    Deleting a behaviour together with its marker leaves no trace in any other
+    check: the id stops appearing in the entries, in the weak ratchet and in the
+    fingerprint index, so every shrink-only test and ``--check-base`` stayed
+    green. Comparing the id SETS against the base revision is the only way to see
+    it, and :data:`BASELINE_APPROVED_REMOVALS_KEY` is the explicit exemption.
+    """
+    return sorted(base_ids - current_ids)
+
+
+def approved_removals(root: Path) -> list[str]:
+    """The ids the current baseline document approves for removal.
+
+    Read rather than defaulted so regenerating the baseline never silently drops
+    the exemption a removal PR depends on.
+    """
+    path = root / BASELINE_RELPATH
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    approvals = payload.get(BASELINE_APPROVED_REMOVALS_KEY)
+    if not isinstance(approvals, list):
+        return []
+    return [value for value in approvals if isinstance(value, str)]
+
+
+def payload_id_set(payload: dict) -> set[str]:
+    """Every behaviour id the baseline document at that revision describes.
+
+    ``id_fingerprints`` indexes every behaviour that carried an id, bound or not,
+    so it is the authoritative id set. A baseline predating that index falls back
+    to the ids it does list (unbound entries plus the weak ratchet): removals of
+    bound behaviours are then invisible, which is the pre-existing behaviour.
+    """
+    fingerprints = payload.get("id_fingerprints")
+    if isinstance(fingerprints, dict) and fingerprints:
+        return set(fingerprints)
+    return set(payload.get("entries") or {}) | set(payload.get("weak_bindings") or [])
+
+
 def _git_show(root: Path, rev: str, relpath: str) -> str | None:
     """The file at *rev*; ``None`` only when the path is GENUINELY absent there.
 
@@ -1362,13 +1420,21 @@ def _git_show(root: Path, rev: str, relpath: str) -> str | None:
 
 
 def check_base(root: Path, rev: str) -> int:
-    """Fail when this change adds a baseline entry relative to *rev*.
+    """Fail when this change widens the ratchet or deletes a documented behaviour.
 
     ``test_baseline_can_only_shrink`` catches the accidental case (an entry that
     has since become bound). This is the deliberate case: unbinding a behaviour
     and freezing it in the same change. The baseline is a shrink-only ratchet, so
-    an added id is a loosening whatever else the change does. The weak-binding
-    ratchet and the review-by date are enforced in the same pass.
+    an added id is a loosening whatever else the change does.
+
+    The other direction is deletion. Removing a behaviour AND its marker leaves no
+    trace anywhere - the id just stops appearing - so every bindings test stayed
+    green while a documented behaviour vanished from the map. The current
+    behaviour id set is therefore compared against the base revision's, and a
+    REMOVED id fails unless it is listed in the baseline's
+    :data:`BASELINE_APPROVED_REMOVALS_KEY` (the explicit exemption for a removal
+    this change intends). The weak-binding ratchet and the review-by date are
+    enforced in the same pass.
     """
     relpath = BASELINE_RELPATH
     try:
@@ -1408,9 +1474,21 @@ def check_base(root: Path, rev: str) -> int:
             file=sys.stderr,
         )
         return 1
+    removed = baseline_removals(payload_id_set(base_payload), payload_id_set(payload))
+    approved = set(approved_removals(root))
+    unapproved = [behaviour_id for behaviour_id in removed if behaviour_id not in approved]
+    if unapproved:
+        detail = "\n".join(f"  REMOVED {behaviour_id}" for behaviour_id in unapproved)
+        guidance = f"\nDeleting a behaviour and its marker leaves no other trace. If the removal is intended, list the id(s) in '{BASELINE_APPROVED_REMOVALS_KEY}' in {relpath} (docs/product-map/README.md)."
+        print(
+            f"behaviour-bindings baseline: FAILED - this change DELETES {len(unapproved)} product-map behaviour(s) that {rev} documents:\n" + detail + guidance,
+            file=sys.stderr,
+        )
+        return 1
     weak_note = "ratchet introduced here" if base_weak is None else f"{len(base_weak)} at base, {len(current_weak)} now"
+    removal_note = "0 removed" if not removed else f"{len(removed)} approved removal(s): {', '.join(removed)}"
     print(
-        f"behaviour-bindings baseline: OK - no entry added relative to {rev} ({len(base_ids)} unbound at base, {len(current_ids)} now; weak {weak_note}; review by {review_by}).",
+        f"behaviour-bindings baseline: OK - no entry added relative to {rev} ({len(base_ids)} unbound at base, {len(current_ids)} now; weak {weak_note}; {removal_note}; review by {review_by}).",
         file=sys.stderr,
     )
     return 0

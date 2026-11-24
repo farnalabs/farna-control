@@ -125,9 +125,16 @@ def marker_refs(pr_body: str) -> tuple[list[str], list[str]]:
     """Every ``Proves:`` reference in the PR body, backticks stripped.
 
     Returns ``(refs, malformed)``; a ``malformed`` entry is a marker line that
-    names several references or nothing, so the failure message can point at the
-    line instead of claiming the marker is absent. Fenced blocks and HTML
-    comments are stripped first (see :func:`strip_documentation`).
+    names several references, so the failure message can point at the line
+    instead of claiming the marker is absent. Fenced blocks and HTML comments are
+    stripped first (see :func:`strip_documentation`).
+
+    An EMPTY marker is treated as absent, not as malformed: the shipped
+    ``.github/PULL_REQUEST_TEMPLATE.md`` carries a bare ``Proves:`` placeholder,
+    and reading that as malformed failed every product PR that followed the
+    template - even one that also filled in a valid marker. A body whose only
+    marker is empty is caught by the "no proving test" path in :func:`evaluate`,
+    which names the format to add.
     """
     refs: list[str] = []
     malformed: list[str] = []
@@ -137,8 +144,8 @@ def marker_refs(pr_body: str) -> tuple[list[str], list[str]]:
             continue
         ref = match.group("rest").strip().strip("`").strip()
         if not ref:
-            malformed.append(line.strip())
-        elif "," in ref:
+            continue
+        if "," in ref:
             malformed.append(f"{line.strip()} (name one test per Proves: line)")
         else:
             refs.append(ref)

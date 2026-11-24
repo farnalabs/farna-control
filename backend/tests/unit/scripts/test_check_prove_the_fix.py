@@ -43,6 +43,7 @@ _loader.exec_module(_module)
 _PROBE_MODULE = "backend/tests/unit/test_probe.py"
 _SPEC_MODULE = "frontend/src/__tests__/ActionRow.spec.ts"
 _PRODUCT_FILE = "backend/src/farna/thing.py"
+_REPO_ROOT = _script_path.parents[1]
 
 _PROBE_SOURCE = '''\
 """Fake pytest module used by the prove-the-fix unit tests."""
@@ -244,6 +245,35 @@ def test_marker_inside_a_fenced_block_does_not_count():
 def test_marker_inside_an_html_comment_does_not_count():
     body = f"<!--\nProves: {_PROBE_MODULE}::test_runs\n-->\n"
     assert _module.marker_refs(body) == ([], [])
+
+
+def test_marker_refs_ignores_an_empty_marker():
+    """A bare ``Proves:`` is ABSENT, not malformed.
+
+    The shipped PR template carries exactly that placeholder line, so reading an
+    empty marker as malformed failed every product PR that followed the template -
+    including one that also filled in a valid marker further down.
+    """
+    assert _module.marker_refs("Proves:\n") == ([], []), "an empty marker must read as absent, not as malformed"
+
+    refs, malformed = _module.marker_refs(f"Proves:   \nProves: `{_PROBE_MODULE}::test_runs`")
+    assert refs == [f"{_PROBE_MODULE}::test_runs"], f"a filled-in marker beside the empty placeholder must still count, got {refs!r}"
+    assert malformed == [], f"the empty placeholder must not be reported as malformed, got {malformed!r}"
+
+
+def test_the_shipped_pr_template_does_not_trip_a_valid_marker(tmp_path: Path):
+    """Following the shipped template must not fail the gate.
+
+    Reads the REAL ``.github/PULL_REQUEST_TEMPLATE.md``, adds one valid marker the
+    way a PR author would, and runs the gate end to end: the template's empty
+    ``Proves:`` line used to make that body fail with "does not name exactly one
+    test", which blocked every product PR that used the template.
+    """
+    root = _make_repo(tmp_path)
+    template = (_REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text(encoding="utf-8")
+    body = f"{template}\nProves: {_PROBE_MODULE}::test_runs\n"
+
+    assert _marker_evaluate(root, body, _changed(_PROBE_MODULE)) == 0
 
 
 # --- the happy path and the missing-marker path ----------------------------

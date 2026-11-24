@@ -149,6 +149,13 @@ two ratchets:
 - `weak_bindings` – ticked behaviours counted as bound by a whole test module
   rather than a named test. Also shrink-only: a new module-only binding fails
   (name the test instead).
+- `approved_removals` – the behaviour ids this repository has agreed to delete.
+  Deleting a behaviour **and its marker** leaves no other trace (the id stops
+  appearing in `entries`, in `weak_bindings` and in the fingerprint index), so
+  `--check-base` compares the behaviour id set against the PR's base revision and
+  fails on a `REMOVED` id. An intended removal is allowed only by listing the id
+  here, which keeps the deletion explicit and reviewable instead of invisible.
+  The list is preserved when the baseline is regenerated.
 
 The baseline also names its owner (`ticket`) and a `review_by` ISO date; once
 that date passes the gate fails until the frozen debt is re-reviewed and the date
@@ -160,7 +167,9 @@ when any reference does not resolve, when a reference is vacuous, when a
 baseline entry has since become bound, when an id is reused for different text,
 when the derived status disagrees with the frontmatter, when a weak binding was
 added, when the review date has passed, and when the baseline or
-`unbound-behaviours.md` are not exactly what the regenerator produces.
+`unbound-behaviours.md` are not exactly what the regenerator produces. On a pull
+request, `--check-base` additionally fails when an id documented at the base
+revision has been removed without an `approved_removals` entry.
 
 ### Regenerating bindings, the baseline and the report
 
@@ -190,7 +199,10 @@ Proves: frontend/src/__tests__/ActionRow.spec.ts::stacks below sm and becomes a 
 ```
 
 - One marker suffices; repeat the line for as many tests as the change needs.
-  Name one test per line.
+  Name one test per line. An empty `Proves:` line (the placeholder the shipped PR
+  template carries) is ignored, not an error: it counts as absent, so a body whose
+  only marker is empty still fails with "no proving test", while a body that also
+  names a real test passes.
 - Every named reference must be a pytest node id under `backend/tests/`, or a
   Vitest/Playwright test title under `frontend/src/**/*.spec.ts` or
   `frontend/tests/**/*.spec.ts`. It must exist in the tree, and the module that

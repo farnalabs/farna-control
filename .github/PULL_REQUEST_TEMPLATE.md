@@ -30,7 +30,8 @@ Only `feature`, `fix`, and `breaking` produce a changelog entry. -->
        Proves: frontend/src/__tests__/ActionRow.spec.ts::stacks below sm
 -->
 
-Proves:
+Proves: <!-- fill in above, one test per line; an empty line is ignored, so
+     leave it empty when the change touches no product source -->
 
 ## Checklist
 
