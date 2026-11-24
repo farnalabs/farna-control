@@ -1366,12 +1366,18 @@ def test_post_upgrade_guidance_no_post_upgrade() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_prepare_database_env_with_admin_url() -> None:
+def test_prepare_database_env_with_admin_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `_prepare_database_env` writes the REAL process environment, so the value
+    # must be recorded for restoration: leaking it left `DATABASE_ADMIN_URL`
+    # pointing at a test URL for every later test in the same pytest process
+    # (which silently retargeted the restore tests).
+    monkeypatch.delenv("DATABASE_ADMIN_URL", raising=False)
     entry_module._prepare_database_env({"DATABASE_ADMIN_URL": "postgresql://admin/db"})
     assert os.environ.get("DATABASE_ADMIN_URL") == "postgresql://admin/db"
 
 
-def test_prepare_database_env_with_system_url() -> None:
+def test_prepare_database_env_with_system_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
     entry_module._prepare_database_env({"FARNA_CONTROL_SYSTEM_DATABASE_URL": "postgresql://sys/db"})
     assert os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL") == "postgresql://sys/db"
 
