@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-console -- this is a CLI: the delta table on stdout is its deliverable. */
 /**
  * PrimeVue baseline comparator (FAR-2205).
  *

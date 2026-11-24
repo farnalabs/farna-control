@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-console -- this is a CLI: its stdout report is the deliverable. */
 /**
  * PrimeVue baseline assembler (FAR-2734).
  *

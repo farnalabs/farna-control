@@ -1,6 +1,7 @@
 import pluginVue from 'eslint-plugin-vue'
 import vuejsAccessibility from 'eslint-plugin-vuejs-accessibility'
 import { withVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
+import globals from 'globals'
 
 export default withVueTs(
   {
@@ -39,6 +40,25 @@ export default withVueTs(
       'vuejs-accessibility/iframe-has-title': 'error',
       'vuejs-accessibility/interactive-supports-focus': 'warn',
       'vuejs-accessibility/anchor-has-content': 'warn',
+    },
+  },
+  {
+    // Node CLI tooling under tests/visual-baseline, which the `lint` script now
+    // covers alongside `src`. Additive only: nothing here changes the rules
+    // applied to `src`.
+    files: ['tests/visual-baseline/**/*.mjs'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      // These are CLIs whose stdout report is the deliverable, so `console.log`
+      // is the intended output channel; `warn`/`error` stay allowed as in src.
+      'no-console': ['error', { allow: ['warn', 'error', 'log'] }],
+      // The repo defers unused-symbol enforcement to vue-tsc, but tsconfig
+      // covers only `src/**` and `tests/e2e/**/*.ts`, so these .mjs files have
+      // no other checker. Keep the same guarantee for this scope.
+      'no-unused-vars': 'error',
     },
   },
 )
