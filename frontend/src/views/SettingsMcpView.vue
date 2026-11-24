@@ -101,12 +101,16 @@
               </template>
             </Select>
           </div>
-           <div v-if="apiKeys.length === 0" class="py-8 text-center text-sm text-muted-foreground">
-             {{ $t('views.SettingsMcpView.no_api_keys_created_yet') }}
-           </div>
-           <div v-else-if="filteredApiKeys.length === 0" class="py-8 text-center text-sm text-muted-foreground">
-             {{ $t('views.SettingsMcpView.no_api_keys_match_filter') }}
-           </div>
+           <EmptyState
+             v-if="apiKeys.length === 0"
+             variant="bare"
+             :title="$t('views.SettingsMcpView.no_api_keys_created_yet')"
+           />
+           <EmptyState
+             v-else-if="filteredApiKeys.length === 0"
+             variant="bare"
+             :title="$t('views.SettingsMcpView.no_api_keys_match_filter')"
+           />
 
            <div v-else class="table-wrapper">
             <table class="w-full text-sm">
@@ -357,6 +361,7 @@ import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import Badge from 'primevue/badge'
 import Button from 'primevue/button'
 import DataCard from '../components/ui/DataCard.vue'
