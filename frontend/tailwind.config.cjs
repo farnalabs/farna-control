@@ -58,6 +58,11 @@ module.exports = {
         // `text-success-text` - never `text-success` - for success COLOURED
         // TEXT (see style.css for the measured ratios).
         'success-text': 'hsl(var(--success-text))',
+        // FAR-1607 pattern: ink drawn ON a solid `success` fill. `--success` is
+        // a mid-lightness green, so white text on it is only ~2.3:1 (below WCAG
+        // AA); `--success-foreground` is the dark on-fill ink (~8:1). Use
+        // `text-success-foreground` on `bg-success` - never `text-white`.
+        'success-foreground': 'hsl(var(--success-foreground))',
         warning: 'hsl(var(--warning))',
         // FAR-1530/FAR-1587: text-safe counterpart of `warning`. `--warning` is
         // tuned as a FILL/accent hue (50% lightness), so amber text on white or
@@ -67,6 +72,11 @@ module.exports = {
         // themes. Use `text-warning-text` - never `text-warning` - for warning
         // COLOURED TEXT (see style.css for the measured ratios).
         'warning-text': 'hsl(var(--warning-text))',
+        // FAR-1607: ink drawn ON a solid `warning` fill - dark in every theme,
+        // because `--warning` is mid-amber. Unlike `--warning-text` (warning
+        // COLOURED text on a neutral surface). Use `text-warning-foreground` on
+        // `bg-warning`; the CSS variable already exists in style.css.
+        'warning-foreground': 'hsl(var(--warning-foreground))',
         // FAR-1913: text-safe counterpart of `destructive`. `--destructive` is
         // tuned as a FILL/accent hue, so destructive COLOURED TEXT on a
         // bg-destructive/* tint is only 4.32:1 (dark) / 3.46:1 (light) - below
