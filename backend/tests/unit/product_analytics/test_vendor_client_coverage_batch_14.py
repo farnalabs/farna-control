@@ -11,7 +11,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from farna.core.model_backend_endpoints import INSECURE_HTTP_NOT_ALLOWED
-from farna.core.product_analytics.vendor_client import MAX_ATTEMPTS, VendorClient
+from farna.core.product_analytics.vendor_client import (
+    MAX_ATTEMPTS,
+    REDACTED_SECRET_MARKER,
+    VendorClient,
+    redact_instance_secret,
+)
 
 
 def _payload() -> dict:
@@ -22,6 +27,26 @@ def _payload() -> dict:
         "instance_id": "instance-123",
         "errors": [],
     }
+
+
+@pytest.mark.parametrize(
+    ("text", "secret", "expected"),
+    [
+        (None, "shh-secret", ""),
+        ("body text", None, "body text"),
+        ("body text", "", "body text"),
+        (f"rejected {REDACTED_SECRET_MARKER}", "shh-secret", f"rejected {REDACTED_SECRET_MARKER}"),
+        ("rejected shh-secret", "shh-secret", f"rejected {REDACTED_SECRET_MARKER}"),
+    ],
+)
+def test_redact_instance_secret_covers_every_documented_arm(text, secret, expected):
+    """Pin every documented arm of the shared redaction helper (FAR-2740).
+
+    ``None`` text normalises to ``""``; an absent or empty secret leaves the
+    text untouched (nothing to redact); otherwise every occurrence of the secret
+    becomes the shared marker.
+    """
+    assert redact_instance_secret(text, secret) == expected
 
 
 @pytest.mark.asyncio
