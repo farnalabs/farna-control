@@ -37,7 +37,7 @@
       <template v-if="isPlainString">
         <pre
           class="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground"
-          :data-testid="plainStringTruncated ? 'json-viewer-string-truncated' : undefined"
+          :data-testid="plainStringTruncated ? `json-viewer-string-truncated-${viewerUid}` : undefined"
         >{{ expandedPlainString ? rawString : plainStringPreview }}</pre>
         <div v-if="plainStringTruncated" class="mt-2 flex items-center gap-2">
           <span class="json-viewer-string-count" aria-live="polite">{{ t('components.JsonViewer.truncated_count', { count: formatCount(rawString.length) }) }}</span>
@@ -124,6 +124,9 @@ const { t } = useI18n()
 // FAR-2719: the long-string expand/collapse toggles carry the same suffix, so
 // two viewers each showing an expandable string do not collide (strict-mode
 // getByTestId matches exactly one element).
+// FAR-2724: the per-value truncated/expanded containers carry it too, so two
+// plain-string viewers (truncated) and two object viewers (expanded) stay
+// unique per instance.
 const viewerUid = useId()
 const copied = ref(false)
 const deepRef = ref(props.deep)
@@ -230,7 +233,7 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
   }
 
   if (expanded) {
-    return h('span', { class: 'json-viewer-string-expanded', 'data-testid': 'json-viewer-string-expanded' }, [
+    return h('span', { class: 'json-viewer-string-expanded', 'data-testid': `json-viewer-string-expanded-${viewerUid}` }, [
       h('span', { class: 'json-viewer-string-expanded-text', role: 'status' }, full),
       h(
         'button',
@@ -247,7 +250,7 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
     ])
   }
 
-  return h('span', { class: 'json-viewer-string-truncated', 'data-testid': 'json-viewer-string-truncated' }, [
+  return h('span', { class: 'json-viewer-string-truncated', 'data-testid': `json-viewer-string-truncated-${viewerUid}` }, [
     h('span', { class: 'json-viewer-string-truncated-text' }, full.slice(0, props.stringTruncateLength)),
     h(
       'button',

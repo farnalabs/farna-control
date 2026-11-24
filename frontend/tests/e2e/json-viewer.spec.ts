@@ -245,14 +245,14 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     await expect(page.locator('.json-viewer').first()).toBeVisible()
     await page.getByTestId('run-detail-toggle-io').click()
 
-    const truncated = page.getByTestId('json-viewer-string-truncated').first()
+    const truncated = page.locator('[data-testid^="json-viewer-string-truncated-"]').first()
     await expect(truncated).toBeVisible()
     await expect(truncated).toContainText('Expand')
     await expect(truncated).toContainText(`… ${expectedCount} chars`)
     await expect(truncated).not.toContainText(longText.slice(500))
 
     await page.locator('[data-testid^="json-viewer-string-expand-"]').first().click()
-    await expect(page.getByTestId('json-viewer-string-expanded').first()).toContainText(longText)
+    await expect(page.locator('[data-testid^="json-viewer-string-expanded-"]').first()).toContainText(longText)
   })
 
   test('wrapped long values stay inside their node without crushing the expand controls', { tag: '@regression' }, async ({ page, env }) => {
@@ -302,7 +302,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     await expect(page.locator('[data-testid="run-detail-input-payload"]')).toBeVisible()
     await expect(page.locator('.json-viewer').first()).toBeVisible()
 
-    const truncated = page.getByTestId('json-viewer-string-truncated').first()
+    const truncated = page.locator('[data-testid^="json-viewer-string-truncated-"]').first()
     await expect(truncated).toBeVisible()
 
     // The expand toggle and char count keep their natural size next to the
@@ -390,7 +390,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
       await expect(page.locator('.json-viewer').first()).toBeVisible()
       await page.getByTestId('run-detail-toggle-io').click()
 
-      const truncated = page.getByTestId('json-viewer-string-truncated').first()
+      const truncated = page.locator('[data-testid^="json-viewer-string-truncated-"]').first()
       await expect(truncated).toBeVisible()
 
       // Measure the preview's actual line boxes. A single-character column
@@ -494,12 +494,12 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
 
       // 6. The expand control actually works at this viewport.
       await page.locator('[data-testid^="json-viewer-string-expand-"]').first().click()
-      const expanded = page.getByTestId('json-viewer-string-expanded').first()
+      const expanded = page.locator('[data-testid^="json-viewer-string-expanded-"]').first()
       await expect(expanded).toContainText(longText.slice(0, 60))
 
       await page.locator('[data-testid^="json-viewer-string-collapse-"]').first().click()
       await expect(truncated).toBeVisible()
-      await expect(page.getByTestId('json-viewer-string-expanded')).toHaveCount(0)
+      await expect(page.locator('[data-testid^="json-viewer-string-expanded-"]')).toHaveCount(0)
     })
   })
 
@@ -543,7 +543,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     await page.goto('/runs/run-json-viewer')
     await expect(page.locator('[data-testid="run-detail-input-payload"]')).toBeVisible()
 
-    const truncated = page.getByTestId('json-viewer-string-truncated').first()
+    const truncated = page.locator('[data-testid^="json-viewer-string-truncated-"]').first()
     await expect(truncated).toBeVisible()
     await truncated.scrollIntoViewIfNeeded()
 
@@ -674,7 +674,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
 
     await page.goto('/runs/run-json-viewer')
     await expect(page.locator('[data-testid^="json-viewer-copy-"]')).toBeVisible()
-    await expect(page.getByTestId('json-viewer-string-truncated').first()).toBeVisible()
+    await expect(page.locator('[data-testid^="json-viewer-string-truncated-"]').first()).toBeVisible()
 
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.locator('[data-testid^="json-viewer-copy-"]').click()
