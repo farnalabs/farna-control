@@ -318,6 +318,33 @@ class VendorClient:
             return None, http_error, True
         return None, http_error, False
 
+    async def _execute_attempt(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        signature: str,
+        body: bytes,
+        timestamp: float,
+        sequence: int,
+        attempt: int,
+    ) -> tuple[tuple[bool, int, str | None] | None, int | None, str, bool]:
+        """Run a single POST attempt and report its outcome to the retry loop.
+
+        Returns ``(terminal, response_code, last_error, retried_after_429)``.
+        ``terminal`` is non-``None`` when the batch is delivered or the
+        response is a terminal 400; the loop returns it immediately. On a
+        transport/unexpected failure ``response_code`` is ``None`` and
+        ``last_error`` carries the described message.
+        """
+        try:
+            resp = await self._post_once(client, url, signature, body, timestamp, sequence)
+        except (TimeoutError, httpx.RequestError) as exc:
+            return None, None, self._describe_error(exc), False
+        except Exception as exc:
+            return None, None, f"Unexpected: {exc}", False
+        terminal, http_error, retried_after_429 = await self._classify_response(resp, attempt)
+        return terminal, resp.status_code, http_error, retried_after_429
+
     async def post_batch(
         self,
         payload: dict[str, Any],
@@ -370,21 +397,9 @@ class VendorClient:
         response_code: int | None = None
 
         for attempt in range(1, MAX_ATTEMPTS + 1):
-            retried_after_429 = False
-            try:
-                resp = await self._post_once(client, url, signature, body, timestamp, sequence)
-            except (TimeoutError, httpx.RequestError) as exc:
-                last_error = self._describe_error(exc)
-                response_code = None
-            except Exception as exc:
-                last_error = f"Unexpected: {exc}"
-                response_code = None
-            else:
-                response_code = resp.status_code
-                terminal, http_error, retried_after_429 = await self._classify_response(resp, attempt)
-                if terminal is not None:
-                    return terminal
-                last_error = http_error
+            terminal, response_code, last_error, retried_after_429 = await self._execute_attempt(client, url, signature, body, timestamp, sequence, attempt)
+            if terminal is not None:
+                return terminal
 
             if retried_after_429:
                 continue

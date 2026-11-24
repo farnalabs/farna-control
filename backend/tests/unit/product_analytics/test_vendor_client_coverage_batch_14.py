@@ -55,6 +55,58 @@ async def test_insecure_http_endpoint_refused_before_any_request(caplog: pytest.
 
 
 @pytest.mark.asyncio
+async def test_malformed_endpoint_url_is_refused_without_raising():
+    """A URL ``urlsplit`` cannot parse is refused, never propagated as an error.
+
+    ``_endpoint_scheme_and_host`` catches ``ValueError`` (e.g. an invalid IPv6
+    literal) and yields an empty scheme, so ``post_batch`` refuses the endpoint
+    through its normal insecure-endpoint path rather than crashing the SAQ job.
+    """
+    client = VendorClient("https://[::1", "shh-secret")
+    existing_http = AsyncMock(is_closed=False)
+    client._http_client = existing_http
+
+    result = await client.post_batch(_payload(), 1.0, 2)
+
+    assert result == (False, None, f"{INSECURE_HTTP_NOT_ALLOWED}: https://[::1")
+    existing_http.post.assert_not_awaited()
+
+
+def test_success_terminal_treats_unreadable_body_as_accepted(caplog: pytest.LogCaptureFixture):
+    """A response whose body cannot be read must not break the never-raises contract."""
+
+    class _UnreadableBodyResponse:
+        status_code = 200
+        is_success = True
+
+        @property
+        def text(self) -> str:
+            raise RuntimeError("decode failure")
+
+    client = VendorClient("https://vendor.example", "secret")
+    with caplog.at_level(logging.WARNING, logger="farna.core.product_analytics.vendor_client"):
+        result = client._success_terminal(_UnreadableBodyResponse(), 200)
+
+    assert result == (True, 200, None)
+    assert any(record.message == "product_analytics.vendor_success_body_unparseable" for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_malformed_payload_returns_envelope_error_without_raising():
+    """A payload missing an envelope key becomes ``EnvelopeError``, not a crash."""
+    client = VendorClient("https://vendor.example", "secret")
+    existing_http = AsyncMock(is_closed=False)
+    client._http_client = existing_http
+
+    result = await client.post_batch({"date": "2026-08-10"}, 1.0, 2)
+
+    assert result[0] is False
+    assert result[1] is None
+    assert result[2].startswith("EnvelopeError: ")
+    existing_http.post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_vendor_client_retries_429_and_honours_retry_after():
     client = VendorClient("https://vendor.example", "secret")
     responses = []
