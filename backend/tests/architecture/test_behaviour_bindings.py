@@ -42,6 +42,9 @@ tool can never drift into enforcing different rules:
 from __future__ import annotations
 
 import functools
+import json
+import shutil
+import subprocess
 import sys
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
@@ -404,3 +407,69 @@ def test_git_show_distinguishes_absent_path_from_git_failure(monkeypatch):
     monkeypatch.setattr(subprocess, "run", failing_show)
     with pytest.raises(ValueError, match="could not read"):
         _bindings._git_show(REPO_ROOT, "HEAD", "backend/tests/architecture/behaviour_bindings_baseline.json")
+
+
+def _probe_product_map(root: Path) -> Path:
+    """Build a throwaway repo holding one product-map entry and its test module."""
+    # Assembled rather than written whole: a bare feat-* literal in this source
+    # file is scanned by the feature-graph test and would have to resolve
+    # against the REAL manifest, which a throwaway id does not.
+    feature_id = "feat-" + "probe"
+    entry = root / _bindings.PRODUCT_MAP_DIR / "probe.md"
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.write_text(
+        f"---\nid: {feature_id}\nstatus: gap\n---\n\n# Probe\n\n## Behaviors\n\n- [x] the probe test runs (backend/tests/unit/test_probe.py::test_probe)\n- [x] a ticked behaviour that cites no test at all\n\n",
+        encoding="utf-8",
+    )
+    test_module = root / "backend" / "tests" / "unit" / "test_probe.py"
+    test_module.parent.mkdir(parents=True, exist_ok=True)
+    test_module.write_text("def test_probe():\n    assert 1 + 1 == 2\n", encoding="utf-8")
+    # ``load_quality_lenses`` imports this module from the root it is handed, so
+    # the temp tree needs its own copy for a cold run.
+    quality = root / "backend" / "tests" / "architecture" / "test_test_suite_quality.py"
+    quality.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(_BASELINE_DIR / "test_test_suite_quality.py", quality)
+    # ``--all`` audits the tree, which resolves registered BDD features through
+    # this module; copy it so a cold run needs nothing from the real repo.
+    gaps = root / "backend" / "tests" / "architecture" / "test_product_map_feature_gaps.py"
+    shutil.copyfile(_BASELINE_DIR / "test_product_map_feature_gaps.py", gaps)
+    baseline = root / _bindings.BASELINE_RELPATH
+    baseline.parent.mkdir(parents=True, exist_ok=True)
+    baseline.write_text(_bindings.render_baseline({}), encoding="utf-8")
+    return entry
+
+
+def test_regeneration_runs_against_a_throwaway_product_map(tmp_path: Path):
+    """``--all`` regenerates a temp product map without crashing.
+
+    ``assign_markers`` used to call ``vacuity_flags`` with an argument the
+    function no longer took, so ``--write-markers`` and ``--all`` died with a
+    ``TypeError`` before writing anything: the documented way to add a marker
+    (the fix every other failing message points at) was broken. This runs the
+    real CLI in a subprocess against a temp tree, so the vacuity lenses, the
+    marker writer, the baseline and the report generator all execute for real -
+    and the run cannot poison this process's module caches.
+
+    The tree is seeded with an EMPTY baseline on purpose: ``--all`` reads the
+    baseline before rewriting it.
+    """
+    entry = _probe_product_map(tmp_path)
+
+    completed = subprocess.run(  # noqa: S603 - fixed argv; the repo's own script, no shell
+        [sys.executable, str(REPO_ROOT / "scripts" / "run_behaviour_bindings_baseline.py"), "--root", str(tmp_path), "--all"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert completed.returncode == 0, f"regeneration exited {completed.returncode}\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+    text = entry.read_text(encoding="utf-8")
+    assert "<!-- behaviour: probe-01 | tests: backend/tests/unit/test_probe.py::test_probe -->" in text, text
+    assert "<!-- behaviour: probe-02 | tests: none -->" in text, text
+    assert "status: partial" in text, text
+    baseline = json.loads((tmp_path / _bindings.BASELINE_RELPATH).read_text(encoding="utf-8"))
+    assert "probe-02" in baseline["entries"], baseline
+    report = (tmp_path / _bindings.REPORT_RELPATH).read_text(encoding="utf-8")
+    assert "`probe-02`" in report, report

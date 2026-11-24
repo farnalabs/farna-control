@@ -963,8 +963,10 @@ def assign_markers(root: Path) -> dict[str, int]:
             derived[(entry.rel, ordinal)] = (refs, marker_id, any(MARKER_RE.search(line) for line in block))
 
     modules = sorted(rel for rel in candidate_modules if index.has_module(rel))
-    node_modules = sorted({ref.partition("::")[0] for (refs, _id, _has) in derived.values() for ref in refs if "::" in ref and index.has_module(ref.partition("::")[0])})
-    flags = vacuity_flags(root, modules, node_modules)
+    # The shared lenses run over every candidate module, so a derived node
+    # binding and a module binding are screened by the same rules the gate
+    # applies; ``vacuity_flags`` takes the bound set once (no second scope).
+    flags = vacuity_flags(root, modules)
     accepted = _filter_vacuous(derived, index, flags)
 
     written: dict[str, int] = {}

@@ -180,8 +180,9 @@ behaviour that genuinely has no test is a coverage gap, not a paperwork gap.
 
 A PR that changes product code must name the test that proves it exists. When the
 diff touches `backend/src/**` or `frontend/src/**`, `scripts/run_check_prove_the_fix.py`
-(CI: the "Prove-the-fix marker" step in the backend-lint job) requires a line in
-the PR body of the form:
+(CI: the "Prove the fix marker" job in `.github/workflows/prove-the-fix.yml`,
+which also re-runs when the PR body is edited) requires a line in the PR body of
+the form:
 
 ```
 Proves: backend/tests/unit/api/test_health.py::test_healthz_ready_mounted
@@ -196,10 +197,11 @@ Proves: frontend/src/__tests__/ActionRow.spec.ts::stacks below sm and becomes a 
   holds it must be part of the PR's changed-file list – a proving test is added
   or updated by the same change, never an untouched test that happened to pass
   before.
-- A test that is skipped or expected to fail cannot prove anything: a pytest
-  test carrying `@pytest.mark.skip` / `skipif` / `xfail`, whose body starts with
-  `pytest.skip()` / `pytest.xfail()`, or a spec test marked
-  `.skip` / `.fixme` / `.todo` is rejected.
+- A test that is skipped or expected to fail cannot prove anything, at any
+  pytest scope: a `@pytest.mark.skip` / `skipif` / `xfail` decorator on the test
+  or on its enclosing class, a module-level `pytestmark = pytest.mark.skip(...)`
+  (or a list of markers), a body that starts with `pytest.skip()` /
+  `pytest.xfail()`, or a spec test marked `.skip` / `.fixme` / `.todo`.
 - Paths are resolved and confined to the repository and the test roots; a `..`
   traversal is rejected.
 - Fenced code blocks and HTML comments are stripped before the `Proves:` lines

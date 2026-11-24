@@ -1,0 +1,67 @@
+# Prove-the-fix marker gate (FAR-2701)
+#
+# A PR that changes product source (backend/src/** or frontend/src/**) must name
+# the test that proves it, as a line in the PR body:
+#
+#     Proves: backend/tests/<path>/test_<module>.py::test_<name>
+#     Proves: frontend/(src|tests)/<path>/<name>.spec.ts::<test title>
+#
+# The check is deterministic (no model): it reads the body and the changed-file
+# list, then verifies every named reference is a test that EXISTS, that the PR
+# actually changes the module holding it, and that the test is not skipped or
+# expected to fail. Fenced code blocks and HTML comments in the body are
+# ignored, so documenting the convention cannot satisfy it. A green PR whose
+# new behaviour nothing asserts is the exact failure this closes;
+# docs/product-map/README.md documents the convention.
+#
+# WHY A SEPARATE, LIGHTWEIGHT WORKFLOW (and not a step in ci.yml):
+#   * The check must re-run when the PR body changes, because adding the missing
+#     `Proves:` line is the fix the gate asks for. ci.yml has no
+#     `pull_request: types:`, so a body edit never triggered it, and adding
+#     `edited` there would re-run the whole ~56 runner-min product pipeline on
+#     every typo in a description.
+#   * It is stdlib-only Python reading the PR body and a git diff, so it needs
+#     no checkout of dependencies and no uv sync: it runs in seconds.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+# A newer event for the same PR supersedes an in-flight check (a second body
+# edit must not queue behind the first run).
+concurrency:
+  group: prove-the-fix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  prove-the-fix:
+    name: Prove the fix marker
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The head tree is what the named tests are read from, and both the
+          # base and the head commit must be in the object database for
+          # `git diff base...head` - so pin the head ref and fetch full history.
+          # (The default pull_request checkout is the merge ref, which does not
+          # exist for a conflicted PR and would fail the check for the wrong
+          # reason.)
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: "Check the Proves: marker"
+        shell: bash
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$PR_BODY" > /tmp/pr-body.md
+          git diff --name-only "$BASE_SHA...$HEAD_SHA" > /tmp/changed-files.txt
+          python3 scripts/run_check_prove_the_fix.py \
+            --pr-body /tmp/pr-body.md --changed-files /tmp/changed-files.txt

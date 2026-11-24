@@ -310,7 +310,12 @@ def test_graph_tracker_status_does_not_overclaim_against_manifest_registry():
     a manifest ``covered``. What must never happen is the opposite: the tracker
     claiming ``covered`` while the manifest says the feature is ``partial`` or
     ``gap`` - a reader of the graph would get a stronger coverage answer from the
-    human layer than the machine layer claims the product ships. Infra-only
+    human layer than the machine layer claims the product ships.
+
+    ``gap`` is special: it means *nothing is ticked at all*, not "narrower
+    proof". A feature the manifest says ships (``covered``) cannot have no
+    shipped behaviour at all in the tracker, so that combination fails too -
+    either the manifest over-claims or the entry lost its ticks. Infra-only
     entries that have no manifest feature are unconstrained.
     """
     with MANIFEST_PATH.open() as handle:
@@ -327,7 +332,11 @@ def test_graph_tracker_status_does_not_overclaim_against_manifest_registry():
         tracker_status = (_entry_frontmatter(entry) or {}).get("status")
         if manifest_status is None or tracker_status is None:
             continue
-        if rank.get(str(tracker_status), -1) <= rank.get(str(manifest_status), -1):
+        overclaims = rank.get(str(tracker_status), -1) > rank.get(str(manifest_status), -1)
+        # `gap` says nothing is ticked; under a manifest `covered` that is a
+        # contradiction, not a narrower proof, even though its rank is lower.
+        contradicts = str(tracker_status) == "gap" and str(manifest_status) == "covered"
+        if not overclaims and not contradicts:
             continue
         mismatches[entry_id] = {
             "manifest": manifest_status,

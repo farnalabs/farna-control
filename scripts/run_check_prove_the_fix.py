@@ -160,27 +160,78 @@ def _is_within(path: Path, base: Path) -> bool:
     return True
 
 
-def _find_function(tree: ast.Module, name: str, owner: str | None) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
-    """The test function *name* (optionally inside class *owner*) in *tree*."""
+def _find_test(tree: ast.Module, name: str, owner: str | None) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, ast.ClassDef | None] | None:
+    """The test function *name* (optionally inside class *owner*), and its class.
+
+    The enclosing class is returned too: a ``@pytest.mark.skip`` on the class
+    skips every method in it, so the caller must see the class decorators.
+    """
     for node in tree.body:
         if owner is None and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
-            return node
+            return node, None
         if isinstance(node, ast.ClassDef) and (owner is None or node.name == owner):
             for child in node.body:
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == name:
-                    return child
+                    return child, node
     return None
 
 
-def _skip_reason(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
-    """Why *fn* cannot prove anything (skipped/xfail), or ``None``."""
-    for decorator in fn.decorator_list:
-        try:
-            text = ast.unparse(decorator)
-        except (ValueError, RecursionError):  # pragma: no cover - defensive
+def _skip_marker(node: ast.AST) -> str | None:
+    """The unparsed text of a pytest skip/skipif/xfail marker, else ``None``."""
+    try:
+        text = ast.unparse(node)
+    except (ValueError, RecursionError):  # pragma: no cover - defensive
+        return None
+    return text if _SKIP_MARKER_RE.match(text) else None
+
+
+def _module_pytestmark_markers(tree: ast.Module) -> list[ast.AST]:
+    """The marker expressions assigned to module-level ``pytestmark``.
+
+    A module-level ``pytestmark`` applies to every test in the module, so a
+    module carrying it silently skips (or xfails) all of its tests. It may be a
+    single marker or a list of markers.
+    """
+    for node in tree.body:
+        value: ast.expr | None = None
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        if value is None or not any(isinstance(target, ast.Name) and target.id == "pytestmark" for target in targets):
             continue
-        if _SKIP_MARKER_RE.match(text):
+        if isinstance(value, (ast.List, ast.Tuple)):
+            return list(value.elts)
+        return [value]
+    return []
+
+
+def _skip_reason(
+    fn: ast.FunctionDef | ast.AsyncFunctionDef,
+    owner_class: ast.ClassDef | None,
+    tree: ast.Module,
+) -> str | None:
+    """Why *fn* cannot prove anything (skipped/xfail), or ``None``.
+
+    Every scope pytest lets a skip attach to is inspected: the function's own
+    decorators, the enclosing class's decorators, the module-level
+    ``pytestmark`` assignment, and a ``pytest.skip()``/``xfail()`` opening the
+    body.
+    """
+    for decorator in fn.decorator_list:
+        text = _skip_marker(decorator)
+        if text is not None:
             return f"it is decorated with @{text.split('(')[0]}"
+    if owner_class is not None:
+        for decorator in owner_class.decorator_list:
+            text = _skip_marker(decorator)
+            if text is not None:
+                return f"its class is decorated with @{text.split('(')[0]}"
+    for marker in _module_pytestmark_markers(tree):
+        text = _skip_marker(marker)
+        if text is not None:
+            return f"its module sets pytestmark = {text.split('(')[0]}"
     body = list(fn.body)
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
         body = body[1:]
@@ -200,12 +251,13 @@ def _verify_pytest_ref(ref: str, match: re.Match[str], module: Path) -> str | No
         tree = ast.parse(source, filename=str(module))
     except (OSError, SyntaxError) as exc:
         return f"{ref!r} names a test module that cannot be parsed: {exc}"
-    fn = _find_function(tree, match.group("name"), match.group("owner"))
+    fn = _find_test(tree, match.group("name"), match.group("owner"))
     if fn is None:
         owner = match.group("owner")
         where = f"class {owner!r} in " if owner else ""
         return f"{ref!r} names a test that is not defined in {where}{match.group('file')}"
-    reason = _skip_reason(fn)
+    test_function, owner_class = fn
+    reason = _skip_reason(test_function, owner_class, tree)
     if reason is not None:
         return f"{ref!r} names a test that cannot prove anything: {reason}"
     return None
