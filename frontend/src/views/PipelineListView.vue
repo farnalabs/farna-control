@@ -285,16 +285,16 @@
     </div>
 
       <!-- Move to Folder dialog -->
-      <dialog
-        ref="moveDialogRef"
-        v-if="showMoveToFolder"
-        open
-        class="fixed inset-0 z-50 m-auto flex w-full max-w-md items-center justify-center border border-border bg-card p-6 shadow-lg"
-        aria-modal="true"
-        :aria-label="$t('views.PipelineListView.move_to_folder')"
-        tabindex="-1"
+      <FormDialog
+        v-model:open="showMoveToFolder"
+        :title="$t('views.PipelineListView.move_to_folder')"
+        :confirm-text="$t('common.save')"
+        :confirm-loading-text="$t('common.saving')"
+        :loading="moving"
+        cancel-test-id="pipeline-list-move-cancel"
+        confirm-test-id="pipeline-list-move-save"
+        @confirm="handleMoveToFolder"
       >
-          <h3 class="mb-4 text-lg font-semibold">{{ $t('views.PipelineListView.move_to_folder') }}</h3>
           <div class="space-y-3">
             <button type="button"
               v-for="f in [...foldersList].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))"
@@ -321,27 +321,20 @@
           </div>
           <!-- retry = click Save again; no separate loader -->
           <ErrorAlert v-if="moveError" :message="moveError" :retryable="false" class="mt-4" :compact="true" />
-          <div class="mt-4 flex justify-end gap-2">
-            <button type="button" class="rounded-lg border border-input bg-background px-4 py-2 text-sm hover:bg-accent" data-testid="pipeline-list-move-cancel" @click="closeMoveToFolder">
-              {{ $t('common.cancel') }}
-            </button>
-            <Button :disabled="moving" data-testid="pipeline-list-move-save" @click="handleMoveToFolder">
-              {{ moving ? $t('common.saving') : $t('common.save') }}
-            </Button>
-          </div>
-        </dialog>
+      </FormDialog>
 
       <!-- Rename dialog -->
-      <dialog
-        ref="renameDialogRef"
-        v-if="showRenameDialog"
-        open
-        class="fixed inset-0 z-50 m-auto flex w-full max-w-md items-center justify-center border border-border bg-card p-6 shadow-lg"
-        aria-modal="true"
-        :aria-label="$t('views.PipelineListView.rename_pipeline')"
-        tabindex="-1"
+      <FormDialog
+        v-model:open="showRenameDialog"
+        :title="$t('views.PipelineListView.rename_pipeline')"
+        :confirm-text="$t('common.save')"
+        :confirm-loading-text="$t('common.saving')"
+        :loading="renaming"
+        :confirm-disabled="!renameName.trim()"
+        cancel-test-id="pipeline-list-rename-cancel"
+        confirm-test-id="pipeline-list-rename-save"
+        @confirm="handleRename"
       >
-          <h3 class="mb-4 text-lg font-semibold">{{ $t('views.PipelineListView.rename_pipeline') }}</h3>
           <div class="space-y-4">
             <div>
               <label for="pipelinelistview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.PipelineListView.name') }}</label>
@@ -355,57 +348,23 @@
             </div>
             <!-- retry = click Save again; no separate loader -->
             <ErrorAlert v-if="renameError" :message="renameError" :retryable="false" :compact="true" />
-            <div class="flex justify-end gap-2">
-              <button
-                type="button"
-                class="rounded-lg border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
-                data-testid="pipeline-list-rename-cancel"
-                @click="closeRename"
-              >
-                {{ $t('common.cancel') }}
-              </button>
-              <Button :disabled="!renameName.trim() || renaming" data-testid="pipeline-list-rename-save" @click="handleRename">
-                {{ renaming ? $t('common.saving') : $t('common.save') }}
-              </Button>
-            </div>
           </div>
-        </dialog>
+      </FormDialog>
 
       <!-- Delete confirmation dialog -->
-      <dialog
-        ref="deleteDialogRef"
-        v-if="showDeleteConfirm"
-        open
-        class="fixed inset-0 z-50 m-auto flex w-full max-w-md items-center justify-center border border-border bg-card p-6 shadow-lg"
-        aria-modal="true"
-        :aria-label="$t('views.PipelineListView.delete_pipeline')"
-        tabindex="-1"
+      <FormDialog
+        v-model:open="showDeleteConfirm"
+        :title="$t('views.PipelineListView.delete_pipeline')"
+        :description="$t('views.PipelineListView.delete_confirm')"
+        :confirm-text="$t('common.delete')"
+        confirm-severity="danger"
+        cancel-test-id="pipeline-list-delete-cancel"
+        confirm-test-id="pipeline-list-delete-confirm"
+        @confirm="handleDelete"
       >
-          <h3 class="mb-4 text-lg font-semibold text-destructive">{{ $t('views.PipelineListView.delete_pipeline') }}</h3>
-          <p class="mb-4 text-sm text-muted-foreground">
-            {{ $t('views.PipelineListView.delete_confirm') }}
-          </p>
           <!-- retry = click Delete again; no separate loader -->
           <ErrorAlert v-if="deleteError" :message="deleteError" :retryable="false" class="mb-4" :compact="true" />
-          <div class="flex justify-end gap-2">
-            <button
-              type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
-              data-testid="pipeline-list-delete-cancel"
-              @click="closeDelete"
-            >
-              {{ $t('common.cancel') }}
-            </button>
-            <button
-              type="button"
-              class="rounded-lg bg-destructive-fill px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive-fill/90"
-              data-testid="pipeline-list-delete-confirm"
-              @click="handleDelete"
-            >
-              {{ $t('common.delete') }}
-            </button>
-          </div>
-        </dialog>
+      </FormDialog>
 
       <!-- The row-action menu is keyed by hand via `openActionMenu` below, which
            bumps `actionMenuKey` on every open. The `key` is load-bearing here:
@@ -444,7 +403,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, type Ref } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
@@ -454,7 +413,7 @@ import FilterBar from '../components/shared/FilterBar.vue'
 import FolderTree from '../components/pipelines/FolderTree.vue'
 import FolderListError from '../components/pipelines/FolderListError.vue'
 import { useDataFetch } from '../composables/useDataFetch'
-import { FOCUSABLE_SELECTOR, trapTabInElement } from '../composables/useFocusTrap'
+import FormDialog from '../components/shared/FormDialog.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
@@ -719,59 +678,11 @@ const showDeleteConfirm = ref(false)
 const deleteTarget = ref<PipelineItem | null>(null)
 const deleteError = ref<string | null>(null)
 
-// Accessible modal dialog helpers: capture/restore focus, move initial focus
-// into the first meaningful control of the open panel, and trap Tab focus
-// within the active dialog using the shared focus-trap primitive.
-const lastFocusedBeforeDialog = ref<HTMLElement | null>(null)
-const moveDialogRef = ref<HTMLElement | null>(null)
-const renameDialogRef = ref<HTMLElement | null>(null)
-const deleteDialogRef = ref<HTMLElement | null>(null)
-const activeDialogPanel = ref<HTMLElement | null>(null)
-
-function openDialog(show: Ref<boolean>, panel: Ref<HTMLElement | null>) {
-  lastFocusedBeforeDialog.value = document.activeElement as HTMLElement | null
-  show.value = true
-  nextTick(() => {
-    if (!panel.value) return
-    activeDialogPanel.value = panel.value
-    // Focus the first meaningful control, not the tabindex="-1" wrapper, so
-    // keyboard users see a focus indicator immediately and the trap guard
-    // (which only fires for focusables inside the panel) stays armed.
-    const first = panel.value.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
-    if (first) first.focus()
-    else panel.value.focus()
-  })
-}
-
-function closeDialog(show: Ref<boolean>) {
-  show.value = false
-  activeDialogPanel.value = null
-  nextTick(() => lastFocusedBeforeDialog.value?.focus())
-}
-
-function closeMoveToFolder() { closeDialog(showMoveToFolder) }
-function closeRename() { closeDialog(showRenameDialog) }
-function closeDelete() { closeDialog(showDeleteConfirm) }
-
-function trapKeydown(e: KeyboardEvent) {
-  if (!activeDialogPanel.value) return
-  if (e.key === 'Escape') {
-    e.preventDefault()
-    if (showMoveToFolder.value) closeMoveToFolder()
-    else if (showRenameDialog.value) closeRename()
-    else if (showDeleteConfirm.value) closeDelete()
-    return
-  }
-  if (e.key !== 'Tab') return
-  trapTabInElement(e, activeDialogPanel.value)
-}
-
-onMounted(() => {
-  document.addEventListener('keydown', trapKeydown)
-})
-onBeforeUnmount(() => {
-  document.removeEventListener('keydown', trapKeydown)
-})
+// FormDialog (PrimeVue Dialog) owns focus, mask and Escape for all three
+// dialogs, so there is no bespoke focus-trap or keydown handler here.
+function closeMoveToFolder() { showMoveToFolder.value = false }
+function closeRename() { showRenameDialog.value = false }
+function closeDelete() { showDeleteConfirm.value = false }
 
 const search = ref('')
 
@@ -943,14 +854,14 @@ function openRename(p: PipelineItem) {
   renameTarget.value = p
   renameName.value = p.name
   renameError.value = null
-  openDialog(showRenameDialog, renameDialogRef)
+  showRenameDialog.value = true
 }
 
 function openMoveToFolder(p: PipelineItem) {
   moveTarget.value = p
   moveToFolderId.value = p.folder_id ?? null
   moveError.value = null
-  openDialog(showMoveToFolder, moveDialogRef)
+  showMoveToFolder.value = true
 }
 
 async function handleMoveToFolder() {
@@ -1059,7 +970,7 @@ async function handleResume(p: PipelineItem) {
 function openDelete(p: PipelineItem) {
   deleteTarget.value = p
   deleteError.value = null
-  openDialog(showDeleteConfirm, deleteDialogRef)
+  showDeleteConfirm.value = true
 }
 
 async function handleDelete() {

@@ -99,9 +99,10 @@ _log = logging.getLogger(__name__)
 
 #: ``User-Agent`` every outbound notification POST carries. Defined ONCE here
 #: (the real delivery path) and imported by the admin route that sends a test
-#: delivery, so the two can never drift. The value is an external-facing
-#: identifier consumers may filter on - do not rename it casually.
-NOTIFIER_USER_AGENT = "Modulo-Notifier/1.0"
+#: delivery, so the two can never drift. ``1.0`` names the notifier PROTOCOL,
+#: not the product release: bump it only on a breaking change to the webhook
+#: contract, never on a product rename.
+NOTIFIER_USER_AGENT = "Farna-Control-Notifier/1.0"
 
 # FAR-250: fire-and-forget post-commit SSE broadcast tasks (kept referenced
 # so the event loop does not garbage-collect them mid-flight).

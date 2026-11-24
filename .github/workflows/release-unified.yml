@@ -33,6 +33,10 @@ name: "Release: Unified Pipeline"
         description: "Release version in X.Y.Z form (e.g. 0.1.0). Required for recut/promote; for cut it's the target version."
         type: string
         required: false
+      target_sha:
+        description: "Optional commit SHA to pin the release to (recut/dry-run only). Must be reachable from origin/main. Empty = origin/main, resolved once and shared by the schema gate and every publishing job. Refused for cut and promote."
+        type: string
+        required: false
       freeze:
         description: "Establish release-freeze branch to pause merge queue (default false while testing pipeline)"
         type: boolean
@@ -53,6 +57,137 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Single release target resolution (FAR-2752)
+  # A recut validates one commit and publishes one commit. Resolving the target
+  # more than once lets main move in between, so a green schema proof could
+  # describe a commit that was never tagged - the observed failure was three
+  # recuts in one session each targeting a different commit, so neither a green
+  # validation could be reused nor a red one avoided. The target is resolved
+  # here ONCE, and the schema gate and every publishing job consume the same
+  # job output. An explicit `target_sha` pins it to a chosen commit; empty keeps
+  # today's origin/main sampling, but sampled exactly once.
+  # ---------------------------------------------------------------------------
+  resolve-target:
+    name: Resolve the release target commit
+    runs-on: ubicloud-standard-2
+    # A local git query plus a fetch of main; nothing here is slow.
+    timeout-minutes: 10
+    permissions:
+      # Read-only: resolution never writes a ref.
+      contents: read
+    outputs:
+      target_sha: ${{ steps.resolve.outputs.target_sha }}
+      target_pinned: ${{ steps.resolve.outputs.target_pinned }}
+    steps:
+      # fetch-depth 0 so an ancestor pin is already present locally, and
+      # persist-credentials: false because resolution never pushes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: main
+          persist-credentials: false
+      - name: Resolve the target commit (pin or origin/main)
+        id: resolve
+        shell: bash
+        env:
+          # Mapped through the step env block (S7630): GitHub expressions
+          # inside a run block are interpolated before the shell parses the
+          # script, so values are data, never code.
+          MODE: ${{ inputs.mode }}
+          REQUESTED_SHA: ${{ inputs.target_sha }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::[$1] $2"
+            exit 1
+          }
+
+          # A pin is coherent only for the modes that publish exactly one chosen
+          # commit. `cut` creates and merges a version-bump PR on main and tags
+          # the resulting merge commit, which does not exist at dispatch time,
+          # so pinning it would tag a commit without the version bump. `promote`
+          # retags an existing RC and publishes no new commit at all.
+          if [ -n "${REQUESTED_SHA:-}" ]; then
+            case "$MODE" in
+              recut|dry-run)
+                ;;
+              cut)
+                fail "target_sha_unsupported_mode" "target_sha is not supported for mode 'cut': cut creates and merges a version-bump PR on main and tags the resulting merge commit, which does not exist at dispatch time. Dispatch a recut to pin a commit."
+                ;;
+              promote)
+                fail "target_sha_unsupported_mode" "target_sha is not supported for mode 'promote': promote retags an existing RC tag and publishes no new commit. Re-run without target_sha."
+                ;;
+              *)
+                fail "target_sha_unsupported_mode" "target_sha is not supported for mode '${MODE}'."
+                ;;
+            esac
+          fi
+
+          if ! git fetch --quiet origin main; then
+            fail "target_fetch_failed" "Could not fetch origin/main; refusing to resolve a release target from an unfetched ref."
+          fi
+
+          if [ -z "${REQUESTED_SHA:-}" ]; then
+            target="$(git rev-parse origin/main)"
+            pinned=false
+            echo "No target_sha supplied; resolved origin/main once to ${target}."
+          else
+            # A tag is refused even when its name looks like a SHA: pinning must
+            # name an immutable commit, not a ref that can be moved or re-pointed.
+            if git show-ref --verify --quiet "refs/tags/${REQUESTED_SHA}"; then
+              fail "target_sha_is_tag" "target_sha '${REQUESTED_SHA}' names a git tag, not a commit. Pass the full 40-character commit SHA."
+            fi
+            if ! printf '%s' "$REQUESTED_SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+              fail "target_sha_not_a_sha" "target_sha '${REQUESTED_SHA}' is not a commit SHA (expected 7-40 hexadecimal characters). Branch names, tags and arbitrary revisions are refused so the pin cannot track a moving ref."
+            fi
+            if ! git cat-file -e "${REQUESTED_SHA}^{commit}" 2>/dev/null; then
+              if git cat-file -e "${REQUESTED_SHA}" 2>/dev/null; then
+                fail "target_sha_not_a_commit" "target_sha '${REQUESTED_SHA}' exists in this repository but is not a commit."
+              fi
+              fail "target_sha_missing" "target_sha '${REQUESTED_SHA}' does not exist in this repository."
+            fi
+            target="$(git rev-parse --verify "${REQUESTED_SHA}^{commit}")"
+            if ! printf '%s' "$target" | grep -Eq '^[0-9a-f]{40}$'; then
+              fail "target_sha_not_a_sha" "target_sha '${REQUESTED_SHA}' did not resolve to a full 40-character commit SHA (got '${target}')."
+            fi
+            if git merge-base --is-ancestor "$target" origin/main; then
+              :
+            elif git merge-base --is-ancestor origin/main "$target"; then
+              fail "target_sha_newer_than_main" "target_sha '${REQUESTED_SHA}' (${target}) is newer than origin/main. A release can only pin a commit that is already on main."
+            else
+              fail "target_sha_not_on_main" "target_sha '${REQUESTED_SHA}' (${target}) is not on main's history. Only a commit reachable from origin/main can be released."
+            fi
+            pinned=true
+            echo "Pinned the release target to ${target} (from '${REQUESTED_SHA}')."
+          fi
+
+          echo "target_sha=${target}" >> "$GITHUB_OUTPUT"
+          echo "target_pinned=${pinned}" >> "$GITHUB_OUTPUT"
+      - name: Record the release target in the run summary
+        env:
+          MODE: ${{ inputs.mode }}
+          TARGET_SHA: ${{ steps.resolve.outputs.target_sha }}
+          TARGET_PINNED: ${{ steps.resolve.outputs.target_pinned }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$TARGET_PINNED" = "true" ]; then
+            source="pinned via the target_sha workflow input"
+          else
+            source="resolved once from origin/main"
+          fi
+          {
+            echo "## Release target"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Mode | \`${MODE}\` |"
+            echo "| Target commit | \`${TARGET_SHA}\` |"
+            echo "| Source | ${source} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
   # Schema-freshness proof for the exact commit (FAR-2484)
   # A release samples a main commit that may be seconds old, and merges land
   # through the merge queue with GITHUB_TOKEN - which does not trigger push
@@ -70,6 +205,12 @@ jobs:
   # ---------------------------------------------------------------------------
   schema-gate:
     name: Schema freshness proof (exact commit)
+    needs: [resolve-target]
+    # Re-export the single resolved target so the discovery gate can inspect
+    # the same commit without resolving (and possibly re-sampling) it again.
+    outputs:
+      target_sha: ${{ needs.resolve-target.outputs.target_sha }}
+      target_pinned: ${{ needs.resolve-target.outputs.target_pinned }}
     runs-on: ubicloud-standard-2
     # Covers the bounded schema-freshness proof: when no completed ci.yml run
     # proves the gate on the exact commit, the job dispatches one against a
@@ -96,11 +237,14 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ github.sha }}
+          # The ONE resolved release target (FAR-2752): a pin or origin/main
+          # sampled once. Never re-resolve here - a second resolution is what
+          # let the proof and the tag disagree.
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
         run: |
           set -euo pipefail
           if [ -z "${TARGET_SHA:-}" ]; then
-            echo "::error::No exact target commit SHA to prove schema freshness for; refusing to run the preflight gate."
+            echo "::error::No resolved target commit SHA to prove schema freshness for; refusing to run the preflight gate."
             exit 1
           fi
           python3 - "$TARGET_SHA" <<'PY'
@@ -399,6 +543,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REGISTRY_USER: ${{ github.actor }}
+          # FAR-2752: inspect the same single resolved target the schema gate
+          # and the publishing jobs use. scripts/run_release_preflight.py reads
+          # CUT_SHA as its target and only falls back to GITHUB_SHA when unset.
+          CUT_SHA: ${{ needs.schema-gate.outputs.target_sha }}
           RELEASE_MODE: ${{ inputs.mode }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_FREEZE: ${{ inputs.freeze }}
@@ -509,7 +657,7 @@ jobs:
   # ---------------------------------------------------------------------------
   dry-run:
     name: Dry-run rehearsal (${{ inputs.version || 'auto' }})
-    needs: [preflight]
+    needs: [preflight, resolve-target]
     if: inputs.mode == 'dry-run'
     runs-on: ubicloud-standard-2
     # Builds every container image (no push) and then verifies and uploads the
@@ -523,7 +671,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: main
+          # FAR-2752: rehearse the single resolved target (a pin or origin/main),
+          # so a pinned dry-run builds the commit a pinned recut would publish.
+          ref: ${{ needs.resolve-target.outputs.target_sha }}
 
       - name: Validate version input
         shell: bash
@@ -616,9 +766,20 @@ jobs:
           retention-days: 30
 
       - name: Dry-run summary
+        env:
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
+          TARGET_PINNED: ${{ needs.resolve-target.outputs.target_pinned }}
         run: |
+          set -euo pipefail
+          if [ "$TARGET_PINNED" = "true" ]; then
+            target_source="pinned via target_sha"
+          else
+            target_source="resolved once from origin/main"
+          fi
           {
             echo "## Dry-run rehearsal - nothing was published"
+            echo ""
+            echo "Release target: \`${TARGET_SHA}\` (${target_source})."
             echo ""
             echo "| Step | Status |"
             echo "|---|---|"
@@ -632,15 +793,16 @@ jobs:
 
   dry-run-bundle:
     name: Rehearse bundle build (no publish)
-    needs: [preflight]
+    needs: [preflight, resolve-target]
     if: inputs.mode == 'dry-run'
     uses: ./.github/workflows/bundle-release.yml
     with:
       version: ${{ inputs.version }}
       # A rehearsal tag that is never created or pushed. It only lands in the
-      # throwaway bundle's RC_TAG file; the checkout below uses main.
+      # throwaway bundle's RC_TAG file; the checkout below uses the single
+      # resolved target (a pin or origin/main).
       rc_tag: v${{ inputs.version }}-dry-run
-      ref: main
+      ref: ${{ needs.resolve-target.outputs.target_sha }}
     secrets:
       BUNDLE_MANIFEST_SIGNING_KEY: ${{ secrets.BUNDLE_MANIFEST_SIGNING_KEY }}
       GH_TOKEN: ${{ github.token }}
@@ -662,7 +824,9 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: Release (${{ inputs.mode }})
-    needs: [preflight]
+    # resolve-target is a direct need so this job can read the single resolved
+    # target (FAR-2752) from its output, not re-resolve origin/main itself.
+    needs: [preflight, resolve-target]
     if: inputs.mode != 'dry-run'
     runs-on: ubicloud-standard-2
     # Covers the bounded 90-minute merge-queue wait plus the bounded 60-minute
@@ -683,6 +847,10 @@ jobs:
       # bundle received the correct one; the explicit step makes the value
       # single-sourced and observable in the job log.
       rc_tag: ${{ steps.rc-output.outputs.rc_tag }}
+      # FAR-2752: re-export the single resolved target so publication records
+      # the commit that was actually validated and tagged.
+      target_sha: ${{ steps.rc-output.outputs.target_sha }}
+      target_pinned: ${{ steps.rc-output.outputs.target_pinned }}
       ga_tag: ${{ steps.promote.outputs.ga_tag }}
       all_in_one_digest: ${{ steps.publish_images.outputs.all_in_one_digest || steps.retag_images.outputs.all_in_one_digest }}
       backend_digest: ${{ steps.publish_images.outputs.backend_digest || steps.retag_images.outputs.backend_digest }}
@@ -1003,18 +1171,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MODE: ${{ inputs.mode }}
           CUT_SHA: ${{ steps.cut-commit.outputs.cut_sha }}
+          # FAR-2752: the single resolved target. `cut` proves its own merged
+          # bump commit (CUT_SHA); a recut proves exactly the commit it will
+          # tag, resolved once by resolve-target. This step never re-resolves
+          # origin/main, so the proof and the tag cannot disagree.
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
         shell: bash
         run: |
           set -euo pipefail
           if [ "$MODE" = "cut" ]; then
-            TARGET_SHA="$CUT_SHA"
+            TARGET_SHA="${CUT_SHA:-}"
             if [ -z "$TARGET_SHA" ]; then
               echo "::error::Cut preparation produced no exact merged commit SHA."
               exit 1
             fi
-          else
-            git fetch origin main
-            TARGET_SHA="$(git rev-parse origin/main)"
+          elif [ -z "${TARGET_SHA:-}" ]; then
+            echo "::error::No resolved release target to prove schema freshness for; refusing to validate an unspecified commit."
+            exit 1
           fi
           echo "Checking schema-freshness on exact target ${TARGET_SHA}..."
           # FAR-2484: a release samples a HEAD that may be only seconds old,
@@ -1445,7 +1618,10 @@ jobs:
           esac
 
       # -----------------------------------------------------------------------
-      # RECUT: tag current main as the next RC (no version bump)
+      # RECUT: tag the single resolved target as the next RC (no version bump).
+      # The target is origin/main sampled once by resolve-target, or an explicit
+      # target_sha pin. This step must NOT re-resolve origin/main: the schema
+      # proof above and this tag must be the same commit (FAR-2752).
       # -----------------------------------------------------------------------
       - name: Recut from current main
         id: recut
@@ -1454,6 +1630,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
+          TARGET_PINNED: ${{ needs.resolve-target.outputs.target_pinned }}
         shell: bash
         run: |
           set -euo pipefail
@@ -1474,13 +1652,26 @@ jobs:
           done
           RC_TAG="${BASE}-rc${N}"
 
-          # Refresh from the live main ref so the new RC always captures the
-          # fix that was merged before this recut dispatch started.
-          git fetch origin main
-          git checkout --detach origin/main
+          # Tag exactly the commit resolve-target resolved - never a fresh
+          # origin/main read, which could have moved since the schema proof.
+          if [ -z "${TARGET_SHA:-}" ]; then
+            echo "::error::No resolved release target; refusing to tag a recut."
+            exit 1
+          fi
+          if ! git cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "$TARGET_SHA"
+          fi
+          git checkout --detach "$TARGET_SHA"
           RC_SHA="$(git rev-parse HEAD)"
-
-          echo "Tagging recut RC: $RC_TAG at $RC_SHA"
+          if [ "$RC_SHA" != "$TARGET_SHA" ]; then
+            echo "::error::Recut checked out ${RC_SHA} but the resolved target is ${TARGET_SHA}; refusing to tag the wrong commit."
+            exit 1
+          fi
+          if [ "$TARGET_PINNED" = "true" ]; then
+            echo "Tagging recut RC pinned to ${TARGET_SHA}; main is not re-sampled."
+          else
+            echo "Tagging recut RC at the single resolved origin/main commit ${TARGET_SHA}."
+          fi
           git tag -a "$RC_TAG" -m "Release candidate $RC_TAG"
           git push origin "$RC_TAG"
 
@@ -1852,7 +2043,8 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # RECUT: publish from the new RC tag, which was created at current main.
+      # RECUT: publish from the new RC tag, which was created at the single
+      # resolved target commit (origin/main sampled once, or an explicit pin).
       # -----------------------------------------------------------------------
       - name: Check out the RC commit for publishing (recut only)
         if: inputs.mode == 'recut'
@@ -2304,13 +2496,38 @@ jobs:
         if: always()
         shell: bash
         env:
+          MODE: ${{ inputs.mode }}
           CUT_RC_TAG: ${{ steps.cut.outputs.rc_tag }}
           RECUT_RC_TAG: ${{ steps.recut.outputs.rc_tag }}
+          CUT_SHA: ${{ steps.cut.outputs.cut_sha }}
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
+          TARGET_PINNED: ${{ needs.resolve-target.outputs.target_pinned }}
         run: |
           set -euo pipefail
           rc_tag="${CUT_RC_TAG:-}${RECUT_RC_TAG:-}"
           echo "rc_tag=${rc_tag}" >> "$GITHUB_OUTPUT"
-          echo "Release candidate tag exposed to dependent jobs: '${rc_tag}'"
+          # FAR-2752: the published target must be the commit the RC tag actually
+          # points at. `cut` tags the merge commit of its version-bump PR - a
+          # commit that did not exist when resolve-target sampled origin/main - so
+          # for cut the target is the cut step's own merged commit, never the
+          # origin/main sample. A recut (and only a recut) publishes the single
+          # resolved target it validated, which may be pinned.
+          if [ "${MODE:-}" = "cut" ]; then
+            if [ -z "${CUT_SHA:-}" ]; then
+              echo "::error::cut produced no exact merged commit SHA to record as the release target."
+              exit 1
+            fi
+            target_sha="${CUT_SHA}"
+            target_pinned="false"
+          else
+            target_sha="${TARGET_SHA:-}"
+            target_pinned="${TARGET_PINNED:-}"
+          fi
+          {
+            echo "target_sha=${target_sha}"
+            echo "target_pinned=${target_pinned}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release candidate tag exposed to dependent jobs: '${rc_tag}' (target ${target_sha}, pinned=${target_pinned})"
 
   # ---------------------------------------------------------------------------
 
@@ -2957,9 +3174,26 @@ jobs:
           TAG: bundle-v${{ inputs.version }}
           RC_TAG: ${{ needs.release.outputs.rc_tag }}
           INCLUDE_WINDOWS: ${{ inputs.include_windows }}
+          MODE: ${{ inputs.mode }}
+          # The release job re-exports the commit the RC tag actually points at
+          # (FAR-2752): for cut that is the version-bump merge commit, for a recut
+          # the pinned/resolved target. So the notes trace exactly the commit the
+          # schema gate proved and the tag published.
+          TARGET_SHA: ${{ needs.release.outputs.target_sha }}
+          TARGET_PINNED: ${{ needs.release.outputs.target_pinned }}
         shell: bash
         run: |
           set -euo pipefail
+
+          # FAR-2752: prove the recorded target is the commit the RC tag points
+          # at before it is published. `cut` tags its version-bump merge commit
+          # and a recut tags the resolved/pinned target; either way the note must
+          # name the tagged commit, never the origin/main sample taken at dispatch.
+          TAGGED_SHA="$(git rev-parse "${RC_TAG}^{commit}")"
+          if [ "${TARGET_SHA:-}" != "$TAGGED_SHA" ]; then
+            echo "::error::Release notes target '${TARGET_SHA}' does not match the RC tag ${RC_TAG} commit ${TAGGED_SHA}; refusing to publish a wrong target."
+            exit 1
+          fi
 
           # Generate changelog and release notes
           NOTES_FILE="$(mktemp)"
@@ -2974,6 +3208,22 @@ jobs:
             --from "$PREV" --to "$RC_TAG" \
             --version "$VERSION" \
             --output CHANGELOG.md > "$NOTES_FILE"
+
+          # FAR-2752: record the commit this RC was tagged at. The pinned/resolved
+          # wording applies to a recut only; a cut publishes the merge commit of
+          # its version-bump PR, which is neither pinned nor the origin/main sample.
+          {
+            echo ""
+            echo "---"
+            echo ""
+            if [ "${TARGET_PINNED:-false}" = "true" ]; then
+              echo "Target commit: \`${TARGET_SHA}\` (pinned via the \`target_sha\` workflow input)."
+            elif [ "${MODE:-}" = "cut" ]; then
+              echo "Target commit: \`${TARGET_SHA}\` (the version-bump merge commit tagged as this release candidate)."
+            else
+              echo "Target commit: \`${TARGET_SHA}\` (resolved once from \`origin/main\` at dispatch)."
+            fi
+          } >> "$NOTES_FILE"
 
           ASSETS=(
               "release-artefacts/farna-control-${VERSION}-linux-amd64.tar.gz"
@@ -3030,7 +3280,7 @@ jobs:
           RELEASE_TITLE="Farna Control ${RC_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::warning::release ${TAG} already exists - uploading assets without clobbering"
-            gh release edit "$TAG" --title "$RELEASE_TITLE" "${PUBLISH_ARGS[@]}"
+            gh release edit "$TAG" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" "${PUBLISH_ARGS[@]}"
             gh release upload "$TAG" "${ASSETS[@]}"
           else
             # --target pins the tag to the checked-out RC commit instead of
@@ -3617,7 +3867,7 @@ jobs:
   # ---------------------------------------------------------------------------
   produce-sbom:
     name: Produce CycloneDX SBOM
-    needs: [preflight]
+    needs: [preflight, resolve-target]
     runs-on: ubicloud-standard-2
     # Generates and uploads the CycloneDX SBOM artefact. The payload is tiny and
     # the work is quick, but attest-artefacts and therefore publication depend
@@ -3630,7 +3880,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          # FAR-2752: attest the SBOM of the same commit the release publishes.
+          ref: ${{ needs.resolve-target.outputs.target_sha }}
           persist-credentials: false
 
       - name: Set up Python 3.12

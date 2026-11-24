@@ -18,10 +18,14 @@ from urllib.parse import urlsplit
 import pytest
 
 from farna.launcher.config_source import (
+    ANALYTICS_ENABLED_KEY,
+    ANALYTICS_ENDPOINT_URL_KEY,
+    ANALYTICS_INSTANCE_SECRET_KEY,
     CONFIG_ENV_FILENAME,
     LauncherConfigError,
     LauncherConfigSource,
     compose_config,
+    export_analytics_env,
     load_launcher_config_inputs,
     render_env_file,
     resolve_pinned_runtime_keys,
@@ -538,3 +542,150 @@ def test_environment_overrides_the_pinned_file(monkeypatch: pytest.MonkeyPatch, 
     pin_env_file(str(path))
     settings = get_settings()
     assert settings.database_url == "postgresql+asyncpg://operator-override/override"
+
+
+# ---------------------------------------------------------------------------
+# Product-analytics opt-in settings (FAR-2741 / FAR-2747)
+# ---------------------------------------------------------------------------
+
+_ANALYTICS_ENV_NAMES = (
+    ANALYTICS_ENDPOINT_URL_KEY,
+    ANALYTICS_INSTANCE_SECRET_KEY,
+    ANALYTICS_ENABLED_KEY,
+)
+
+
+def _clear_analytics_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drop any ambient analytics setting so these assertions are deterministic."""
+    for name in _ANALYTICS_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key] = value
+    return values
+
+
+def test_pinned_config_preserves_product_analytics_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """FAR-2747: write_pinned_env_file runs on every boot and must not erase them.
+
+    The regression: only the composed dict was rendered, so the installer's
+    opt-in (or a later admin change) vanished on the first launcher boot.
+    """
+    _clear_analytics_env(monkeypatch)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    path = data_dir / CONFIG_ENV_FILENAME
+    secret = "c" * 64
+    path.write_text(
+        f"{ANALYTICS_ENDPOINT_URL_KEY}=https://analytics.example.test\n{ANALYTICS_INSTANCE_SECRET_KEY}={secret}\n{ANALYTICS_ENABLED_KEY}=true\n",
+        encoding="utf-8",
+    )
+
+    write_pinned_env_file(data_dir, _state(), _secrets())
+
+    persisted = _read_env_file(path)
+    assert persisted[ANALYTICS_ENDPOINT_URL_KEY] == "https://analytics.example.test"
+    assert persisted[ANALYTICS_INSTANCE_SECRET_KEY] == secret
+    assert persisted[ANALYTICS_ENABLED_KEY] == "true"
+
+
+def test_launcher_generates_stable_analytics_secret_when_endpoint_set(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """An endpoint with no secret gets a generated 32-byte hex secret, kept stable."""
+    _clear_analytics_env(monkeypatch)
+    monkeypatch.setenv(ANALYTICS_ENDPOINT_URL_KEY, "https://analytics.example.test")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    first = write_pinned_env_file(data_dir, _state(), _secrets())
+    generated = _read_env_file(first)[ANALYTICS_INSTANCE_SECRET_KEY]
+    assert len(generated) == 64
+    assert all(character in "0123456789abcdef" for character in generated)
+
+    second = write_pinned_env_file(data_dir, _state(), _secrets())
+    assert _read_env_file(second)[ANALYTICS_INSTANCE_SECRET_KEY] == generated
+    assert second.read_text(encoding="utf-8") == first.read_text(encoding="utf-8")
+
+
+def test_persisted_endpoint_also_triggers_secret_generation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The endpoint may come from config.env (the installer) rather than the environment."""
+    _clear_analytics_env(monkeypatch)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    path = data_dir / CONFIG_ENV_FILENAME
+    path.write_text(f"{ANALYTICS_ENDPOINT_URL_KEY}=https://analytics.example.test\n", encoding="utf-8")
+
+    write_pinned_env_file(data_dir, _state(), _secrets())
+
+    generated = _read_env_file(path)[ANALYTICS_INSTANCE_SECRET_KEY]
+    assert len(generated) == 64
+
+
+def test_explicit_persisted_analytics_secret_is_preserved_verbatim(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A secret supplied in config.env is never replaced by a generated one."""
+    _clear_analytics_env(monkeypatch)
+    monkeypatch.setenv(ANALYTICS_ENDPOINT_URL_KEY, "https://analytics.example.test")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    path = data_dir / CONFIG_ENV_FILENAME
+    path.write_text(f"{ANALYTICS_INSTANCE_SECRET_KEY}=installer-supplied-secret\n", encoding="utf-8")
+
+    write_pinned_env_file(data_dir, _state(), _secrets())
+
+    assert _read_env_file(path)[ANALYTICS_INSTANCE_SECRET_KEY] == "installer-supplied-secret"
+
+
+def test_operator_analytics_secret_is_preserved_and_never_regenerated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """An operator-exported secret wins and is never overwritten by generation."""
+    monkeypatch.setenv(ANALYTICS_ENDPOINT_URL_KEY, "https://analytics.example.test")
+    monkeypatch.setenv(ANALYTICS_INSTANCE_SECRET_KEY, "operator-supplied-secret")
+
+    resolved = resolve_pinned_runtime_keys({ANALYTICS_ENDPOINT_URL_KEY: "https://analytics.example.test"}, tmp_path / CONFIG_ENV_FILENAME)
+
+    assert resolved[ANALYTICS_INSTANCE_SECRET_KEY] == "operator-supplied-secret"
+
+
+def test_no_endpoint_means_no_analytics_secret_is_generated(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """No endpoint (no opt-in) mints nothing: absence is the off state."""
+    _clear_analytics_env(monkeypatch)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    path = write_pinned_env_file(data_dir, _state(), _secrets())
+
+    values = _read_env_file(path)
+    assert ANALYTICS_ENDPOINT_URL_KEY not in values
+    assert ANALYTICS_INSTANCE_SECRET_KEY not in values
+    assert ANALYTICS_ENABLED_KEY not in values
+
+
+def test_export_analytics_env_sets_the_resolved_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The API's ON-switch consumer and the SAQ children read os.environ (FAR-2747)."""
+    _clear_analytics_env(monkeypatch)
+
+    export_analytics_env(
+        {
+            ANALYTICS_ENDPOINT_URL_KEY: "https://analytics.example.test",
+            ANALYTICS_INSTANCE_SECRET_KEY: "resolved-secret",
+            ANALYTICS_ENABLED_KEY: "true",
+        }
+    )
+
+    assert os.environ[ANALYTICS_ENDPOINT_URL_KEY] == "https://analytics.example.test"
+    assert os.environ[ANALYTICS_INSTANCE_SECRET_KEY] == "resolved-secret"
+    assert os.environ[ANALYTICS_ENABLED_KEY] == "true"
+
+
+def test_export_analytics_env_never_invents_absent_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Absence is the off state: nothing is exported when the opt-in is absent or blank."""
+    _clear_analytics_env(monkeypatch)
+
+    export_analytics_env({ANALYTICS_ENDPOINT_URL_KEY: "", ANALYTICS_ENABLED_KEY: ""})
+
+    assert ANALYTICS_ENDPOINT_URL_KEY not in os.environ
+    assert ANALYTICS_INSTANCE_SECRET_KEY not in os.environ
+    assert ANALYTICS_ENABLED_KEY not in os.environ

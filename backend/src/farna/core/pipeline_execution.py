@@ -3317,9 +3317,14 @@ async def _write_node_completion(
                 )
             ).scalar_one_or_none()
             if row is None:
+                from farna.db.run_ownership import resolve_run_owner_team_id
+
                 row = RunNodeOutput(
                     run_id=uuid.UUID(run_id),
                     organisation_id=uuid.UUID(org_id),
+                    # ADR 070 Phase 1A: a completion marker row inherits the parent
+                    # RUN's team in this transaction (never the live pipeline's).
+                    owner_team_id=await resolve_run_owner_team_id(session, uuid.UUID(run_id)),
                     node_id=node_id,
                     attempt_key=_completion_attempt_key(run_id, node_id, claim_token),
                 )

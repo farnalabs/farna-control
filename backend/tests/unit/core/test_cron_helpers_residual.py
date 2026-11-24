@@ -102,6 +102,13 @@ class _MockSession:
     def add(self, obj: object) -> None:
         self.added.append(obj)
 
+    async def scalar(self, stmt: Any, params: dict[str, Any] | None = None) -> Any:
+        # ADR 070 Phase 1A: the suite-run builder snapshots the pipeline's owner
+        # team at fire time. That lookup is plumbing in these tests, so the double
+        # answers None without consuming a canned execute() result slot.
+        self.executed.append((stmt, params))
+        return None
+
     async def flush(self) -> None:
         return None
 

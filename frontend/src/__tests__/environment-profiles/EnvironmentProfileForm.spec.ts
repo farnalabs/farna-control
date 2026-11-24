@@ -86,6 +86,16 @@ describe('EnvironmentProfileForm — create mode', () => {
     expect(wrapper.find('[data-testid="envprofile-form-name"]').exists()).toBe(true)
   })
 
+  it('renders exactly one <h1> — its own create page title (FAR-2723)', async () => {
+    const wrapper = mountForm()
+    await flush()
+
+    const headings = wrapper.findAll('h1')
+    expect(headings).toHaveLength(1)
+    expect(headings[0].text()).toBe('New Environment Profile')
+    expect(wrapper.findAll('[data-page-heading]')).toHaveLength(1)
+  })
+
   it('submit without a name shows the required error and never calls the API', async () => {
     const wrapper = mountForm()
     await flush()
@@ -342,6 +352,15 @@ describe('EnvironmentProfileForm — edit mode', () => {
     expect(vm.form.network_policy).toBe('none')
     expect(vm.form.initialisation_strategy).toBe('blank')
     expect(vm.form.persistence_policy).toBe('retained')
+  })
+
+  it('renders exactly one <h1> — its own edit page title (FAR-2723)', async () => {
+    const wrapper = await mountEdit()
+
+    const headings = wrapper.findAll('h1')
+    expect(headings).toHaveLength(1)
+    expect(headings[0].text()).toBe('Edit Environment Profile')
+    expect(wrapper.findAll('[data-page-heading]')).toHaveLength(1)
   })
 
   it('edit: submit PUTs the profile id with the edited fields', async () => {

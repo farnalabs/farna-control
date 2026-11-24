@@ -45,6 +45,15 @@ _NEW_KEY = Fernet.generate_key().decode()
 _ROW_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
+@pytest.fixture(autouse=True)
+def _pin_server_gucs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The dump's compatibility rewrite asks the server for its GUC names;
+    these tests never touch a database."""
+    from farna.db import plain_dump
+
+    monkeypatch.setattr(plain_dump, "server_guc_names", lambda _url, **_kwargs: {"statement_timeout"})
+
+
 class TestPureHelpers:
     def test_resolve_url_strips_async_drivers(self) -> None:
         assert _resolve_url("postgresql+asyncpg://u:p@h/db") == "postgresql://u:p@h/db"
@@ -187,13 +196,38 @@ class TestPsqlDumpHelpers:
     def test_run_pg_dump_success(self, tmp_path: Path) -> None:
         out = tmp_path / "database.sql"
         completed = MagicMock(returncode=0)
+
+        def _run(argv: list[str], **kwargs: Any) -> MagicMock:
+            stdout = kwargs.get("stdout")
+            if stdout is not None:
+                stdout.write(b"-- dump\n-- PostgreSQL database dump complete\n")
+            return completed
+
         with (
             patch.object(shutil, "which", return_value="/usr/bin/pg_dump"),
-            patch.object(subprocess, "run", return_value=completed) as run,
+            patch.object(subprocess, "run", side_effect=_run) as run,
         ):
             _run_pg_dump("postgresql://x", out, timeout=7)
         run.assert_called_once()
         assert out.parent == tmp_path
+
+    def test_run_pg_dump_refuses_a_truncated_dump(self, tmp_path: Path) -> None:
+        """FAR-2667: exit 0 is not enough — the completion trailer proves the
+        whole dump was written."""
+        out = tmp_path / "database.sql"
+
+        def _run(argv: list[str], **kwargs: Any) -> MagicMock:
+            stdout = kwargs.get("stdout")
+            if stdout is not None:
+                stdout.write(b"-- dump\nCREATE TABLE t (id int);\n")
+            return MagicMock(returncode=0)
+
+        with (
+            patch.object(shutil, "which", return_value="/usr/bin/pg_dump"),
+            patch.object(subprocess, "run", side_effect=_run),
+            pytest.raises(RuntimeError, match="INCOMPLETE"),
+        ):
+            _run_pg_dump("postgresql://x", out, timeout=7)
 
     def test_run_pg_dump_nonzero(self, tmp_path: Path) -> None:
         out = tmp_path / "database.sql"

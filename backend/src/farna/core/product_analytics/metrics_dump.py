@@ -15,7 +15,6 @@ gate skips (instance switch off, no consenting orgs, persistent vendor failure).
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 import uuid
@@ -43,8 +42,9 @@ _log = logging.getLogger(__name__)
 
 __all__ = ["DUMP_COUNT_KEY", "DUMP_WATERMARK_KEY", "coerce_dump_count", "metrics_dump"]
 
-# Schema version -- bumped when the payload shape changes.
-SCHEMA_VERSION: int = 2
+# Schema version -- bumped when the payload shape changes. v3 renamed the
+# error rollup from ``error_stats`` to the receiver's ``errors`` list.
+SCHEMA_VERSION: int = 3
 
 # Backfill cap (design doc section 8).
 _BACKFILL_MAX_DAYS = 14
@@ -319,11 +319,10 @@ async def _dump_date_range(
                 continue
 
             payload = await _build_payload(factory, eligible_orgs, current_date)
-            payload_bytes = json.dumps(payload, default=str, separators=(",", ":")).encode()
             timestamp = time.time()
             sequence = int(current_date.strftime("%Y%m%d"))
 
-            success, status_code, error = await client.post_batch(payload_bytes, timestamp, sequence)
+            success, status_code, error = await client.post_batch(payload, timestamp, sequence)
             if success:
                 succeeded_dates.append(current_date)
                 _log.info(
@@ -411,11 +410,25 @@ async def _build_payload(
         "org_count": len(orgs),
         "entity_counts": entity_counts,
         "run_stats": run_stats,
-        "error_stats": error_stats,
+        "errors": _map_errors(error_stats),
         "event_counts": staged_event_counts,
         "integration_inventory": integration_inventory,
         "instance_metadata": _build_instance_metadata(factory),
     }
+
+
+def _map_errors(error_stats: dict[str, Any]) -> list[dict[str, Any]]:
+    """Map ``_aggregate_error_stats`` output to the receiver's ``errors`` shape.
+
+    The receiver reads ``payload["errors"]`` as a list of
+    ``{"family": <str>, "count": <int>}``. Our aggregation groups errors by
+    ``ErrorGroup.level_peak``, which is the only family discriminator available,
+    so each level becomes one entry. Without this mapping the error rollup is
+    silently dropped: the receiver looks for ``errors`` and never reads
+    ``error_stats``.
+    """
+    by_level = error_stats.get("by_level") or {}
+    return [{"family": str(family), "count": int(count)} for family, count in by_level.items()]
 
 
 async def _count_entities(session: AsyncSession, org_ids: list[uuid.UUID]) -> dict[str, int]:

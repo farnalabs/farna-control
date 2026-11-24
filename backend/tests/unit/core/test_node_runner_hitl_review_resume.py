@@ -526,6 +526,9 @@ def _open_session() -> MagicMock:
     begin_cm.__aenter__ = AsyncMock(return_value=None)
     begin_cm.__aexit__ = AsyncMock(return_value=False)
     session.begin = MagicMock(return_value=begin_cm)
+    # ADR 070 Phase 1A: grounding resolves the run's owner team before writing the
+    # Evidence row; it is plumbing here, so the double answers None.
+    session.scalar = AsyncMock(return_value=None)
     return session
 
 
