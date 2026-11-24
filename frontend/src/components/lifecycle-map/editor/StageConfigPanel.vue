@@ -35,7 +35,7 @@
       </div>
     </div>
 
-    <div v-if="form.stage_type === 'modulo'">
+    <div v-if="form.stage_type === 'farna_control'">
       <span class="mb-1 block text-sm font-medium">{{ $t('components.lifecycle-map.editor.StageConfigPanel.pipeline') }}</span>
       <Select
   aria-label="Pipeline"
@@ -109,7 +109,7 @@ const emit = defineEmits<{
 }>()
 
 const stageTypeOptions = [
-  { value: 'modulo' as StageType, label: 'Farna Control', description: 'Managed by a Farna Control pipeline' },
+  { value: 'farna_control' as StageType, label: 'Farna Control', description: 'Managed by a Farna Control pipeline' },
   { value: 'external' as StageType, label: 'External', description: 'Runs outside Farna Control' },
   { value: 'manual' as StageType, label: 'Manual', description: 'Human-performed step' },
   { value: 'placeholder' as StageType, label: 'Placeholder', description: 'Not yet defined' },

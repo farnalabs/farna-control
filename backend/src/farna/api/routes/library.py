@@ -144,7 +144,7 @@ _CODE_LIBRARY_SEARCH = "library.search"
 _GRANT_LIBRARY_SEARCH_IN_DEV = "library.search.in_dev"
 _VISIBILITY_PATTERN = "^(org|team)$"
 _CODE_LIBRARY_WRITE = "library.write"
-_BUILTIN_SOURCE = "modulo"
+_BUILTIN_SOURCE = "farna_control"
 
 _MSG_LIBRARY_FEATURE_TEMPORARILY_UNAVAILABLE = "The library feature is temporarily unavailable due to a database issue. Please retry."
 _CODE_LIBRARY_MANAGE = "library.manage"

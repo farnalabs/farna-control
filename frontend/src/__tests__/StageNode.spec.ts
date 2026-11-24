@@ -24,7 +24,7 @@ function mountNode(props: Partial<InstanceType<typeof StageNode>['$props']> = {}
       data: {
         name: 'Build Stage',
         description: '',
-        stage_type: 'modulo',
+        stage_type: 'farna_control',
         owner: null,
         graduated: false,
       },
@@ -46,8 +46,8 @@ afterEach(() => { vi.unstubAllGlobals() })
 /* ── stageTypeLabel computed ──────────────────────────────────────────── */
 
 describe('StageNode stageTypeLabel', () => {
-  it('returns "Modulo" for modulo type', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+  it('returns "Farna Control" for farna_control type', async () => {
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     const vm = wrapper.vm as unknown as { stageTypeLabel: string }
     expect(vm.stageTypeLabel).toBe('Farna Control')
@@ -85,8 +85,8 @@ describe('StageNode stageTypeLabel', () => {
 /* ── borderClass computed ─────────────────────────────────────────────── */
 
 describe('StageNode borderClass', () => {
-  it('returns primary/60 for modulo', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+  it('returns primary/60 for farna_control', async () => {
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     const vm = wrapper.vm as unknown as { borderClass: string }
     expect(vm.borderClass).toContain('border-primary/60')
@@ -127,8 +127,8 @@ describe('StageNode borderClass', () => {
 /* ── bgClass computed ─────────────────────────────────────────────────── */
 
 describe('StageNode bgClass', () => {
-  it('returns primary/5 for modulo', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+  it('returns primary/5 for farna_control', async () => {
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     const vm = wrapper.vm as unknown as { bgClass: string }
     expect(vm.bgClass).toBe('bg-primary/5')
@@ -166,8 +166,8 @@ describe('StageNode bgClass', () => {
 /* ── labelClass computed ──────────────────────────────────────────────── */
 
 describe('StageNode labelClass', () => {
-  it('returns text-primary-text for modulo', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+  it('returns text-primary-text for farna_control', async () => {
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     const vm = wrapper.vm as unknown as { labelClass: string }
     expect(vm.labelClass).toBe('text-primary-text')
@@ -206,49 +206,49 @@ describe('StageNode labelClass', () => {
 
 describe('StageNode template', () => {
   it('renders the stage name', async () => {
-    const wrapper = mountNode({ data: { name: 'Deploy', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+    const wrapper = mountNode({ data: { name: 'Deploy', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     expect(wrapper.text()).toContain('Deploy')
   })
 
   it('renders "Untitled Stage" when name is empty', async () => {
-    const wrapper = mountNode({ data: { name: '', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+    const wrapper = mountNode({ data: { name: '', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     expect(wrapper.text()).toContain('Untitled Stage')
   })
 
   it('renders description when present', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: 'Builds the project', stage_type: 'modulo', owner: null, graduated: false } })
+    const wrapper = mountNode({ data: { name: 'Test', description: 'Builds the project', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     expect(wrapper.text()).toContain('Builds the project')
   })
 
   it('does not render description when empty', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     expect(wrapper.find('.line-clamp-2').exists()).toBe(false)
   })
 
   it('renders owner when present', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: 'team-alpha', graduated: false } })
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: 'team-alpha', graduated: false } })
     await flushPromises()
     expect(wrapper.text()).toContain('team-alpha')
   })
 
   it('does not render owner when null', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     expect(wrapper.find('.bg-muted').exists()).toBe(false)
   })
 
   it('shows graduated badge when graduated is true', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: null, graduated: true } })
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: null, graduated: true } })
     await flushPromises()
     expect(wrapper.text()).toContain('Graduated')
   })
 
   it('does not show graduated badge when graduated is false', async () => {
-    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'modulo', owner: null, graduated: false } })
+    const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: 'farna_control', owner: null, graduated: false } })
     await flushPromises()
     expect(wrapper.text()).not.toContain('Graduated')
   })
@@ -315,11 +315,11 @@ describe('StageNode props', () => {
 
 describe('StageNode stage type label in template', () => {
   it('renders the stage type label text for each type', async () => {
-    const types = ['modulo', 'external', 'manual', 'placeholder'] as const
+    const types = ['farna_control', 'external', 'manual', 'placeholder'] as const
     for (const stageType of types) {
       const wrapper = mountNode({ data: { name: 'Test', description: '', stage_type: stageType, owner: null, graduated: false } })
       await flushPromises()
-      const expectedLabel = { modulo: 'Farna Control', external: 'External', manual: 'Manual', placeholder: 'Placeholder' }[stageType]
+      const expectedLabel = { farna_control: 'Farna Control', external: 'External', manual: 'Manual', placeholder: 'Placeholder' }[stageType]
       expect(wrapper.text()).toContain(expectedLabel)
     }
   })
