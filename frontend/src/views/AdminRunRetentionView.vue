@@ -164,17 +164,17 @@
             data-testid="admin-run-retention-error-msg"
           />
           <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <MetricCard
+            <StatCard
               :label="$t('views.AdminRunRetentionView.matching_runs')"
               :value="totalCount"
               data-testid="admin-run-retention-total-runs"
             />
-            <MetricCard
+            <StatCard
               :label="$t('views.AdminRunRetentionView.estimated_reclaimable')"
               :value="formatBytes(displayTerminalBytes)"
               data-testid="admin-run-retention-total-bytes"
             />
-            <MetricCard
+            <StatCard
               :label="$t('views.AdminRunRetentionView.terminal_purgeable')"
               :value="displayTerminalCount"
               data-testid="admin-run-retention-terminal-runs"
@@ -277,7 +277,7 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import MetricCard from '../components/ui/MetricCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import Select from '../components/shared/AppSelect.vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
