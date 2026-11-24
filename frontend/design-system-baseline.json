@@ -72,10 +72,6 @@
     "frontend/src/views/SettingsTriggersView.vue": 1,
     "frontend/src/views/SystemMapDetailView.vue": 2,
     "frontend/src/views/SystemMapsView.vue": 1,
-    "frontend/src/views/VariantBatchCompareView.vue": 1,
-    "frontend/src/views/VariantCompareView.vue": 1,
-    "frontend/src/views/lifecycle-map/LifecycleMapList.vue": 1,
-    "frontend/src/views/pipeline/CompositeEditorView.vue": 1,
     "frontend/src/views/runners/RunnersConcurrencyTab.vue": 2,
     "frontend/src/views/runners/RunnersProfilesTab.vue": 4,
     "frontend/src/views/setup/ModelBackendSetupView.vue": 1
