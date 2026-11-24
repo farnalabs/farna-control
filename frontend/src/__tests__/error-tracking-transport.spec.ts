@@ -69,7 +69,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  delete (window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__
+  delete (window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -118,7 +118,7 @@ describe('transport happy path', () => {
   })
 
   it('does nothing when error tracking is disabled', async () => {
-    ;(window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__ = true
+    ;(window as unknown as Record<string, unknown>).__FARNA_ERROR_TRACKING_DISABLED__ = true
     const transport = await loadTransport()
     transport.enqueueError(evt('ignored'))
     await transport.flush()

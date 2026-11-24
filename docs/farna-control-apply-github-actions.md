@@ -1,0 +1,305 @@
+# `farna-control apply` in GitHub Actions (Terraform-style CI)
+
+A copy-paste GitHub Actions workflow that gives the [`farna-control apply` CLI](./product-map/configure/apply.md)
+a Terraform-style CI loop: every pull request posts a **plan** – the upsert diff
+the CLI would write – as a comment on the PR, and merging to `main` runs the
+**apply** against each environment. Save the YAML below as
+`.github/workflows/farna-control-apply.yml` in the repo that holds your apply config.
+
+## Prerequisites
+
+- **`FARNA_CONTROL_URL`** – the deployment the CLI talks to. Store it as a repository
+  Variable (`vars.FARNA_CONTROL_URL`), or set it per GitHub Environment when staging
+  and production point at different deployments. The CLI hard-requires it.
+- **`FARNA_CONTROL_API_KEY`** – an org API key (`mk_...` with the `operator` role)
+  stored as a GitHub **secret**, scoped per Environment so staging and
+  production hold different keys. The CLI refuses to run without both
+  `FARNA_CONTROL_URL` and `FARNA_CONTROL_API_KEY`; GitHub does not export variables or
+  secrets into a job automatically, so the workflow wires them into every
+  job with a job-level `env:` block (environment-scoped values win when a
+  job names `environment:`).
+- **GitHub Environments** – create `staging` and `production`
+  (*Settings → Environments → New environment*). Repo-level secrets and
+  variables live under *Settings → Secrets and variables → Actions*;
+  environment-scoped ones are added on each environment's page, and when a
+  job names `environment:` they override the repo-level values. The example
+  binds one job per environment. If you add protection rules (e.g. required
+  reviewers) to an environment, every job that names it – plan jobs included –
+  pauses until the rules pass, so keep rules only where you want a hold.
+- **The apply config** – the YAML file `farna-control apply -f` consumes, committed to
+  this repo (the example uses `farna-control.yaml`).
+- **CLI installation in CI** – `pip install farna-control` (or
+  `uv tool install farna-control`), the distribution this repo declares in
+  `backend/pyproject.toml` (`[project].name`), which installs the
+  `farna-control` command from `[project.scripts]`. **To be confirmed**:
+  a published release can lag this repo, so before relying on the
+  workflow's install step, check the installed release actually ships the
+  `apply` subcommand (`farna-control apply --help`) and pin that version
+  (`pip install farna-control==<version>`). Until that is confirmed,
+  install from a checkout of this repo (`uv sync` in `backend/`, then
+  `uv run farna-control apply ...`, as the self-hosted docs do) or from your own
+  package index.
+
+## Workflow
+
+```yaml
+name: farna-control apply
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ---- Plan: every pull request, one job per environment -----------------
+  # `--plan` computes the upsert diff without writing anything; a computed
+  # plan exits 0, so a pending change never fails the job (config, auth or
+  # network errors still exit non-zero and fail it loudly).
+  plan-staging:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: staging
+    # One in-flight plan per PR: a new push cancels the previous plan job, so
+    # the PR gets a single, current plan comment instead of a duplicate per
+    # push. Only the plan jobs are concurrency-scoped - the apply jobs are
+    # deliberately left alone so a mid-run apply is never cancelled.
+    concurrency:
+      group: farna-control-plan-staging-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      FARNA_CONTROL_URL: ${{ vars.FARNA_CONTROL_URL }}
+      FARNA_CONTROL_API_KEY: ${{ secrets.FARNA_CONTROL_API_KEY }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install farna-control CLI
+        # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
+        run: pip install farna-control
+      - name: Plan
+        run: |
+          set -o pipefail
+          farna-control apply --plan -f farna-control.yaml | tee plan-staging.txt
+      - name: Comment the plan on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "### farna-control plan (staging)"
+            echo '```'
+            cat plan-staging.txt
+            echo '```'
+          } | gh pr comment "$PR_NUMBER" --body-file -
+
+  plan-production:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: farna-control-plan-production-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      FARNA_CONTROL_URL: ${{ vars.FARNA_CONTROL_URL }}
+      FARNA_CONTROL_API_KEY: ${{ secrets.FARNA_CONTROL_API_KEY }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install farna-control CLI
+        # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
+        run: pip install farna-control
+      - name: Plan
+        run: |
+          set -o pipefail
+          farna-control apply --plan -f farna-control.yaml | tee plan-production.txt
+      - name: Comment the plan on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "### farna-control plan (production)"
+            echo '```'
+            cat plan-production.txt
+            echo '```'
+          } | gh pr comment "$PR_NUMBER" --body-file -
+
+  # ---- Apply: merge to main, one job per environment ---------------------
+  # A real apply exits 1 if any entity was blocked or failed, so the job (and
+  # the merge's checks) go red instead of silently diverging.
+  apply-staging:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      FARNA_CONTROL_URL: ${{ vars.FARNA_CONTROL_URL }}
+      FARNA_CONTROL_API_KEY: ${{ secrets.FARNA_CONTROL_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install farna-control CLI
+        # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
+        run: pip install farna-control
+      - name: Apply
+        run: farna-control apply -f farna-control.yaml
+
+  apply-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: apply-staging
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      FARNA_CONTROL_URL: ${{ vars.FARNA_CONTROL_URL }}
+      FARNA_CONTROL_API_KEY: ${{ secrets.FARNA_CONTROL_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install farna-control CLI
+        # To be confirmed: verify + pin a release that ships `apply` (see Prerequisites).
+        run: pip install farna-control
+      - name: Apply
+        run: farna-control apply -f farna-control.yaml
+```
+
+## Approval model
+
+**Merging to `main` IS the approval.** The apply jobs run on push to `main`,
+so whoever can merge the PR has approved the change. Farna Control owns no approval
+step: the CLI has no confirm/approve prompt in CI, and nothing in this
+workflow asks Farna Control for permission to write. Any extra gate – required
+reviewers, protected branches, an approval queue before production deploys –
+comes from GitHub branch protection or GitHub Environments protection rules
+configured in the repo, never from a Farna Control-owned approval.
+
+## Exit codes the jobs rely on
+
+| Command | Exit code |
+|---|---|
+| `farna-control apply --plan -f <file>` (alias `--dry-run`) | `0` once the plan is computed – a pending change never fails the job |
+| `farna-control apply -f <file>` (real apply) | `1` if any entity was blocked or failed, else `0` – the apply jobs go red instead of silently diverging |
+| `farna-control apply --diff -f <file>` (read-only drift check) | `0` when the org matches the config, `1` on drift (`created` / `updated` / `blocked`) – usable as a separate CI gate |
+
+Config-load, auth and network errors exit `1` on every command (the CLI
+fails before producing a report), so a broken config or missing
+`FARNA_CONTROL_API_KEY` fails the job loudly rather than posting an empty plan.
+
+## Vault credentials (`credential_ref`)
+
+CI is exactly where a committed apply config must never contain a credential
+value. A model backend's credential is therefore declared as a **reference**,
+never a literal, in one of three forms:
+
+- `api_key: ${env:VAR}` – resolved client-side from the environment. Fine for
+  a value the CI runner already holds, but the runner must hold it.
+- `api_key: secretref://<key>` – a token the **server** resolves against the
+  org vault at write time (FAR-1640). The value never leaves the server.
+- `credential_ref: <key>` – the same server-side vault reference in its
+  declarative short form (FAR-1216): name the bare vault key, and the CLI sends
+  the server the `secretref://<key>` token.
+
+```yaml
+entities:
+  model_backends:
+    - name: openai-prod
+      display_name: OpenAI (production)
+      provider: openai
+      model_id: gpt-4o
+      credential_ref: openai-prod-key   # value lives in the org vault
+```
+
+`credential_ref` adds a **plan-time** guarantee: before it computes the plan,
+the CLI lists the org vault keys (through the server's `list_secrets` surface)
+and **fails the plan** – never a silent pass – when the named key is absent, or
+when the listing cannot be reached to confirm it. The `list_secrets` surface
+requires the `secret.manage` scope, so the `FARNA_CONTROL_API_KEY` you store as a
+GitHub secret must be an operator key permitted to list secrets; a key that
+cannot list secrets blocks the affected entity rather than passing it. The
+affected entity appears in the plan's `blocked` list with a reason naming the
+key, so a PR comment shows the misconfiguration before anything is written. A
+credential that is missing for any other reason (a `secretref://` set directly
+on `api_key`, a key that
+exists at plan time but is deleted before apply) still fails the apply with the
+server's typed `credential_reference_error` (422), naming only the key.
+
+Set the vault entry out-of-band (the org vault / `create_secret` surface) before
+merging the config; the key itself is never committed.
+
+## Custom endpoints (`base_url`)
+
+A self-hosted or OpenAI-compatible gateway is declared with `base_url`; a
+plain-`http` gateway additionally needs the explicit `allow_insecure_http`
+opt-in (an `https` endpoint does not):
+
+```yaml
+entities:
+  model_backends:
+    - name: local-vllm
+      display_name: Local vLLM
+      provider: openai
+      model_id: my-model
+      api_key: ${env:LOCAL_MODEL_KEY}
+      base_url: http://gateway.internal:8080/v1
+      allow_insecure_http: true
+```
+
+Declare-to-manage semantics:
+
+- **omit `base_url`** – apply does not manage the endpoint: a UI/API-set
+  endpoint is left untouched (no drift, no write). `allow_insecure_http` is
+  only read when `base_url` is declared.
+- **`base_url: null`** – clear the stored endpoint.
+- **`base_url: https://...`** – set/replace it. A changed endpoint shows as
+  drift in `--diff` and PATCHes on apply.
+- `allow_insecure_http` must accompany a non-null `base_url`; declaring it
+  alone is a config-load error.
+
+A declared `base_url` is validated at **plan** time with the same rules the
+REST API applies: cloud metadata hosts (`169.254.169.254`,
+`metadata.google.internal`, ...), non-canonical IP literals such as
+`0x7f000001`, embedded userinfo/query/fragment, and `http` without the opt-in
+are all `block` lines in the plan – never a 422 halfway through an apply. The
+provider capability map stays the server's authority, so an endpoint on a
+provider that cannot consume it still fails with the server's typed error.
+
+**Credential binding (FAR-2046).** The endpoint is credential-bound: creating a
+custom destination, or changing an existing one, requires the **literal key**
+itself, because the server re-authenticates the new destination with it. A
+`credential_ref` / `secretref://` vault reference therefore cannot create or
+move an endpoint; the plan blocks that entity with the reason named. For an
+endpoint change, declare `api_key: ${env:VAR}` and put the key in the
+environment: the CLI resolves it client-side into a literal key for the write.
+
+- The plan jobs post the CLI's plain-text report (`create` / `update` /
+  `block` / `fail` / `unchanged` lines plus the summary). If you need the
+  machine-readable report instead, add `--output json` (alias `--json`) and
+  post that.
+- If trigger or pipeline secrets rotated in a place the server masks on read,
+  add `--refresh-secrets` to the apply command so those declarations are
+  re-sent every run.
+- Fork PRs: `pull_request` runs from forks receive neither secrets nor a
+  write-capable token, so the plan jobs fail at the CLI step (no
+  `FARNA_CONTROL_API_KEY`) and could not comment anyway. The plan jobs therefore
+  gate on `github.event.pull_request.head.repo.full_name == github.repository`
+  so fork PRs skip them instead of failing. Drop that gate if you deliberately
+  want forks to plan – they will then need their own `FARNA_CONTROL_URL` and
+  `FARNA_CONTROL_API_KEY`.

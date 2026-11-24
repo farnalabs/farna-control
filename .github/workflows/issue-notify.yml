@@ -86,7 +86,7 @@ jobs:
                   f"/{os.environ.get('GITHUB_REPOSITORY', '')}"
                   f"/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
               )
-              subject = "[Modulo] TEST: issue-notify workflow (manual dispatch)"
+              subject = "[Farna Control] TEST: issue-notify workflow (manual dispatch)"
               text = (
                   "TEST email from the issue-notify workflow (workflow_dispatch).\n"
                   "No issue context is included - this is only a connectivity test.\n\n"
@@ -101,9 +101,9 @@ jobs:
               excerpt = body.strip()
               if len(excerpt) > EXCERPT_LIMIT:
                   excerpt = excerpt[:EXCERPT_LIMIT] + "\n... (truncated)"
-              subject = f"[Modulo] New issue from {author}: {title}"
+              subject = f"[Farna Control] New issue from {author}: {title}"
               text = (
-                  "A new issue was opened on the Modulo repository.\n\n"
+                  "A new issue was opened on the Farna Control repository.\n\n"
                   f"Author: {author}\n"
                   f"Title:  {title}\n"
                   f"URL:    {url}\n\n"

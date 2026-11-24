@@ -11,10 +11,12 @@ Issuance provenance (binding guardrail)
 ---------------------------------------
 Every issued credential carries a typed issuance provenance:
 
-* ``modulo_minted`` — Modulo minted the credential itself (``attested``; the
-  minting code path is the evidence).
-* ``broker_issued`` — an external broker issued it (``declared``; Modulo only
-  *reports* the broker's claim, it cannot observe the broker's mint).
+* ``self_minted`` — Farna Control minted the credential itself (``attested``;
+  the minting code path is the evidence). The legacy value ``modulo_minted``
+  is still accepted on the read side until the drop release; this release never
+  writes it.
+* ``broker_issued`` — an external broker issued it (``declared``; Farna Control
+  only *reports* the broker's claim, it cannot observe the broker's mint).
 
 ``observed`` is NEVER a valid issuance provenance: Modulo does not observe an
 external mint, it either performs it (attested) or is told about it (declared).
@@ -49,10 +51,26 @@ _log = logging.getLogger(__name__)
 
 # --- Issuance provenance vocabulary (declare once, validate at the boundary) --
 
-ISSUANCE_PROVENANCE_MODULO_MINTED = "modulo_minted"
+#: Wire value stamped on a self-minted credential (the sandbox env var and the
+#: ``credential.issued`` telemetry event). Brand-free by design so the next
+#: product rename never touches it: rename the CONSTANT if you like, never the
+#: value.
+ISSUANCE_PROVENANCE_SELF_MINTED = "self_minted"
 ISSUANCE_PROVENANCE_BROKER_ISSUED = "broker_issued"
 
-ISSUANCE_PROVENANCES: frozenset[str] = frozenset({ISSUANCE_PROVENANCE_MODULO_MINTED, ISSUANCE_PROVENANCE_BROKER_ISSUED})
+#: Legacy value written by releases before the rebrand. Still ACCEPTED on the
+#: read side (telemetry replay/import, an in-flight sandbox script) until the
+#: drop release; never written by this release. The persisted-value migration
+#: plan keeps this alias until R3. Do not reintroduce it as a write value.
+ISSUANCE_PROVENANCE_SELF_MINTED_LEGACY = "modulo_minted"
+
+ISSUANCE_PROVENANCES: frozenset[str] = frozenset(
+    {
+        ISSUANCE_PROVENANCE_SELF_MINTED,
+        ISSUANCE_PROVENANCE_SELF_MINTED_LEGACY,
+        ISSUANCE_PROVENANCE_BROKER_ISSUED,
+    }
+)
 
 # The evidence class of a provenance value. ``attested`` = Modulo performed the
 # mint; ``declared`` = Modulo reports a third party's claim. ``observed`` is
@@ -85,9 +103,9 @@ class IssuedRunCredential:
     run_id: uuid.UUID
     node_id: str
     secret: str = field(repr=False, compare=False)
-    provenance: str = ISSUANCE_PROVENANCE_MODULO_MINTED
+    provenance: str = ISSUANCE_PROVENANCE_SELF_MINTED
     provenance_kind: str = PROVENANCE_KIND_ATTESTED
-    issuer: str = "modulo"
+    issuer: str = "farna_control"
     expires_at: datetime | None = None
 
     def __post_init__(self) -> None:
@@ -141,8 +159,8 @@ class ModuloCredentialIssuer:
     revoke and compensating sweep already cover it.
     """
 
-    name: str = "modulo"
-    provenance: str = ISSUANCE_PROVENANCE_MODULO_MINTED
+    name: str = "farna_control"
+    provenance: str = ISSUANCE_PROVENANCE_SELF_MINTED
 
     async def issue_for_run(
         self,

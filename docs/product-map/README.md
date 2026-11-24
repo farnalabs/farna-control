@@ -97,7 +97,7 @@ Fresh entries for these features are added to the graph below as behavior tracke
 - **feat-library-collections** - Install, uninstall, and manage library collection installs into runnable org entities (flag-gated behind `library_collection`; see FAR-760 / FAR-762 / FAR-764) - routes: `/library/collections/new`, `/library/collections/:id`
 - **feat-runs** - Run execution, history, and detail (Output Diff deferred from the MVP nav – hidden via private_preview; see FAR-542) - routes: `/runs`, `/runs/:id`
 - **feat-lifecycle-maps** - Internal lifecycle maps and stage workflows (dev-mode dogfood only; not Alpha-facing) - routes: `/lifecycle-maps`, `/lifecycle-maps/:id/editor`, `/lifecycle-maps/:id`
-- **feat-system-maps** - Bounded visual authoring of delivery system maps (Beta preview available in Alpha: a default-OFF, org-admin-settable `system_maps` flag plus the operator/admin role and `system_maps_access` grant; no dev-mode gate; published maps remain viewer-readable) - routes: `/system-maps`, `/system-maps/:id`
+- **feat-system-maps** - Bounded visual authoring of delivery system maps (ships at Beta; release-gated behind developer mode until then — `/system-maps` and `/system-maps/:id` are `private_preview`, visible only in developer mode; inside that gate authoring requires the org-aware default-OFF `system_maps` flag plus the operator/admin role and `system_maps_access` grant, and published maps stay viewer-readable via `system_maps_read` + `system_maps.read`) - routes: `/system-maps`, `/system-maps/:id`
 - **feat-governance-stack** - Read-only governance-hierarchy taxonomy readout over existing list APIs - routes: `/governance`
 - **feat-determination** - Read-only SDLC determination scan, evidence-backed proposal review, and a recorded review decision that never activates a pipeline - routes: `/determination`
 
@@ -1258,6 +1258,19 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > version-aware-history UI, create-only re-scan and missing loop runtime remain
 > the honest unchecked gaps. `_ORPHANED_BDD_FEATURES` stays empty.
 
+> **Closed this walk (2026-11-23):** tracked two shipped but untracked backend
+> surfaces: the FAR-1692 S1/S2 external-agent registry
+> (`configure/external-agent-registry.md`) and MCP server registry plus
+> tool-definition pinning (`configure/mcp-server-registry.md`). Both ship
+> REST-only (`/api/v1/external-agents`, `/api/v1/mcp-servers`) with no manifest
+> route, no UI and no MCP tools, so neither layer of the product map described
+> them and they were invisible to the feature graph and to Assistant's
+> documentation indexer. Each entry records the CRUD contract, the permission
+> floors, org/team scoping, audit events, the detect-and-surface drift decision,
+> and the honest gaps (no ingestion leg, no UI, unreachable `blocked` pin state,
+> `declared_scopes` recorded but unenforced). `_ORPHANED_BDD_FEATURES` stays
+> empty.
+
 ### Admin
 - [feat-product-analytics](admin/product-analytics.md) => PRD N/A
 - [feat-plugins](admin/plugins.md) => PRD N/A
@@ -1275,6 +1288,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-auth-jwt-auth](auth/jwt-auth.md) => PRD N/A
 - [feat-sso](auth/sso-provider-ui.md) => PRD 9.4
 - [feat-scim](auth/scim-provisioning.md) => PRD 9.4
+- [feat-service-accounts](auth/service-accounts.md) => PRD N/A
 - [feat-onboarding](auth/onboarding.md) => PRD N/A
 
 ### Build
@@ -1286,8 +1300,10 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 ### Configure
 - [feat-apply](configure/apply.md) => PRD N/A
 - [feat-connectors](configure/connectors.md) => PRD N/A
+- [feat-external-agent-registry](configure/external-agent-registry.md) => PRD N/A
 - [feat-guardrails](configure/guardrails.md) => PRD N/A
 - [feat-mcp](configure/mcp.md) => PRD N/A
+- [feat-mcp-server-registry](configure/mcp-server-registry.md) => PRD N/A
 - [feat-model-backends](configure/model-backends.md) => PRD N/A
 - [feat-assistant](configure/assistant.md) => PRD 8.23
 

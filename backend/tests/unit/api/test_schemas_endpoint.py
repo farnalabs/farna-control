@@ -341,6 +341,23 @@ def test_schema_version_crud(client: TestClient, case: dict[str, object]) -> Non
             p.stop()
 
 
+def test_list_schema_versions_threads_the_callers_org(client: TestClient) -> None:
+    """FAR-2689: the version history read is org-clamped, not parent-id-only."""
+    page_result = MagicMock(items=[], total=0, page=1, page_size=20)
+    with (
+        patch("farna.api.routes.schemas.get_schema", return_value=_make_schema()),
+        patch("farna.api.routes.schemas.set_rls_org"),
+        patch("farna.api.routes.schemas.list_schema_versions", new_callable=AsyncMock) as mock_list,
+    ):
+        mock_list.return_value = page_result
+        resp = client.get(f"/api/v1/schemas/{_SCHEMA_ID}/versions")
+
+    assert resp.status_code == 200
+    assert mock_list.await_args is not None
+    assert mock_list.await_args.args[1] == _SCHEMA_ID
+    assert mock_list.await_args.kwargs["org_id"] == _ORG_ID
+
+
 def test_get_schema_cross_org_returns_404(client: TestClient) -> None:
     """IDOR guard: a schema belonging to another org must not be readable.
 

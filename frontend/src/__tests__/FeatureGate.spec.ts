@@ -1,8 +1,24 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
-import { usePlanStore } from '../stores/planStore'
+import { usePlanStore, type PlanEntitlement } from '../stores/planStore'
 import FeatureGate from '../components/FeatureGate.vue'
+
+/**
+ * FAR-2665: the lock copy is decided by the ENTITLEMENT registry in the plan
+ * payload, not by a static per-view tier prop. A flag mapped to an ungranted
+ * entitlement is a commercial capability (upgrade wording + View Plans); a flag
+ * no entitlement covers is behaviour the org switched off (no upgrade can help).
+ */
+function entitlements(overrides: Partial<PlanEntitlement>[] = []): PlanEntitlement[] {
+  const base: PlanEntitlement[] = [
+    { key: 'identity', name: 'Identity', description: '', granted: false, flags: ['sso', 'scim', 'team_rbac'] },
+    { key: 'audit_evidence', name: 'Audit and evidence', description: '', granted: false, flags: ['audit_viewer', 'admin_run_retention'] },
+    { key: 'cost_governance', name: 'Cost governance', description: '', granted: false, flags: ['admin_spend_limits', 'admin_cost_controls', 'admin_cost_breakdown'] },
+  ]
+  return base.map((entry) => ({ ...entry, ...(overrides.find((o) => o.key === entry.key) ?? {}) }))
+}
 
 describe('FeatureGate', () => {
   beforeEach(() => {
@@ -19,40 +35,103 @@ describe('FeatureGate', () => {
     })
 
     expect(wrapper.text()).toContain('Gated Content')
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(false)
   })
 
-  it('shows lock overlay when feature is disabled', () => {
+  it('shows the behaviour-off copy when a flag no entitlement covers is disabled', () => {
     const store = usePlanStore()
-    store.$patch({ features: { 'test-feature': false } })
+    store.$patch({ features: { mcp_server: false }, entitlements: entitlements() })
 
     const wrapper = mount(FeatureGate, {
-      props: { featureName: 'test-feature' },
+      props: { featureName: 'mcp_server' },
       slots: { default: 'Gated Content' },
     })
 
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').text()).toContain('Team Feature')
+    const lock = wrapper.find('[data-testid^="feature-gate-lock-"]')
+    expect(lock.exists()).toBe(true)
+    expect(lock.text()).toContain('Feature not available')
+    expect(lock.text()).not.toContain('Team Feature')
+    expect(lock.text()).not.toContain('Available on higher plan tier')
+    expect(lock.text()).toContain('turned off for your organization')
   })
 
-  it('uses custom requiredTier in tooltip', () => {
+  it('omits the pricing link for a behaviour-only gate', () => {
     const store = usePlanStore()
-    store.$patch({ features: { 'test-feature': false } })
+    store.$patch({ features: { mcp_server: false }, entitlements: entitlements() })
 
     const wrapper = mount(FeatureGate, {
-      props: { featureName: 'test-feature', requiredTier: 'team' },
+      props: { featureName: 'mcp_server' },
       slots: { default: 'Gated Content' },
     })
 
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"] a').exists()).toBe(false)
+  })
+
+  it('renders the commercial copy and entitlement label for an ungranted capability', () => {
+    const store = usePlanStore()
+    store.$patch({ features: { audit_viewer: false }, entitlements: entitlements() })
+
+    const wrapper = mount(FeatureGate, {
+      props: { featureName: 'audit_viewer' },
+      slots: { default: 'Gated Content' },
+    })
+
+    const lock = wrapper.find('[data-testid^="feature-gate-lock-"]')
+    expect(lock.text()).toContain('Team Feature')
     expect(lock.find('[data-testid="lock-icon"]').attributes('title')).toBe(
-      'Available on higher plan tier — Team — /settings/license',
+      'Available on higher plan tier — Audit and evidence — /settings/license',
     )
+    expect(lock.find('a').exists()).toBe(true)
+  })
+
+  it('shows the behaviour copy when the entitlement is granted but the flag is switched off', () => {
+    // FAR-1283 + FAR-2665: an operator kill switch (feature_flag_catalog
+    // is_active=false) turns the flag off while the licence still GRANTS the
+    // entitlement. No purchase can re-enable it, so the gate must not claim
+    // "Team Feature" / "Available on higher plan tier" or offer View Plans.
+    const store = usePlanStore()
+    store.$patch({
+      features: { team_rbac: false },
+      entitlements: entitlements([{ key: 'identity', granted: true }]),
+    })
+
+    const wrapper = mount(FeatureGate, {
+      props: { featureName: 'team_rbac' },
+      slots: { default: 'Gated Content' },
+    })
+
+    const lock = wrapper.find('[data-testid^="feature-gate-lock-"]')
+    expect(lock.exists()).toBe(true)
+    expect(lock.text()).toContain('Feature not available')
+    expect(lock.text()).toContain('turned off for your organization')
+    expect(lock.text()).not.toContain('Team Feature')
+    expect(lock.text()).not.toContain('Available on higher plan tier')
+    expect(lock.find('a').exists()).toBe(false)
+  })
+
+  it('locks directly on a requiredEntitlement (no per-capability flag)', () => {
+    const store = usePlanStore()
+    store.$patch({
+      features: {},
+      entitlements: entitlements([{ key: 'cost_governance', granted: true }]),
+    })
+
+    const lockedWrapper = mount(FeatureGate, {
+      props: { requiredEntitlement: 'identity' },
+      slots: { default: 'Gated Content' },
+    })
+    expect(lockedWrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(true)
+
+    const openWrapper = mount(FeatureGate, {
+      props: { requiredEntitlement: 'cost_governance' },
+      slots: { default: 'Gated Content' },
+    })
+    expect(openWrapper.text()).toContain('Gated Content')
   })
 
   it('renders locked slot when feature is disabled', () => {
     const store = usePlanStore()
-    store.$patch({ features: { 'test-feature': false } })
+    store.$patch({ features: { 'test-feature': false }, entitlements: entitlements() })
 
     const wrapper = mount(FeatureGate, {
       props: { featureName: 'test-feature' },
@@ -80,108 +159,68 @@ describe('FeatureGate', () => {
     expect(wrapper.find('[data-testid="custom-locked"]').exists()).toBe(false)
   })
 
-  // ── FAR-1283: tier-accurate copy for a COMMUNITY-tier flag ────────────────
-  //
-  // mcp_server is a community-tier flag. With it off the old banner called it a
-  // "Team Feature" and told the operator to buy a higher tier — both false, and
-  // the "View Plans" link pointed at a purchase that cannot change the answer.
-  // These tests fail on the pre-FAR-1283 component.
-
-  it('never calls a disabled community-tier feature a team feature', () => {
+  it('keeps the behaviour copy before the plan payload resolves', () => {
+    // No entitlement payload yet: the gate must not claim a purchase would fix
+    // a flag it cannot classify.
     const store = usePlanStore()
-    // currentTier '' leaves the gate disabled (an unranked tier), which is the
-    // state a community org is in when mcp_server is off despite its tier.
-    store.$patch({ features: { mcp_server: false }, currentTier: '' })
+    store.$patch({ features: { audit_viewer: false }, entitlements: [] })
 
     const wrapper = mount(FeatureGate, {
-      props: { featureName: 'mcp_server', requiredTier: 'community' },
+      props: { featureName: 'audit_viewer' },
       slots: { default: 'Gated Content' },
     })
 
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
-    expect(lock.exists()).toBe(true)
-    const text = lock.text()
-    expect(text).toContain('Feature not available')
-    expect(text).not.toContain('Team Feature')
-    expect(text).not.toContain('Available on higher plan tier')
-    expect(text).toContain('turned off for your organization')
+    const lock = wrapper.find('[data-testid^="feature-gate-lock-"]')
+    expect(lock.text()).toContain('Feature not available')
+    expect(lock.find('a').exists()).toBe(false)
   })
 
-  it('omits the pricing link for a disabled community-tier feature', () => {
+  it('applies the behaviour copy in the show-disabled banner too', () => {
     const store = usePlanStore()
-    store.$patch({ features: { mcp_server: false }, currentTier: '' })
+    store.$patch({ features: { mcp_server: false }, entitlements: entitlements() })
 
     const wrapper = mount(FeatureGate, {
-      props: { featureName: 'mcp_server', requiredTier: 'community' },
+      props: { featureName: 'mcp_server', showDisabled: true },
       slots: { default: 'Gated Content' },
     })
 
-    expect(wrapper.find('[data-testid="feature-gate-lock"] a').exists()).toBe(false)
-  })
-
-  it('keeps the upgrade copy for a required tier that is not in the catalog', () => {
-    const store = usePlanStore()
-    // 'enterprise' is absent from the default tierRanks catalog, so
-    // isCommunityTier cannot rank it and must fall back to the upgrade copy.
-    store.$patch({ features: { 'test-feature': false } })
-
-    const wrapper = mount(FeatureGate, {
-      props: { featureName: 'test-feature', requiredTier: 'enterprise' },
-      slots: { default: 'Gated Content' },
-    })
-
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
-    expect(lock.text()).toContain('Team Feature')
-    expect(lock.find('a').exists()).toBe(true)
-  })
-
-  it('does not mislabel a paid tier as community when the catalog lacks a community rank', () => {
-    const store = usePlanStore()
-    // A catalog that landed without the community entry: communityRank is
-    // undefined, so a registered paid tier must keep the upgrade wording
-    // rather than being called a community feature. A function patch REPLACES
-    // the map (an object $patch would deep-merge and keep community).
-    store.$patch((state) => {
-      state.tierRanks = { team: 1 }
-      state.features = { 'test-feature': false }
-    })
-
-    const wrapper = mount(FeatureGate, {
-      props: { featureName: 'test-feature', requiredTier: 'team' },
-      slots: { default: 'Gated Content' },
-    })
-
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
-    expect(lock.text()).toContain('Team Feature')
-    expect(lock.find('a').exists()).toBe(true)
-  })
-
-  it('keeps the upgrade copy and pricing link for a disabled team-tier feature', () => {
-    const store = usePlanStore()
-    store.$patch({ features: { audit_viewer: false }, currentTier: 'community' })
-
-    const wrapper = mount(FeatureGate, {
-      props: { featureName: 'audit_viewer', requiredTier: 'team' },
-      slots: { default: 'Gated Content' },
-    })
-
-    const lock = wrapper.find('[data-testid="feature-gate-lock"]')
-    expect(lock.text()).toContain('Team Feature')
-    expect(lock.find('a').exists()).toBe(true)
-  })
-
-  it('applies the community copy in the show-disabled banner too', () => {
-    const store = usePlanStore()
-    store.$patch({ features: { mcp_server: false }, currentTier: '' })
-
-    const wrapper = mount(FeatureGate, {
-      props: { featureName: 'mcp_server', requiredTier: 'community', showDisabled: true },
-      slots: { default: 'Gated Content' },
-    })
-
-    const banner = wrapper.find('[data-testid="feature-gate-disabled"]')
-    expect(banner.find('[data-testid="feature-gate-title"]').text()).toBe('Feature not available')
+    const banner = wrapper.find('[data-testid^="feature-gate-disabled-"]')
+    expect(banner.find('[data-testid^="feature-gate-title-"]').text()).toBe('Feature not available')
     expect(banner.text()).not.toContain('Team Feature')
     expect(banner.find('a').exists()).toBe(false)
+  })
+
+  it('gives two gates on one page distinct disabled/lock/title ids (FAR-2719)', () => {
+    // A page can render several gates (e.g. /governance). FAR-2714 made the
+    // gate root per-instance; FAR-2719 does the same for the disabled/lock/
+    // title markers, otherwise two gates collide and Playwright strict-mode
+    // getByTestId matches more than one element. Both gates mount inside ONE
+    // app (useId's counter is per-app, so two separate mounts would both
+    // allocate the same suffix and mask the collision).
+    const store = usePlanStore()
+    store.$patch({ features: { mcp_server: false }, entitlements: entitlements() })
+
+    const Host = defineComponent({
+      components: { FeatureGate },
+      template: `
+        <div>
+          <FeatureGate feature-name="mcp_server" :show-disabled="true" />
+          <FeatureGate required-entitlement="identity" />
+        </div>`,
+    })
+
+    const wrapper = mount(Host)
+    const ids = wrapper.findAll('[data-testid]').map((el) => el.attributes('data-testid') ?? '')
+    const gateIds = ids.filter((id) => id.startsWith('feature-gate-'))
+
+    // One disabled banner + one lock screen renders two gate titles; every
+    // gate id across both must be unique.
+    expect(new Set(gateIds).size).toBe(gateIds.length)
+
+    // Each marker carries its per-instance suffix — reverting any of the three
+    // to a static id drops it from its suffixed family and fails here too.
+    expect(gateIds.filter((id) => id.startsWith('feature-gate-disabled-'))).toHaveLength(1)
+    expect(gateIds.filter((id) => id.startsWith('feature-gate-lock-'))).toHaveLength(1)
+    expect(gateIds.filter((id) => id.startsWith('feature-gate-title-'))).toHaveLength(2)
   })
 })

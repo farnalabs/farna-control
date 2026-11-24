@@ -22,7 +22,7 @@ import pytest
 
 from farna.core import workflow_import_export as wix
 from farna.core.library_service import install as install_mod
-from farna.core.library_service._seed_data import MODULO_ORG_ID
+from farna.core.library_service._seed_data import BUILTIN_ORG_ID
 from farna.core.library_service.install import (
     CollectionInstallError,
     CollectionNotPublishedError,
@@ -199,7 +199,7 @@ class TestCloneBuiltin:
             name="Agent",
             slug="agent",
             content_json={"prompt_template": "do"},
-            source="modulo",
+            source="farna_control",
             tags=["x"],
             description="d",
             verified=True,
@@ -219,7 +219,7 @@ class TestCloneBuiltin:
         )
         clone = _clone_builtin(src)
         assert clone.id == src.id
-        assert clone.source == "modulo"
+        assert clone.source == "farna_control"
         assert clone.content_json == {"prompt_template": "do"}
         assert clone.tags == ["x"]
         assert clone.verified is True
@@ -244,7 +244,7 @@ class TestResolveCollection:
         coll = _prim(uuid.uuid4(), primitive_type="library_collection", organisation_id=uuid.uuid4())
         session = MagicMock()
         session.get = AsyncMock(return_value=None)
-        resolved = _prim(coll.id, primitive_type="library_collection", source="modulo", organisation_id=uuid.uuid4())
+        resolved = _prim(coll.id, primitive_type="library_collection", source="farna_control", organisation_id=uuid.uuid4())
         with patch.object(install_mod, "get_primitive", new=AsyncMock(return_value=resolved)):
             assert await _resolve_collection(session, _ORG_ID, coll.id) is resolved
 
@@ -357,7 +357,7 @@ class TestPersistCollectionRow:
             pytest.raises(CollectionInstallError),
         ):
             await _persist_collection_row(session, _ORG_ID, coll)
-        assert [call.args[1] for call in rls.call_args_list] == [MODULO_ORG_ID, _ORG_ID]
+        assert [call.args[1] for call in rls.call_args_list] == [BUILTIN_ORG_ID, _ORG_ID]
 
     async def test_tuple_hit_same_content_reuses_row(self) -> None:
         coll = _collection()

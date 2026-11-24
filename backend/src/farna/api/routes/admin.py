@@ -33,7 +33,7 @@ from farna.api.db_error_handling import handle_db_errors, raise_lock_timeout_con
 from farna.api.dependencies import (
     deny_break_glass_mint,
     get_db_session,
-    require_feature,
+    require_entitlement,
     require_permission,
     require_system_or_org_admin,
     require_system_permission,
@@ -1005,7 +1005,7 @@ class AdminCreateTeamResponse(BaseModel):
     status_code=status.HTTP_201_CREATED,
     dependencies=[
         Depends(audited("api_access_post", "team", principal_dep=get_current_tenant_user)),
-        require_feature("team_rbac"),
+        require_entitlement("identity"),
     ],
 )
 async def admin_create_team(
@@ -2212,7 +2212,7 @@ class AdminTeamListResponse(BaseModel):
     page_size: int
 
 
-@router.get("/teams", dependencies=[require_feature("team_rbac")])
+@router.get("/teams", dependencies=[require_entitlement("identity")])
 async def admin_list_teams(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=1000),
@@ -2315,7 +2315,7 @@ async def _update_team_or_raise(
     "/teams/{team_id}",
     dependencies=[
         Depends(audited("api_access_put", "team", principal_dep=get_current_tenant_user)),
-        require_feature("team_rbac"),
+        require_entitlement("identity"),
     ],
 )
 async def admin_update_team(
@@ -2388,7 +2388,7 @@ class BulkReassignResponse(BaseModel):
     "/teams/{team_id}/reassign-all",
     dependencies=[
         Depends(audited("team_resources_reassigned", "team", principal_dep=get_current_tenant_user)),
-        require_feature("team_rbac"),
+        require_entitlement("identity"),
     ],
 )
 @handle_db_errors("admin.reassign_all_team_resources")
@@ -2458,7 +2458,7 @@ async def admin_reassign_all_team_resources(
                 fail_closed=True,
             )
         ),
-        require_feature("team_rbac"),
+        require_entitlement("identity"),
     ],
 )
 async def admin_delete_team(
@@ -3620,7 +3620,7 @@ class RetentionPurgeRequest(BaseModel):
                 fail_closed=True,
             )
         ),
-        require_feature("admin_run_retention"),
+        require_entitlement("audit_evidence"),
     ],
 )
 async def admin_retention_purge_runs(
@@ -3673,7 +3673,7 @@ class ManualPurgeRequest(BaseModel):
                 fail_closed=True,
             )
         ),
-        require_feature("admin_run_retention"),
+        require_entitlement("audit_evidence"),
     ],
 )
 async def admin_manual_purge(
@@ -3739,7 +3739,7 @@ class PurgeRunsResponse(BaseModel):
                 fail_closed=True,
             )
         ),
-        require_feature("admin_run_retention"),
+        require_entitlement("audit_evidence"),
     ],
 )
 async def admin_purge_stale_runs(
@@ -3855,7 +3855,7 @@ def _retention_days_from_setting(row: Any) -> int:
 
 @router.get(
     "/runs/retention",
-    dependencies=[require_feature("admin_run_retention")],
+    dependencies=[require_entitlement("audit_evidence")],
 )
 async def admin_get_retention(
     current_user: TenantPrincipal = Depends(get_current_tenant_user),
@@ -3871,7 +3871,7 @@ async def admin_get_retention(
     status_code=status.HTTP_200_OK,
     dependencies=[
         Depends(audited("run_retention_updated", "run_retention", principal_dep=get_current_tenant_user)),
-        require_feature("admin_run_retention"),
+        require_entitlement("audit_evidence"),
     ],
 )
 async def admin_update_retention(

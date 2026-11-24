@@ -1,6 +1,7 @@
 <template>
-  <div
-    class="card card-hover p-5 flex flex-col"
+  <BaseCard
+    padding="lg"
+    :class="'card-hover flex flex-col'"
     :data-testid="`library-item-${prim.id}`"
   >
     <div class="flex items-start justify-between mb-3">
@@ -11,7 +12,7 @@
         <h3 class="mt-2 text-base font-medium text-foreground">{{ prim.name }}</h3>
       </div>
       <span
-        v-if="badge === 'modulo' && prim.source === 'modulo'"
+        v-if="badge === 'modulo' && prim.source === 'farna_control'"
         class="text-xs text-primary-text font-medium bg-primary/10 px-2 py-0.5 rounded"
       >
         {{ $t('views.LibraryView.modulo_badge') }}
@@ -84,10 +85,12 @@
         {{ $t('views.LibraryView.view_details') }}
       </button>
     </div>
-  </div>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
+import BaseCard from '../ui/BaseCard.vue'
+
 export interface LibraryPrimitive {
   id: string
   source: string

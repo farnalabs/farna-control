@@ -1,7 +1,11 @@
 <template>
-  <section class="card p-4 space-y-5" data-testid="determination-review">
-    <h2 class="text-lg font-semibold">{{ $t('views.DeterminationView.review_title') }}</h2>
-
+  <DataCard
+    as="section"
+    data-testid="determination-review"
+    :title="$t('views.DeterminationView.review_title')"
+    heading-level="h2"
+  >
+    <div class="space-y-5">
     <section
       v-if="review"
       class="rounded-lg border border-success/40 bg-success/5 p-3 space-y-2"
@@ -33,16 +37,14 @@
       </p>
     </section>
 
-    <div
+    <ErrorAlert
       v-if="error"
-      role="alert"
-      aria-live="assertive"
-      class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-destructive-text"
+      compact
       data-testid="determination-review-error"
     >
       <p class="text-sm font-medium">{{ $t('views.DeterminationView.review_failed') }}</p>
       <p class="text-sm">{{ error }}</p>
-    </div>
+    </ErrorAlert>
 
     <section class="space-y-2" data-testid="determination-review-derived">
       <h3 class="text-sm font-medium">{{ $t('views.DeterminationView.review_derived_title') }}</h3>
@@ -206,13 +208,16 @@
         {{ $t('views.DeterminationView.review_needs_review') }}
       </button>
     </div>
-  </section>
+    </div>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSelect from '../shared/AppSelect.vue'
+import ErrorAlert from '../shared/ErrorAlert.vue'
+import DataCard from '../ui/DataCard.vue'
 import { formatDateShortWithTime } from '../../lib/formatDate'
 import { isUnsettledConfidence } from './confidencePresentation'
 import type {

@@ -248,6 +248,38 @@ def _run_detail_statement(principal: TenantPrincipal, run_id: uuid.UUID) -> Sele
     return select(Run).options(selectinload(Run.pipeline)).where(Run.id == run_id, Run.organisation_id == principal.organisation_id)
 
 
+async def _run_owned_by_another_team(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    run: Run,
+) -> bool:
+    """True when a team-scoped API key must not access *run* (FAR-681 boundary).
+
+    ``runs`` carries only org-isolation RLS (ADR 038 §5 has no ``visibility``
+    column here), so a team-scoped ``mk_`` key's hard team boundary
+    (``principal.team_id``) has to be applied explicitly on every run read and
+    mutation, exactly as the MCP run tools do via
+    ``_team_scoped_key_mismatch``. The run's stamped ``owner_team_id`` is the
+    source of truth; a pre-stamp row (NULL) falls back to the pipeline's current
+    owner, resolved TEAM-BLIND (``run_effective_owner_team_id``) so another
+    team's ``visibility='team'`` pipeline — hidden from a caller-facing read by
+    ``rls_team_isolation`` — cannot resolve to None and fail open. A pipeline
+    that is absent (or soft-deleted) even team-blind is a denial, never an
+    org-level run. Org-level runs (no owner team) remain visible to every
+    team-scoped key, matching the list filter (``team_scope_clause``). JWT
+    principals and org-wide keys carry ``team_id=None`` and are unaffected.
+    """
+    if getattr(principal, "team_id", None) is None:
+        return False
+    from farna.db.crud.team_scope import run_effective_owner_team_id
+
+    resolved = await run_effective_owner_team_id(session, run)
+    if not resolved.pipeline_present:
+        return True
+    owner_team_id = resolved.owner_team_id
+    return owner_team_id is not None and owner_team_id != principal.team_id
+
+
 async def _do_get_run(
     factory: async_sessionmaker[AsyncSession],
     principal: TenantPrincipal,
@@ -258,6 +290,8 @@ async def _do_get_run(
         await set_rls_user_context(session, principal.account_id, principal.org_role)
         run = (await session.execute(_run_detail_statement(principal, run_id))).scalar_one_or_none()
         if run is None:
+            raise RunNotFoundError(run_id)
+        if await _run_owned_by_another_team(session, principal, run):
             raise RunNotFoundError(run_id)
         return run
 
@@ -288,6 +322,8 @@ async def _do_get_run_with_gate(
         # schema-enforcement readers of `_do_get_run` do not pay for it.
         run = (await session.execute(_run_detail_statement(principal, run_id).options(selectinload(Run.snapshot).load_only(PipelineSnapshot.snapshot_version)))).scalar_one_or_none()
         if run is None:
+            raise RunNotFoundError(run_id)
+        if await _run_owned_by_another_team(session, principal, run):
             raise RunNotFoundError(run_id)
         return run, await _run_gate_fired(session, run)
 
@@ -922,6 +958,15 @@ async def _do_list_runs(
             variant_group_id=query.variant_group_id,
             batch_id=query.batch_id,
             account_id=user.account_id if user.org_role == "viewer" else None,
+            # FAR-2726: the list now accepts mk_ keys, so a TEAM-SCOPED key's
+            # hard team boundary must be applied here exactly as every other
+            # run surface applies it (`_run_owned_by_another_team` on detail,
+            # `team_scope_clause` in the MCP list). JWT principals and org-wide
+            # keys carry team_id=None, so this is a no-op for them and the
+            # existing viewer/account clause above is unchanged. `team_id`
+            # takes precedence over `account_id` in `_runs_list_scope_filters`,
+            # which is the intended boundary for a team-scoped credential.
+            team_id=user.team_id,
         )
         # Child-run cost rollup: ONE GROUP BY query for the whole page, joined
         # in Python — never a per-row aggregate (avoids N+1).
@@ -993,7 +1038,15 @@ async def list_runs_endpoint(
     variant_group_id: uuid.UUID | None = Query(None),
     batch_id: uuid.UUID | None = Query(None),
     factory: async_sessionmaker[AsyncSession] = Depends(_get_session_factory),
-    user: TenantPrincipal = require_permission(_CODE_RUN_LIST),
+    # any_credential (FAR-2726): the run DETAIL route already accepts an mk_ org
+    # API key (``require_permission_any_credential("run.status")``); the LIST
+    # is the same read family and must not 401 the same credential. Tenant
+    # isolation is unchanged (org predicate + RLS below); the viewer/account
+    # clause is role-based, and ``_do_list_runs`` threads the principal's
+    # ``team_id`` into the shared team filter so a team-scoped key keeps its
+    # hard team boundary on this surface too (matching the MCP list and every
+    # other run read).
+    user: TenantPrincipal = require_permission_any_credential(_CODE_RUN_LIST),
 ) -> dict[str, Any]:
     try:
         query = _ListRunsQuery(
@@ -1860,7 +1913,7 @@ async def trigger_run(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
-    await dispatch_run(str(run_id), str(org_id), queue="runs")
+    await dispatch_run(str(run_id), str(org_id))
 
     return run_response
 
@@ -1983,6 +2036,8 @@ async def trigger_rerun(
             source_run = await get_run(session, run_id, organisation_id=org_id)
             if source_run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            if await _run_owned_by_another_team(session, principal, source_run):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             run = await _create_rerun_run(session, principal, source_run)
             run_id_new = run.id
             # Build the response while the transaction is still open (same
@@ -2047,7 +2102,7 @@ async def trigger_rerun(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
-    await dispatch_run(str(run_id_new), str(org_id), queue="runs")
+    await dispatch_run(str(run_id_new), str(org_id))
 
     return run_response
 
@@ -2647,6 +2702,8 @@ async def get_run_work_item_enrichment(
             run = await get_run(session, run_id, organisation_id=principal.organisation_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            if await _run_owned_by_another_team(session, principal, run):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             refs = run.work_item_refs
             raw_payload = getattr(run, "input_payload", None)
             payload = raw_payload if isinstance(raw_payload, dict) else None
@@ -3185,7 +3242,9 @@ async def list_run_attempts(
             run = await get_run(session, run_id, organisation_id=principal.organisation_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
-            attempts = await db_list_attempts(session, run_id)
+            if await _run_owned_by_another_team(session, principal, run):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+            attempts = await db_list_attempts(session, run_id, org_id=principal.organisation_id)
     except IntegrityError:
         _log.exception(_CODE_RUNS_LIST_RUN_ATTEMPTS)
         raise HTTPException(
@@ -3543,7 +3602,6 @@ async def _resume_recovered_node(
         outcome, _job_id = await dispatch_run(
             str(run_id),
             str(org_id),
-            queue="runs",
             job_type="resume_run",
             resume_data=resume_data,
         )
@@ -3750,7 +3808,6 @@ async def _redispatch_guardrail_override(*, run_id: uuid.UUID, org_id: uuid.UUID
         outcome, _job_id = await dispatch_run(
             str(run_id),
             str(org_id),
-            queue="runs",
             job_type=job_type,
         )
     except Exception as exc:
@@ -4860,7 +4917,12 @@ def _build_diff_lines(text_a: str, text_b: str) -> tuple[list[NodeOutputDiffLine
 )
 async def get_run_schema_enforcement(
     run_id: uuid.UUID,
-    current_user: TenantPrincipal = Depends(get_current_tenant_user),
+    # FAR-2683: this is a run child read, so it uses the same viewer-level
+    # ``run.status`` gate (any-credential) as the run detail, events and
+    # attempts endpoints — a credential that can read the run can read its
+    # enforcement detail. Deliberately not a new key: a fresh key resolving to a
+    # different role would silently widen or narrow the gate.
+    current_user: TenantPrincipal = require_permission_any_credential(_CODE_RUN_STATUS),
     session_factory: async_sessionmaker[AsyncSession] = Depends(_get_session_factory),
 ) -> dict[str, Any]:
     """D3: Operator-readable run-detail enforcement surface.
@@ -4965,7 +5027,11 @@ async def get_run_schema_enforcement(
     },
 )
 async def get_schema_enforcement_flip_guard(
-    current_user: TenantPrincipal = Depends(get_current_tenant_user),
+    # FAR-2683: an org-wide, read-only aggregate over run enforcement records —
+    # the same data class as ``/runs/stats`` and the run list, so it takes the
+    # viewer-level ``run.list`` floor (JWT) rather than a new key. The advisory
+    # never mutates the mode; changing the mode remains a separate admin action.
+    current_user: TenantPrincipal = require_permission(_CODE_RUN_LIST),
     session_factory: async_sessionmaker[AsyncSession] = Depends(_get_session_factory),
 ) -> dict[str, Any]:
     """D2: Read-only flip guard — advises whether lenient-to-strict is safe.

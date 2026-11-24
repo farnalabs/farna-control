@@ -1,5 +1,5 @@
 <template>
-  <div class="card space-y-4 p-4" data-testid="analytics-filter-bar">
+  <BaseCard padding="md" class="space-y-4" data-testid="analytics-filter-bar">
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div>
         <p class="mb-2 text-xs font-medium text-muted-foreground">
@@ -209,13 +209,14 @@
         />
       </label>
     </div>
-  </div>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import AppSelect from "../shared/AppSelect.vue";
+import BaseCard from "../ui/BaseCard.vue";
 import type { components } from "../../lib/api/schema";
 import {
   MEASURES,

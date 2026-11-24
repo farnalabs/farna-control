@@ -136,11 +136,29 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
 - [x] Alerting + notification rules: a critical error fires an alert, a cooldown
       prevents alert storms, a condition window counts only recent events (with a
       lifetime-count fallback at window 0), and notification rules are
-      configurable up to 10 per org on the Team tier (3 on Community, where
-      webhook rules are also refused 402) (`error_notifications.feature`,
+      configurable up to 10 per org on every plan — there is no
+      licence-differentiated cap. `error_tracking` is a Community behaviour flag
+      (FAR-2665), so it governs availability only: switching it off returns 402
+      and never lowers the cap, and webhook rules are available on every plan
+      (FAR-2698) (`error_notifications.feature`,
       `api/routes/error_notification_rules.py`,
-      `core/error_tracking/alerting.py`)
+      `core/error_tracking/alerting.py`). Notification-rule configuration is
+      admin-class on every operation, including the list read: the rule set and
+      each rule's `webhook_url` are delivery configuration, so the read reuses
+      the same `error_notification.manage` admin floor as create/update/delete
+      (FAR-2683/FAR-2685); the sibling outbound-endpoint surface is admin-class
+      as well (`admin.notification.manage`, `GET /api/v1/admin/notifications`),
+      and no operator-facing surface reads the rules, so there is no operator
+      need that would justify a separate read key. Operators run pipelines and
+      receive the alerts; they do not own where those alerts are delivered.
 - _Error forwarders behavior detail removed for the MVP cut (see the pointer above)._
+- [x] The forwarder and notification-rule LIST reads are admin-gated, not just
+      their writes: `GET /api/v1/errors/forwarders` requires
+      `error_forwarder.manage` and `GET /api/v1/errors/notification-rules`
+      requires `error_notification.manage` (both admin, `require_permission`),
+      so a member who may not manage delivery cannot enumerate the forwarder
+      configuration, the rule set, or each rule's `webhook_url` (FAR-2683;
+      `test_error_forwarder_config.py`, `test_error_notification_rules_route.py`)
 - [x] OTLP observability export: `GET/PUT /api/v1/settings/observability`
       reads/updates the OTel endpoint + export interval (and the LangSmith key),
       serves stale cache on DB outage (degraded response, never hangs), masks

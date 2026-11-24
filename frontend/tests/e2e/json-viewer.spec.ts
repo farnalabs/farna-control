@@ -191,10 +191,10 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     })
 
     await page.goto('/runs/run-json-viewer')
-    await expect(page.getByTestId('json-viewer-copy')).toBeVisible()
+    await expect(page.locator('[data-testid^="json-viewer-copy-"]')).toBeVisible()
 
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
-    await page.getByTestId('json-viewer-copy').click()
+    await page.locator('[data-testid^="json-viewer-copy-"]').click()
     const clipboard = await page.evaluate(() => navigator.clipboard.readText())
     expect(clipboard).toContain('hello world')
   })
@@ -245,14 +245,14 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     await expect(page.locator('.json-viewer').first()).toBeVisible()
     await page.getByTestId('run-detail-toggle-io').click()
 
-    const truncated = page.getByTestId('json-viewer-string-truncated').first()
+    const truncated = page.locator('[data-testid^="json-viewer-string-truncated-"]').first()
     await expect(truncated).toBeVisible()
     await expect(truncated).toContainText('Expand')
     await expect(truncated).toContainText(`… ${expectedCount} chars`)
     await expect(truncated).not.toContainText(longText.slice(500))
 
-    await page.getByTestId('json-viewer-string-expand').first().click()
-    await expect(page.getByTestId('json-viewer-string-expanded').first()).toContainText(longText)
+    await page.locator('[data-testid^="json-viewer-string-expand-"]').first().click()
+    await expect(page.locator('[data-testid^="json-viewer-string-expanded-"]').first()).toContainText(longText)
   })
 
   test('wrapped long values stay inside their node without crushing the expand controls', { tag: '@regression' }, async ({ page, env }) => {
@@ -302,12 +302,12 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     await expect(page.locator('[data-testid="run-detail-input-payload"]')).toBeVisible()
     await expect(page.locator('.json-viewer').first()).toBeVisible()
 
-    const truncated = page.getByTestId('json-viewer-string-truncated').first()
+    const truncated = page.locator('[data-testid^="json-viewer-string-truncated-"]').first()
     await expect(truncated).toBeVisible()
 
     // The expand toggle and char count keep their natural size next to the
     // wrapped preview — they must never be squeezed into vertical slivers.
-    const toggleBox = await page.getByTestId('json-viewer-string-expand').first().boundingBox()
+    const toggleBox = await page.locator('[data-testid^="json-viewer-string-expand-"]').first().boundingBox()
     expect(toggleBox, 'expand toggle rendered').not.toBeNull()
     expect(toggleBox!.width, 'expand toggle must keep its label width').toBeGreaterThan(40)
     expect(toggleBox!.height, 'expand toggle must stay one label tall').toBeLessThanOrEqual(30)
@@ -390,7 +390,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
       await expect(page.locator('.json-viewer').first()).toBeVisible()
       await page.getByTestId('run-detail-toggle-io').click()
 
-      const truncated = page.getByTestId('json-viewer-string-truncated').first()
+      const truncated = page.locator('[data-testid^="json-viewer-string-truncated-"]').first()
       await expect(truncated).toBeVisible()
 
       // Measure the preview's actual line boxes. A single-character column
@@ -410,7 +410,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
         const lineWidths = Array.from(byLine.values())
         const textBox = text.getBoundingClientRect()
         const scroll = el.closest('.overflow-auto')
-        const toggle = el.querySelector('[data-testid="json-viewer-string-expand"]')
+        const toggle = el.querySelector('[data-testid^="json-viewer-string-expand-"]')
         const toggleBox = toggle?.getBoundingClientRect()
         return {
           lineCount: lineWidths.length,
@@ -493,13 +493,13 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
       ).toBeLessThanOrEqual(2)
 
       // 6. The expand control actually works at this viewport.
-      await page.getByTestId('json-viewer-string-expand').first().click()
-      const expanded = page.getByTestId('json-viewer-string-expanded').first()
+      await page.locator('[data-testid^="json-viewer-string-expand-"]').first().click()
+      const expanded = page.locator('[data-testid^="json-viewer-string-expanded-"]').first()
       await expect(expanded).toContainText(longText.slice(0, 60))
 
-      await page.getByTestId('json-viewer-string-collapse').first().click()
+      await page.locator('[data-testid^="json-viewer-string-collapse-"]').first().click()
       await expect(truncated).toBeVisible()
-      await expect(page.getByTestId('json-viewer-string-expanded')).toHaveCount(0)
+      await expect(page.locator('[data-testid^="json-viewer-string-expanded-"]')).toHaveCount(0)
     })
   })
 
@@ -543,7 +543,7 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     await page.goto('/runs/run-json-viewer')
     await expect(page.locator('[data-testid="run-detail-input-payload"]')).toBeVisible()
 
-    const truncated = page.getByTestId('json-viewer-string-truncated').first()
+    const truncated = page.locator('[data-testid^="json-viewer-string-truncated-"]').first()
     await expect(truncated).toBeVisible()
     await truncated.scrollIntoViewIfNeeded()
 
@@ -673,11 +673,11 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
     })
 
     await page.goto('/runs/run-json-viewer')
-    await expect(page.getByTestId('json-viewer-copy')).toBeVisible()
-    await expect(page.getByTestId('json-viewer-string-truncated').first()).toBeVisible()
+    await expect(page.locator('[data-testid^="json-viewer-copy-"]')).toBeVisible()
+    await expect(page.locator('[data-testid^="json-viewer-string-truncated-"]').first()).toBeVisible()
 
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
-    await page.getByTestId('json-viewer-copy').click()
+    await page.locator('[data-testid^="json-viewer-copy-"]').click()
     const clipboard = await page.evaluate(() => navigator.clipboard.readText())
     expect(clipboard).toContain(longText)
   })

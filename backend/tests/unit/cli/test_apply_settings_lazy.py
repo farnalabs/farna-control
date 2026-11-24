@@ -4,7 +4,7 @@
 it executes the ``farna.cli`` package ``__init__`` FIRST, and until FAR-1586
 that module eagerly imported ``farna.cli.migrate_org`` -> ``farna.db.session``,
 whose async engine is built AT IMPORT TIME through ``get_settings()``. The whole
-``modulo apply`` surface therefore demanded ``DATABASE_URL`` / ``SECRET_KEY`` /
+``farna-control apply`` surface therefore demanded ``DATABASE_URL`` / ``SECRET_KEY`` /
 ``FERNET_KEY`` at startup, even though ``apply`` only talks to a remote instance
 over ``FARNA_CONTROL_URL`` + ``FARNA_CONTROL_API_KEY``.
 

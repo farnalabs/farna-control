@@ -86,7 +86,7 @@ vi.mock('../config/navigation', async (importOriginal) => {
 })
 
 import DashboardView from '../views/DashboardView.vue'
-import StatCard from '../components/StatCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import DashboardSystemOverview from '../components/dashboard/DashboardSystemOverview.vue'
 
 function setupDefaultMocks() {
@@ -207,7 +207,7 @@ describe('DashboardView', () => {
       if (url === '/api/v1/dashboard/summary') return Promise.resolve({ data: mockSummaryData, error: undefined })
       if (url === '/api/v1/dashboard/trends') return Promise.resolve({ data: null, error: undefined })
       if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: true, flags: [...mockPlanData.flags, { name: 'system_maps', currently_active: true }] }, error: undefined })
-      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps_access', 'system.config.manage'] }, error: undefined })
+      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps.read', 'system_maps_access', 'system.config.manage'] }, error: undefined })
       return Promise.resolve({ data: null, error: undefined })
     })
 
@@ -218,13 +218,35 @@ describe('DashboardView', () => {
     expect(mockGet).not.toHaveBeenCalledWith('/api/v1/admin/feature-flags')
   })
 
+  it('hides System Overview from a non-developer account even with the read permission (FAR-2638)', async () => {
+    // System Maps is release-gated (`private_preview`) until Beta, so the
+    // dashboard entry point must be hidden exactly as the route is. The
+    // viewer-floor `system_maps.read` permission still resolves
+    // `systemMapsEnabled` true here, which is the whole point: pre-fix this
+    // assertion failed because the card keyed off the permission alone and
+    // rendered on an alpha dashboard whose Discover action bounced straight
+    // back to the dashboard.
+    vi.mocked(getAccessToken).mockReturnValue(jwtForUser('operator'))
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/v1/dashboard/summary') return Promise.resolve({ data: mockSummaryData, error: undefined })
+      if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: false, flags: [...mockPlanData.flags, { name: 'system_maps', currently_active: true }] }, error: undefined })
+      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps.read', 'system_maps_access'] }, error: undefined })
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="dashboard-system-overview"]').exists()).toBe(false)
+  })
+
   it('falls back to a 7-day System Overview window when All time is selected', async () => {
     localStorage.setItem('modulo.dashboard.trendWindow', 'all')
     vi.mocked(getAccessToken).mockReturnValue(jwtForUser('operator'))
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/dashboard/summary') return Promise.resolve({ data: mockSummaryData, error: undefined })
       if (url === '/api/v1/plan') return Promise.resolve({ data: { ...mockPlanData, dev_mode: true, flags: [...mockPlanData.flags, { name: 'system_maps', currently_active: true }] }, error: undefined })
-      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps_access', 'system.config.manage'] }, error: undefined })
+      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: ['system_maps.read', 'system_maps_access'] }, error: undefined })
       return Promise.resolve({ data: null, error: undefined })
     })
 
@@ -294,6 +316,27 @@ describe('DashboardView', () => {
     expect(wrapper.text()).toContain('Idle')
   })
 
+  it('falls back to zero counts when the summary omits the per-status run breakdown', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/v1/dashboard/summary') {
+        return Promise.resolve({
+          data: { ...mockSummaryData, run_counts_by_status: {} },
+          error: undefined,
+        })
+      }
+      if (url === '/api/v1/plan') return Promise.resolve({ data: mockPlanData, error: undefined })
+      if (url === '/api/v1/auth/permissions') return Promise.resolve({ data: { permissions: [] }, error: undefined })
+      if (url === '/api/v1/admin/feature-flags') return Promise.resolve({ data: { flags: [] }, error: undefined })
+      return Promise.resolve({ data: null, error: undefined })
+    })
+    const wrapper = mount(DashboardView)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Running')
+    expect(wrapper.text()).toContain('Idle')
+    expect(wrapper.text()).toContain('142')
+  })
+
   it('renders eval pass rate card', async () => {
     const wrapper = mount(DashboardView)
     await flushPromises()
@@ -326,7 +369,7 @@ describe('DashboardView', () => {
       'py-6', 'text-sm', 'text-muted-foreground',
     ]))
     expect(empty.find('span.font-semibold').exists()).toBe(false)
-    expect(card.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(card.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
   })
 
   it('does not show team breakdown for non-enterprise plans', async () => {
@@ -388,6 +431,30 @@ describe('DashboardView', () => {
       await flushPromises()
 
       expect(wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')).toBe('/admin/costs')
+    })
+
+    it('omits the role param when the Costs item is refused for instance admin', async () => {
+      // The real manifest does not make Costs instance-admin-gated, but the
+      // destination is shared logic and must tolerate that refusal: a
+      // `system_admin` reason carries no role to name, so no `role=` param.
+      navState.groups = [
+        {
+          id: 'test',
+          label: 'Test',
+          defaultCollapsed: false,
+          items: [
+            { to: '/admin/costs', icon: 'Coins', label: 'Costs', labelKey: 'k', systemAdminOnly: true },
+          ],
+        },
+      ]
+      vi.mocked(getAccessToken).mockReturnValue(jwtForUser('admin'))
+      const wrapper = mount(DashboardView)
+      await flushPromises()
+
+      const href = wrapper.get('[data-testid="dashboard-token-spend"]').attributes('href')
+      expect(href).toContain('/locked?')
+      expect(href).toContain('reason=system_admin')
+      expect(href).not.toContain('role=')
     })
 
     it('sends a role the Costs route refuses to the honest lock, not the Dashboard', async () => {
@@ -600,7 +667,7 @@ describe('DashboardView', () => {
     // The chart itself renders a compact, deliberately sized empty state
     // instead of an empty sparkline stretched across the card.
     expect(evalCard.text()).toContain('No data')
-    expect(evalCard.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(evalCard.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
     expect(evalCard.find('polyline').exists()).toBe(false)
     const emptyChart = evalCard.get('[aria-live="polite"]')
     expect(emptyChart.classes()).toContain('h-12')
@@ -650,7 +717,7 @@ describe('DashboardView', () => {
 
     const evalCard = wrapper.get('[data-testid="dashboard-eval-rate"]')
     expect(evalCard.text()).toContain('100%')
-    expect(evalCard.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(evalCard.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
     expect(evalCard.get('[aria-live="polite"]').classes()).toContain('h-12')
     wrapper.unmount()
   })
@@ -662,7 +729,7 @@ describe('DashboardView', () => {
 
     const runActivity = wrapper.get('[data-testid="dashboard-run-activity"]')
     expect(runActivity.text()).toContain('No data yet')
-    expect(runActivity.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(runActivity.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
     expect(wrapper.findComponent({ name: 'ErrorAlert' }).exists()).toBe(false)
 
     const emptyState = runActivity.get('[aria-live="polite"]')
@@ -735,7 +802,7 @@ describe('DashboardView', () => {
     // because the summary refetch swaps the whole tree through the skeleton.
     const allTimeEvalCard = wrapper.get('[data-testid="dashboard-eval-rate"]')
     expect(allTimeEvalCard.text()).toContain('82.5%')
-    expect(allTimeEvalCard.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(allTimeEvalCard.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
     const spendSparkline = wrapper
       .get('[data-testid="dashboard-token-spend"]')
       .getComponent({ name: 'SparklineChart' })
@@ -1137,7 +1204,7 @@ describe('DashboardView', () => {
     // sparkline that has nothing to plot.
     const card = wrapper.get('[data-testid="dashboard-token-spend"]')
     expect(card.find('[data-testid="dashboard-token-spend-empty"]').exists()).toBe(true)
-    expect(card.find('[data-testid="sparkline"]').exists()).toBe(false)
+    expect(card.findComponent({ name: 'SparklineChart' }).exists()).toBe(false)
   })
 
   it('Pipelines card renders neutral trend colour (muted) even when delta is positive', async () => {

@@ -19135,7 +19135,7 @@ export interface components {
          * PipelineGraphPolicyGate
          * @description Node-attached policy-gate configuration (FAR-1109).
          *
-         *     Declared on a :class:`PipelineGraphNode` so a declarative ``modulo apply``
+         *     Declared on a :class:`PipelineGraphNode` so a declarative ``farna-control apply``
          *     config can carry the gate as part of the graph write. ``action`` is the
          *     gate's configured action (the ``policy_gates.action`` CHECK vocabulary);
          *     ``eval_id`` references the eval bound to this node (the CLI never
@@ -19477,6 +19477,11 @@ export interface components {
          *     permission), with the org ``feature_overrides`` overlay applied and the
          *     FULL known flag set present — inactive flags carry
          *     ``currently_active: false`` rather than being omitted.
+         *
+         *     FAR-2665 adds ``entitlements``: the commercial capability set (Identity /
+         *     Audit and evidence / Cost governance) with what the licence grants, so a
+         *     commercial gate is answered from the plan payload rather than from a
+         *     per-view tier prop.
          */
         PlanBootstrapResponse: {
             license: components["schemas"]["PlanLicenseInfo"];
@@ -19484,6 +19489,31 @@ export interface components {
             dev_mode: boolean;
             /** Flags */
             flags: components["schemas"]["PlanFlagInfo"][];
+            /** Entitlements */
+            entitlements?: components["schemas"]["PlanEntitlementInfo"][];
+        };
+        /**
+         * PlanEntitlementInfo
+         * @description One commercial entitlement in the ``/api/v1/plan`` payload (FAR-2665).
+         *
+         *     ``granted`` is the licence answer; ``flags`` is the behaviour flags the
+         *     entitlement covers. The client derives BOTH directions from this list — the
+         *     granted set that gates a route, and the flag -> entitlement mapping that
+         *     tells a commercial lock from an organisation-disabled flag — so the SPA
+         *     never needs a second source (a manifest tier or a hardcoded map) that can
+         *     drift from the backend.
+         */
+        PlanEntitlementInfo: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Granted */
+            granted: boolean;
+            /** Flags */
+            flags: string[];
         };
         /**
          * PlanFlagInfo

@@ -67,14 +67,11 @@
       variant="bordered"
       padding="md"
       elevation="sm"
+      heading-level="h2"
+      :title="$t('views.SettingsTriggerEventLogView.capacity_outcomes')"
+      :description="$t('views.SettingsTriggerEventLogView.capacity_outcomes_window', { hours: capacityWindowHours })"
     >
-      <div class="flex flex-wrap items-center gap-3">
-        <span class="text-sm font-medium text-foreground">
-          {{ $t('views.SettingsTriggerEventLogView.capacity_outcomes') }}
-        </span>
-        <span class="text-xs text-muted-foreground">
-          {{ $t('views.SettingsTriggerEventLogView.capacity_outcomes_window', { hours: capacityWindowHours }) }}
-        </span>
+      <template #headerActions>
         <span
           data-testid="capacity-outcomes-total"
           :class="capacityTotalBadgeClass"
@@ -88,8 +85,8 @@
         >
           {{ capacityTrendLabel }}
         </span>
-      </div>
-      <div v-if="capacityOutcomeRows.length > 0" class="mt-3 flex flex-wrap gap-2">
+      </template>
+      <div v-if="capacityOutcomeRows.length > 0" class="flex flex-wrap gap-2">
         <span
           v-for="row in capacityOutcomeRows"
           :key="row.key"
@@ -99,7 +96,7 @@
           {{ $t(`views.SettingsTriggerEventLogView.${row.key}`) }}: {{ row.value }}
         </span>
       </div>
-      <p v-else class="mt-3 text-xs text-muted-foreground">
+      <p v-else class="text-xs text-muted-foreground">
         {{ $t('views.SettingsTriggerEventLogView.capacity_outcome_none', { hours: capacityWindowHours }) }}
       </p>
     </DataCard>
@@ -108,12 +105,11 @@
 
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadEvents" />
 
-    <div v-else-if="items.length === 0" class="rounded-lg border bg-card p-8 text-center">
-      <p class="text-lg font-medium">{{ $t('views.SettingsTriggerEventLogView.no_trigger_events_found') }}</p>
-      <p class="mt-1 text-sm text-muted-foreground">
-        {{ $t('views.SettingsTriggerEventLogView.try_adjusting_filters') }}
-      </p>
-    </div>
+    <EmptyState
+      v-else-if="items.length === 0"
+      :title="$t('views.SettingsTriggerEventLogView.no_trigger_events_found')"
+      :description="$t('views.SettingsTriggerEventLogView.try_adjusting_filters')"
+    />
 
     <template v-else>
       <!-- FAR-2226: the pipeline column makes the table wider than a narrow
@@ -226,6 +222,7 @@ import { useCursorPageStack } from '../composables/useCursorPageStack'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { shortId } from '../utils/format'
 import Button from 'primevue/button'

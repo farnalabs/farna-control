@@ -188,7 +188,7 @@ def _build_real_opencode_client(
         http_client=httpx.AsyncClient(transport=transport),
         default_headers={
             "x-opencode-session": session_id,
-            "User-Agent": f"modulo/{get_version()}",
+            "User-Agent": f"farna-control/{get_version()}",
         },
     )
 
@@ -223,7 +223,7 @@ async def test_opencode_headers_reach_the_wire():
     assert len(transport.requests) == 1
     headers = transport.requests[0].headers
     assert headers["x-opencode-session"] == session_id
-    assert "modulo/" in headers["user-agent"]
+    assert "farna-control/" in headers["user-agent"]
 
 
 @pytest.mark.anyio
@@ -290,7 +290,7 @@ def test_opencode_backend_default_headers_include_both():
     assert "x-opencode-session" in headers
     assert headers["x-opencode-session"]  # non-empty
     assert "User-Agent" in headers
-    assert headers["User-Agent"].startswith("modulo/")
+    assert headers["User-Agent"].startswith("farna-control/")
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +301,7 @@ def test_opencode_backend_default_headers_include_both():
 # an ``httpx.AsyncClient`` backed by ``_RecordingTransport``, then construct
 # a real ``OpenCodeBackend`` (no ``ChatOpenAI`` mock) and invoke a model
 # call.  They assert that ``x-opencode-session`` (non-empty) and the
-# ``modulo/…`` User-Agent appear on the actual outgoing ``httpx.Request``.
+# ``farna-control/…`` User-Agent appear on the actual outgoing ``httpx.Request``.
 #
 # These FAIL if the production fix is reverted (no ``default_headers``
 # passed) and also fail if the pinned-client path drops the headers.
@@ -336,7 +336,7 @@ async def test_headers_reach_wire_through_real_backend():
         assert len(transport.requests) == 1
         headers = transport.requests[0].headers
         assert headers["x-opencode-session"] == backend.session_id
-        assert "modulo/" in headers["user-agent"]
+        assert "farna-control/" in headers["user-agent"]
     finally:
         await backend.aclose()
 

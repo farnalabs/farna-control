@@ -93,7 +93,7 @@
       - id: check-yaml
         # Exclude only the Helm templates (Go-templated, not plain YAML).
         # values*.yaml and Chart.yaml are valid plain YAML and must be checked.
-        exclude: ^deploy/helm/modulo/templates/
+        exclude: ^deploy/helm/farna-control/templates/
       - id: check-toml
       - id: check-json
       - id: end-of-file-fixer
@@ -131,11 +131,11 @@
         name: ESLint
         entry: uv run --project backend --no-sync --frozen python scripts/run_frontend_npm.py lint
         language: system
-        # Match only frontend/src, mirroring the CI lint command `eslint src`
-        # (frontend/package.json).  A repo-wide pattern would also match docs
-        # examples and frontend/tests, which carry pre-existing no-console
-        # violations the CI lint gate does not enforce.
-        files: ^frontend/src/.*\.(vue|ts|js)$
+        # Match the CI lint command's scope (frontend/package.json):
+        # `eslint src tests/visual-baseline`.  A repo-wide pattern would also
+        # match docs examples and the rest of frontend/tests, whose pre-existing
+        # no-console violations the CI lint gate does not enforce.
+        files: ^frontend/(src/.*\.(vue|ts|js)|tests/visual-baseline/.*\.mjs)$
         pass_filenames: true
       - id: vue-tsc
         name: vue-tsc type check

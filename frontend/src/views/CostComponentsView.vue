@@ -12,7 +12,7 @@
       </template>
     </PageHeader>
 
-    <FeatureGate feature-name="admin_cost_breakdown" required-tier="team" show-disabled class="space-y-6">
+    <FeatureGate feature-name="admin_cost_breakdown" show-disabled class="space-y-6">
 
       <div v-if="loading" data-testid="cost-components-loading">
         <output class="sr-only" aria-live="polite">{{ $t('views.CostComponentsView.loading_components') }}</output>
@@ -40,67 +40,62 @@
           :description="$t('views.CostComponentsView.add_a_component_to_break_down_run_costs')"
         />
 
-        <DataCard v-else padding="none">
-           <template #default>
-             <div>
-            <DataTable
-              :columns="[
-                { key: 'display_name', label: $t('views.CostComponentsView.display_name') },
-                { key: 'kind', label: $t('views.CostComponentsView.kind') },
-                { key: 'rate', label: $t('views.CostComponentsView.rate_usd'), numeric: true },
-                { key: 'formula', label: $t('views.CostComponentsView.formula') },
-                { key: 'report_key', label: $t('views.CostComponentsView.report_key') },
-                { key: 'enabled', label: $t('views.CostComponentsView.enabled') },
-                { key: 'actions', label: '' },
-              ]"
-              :rows="tableRows"
-              :row-clickable="false"
-            >
-              <template #cell-display_name="{ row }">
-                <div class="flex items-center gap-2">
-                  <span class="font-medium">{{ (row as any).display_name }}</span>
-                  <span class="font-mono text-xs text-muted-foreground">{{ (row as any).name }}</span>
-                </div>
-              </template>
-              <template #cell-kind="{ row }">
-                <span
-                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize"
-                  :class="(row as any).kind === 'self_reported' ? 'bg-primary/10 text-primary-text' : 'bg-muted text-muted-foreground'"
-                >
-                  {{ $t(`views.CostComponentsView.${(row as any).kind}`) }}
-                </span>
-              </template>
-              <template #cell-rate="{ row }">
-                <span class="tabular-nums">{{ (row as any).rateDisplay }}</span>
-                <span v-if="(row as any).rate_fallback" class="ml-1 font-mono text-xs text-muted-foreground">({{ (row as any).rate_fallback }})</span>
-              </template>
-              <template #cell-formula="{ row }">
-                <code class="max-w-64 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{{ (row as any).formula || '—' }}</code>
-              </template>
-              <template #cell-report_key="{ row }">
-                <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{{ (row as any).report_key || '—' }}</code>
-              </template>
-              <template #cell-enabled="{ row }">
-                <label class="relative inline-flex cursor-pointer items-center" :data-testid="'cost-components-toggle-' + (row as any).id">
-                  <input
-                    type="checkbox"
-                    class="peer sr-only"
-                    :aria-label="$t('views.CostComponentsView.enabled') + ': ' + (row as any).display_name"
-                    :checked="(row as any).enabled"
-                    @change="toggleEnabled(row as any)"
-                  />
-                  <div class="peer h-6 w-11 rounded-full bg-muted-foreground/30 after:absolute after:start-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-muted after:bg-background after:transition-all peer-checked:bg-primary peer-checked:after:translate-x-full peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background" />
-                </label>
-              </template>
-              <template #cell-actions="{ row }">
-                <div class="text-right">
-                  <TableActions :actions="rowActions(row as any)" />
-                </div>
-              </template>
-            </DataTable>
+        <DataTable
+          v-else
+          :columns="[
+            { key: 'display_name', label: $t('views.CostComponentsView.display_name') },
+            { key: 'kind', label: $t('views.CostComponentsView.kind') },
+            { key: 'rate', label: $t('views.CostComponentsView.rate_usd'), numeric: true },
+            { key: 'formula', label: $t('views.CostComponentsView.formula') },
+            { key: 'report_key', label: $t('views.CostComponentsView.report_key') },
+            { key: 'enabled', label: $t('views.CostComponentsView.enabled') },
+            { key: 'actions', label: '' },
+          ]"
+          :rows="tableRows"
+          :row-clickable="false"
+        >
+          <template #cell-display_name="{ row }">
+            <div class="flex items-center gap-2">
+              <span class="font-medium">{{ (row as any).display_name }}</span>
+              <span class="font-mono text-xs text-muted-foreground">{{ (row as any).name }}</span>
             </div>
           </template>
-        </DataCard>
+          <template #cell-kind="{ row }">
+            <span
+              class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize"
+              :class="(row as any).kind === 'self_reported' ? 'bg-primary/10 text-primary-text' : 'bg-muted text-muted-foreground'"
+            >
+              {{ $t(`views.CostComponentsView.${(row as any).kind}`) }}
+            </span>
+          </template>
+          <template #cell-rate="{ row }">
+            <span class="tabular-nums">{{ (row as any).rateDisplay }}</span>
+            <span v-if="(row as any).rate_fallback" class="ml-1 font-mono text-xs text-muted-foreground">({{ (row as any).rate_fallback }})</span>
+          </template>
+          <template #cell-formula="{ row }">
+            <code class="max-w-64 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{{ (row as any).formula || '—' }}</code>
+          </template>
+          <template #cell-report_key="{ row }">
+            <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{{ (row as any).report_key || '—' }}</code>
+          </template>
+          <template #cell-enabled="{ row }">
+            <label class="relative inline-flex cursor-pointer items-center" :data-testid="'cost-components-toggle-' + (row as any).id">
+              <input
+                type="checkbox"
+                class="peer sr-only"
+                :aria-label="$t('views.CostComponentsView.enabled') + ': ' + (row as any).display_name"
+                :checked="(row as any).enabled"
+                @change="toggleEnabled(row as any)"
+              />
+              <div class="peer h-6 w-11 rounded-full bg-muted-foreground/30 after:absolute after:start-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-muted after:bg-background after:transition-all peer-checked:bg-primary peer-checked:after:translate-x-full peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background" />
+            </label>
+          </template>
+          <template #cell-actions="{ row }">
+            <div class="text-right">
+              <TableActions :actions="rowActions(row as any)" />
+            </div>
+          </template>
+        </DataTable>
 
         <p v-if="formError" class="mt-3 text-sm text-destructive" data-testid="cost-components-form-error">{{ formError }}</p>
         <p v-if="formSuccess" class="mt-3 text-sm text-success-text" data-testid="cost-components-form-success">{{ formSuccess }}</p>
@@ -180,22 +175,24 @@
               <InputText id="costcomponents-formula" v-model="form.formula" data-testid="cost-components-formula" class="font-mono" :placeholder="$t('views.CostComponentsView.placeholder_formula')" />
               <details class="mt-2 rounded-lg border bg-muted/30 p-3">
                 <summary class="cursor-pointer text-xs font-medium text-muted-foreground">{{ $t('views.CostComponentsView.available_params') }}</summary>
-                <table class="mt-2 w-full text-xs">
-                  <thead>
-                    <tr class="border-b text-left text-muted-foreground">
-                      <th class="py-1 pr-3 font-medium">{{ $t('views.CostComponentsView.param') }}</th>
-                      <th class="py-1 pr-3 font-medium">{{ $t('views.CostComponentsView.type') }}</th>
-                      <th class="py-1 font-medium">{{ $t('views.CostComponentsView.meaning') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="p in availableParams" :key="p.name" class="border-b last:border-b-0">
-                      <td class="py-1 pr-3 font-mono text-primary-text">{{ p.name }}</td>
-                      <td class="py-1 pr-3 text-muted-foreground">{{ p.type }}</td>
-                      <td class="py-1 text-muted-foreground">{{ p.meaning }}</td>
-                    </tr>
-                  </tbody>
-                </table>
+                <div class="table-wrapper mt-2">
+                  <table class="w-full text-xs">
+                    <thead>
+                      <tr class="border-b text-left text-muted-foreground">
+                        <th class="py-1 pr-3 font-medium">{{ $t('views.CostComponentsView.param') }}</th>
+                        <th class="py-1 pr-3 font-medium">{{ $t('views.CostComponentsView.type') }}</th>
+                        <th class="py-1 font-medium">{{ $t('views.CostComponentsView.meaning') }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="p in availableParams" :key="p.name" class="border-b last:border-b-0">
+                        <td class="py-1 pr-3 font-mono text-primary-text">{{ p.name }}</td>
+                        <td class="py-1 pr-3 text-muted-foreground">{{ p.type }}</td>
+                        <td class="py-1 text-muted-foreground">{{ p.meaning }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </details>
             </div>
 
@@ -248,7 +245,6 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import TableActions from '../components/shared/TableActions.vue'
 import Button from 'primevue/button'
-import DataCard from '../components/ui/DataCard.vue'
 import InputText from 'primevue/inputtext'
 import { DataTable } from '../components/ui/data-table'
 import Select from '../components/shared/AppSelect.vue'

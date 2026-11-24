@@ -3,6 +3,7 @@ import { ref } from "vue";
 import Button from 'primevue/button'
 import Select from '../../shared/AppSelect.vue'
 import ErrorAlert from '../../shared/ErrorAlert.vue'
+import EmptyState from '../../shared/EmptyState.vue'
 import DataCard from '../../ui/DataCard.vue'
 import { useApi } from "../../../composables/useApi";
 import type { ParameterPort, ParameterPortType } from "../../../types/pipeline";
@@ -182,13 +183,12 @@ async function detectPlaceholders() {
       </div>
     </div>
 
-    <div
+    <EmptyState
       v-if="ports.length === 0"
-      class="py-8 text-center text-sm text-muted-foreground"
-    >
-      No parameter ports defined yet. Add ports for values that pipeline authors
-      can configure.
-    </div>
+      variant="bare"
+      title="No parameter ports defined yet."
+      description="Add ports for values that pipeline authors can configure."
+    />
 
     <div
       v-for="(port, index) in ports"
@@ -257,7 +257,7 @@ async function detectPlaceholders() {
       v-if="showAddForm"
       :title="editingIndex !== null ? 'Edit Port' : 'Add Port'"
       heading-level="h4"
-      title-class="text-sm font-medium"
+      size="sm"
       padding="md"
       elevation="sm"
     >

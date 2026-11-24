@@ -953,7 +953,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -1086,7 +1086,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -1154,7 +1154,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -1199,7 +1199,7 @@ jobs:
     # only logs ::error:: in the Actions tab — invisible unless someone
     # checks. This job dispatches the Branch Fixer as a TRIAGE step: it may
     # conclude the failure is not fixable in code, but the webhook creates a
-    # visible Modulo pipeline run that surfaces the failure in the app UI.
+    # visible Farna Control pipeline run that surfaces the failure in the app UI.
     #
     # Distinguishable from code-failure notifications: the FEEDBACK text
     # begins with "INFRASTRUCTURE FAILURE" so a human reading it knows this
@@ -1230,7 +1230,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -1282,6 +1282,11 @@ jobs:
     # default of 360 min (6h) silently swallows a hang as 'cancelled' rather
     # than routing it to the fix loop.
     timeout-minutes: 180
+    # The deploy target's identity, read by BOTH the from-zero pre-create step
+    # and the main deploy step, so an app rename moves them together (FAR-2656).
+    env:
+      DEPLOY_APP: staging-farna-control
+      DEPLOY_FLY_CONFIG: deploy/fly/fly.staging.toml
     steps:
       - name: Echo run identity (pre-checkout)
         shell: bash
@@ -1339,14 +1344,14 @@ jobs:
           # --push --image-label). The image label carries the deploy SHA so
           # the pre-migrate machine and the deploy step can both reference it.
           IMAGE_LABEL="deploy-$(echo "${{ needs.deploy-throttle.outputs.run_sha }}" | cut -c1-12)"
-          IMAGE_REF="registry.fly.io/staging-modulo:${IMAGE_LABEL}"
+          IMAGE_REF="registry.fly.io/staging-farna-control:${IMAGE_LABEL}"
           echo "IMAGE_REF=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
 
           MAX_RETRIES=3
           RETRY_DELAY=10
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "--- Build attempt $attempt of $MAX_RETRIES ---"
-            if fly deploy --app staging-modulo --build-only --push --image-label "$IMAGE_LABEL" --config deploy/fly/fly.staging.toml \
+            if fly deploy --app staging-farna-control --build-only --push --image-label "$IMAGE_LABEL" --config deploy/fly/fly.staging.toml \
               --build-arg "GIT_SHA=${{ steps.git.outputs.git-sha }}" \
               --build-arg "GIT_BRANCH=${{ steps.git.outputs.git-branch }}" \
               --build-arg "GIT_COMMIT_TIMESTAMP=${{ steps.git.outputs.git-commit-timestamp }}" \
@@ -1405,7 +1410,7 @@ jobs:
 
           # Snapshot machine IDs BEFORE creating the one-off machine so ID
           # discovery (and the destroy step's fallback) can single it out.
-          fly machine list --app staging-modulo --json > /tmp/prerehearse-before.json 2>/dev/null || true
+          fly machine list --app staging-farna-control --json > /tmp/prerehearse-before.json 2>/dev/null || true
           python3 -c '
           import json
           try:
@@ -1432,7 +1437,7 @@ jobs:
           LAUNCH_RC=1
           while [ "$launch_attempt" -lt "$LAUNCH_ATTEMPTS" ]; do
             launch_attempt=$(( launch_attempt + 1 ))
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-modulo --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --env ALEMBIC_REHEARSAL=1 \
@@ -1441,6 +1446,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/prerehearse-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             if grep -qi 'failed to reach desired start state' \
@@ -1483,7 +1497,7 @@ jobs:
             discovery_attempt=0
             while [ "$discovery_attempt" -lt "$DISCOVERY_ATTEMPTS" ]; do
               discovery_attempt=$(( discovery_attempt + 1 ))
-              MID="$(fly machine list --app staging-modulo --json 2>/dev/null | python3 -c '
+              MID="$(fly machine list --app staging-farna-control --json 2>/dev/null | python3 -c '
            import json, os, sys
            image = os.environ.get("PREMIGRATE_IMAGE_REF", "")
            try:
@@ -1534,7 +1548,7 @@ jobs:
           attempt=0
           while [ "$attempt" -lt "$ATTEMPTS" ]; do
             attempt=$(( attempt + 1 ))
-            STATE="$(fly machine list --app staging-modulo --json 2>/dev/null | python3 -c '
+            STATE="$(fly machine list --app staging-farna-control --json 2>/dev/null | python3 -c '
           import json, os, sys
           mid = os.environ.get("MID", "")
           try:
@@ -1556,7 +1570,7 @@ jobs:
               # 0), so a missing exit_code is treated as success, exactly like
               # the real pre-migrate machine's gate below: the real run still
               # gates the deploy on migration success.
-              EXIT_CODE="$(fly machine list --app staging-modulo --json 2>/dev/null | python3 -c '
+              EXIT_CODE="$(fly machine list --app staging-farna-control --json 2>/dev/null | python3 -c '
           import json, os, sys
           mid = os.environ.get("MID", "")
           try:
@@ -1578,7 +1592,7 @@ jobs:
               if [ -n "$EXIT_CODE" ] && [ "$EXIT_CODE" != "0" ]; then
                 echo "::error::REHEARSAL migration machine ${MID} exited with code ${EXIT_CODE} - the rehearsal FAILED (a migration would fail against the real database); aborting the deploy before the real migration."
                 echo "Capturing rehearsal machine logs for diagnosis (FAR-717) ..."
-                fly logs --app staging-modulo --machine "$MID" --no-tail > /tmp/prerehearse-failure.log 2>&1 || true
+                fly logs --app staging-farna-control --machine "$MID" --no-tail > /tmp/prerehearse-failure.log 2>&1 || true
                 echo "----- rehearsal machine log (tail) -----"
                 tail -200 /tmp/prerehearse-failure.log || true
                 echo "----- end rehearsal machine log -----"
@@ -1597,7 +1611,7 @@ jobs:
           done
           echo "::error::Migration rehearsal did not complete within ${TIMEOUT_MIN} minutes (machine ${MID} still running) - failing the run so the deploy is aborted; fix the root cause."
           echo "Capturing rehearsal machine logs for diagnosis (FAR-717) ..."
-          fly logs --app staging-modulo --machine "$MID" --no-tail > /tmp/prerehearse-failure.log 2>&1 || true
+          fly logs --app staging-farna-control --machine "$MID" --no-tail > /tmp/prerehearse-failure.log 2>&1 || true
           echo "----- rehearsal machine log (tail) -----"
           tail -100 /tmp/prerehearse-failure.log || true
           echo "----- end rehearsal machine log -----"
@@ -1625,7 +1639,7 @@ jobs:
           if [ -z "$MID" ]; then
             # Fallback: find a machine running the pre-migrate image that was
             # not present before the rehearsal step created anything.
-            fly machine list --app staging-modulo --json > /tmp/prerehearse-destroy.json 2>/dev/null || true
+            fly machine list --app staging-farna-control --json > /tmp/prerehearse-destroy.json 2>/dev/null || true
             MID="$(python3 -c '
           import json, os
           image = os.environ.get("PREMIGRATE_IMAGE_REF", "")
@@ -1650,7 +1664,7 @@ jobs:
           ' 2>/dev/null || true)"
           fi
           if [ -n "$MID" ]; then
-            fly machine destroy "$MID" --app staging-modulo --force || true
+            fly machine destroy "$MID" --app staging-farna-control --force || true
             echo "Pre-rehearsal machine ${MID} destroyed (or already gone)."
           else
             echo "No pre-rehearsal machine found to destroy (it may never have been created)."
@@ -1698,7 +1712,7 @@ jobs:
 
           # Snapshot machine IDs BEFORE creating the one-off machine so ID
           # discovery (and the destroy step's fallback) can single it out.
-          fly machine list --app staging-modulo --json > /tmp/premigrate-before.json 2>/dev/null || true
+          fly machine list --app staging-farna-control --json > /tmp/premigrate-before.json 2>/dev/null || true
           python3 -c '
           import json
           try:
@@ -1749,7 +1763,7 @@ jobs:
             # --detach means RC=0 iff creation succeeded, so a retried attempt
             # does not leak a second machine; the single destroy below is
             # sufficient to clean up the one machine this loop creates.
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-modulo --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --detach \
@@ -1757,6 +1771,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/premigrate-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             # FAR-486: even with --detach, flyctl can still exit non-zero with
@@ -1828,7 +1851,7 @@ jobs:
             discovery_attempt=0
             while [ "$discovery_attempt" -lt "$DISCOVERY_ATTEMPTS" ]; do
               discovery_attempt=$(( discovery_attempt + 1 ))
-              MID="$(fly machine list --app staging-modulo --json 2>/dev/null | python3 -c '
+              MID="$(fly machine list --app staging-farna-control --json 2>/dev/null | python3 -c '
            import json, os, sys
            image = os.environ.get("PREMIGRATE_IMAGE_REF", "")
            try:
@@ -1892,7 +1915,7 @@ jobs:
           attempt=0
           while [ "$attempt" -lt "$ATTEMPTS" ]; do
             attempt=$(( attempt + 1 ))
-            STATE="$(fly machine list --app staging-modulo --json 2>/dev/null | python3 -c '
+            STATE="$(fly machine list --app staging-farna-control --json 2>/dev/null | python3 -c '
           import json, os, sys
           mid = os.environ.get("MID", "")
           try:
@@ -1915,7 +1938,7 @@ jobs:
               # release command in `fly deploy` remains the authoritative
               # migration gate). Events are newest-first; the first "exit"
               # event is the latest.
-              EXIT_CODE="$(fly machine list --app staging-modulo --json 2>/dev/null | python3 -c '
+              EXIT_CODE="$(fly machine list --app staging-farna-control --json 2>/dev/null | python3 -c '
           import json, os, sys
           mid = os.environ.get("MID", "")
           try:
@@ -1937,7 +1960,7 @@ jobs:
               if [ -n "$EXIT_CODE" ] && [ "$EXIT_CODE" != "0" ]; then
                 echo "::error::Pre-deploy migration machine ${MID} exited with code ${EXIT_CODE} - migrations failed; aborting the deploy before the swap."
                 echo "Capturing pre-migrate machine logs for diagnosis (FAR-717) ..."
-                fly logs --app staging-modulo --machine "$MID" --no-tail > /tmp/premigrate-failure.log 2>&1 || true
+                fly logs --app staging-farna-control --machine "$MID" --no-tail > /tmp/premigrate-failure.log 2>&1 || true
                 echo "----- pre-migrate machine log (tail) -----"
                 tail -200 /tmp/premigrate-failure.log || true
                 echo "----- end pre-migrate machine log -----"
@@ -1956,13 +1979,82 @@ jobs:
           done
           echo "::error::Pre-deploy migrations did not complete within ${TIMEOUT_MIN} minutes (machine ${MID} still running) - failing the run so the deploy is aborted; fix the root cause."
           echo "Capturing pre-migrate machine logs for diagnosis (FAR-717) ..."
-          fly logs --app staging-modulo --machine "$MID" --no-tail > /tmp/premigrate-failure.log 2>&1 || true
+          fly logs --app staging-farna-control --machine "$MID" --no-tail > /tmp/premigrate-failure.log 2>&1 || true
           echo "----- pre-migrate machine log (tail) -----"
           tail -100 /tmp/premigrate-failure.log || true
           echo "----- end pre-migrate machine log -----"
           exit 1
 
-      - name: Deploy to staging-modulo
+      # FAR-2656: a brand-new app, or one fully scaled to zero, has no worker
+      # machine, so /healthz/ready can never pass and `fly deploy` times out
+      # waiting on the app machine's health check before it creates the worker
+      # (observed twice against a zero-machine deployment). Create the worker
+      # process group first, from the SAME pre-built image, so the main
+      # deploy's health gate can pass. Skipped whenever the app already has an
+      # app/worker machine, so an ordinary deploy is unchanged.
+      - name: Pre-create worker process group from zero machines (staging)
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          IMAGE_REF: ${{ steps.build.outputs.IMAGE_REF }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/install-flyctl.sh
+          export FLYCTL_INSTALL="/home/runner/.fly"
+          export PATH="$FLYCTL_INSTALL/bin:$PATH"
+
+          # The one-off pre-migrate machine still exists at this point; it is
+          # NOT app capacity. Exclude the ids the rehearsal/pre-migrate steps
+          # recorded, and count only machines that belong to a real process
+          # group (the same attribute "Ensure worker machine exists" reads).
+          # Zero means the app is deploying from nothing.
+          PREMIGRATE_ID=""
+          if [ -f /tmp/premigrate-machine-id.txt ]; then
+            PREMIGRATE_ID="$(cat /tmp/premigrate-machine-id.txt 2>/dev/null || true)"
+          fi
+          REHEARSE_ID=""
+          if [ -f /tmp/prerehearse-machine-id.txt ]; then
+            REHEARSE_ID="$(cat /tmp/prerehearse-machine-id.txt 2>/dev/null || true)"
+          fi
+
+          if ! MACHINES_JSON="$(flyctl machines list -a "$DEPLOY_APP" --json)"; then
+            echo "::error::from-zero check: 'flyctl machines list -a ${DEPLOY_APP}' failed - cannot tell whether the app has machines. Refusing to deploy blind (an app that does not exist yet must be created before deploying)."
+            exit 1
+          fi
+          if ! MACHINE_COUNT="$(printf '%s' "$MACHINES_JSON" | jq -r --arg pre "$PREMIGRATE_ID" --arg rehearse "$REHEARSE_ID" '
+            if type != "array" then error("machines list did not return an array") else
+              [ .[]
+                | select(.id != $pre and .id != $rehearse)
+                | select(
+                    ((.config.metadata.fly_process_group // "") == "app")
+                    or ((.config.metadata.fly_process_group // "") == "worker")
+                    or ((.config.env.FLY_PROCESS_GROUP // "") == "app")
+                    or ((.config.env.FLY_PROCESS_GROUP // "") == "worker")
+                  )
+              ] | length
+            end' 2>/dev/null)"; then
+            echo "::error::from-zero check: could not parse 'flyctl machines list' output - refusing to deploy blind."
+            exit 1
+          fi
+          case "$MACHINE_COUNT" in
+            '' | *[!0-9]*)
+              echo "::error::from-zero check: machine count '${MACHINE_COUNT}' is not a number - refusing to deploy blind."
+              exit 1
+              ;;
+            *) : ;;
+          esac
+          if [ "$MACHINE_COUNT" -ne 0 ]; then
+            echo "machines present (${MACHINE_COUNT}): skipping from-zero pre-create"
+            exit 0
+          fi
+
+          echo "from-zero: pre-creating worker process group"
+          if ! timeout 900 flyctl deploy --app "$DEPLOY_APP" --image "$IMAGE_REF" --config "$DEPLOY_FLY_CONFIG" --process-groups worker; then
+            echo "::error::from-zero pre-create of the worker process group failed - the main deploy would time out on /healthz/ready. Failing now instead."
+            exit 1
+          fi
+
+      - name: Deploy to staging-farna-control
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -1981,7 +2073,7 @@ jobs:
           RETRY_DELAY=10
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "--- Deploy attempt $attempt of $MAX_RETRIES ---"
-            if fly deploy --app staging-modulo --image "$IMAGE_REF" --config deploy/fly/fly.staging.toml; then
+            if fly deploy --app "$DEPLOY_APP" --image "$IMAGE_REF" --config "$DEPLOY_FLY_CONFIG"; then
               echo "Deploy succeeded on attempt $attempt"
               exit 0
             else
@@ -1992,7 +2084,7 @@ jobs:
                 # out identically (2026-10-23 staging outage). Recover it first:
                 # restart it, or destroy it if the restart itself fails, so the
                 # retry creates a fresh machine instead of updating a corpse.
-                bash .github/scripts/restart-wedged-app-machines.sh staging-modulo
+                bash .github/scripts/restart-wedged-app-machines.sh "$DEPLOY_APP"
                 DELAY=$((RETRY_DELAY * 2 ** (attempt - 1)))
                 echo "Deploy failed (exit $EXIT_CODE) -- retrying in ${DELAY}s..."
                 sleep $DELAY
@@ -2026,7 +2118,7 @@ jobs:
           if [ -z "$MID" ]; then
             # Fallback: find a machine running the pre-migrate image that was
             # not present before the pre-migrate step created anything.
-            fly machine list --app staging-modulo --json > /tmp/premigrate-destroy.json 2>/dev/null || true
+            fly machine list --app staging-farna-control --json > /tmp/premigrate-destroy.json 2>/dev/null || true
             MID="$(python3 -c '
           import json, os
           image = os.environ.get("PREMIGRATE_IMAGE_REF", "")
@@ -2051,7 +2143,7 @@ jobs:
           ' 2>/dev/null || true)"
           fi
           if [ -n "$MID" ]; then
-            fly machine destroy "$MID" --app staging-modulo --force || true
+            fly machine destroy "$MID" --app staging-farna-control --force || true
             echo "Pre-migrate machine ${MID} destroyed (or already gone)."
           else
             echo "No pre-migrate machine found to destroy (it may never have been created)."
@@ -2081,7 +2173,7 @@ jobs:
           export PATH="$FLYCTL_INSTALL/bin:$PATH"
           LOG_DIR="/tmp/app-machine-logs"
           mkdir -p "$LOG_DIR" 2>/dev/null || true
-          fly machine list --app staging-modulo --json > "$LOG_DIR/machines.json" 2>&1 || true
+          fly machine list --app staging-farna-control --json > "$LOG_DIR/machines.json" 2>&1 || true
           python3 - "$LOG_DIR" <<'PY' > "$LOG_DIR/machines.tsv" 2>/dev/null || true
           import json
           import os
@@ -2105,7 +2197,7 @@ jobs:
             [ -z "$MID" ] && continue
             OUT="${LOG_DIR}/${GROUP}-${MID}.log"
             # Bounded: a log fetch must never add another multi-minute wait.
-            timeout 90 fly logs --app staging-modulo --machine "$MID" --no-tail > "$OUT" 2>&1 || true
+            timeout 90 fly logs --app staging-farna-control --machine "$MID" --no-tail > "$OUT" 2>&1 || true
             # The entrypoint prints the DATABASE_URL prefix; redact credentials
             # before the capture is echoed or persisted. Match on the
             # `://user:pw@` shape, not a bare `postgres(ql)://` prefix, so
@@ -2145,100 +2237,69 @@ jobs:
           retention-days: 3
 
       - name: Verify deployment
+        # FAR-2656: verify the app this job actually deployed. The deploy
+        # target moved to staging-farna-control, but the custom domain
+        # (staging-control.farna.dev) stays on the old app until the follow-up
+        # domain move, so resolving through the domain here would read the old
+        # app in that window. The app's own <app>.fly.dev host always serves
+        # the machine this job just rolled out.
         uses: ./.github/actions/verify-deployment
         with:
-          url: https://staging-control.farna.dev
+          url: https://staging-farna-control.fly.dev
 
       - name: Check deployed SHA
         shell: pwsh
+        # FAR-2656: a from-zero deploy starts brand-new machines, and the app
+        # can be several seconds away from answering its first request. Probe
+        # with a bounded wait instead of a single curl, so a cold start does
+        # not fail a deploy that is otherwise healthily rolling out.
         run: |
           $expectedSha = "${{ steps.git.outputs.git-sha }}".Substring(0, 7)
-          $info = curl -s -m 10 "https://staging-control.farna.dev/api/v1/deployment" 2>$null
-          if (-not $info) { Write-Host "No deployment info"; exit 1 }
+          $hostName = "staging-farna-control.fly.dev"
+          # 1) Wait (bounded) for the app to answer its readiness endpoint.
+          #    24 attempts at 5s intervals, capped at 120s wall clock, so a
+          #    hung probe cannot stretch the step past its budget.
+          $readyAttempts = 24
+          $ready = $false
+          $attempt = 0
+          $deadline = (Get-Date).AddSeconds(120)
+          while ($attempt -lt $readyAttempts -and (Get-Date) -lt $deadline) {
+            $attempt++
+            $code = curl -s -o /dev/null -m 5 -w "%{http_code}" "https://staging-farna-control.fly.dev/healthz/ready" 2>$null
+            if ($code -eq "200") { $ready = $true; break }
+            Write-Host "Readiness attempt $attempt/$readyAttempts on $hostName returned '$code'; retrying in 5s"
+            Start-Sleep -Seconds 5
+          }
+          if (-not $ready) {
+            Write-Host "::error::$hostName did not report readiness (HTTP 200) after $attempt attempts"
+            exit 1
+          }
+          # 2) Read the deployment info with a bounded retry. An empty body or
+          #    a non-2xx response is retryable; exhaustion fails loudly below.
+          $infoAttempts = 6
+          $info = ""
+          $infoFile = [System.IO.Path]::GetTempFileName()
+          for ($attempt = 1; $attempt -le $infoAttempts; $attempt++) {
+            $code = curl -s -m 5 -o $infoFile -w "%{http_code}" "https://staging-farna-control.fly.dev/api/v1/deployment" 2>$null
+            $raw = if (Test-Path -LiteralPath $infoFile) { Get-Content -Raw -LiteralPath $infoFile } else { $null }
+            $info = if ($raw) { $raw.Trim() } else { "" }
+            if ($code -eq "200" -and $info) { break }
+            $info = ""
+            Write-Host "Deployment info attempt $attempt/$infoAttempts on $hostName returned HTTP '$code'; retrying in 5s"
+            if ($attempt -lt $infoAttempts) { Start-Sleep -Seconds 5 }
+          }
+          Remove-Item -LiteralPath $infoFile -ErrorAction SilentlyContinue
+          if (-not $info) {
+            Write-Host "::error::No deployment info from $hostName after $infoAttempts attempts"
+            exit 1
+          }
           $deployInfo = $info | ConvertFrom-Json
           $deployedSha = if ($deployInfo.git_sha) { $deployInfo.git_sha.Substring(0, 7) } else { "?" }
           if ($deployedSha -ne $expectedSha) {
             Write-Host "SHA MISMATCH: deployed=$deployedSha expected=$expectedSha"
             exit 1
           }
-          Write-Host "staging-control.farna.dev SHA match: $deployedSha"
-
-      - name: Self-report deployed PRs to Modulo (fail-open, best-effort)
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
-          # Transitional dual-accept: the renamed secret is provisioned over time;
-          # fall back to the pre-rebrand secret name until then so the
-          # self-report POST never silently skips (fail-open). Drop the
-          # fallback once the new secret is provisioned everywhere.
-          FARNA_CONTROL_SELF_REPORT_URL: ${{ secrets.FARNA_CONTROL_SELF_REPORT_URL || secrets.MODULO_SELF_REPORT_URL }}
-          FARNA_CONTROL_SELF_REPORT_TOKEN: ${{ secrets.FARNA_CONTROL_SELF_REPORT_TOKEN }}
-        run: |
-          # FAR-145 follow-up (workflow self-report): the Deploy Agent carries PRs
-          # to staging/prod but never emitted work_item_refs, so the deploy stage of
-          # a lifecycle-map journey never advanced autonomously. This step discovers
-          # the PRs this deploy carries from the squash-merge commit messages on
-          # main ("Title (#123)" / "Merge pull request #123") and emits a
-          # self-report payload matching the work-item-refs contract in self_report.py
-          # ({kind, ref, status?} — advisory operator claims, confirm/match only,
-          # never mint). The parser reads the payload's work_item_refs list directly.
-          #
-          # stage_id: "deploy" names the lifecycle-map stage this workflow completes.
-          # The deploy stage is EXTERNAL (a GitHub Actions workflow, not a Modulo
-          # pipeline), so it has no pipeline_id for the advancement service to
-          # resolve; the endpoint uses stage_id to advance the journey into it.
-          #
-          # FAIL-OPEN BY DESIGN: discovery + the optional POST are guarded so a
-          # Modulo outage can NEVER fail the deploy. The payload is always recorded
-          # in the log; the POST only fires when FARNA_CONTROL_SELF_REPORT_URL is
-          # configured. The endpoint is POST
-          # /api/v1/lifecycle-maps/{lifecycle_map_id}/journeys/self-report
-          # (FAR-143); the URL secret points at the dogfood map's endpoint.
-          COMMITS=$(gh api "repos/${{ github.repository }}/commits?sha=${{ github.sha }}&per_page=30" --jq '.[].commit.message' 2>/dev/null || echo "")
-          NUMS=$(echo "$COMMITS" | grep -oE 'Merge pull request #[0-9]+|\(#[0-9]+\)' | grep -oE '[0-9]+' | sort -un || true)
-          [ -z "$NUMS" ] && { echo "No PR numbers found in the deployed commit range - nothing to self-report."; exit 0; }
-
-          # Ref contract: kind "pr" + bare number — webhook-minted journeys are keyed
-          # (org, "pr", "<number>") and the canonical journey key is uuid5(org:kind:ref), so kind "github_pr" would never match (the leading "#" was already stripped by canonicalisation and was never the issue).
-          REFS="[]"
-          for NUM in $NUMS; do
-            REFS=$(echo "$REFS" | jq -c --arg ref "${NUM}" '. + [{"kind": "pr", "ref": $ref, "status": "done"}]' 2>/dev/null || echo "$REFS")
-          done
-          PAYLOAD=$(jq -n --argjson refs "$REFS" \
-            '{event: "workflow_self_report", source: "github_actions", workflow: "deploy", stage_id: "deploy", work_item_refs: $refs}' 2>/dev/null) \
-            || PAYLOAD='{"event":"workflow_self_report","source":"github_actions","workflow":"deploy","stage_id":"deploy","work_item_refs":[]}'
-
-          echo "=== Modulo self-report payload (deployed PRs) ==="
-          echo "$PAYLOAD"
-
-          if [ -z "$FARNA_CONTROL_SELF_REPORT_URL" ]; then
-            echo "::notice::FARNA_CONTROL_SELF_REPORT_URL not configured - deployed PRs recorded in log only, POST skipped (fail-open)."
-            exit 0
-          fi
-
-          # Capture status + body: a 200 with {"accepted":0,"unmatched":1} must
-          # NOT read as success — that masking is the exact FAR-666 failure mode.
-          # Keep -sS (stderr stays visible: connection/TLS errors reach the log);
-          # drop -f so we can branch on the real HTTP status code.
-          HTTP_CODE=$(curl -sS -o "${RUNNER_TEMP}/self-report-body.json" -w '%{http_code}' --max-time 15 -X POST "$FARNA_CONTROL_SELF_REPORT_URL" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $FARNA_CONTROL_SELF_REPORT_TOKEN" \
-            -d "$PAYLOAD") || HTTP_CODE="000"
-
-          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "::warning::Modulo self-report POST failed (HTTP $HTTP_CODE): $(cat "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 'no body') - deployed PRs recorded in log only (fail-open)."
-            exit 0
-          fi
-
-          ACCEPTED=$(jq -r '.accepted // 0' "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 0)
-          UNMATCHED=$(jq -r '.unmatched // 0' "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 0)
-          REJECTED=$(jq -r '.rejected // 0' "${RUNNER_TEMP}/self-report-body.json" 2>/dev/null || echo 0)
-          REF_COUNT=$(echo "$PAYLOAD" | jq '.work_item_refs | length' 2>/dev/null || echo 0)
-          if [ "$UNMATCHED" -gt 0 ] || { [ "$ACCEPTED" -eq 0 ] && [ "$REF_COUNT" -gt 0 ]; }; then
-            echo "::warning::Modulo self-report matched no journeys (accepted=$ACCEPTED unmatched=$UNMATCHED rejected=$REJECTED) - check the ref kind/ref contract (expected kind 'pr' + bare PR number matching webhook-minted journeys)"
-            exit 0
-          fi
-          echo "Self-report delivered to Modulo (accepted=$ACCEPTED unmatched=$UNMATCHED)."
+          Write-Host "staging-farna-control.fly.dev SHA match: $deployedSha"
 
       - name: Ensure worker machine exists (staging)
         shell: bash
@@ -2250,7 +2311,7 @@ jobs:
           # Guard the parse: a transient `fly machine list` failure must not
           # fail the whole deploy job. Only machines in the 'started' state
           # count -- a stopped/crash-looping worker does not satisfy the check.
-          fly machine list --app staging-modulo --json > /tmp/worker-machines.json 2>/dev/null || true
+          fly machine list --app staging-farna-control --json > /tmp/worker-machines.json 2>/dev/null || true
           # Snapshot the machine IDs that exist BEFORE this step creates/clones
           # anything. The "Clean up stray machines" step uses this list so it
           # never destroys a machine this deploy just created/cloned.
@@ -2301,16 +2362,16 @@ jobs:
             # the correct process_group, so no --process-group flag is needed.
             if [ -n "$WORKER_ID" ]; then
               echo "No started worker machine -- cloning existing worker machine: $WORKER_ID"
-              fly machine clone "$WORKER_ID" --app staging-modulo --region lhr
+              fly machine clone "$WORKER_ID" --app staging-farna-control --region lhr
             elif [ -n "$IMAGE" ]; then
               # No worker machine exists at all -- create one from the deployed
               # image. The [processes] section of deploy/fly/fly.staging.toml assigns the group.
               echo "No worker machine exists -- creating one from the deployed image: $IMAGE"
-              fly machine run "$IMAGE" --app staging-modulo --region lhr -c deploy/fly/fly.staging.toml
+              fly machine run "$IMAGE" --app staging-farna-control --region lhr -c deploy/fly/fly.staging.toml
             else
               # Last resort: fresh build, still using the config for the worker group.
               echo "No worker machine and no deployed image resolvable -- creating one from a fresh build"
-              fly machine run . --app staging-modulo --region lhr -c deploy/fly/fly.staging.toml
+              fly machine run . --app staging-farna-control --region lhr -c deploy/fly/fly.staging.toml
             fi
           else
             echo "Started worker machine(s) already exist: $WORKER_COUNT"
@@ -2343,7 +2404,7 @@ jobs:
           attempt=0
           while [ "$attempt" -lt "$ATTEMPTS" ]; do
             attempt=$(( attempt + 1 ))
-            fly checks list --app staging-modulo --json > /tmp/worker-checks.json 2>/dev/null || true
+            fly checks list --app staging-farna-control --json > /tmp/worker-checks.json 2>/dev/null || true
             PASSING_MACHINES="$(python3 -c '
           import json
           try:
@@ -2393,17 +2454,17 @@ jobs:
           attempt=0
           while [ "$attempt" -lt "$ATTEMPTS" ]; do
             attempt=$(( attempt + 1 ))
-            if curl -fsS -m 10 https://staging-control.farna.dev/healthz/ready >/dev/null 2>&1; then
-              echo "staging-control.farna.dev /healthz/ready OK (attempt ${attempt})"
+            if curl -fsS -m 10 https://staging-farna-control.fly.dev/healthz/ready >/dev/null 2>&1; then
+              echo "staging-farna-control.fly.dev /healthz/ready OK (attempt ${attempt})"
               exit 0
             fi
             echo "healthz not ready yet (attempt ${attempt}/${ATTEMPTS}) - retrying in ${INTERVAL_SEC}s"
             sleep "$INTERVAL_SEC"
           done
-          echo "::error::staging-control.farna.dev did not become healthy after deploy - rolling back to previous release"
-          fly releases rollback staging-modulo
+          echo "::error::staging-farna-control.fly.dev did not become healthy after deploy - rolling back to previous release"
+          fly releases rollback staging-farna-control
           sleep 30
-          if curl -fsS -m 10 https://staging-control.farna.dev/healthz/ready >/dev/null 2>&1; then
+          if curl -fsS -m 10 https://staging-farna-control.fly.dev/healthz/ready >/dev/null 2>&1; then
             echo "Rollback restored service."
             exit 0
           fi
@@ -2421,10 +2482,10 @@ jobs:
           # Machines with NO process group are strays created by the old broken
           # worker-ensure parse (fly machine run without a group) and must be
           # destroyed or they accumulate and hit the Fly machine limit.
-          fly machine list --app staging-modulo --json > /tmp/cleanup-machines.json 2>/dev/null || true
+          fly machine list --app staging-farna-control --json > /tmp/cleanup-machines.json 2>/dev/null || true
           python3 - <<'PYEOF' || true
           import json
-          app = "staging-modulo"
+          app = "staging-farna-control"
           try:
               with open("/tmp/cleanup-machines.json") as f:
                   machines = json.load(f)
@@ -2527,10 +2588,10 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          Write-Host "Waiting for staging-control.farna.dev ..."
+          Write-Host "Waiting for staging-farna-control.fly.dev ..."
           for ($i=0; $i -lt 60; $i++) {
             try {
-              $r = curl -s -f "https://staging-control.farna.dev/healthz/ready" 2>$null
+              $r = curl -s -f "https://staging-farna-control.fly.dev/healthz/ready" 2>$null
               if ($LASTEXITCODE -eq 0) { Write-Host "Staging ready after ${i}s"; exit 0 }
             } catch {}
             Start-Sleep -Seconds 5
@@ -2549,6 +2610,10 @@ jobs:
         timeout-minutes: 90
         env:
           E2E_TARGET: staging
+          # FAR-2656: exercise the app deploy-staging just rolled out, not the
+          # old app still behind staging-control.farna.dev until the domain
+          # move. `E2E_BASE_URL` overrides the staging base URL in getBaseUrl().
+          E2E_BASE_URL: https://staging-farna-control.fly.dev
           E2E_NO_WEBSERVER: "true"
           E2E_ADMIN_EMAIL: ${{ secrets.E2E_STAGING_ADMIN_EMAIL }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_STAGING_ADMIN_PASSWORD }}
@@ -2587,6 +2652,11 @@ jobs:
     # pre-migrate + deploy + health gate). Without this, the GitHub default
     # of 360 min (6h) silently swallows a hang as 'cancelled'.
     timeout-minutes: 180
+    # The deploy target's identity, read by BOTH the from-zero pre-create step
+    # and the main deploy step, so an app rename moves them together (FAR-2656).
+    env:
+      DEPLOY_APP: farna-control
+      DEPLOY_FLY_CONFIG: fly.toml
     steps:
       - name: Echo run identity (pre-checkout)
         shell: bash
@@ -2642,14 +2712,14 @@ jobs:
           # --push --image-label). The image label carries the deploy SHA so
           # the pre-migrate machine and the deploy step can both reference it.
           IMAGE_LABEL="deploy-$(echo "${{ needs.deploy-throttle.outputs.run_sha }}" | cut -c1-12)"
-          IMAGE_REF="registry.fly.io/app-modulo:${IMAGE_LABEL}"
+          IMAGE_REF="registry.fly.io/farna-control:${IMAGE_LABEL}"
           echo "IMAGE_REF=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
 
           MAX_RETRIES=3
           RETRY_DELAY=10
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "--- Build attempt $attempt of $MAX_RETRIES ---"
-            if fly deploy --app app-modulo --build-only --push --image-label "$IMAGE_LABEL" --config fly.toml \
+            if fly deploy --app farna-control --build-only --push --image-label "$IMAGE_LABEL" --config fly.toml \
               --build-arg "GIT_SHA=${{ steps.git.outputs.git-sha }}" \
               --build-arg "GIT_BRANCH=${{ steps.git.outputs.git-branch }}" \
               --build-arg "GIT_COMMIT_TIMESTAMP=${{ steps.git.outputs.git-commit-timestamp }}" \
@@ -2708,7 +2778,7 @@ jobs:
 
           # Snapshot machine IDs BEFORE creating the one-off machine so ID
           # discovery (and the destroy step's fallback) can single it out.
-          fly machine list --app app-modulo --json > /tmp/prerehearse-before.json 2>/dev/null || true
+          fly machine list --app farna-control --json > /tmp/prerehearse-before.json 2>/dev/null || true
           python3 -c '
           import json
           try:
@@ -2735,7 +2805,7 @@ jobs:
           LAUNCH_RC=1
           while [ "$launch_attempt" -lt "$LAUNCH_ATTEMPTS" ]; do
             launch_attempt=$(( launch_attempt + 1 ))
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app app-modulo --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --env ALEMBIC_REHEARSAL=1 \
@@ -2744,6 +2814,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/prerehearse-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             if grep -qi 'failed to reach desired start state' \
@@ -2786,7 +2865,7 @@ jobs:
             discovery_attempt=0
             while [ "$discovery_attempt" -lt "$DISCOVERY_ATTEMPTS" ]; do
               discovery_attempt=$(( discovery_attempt + 1 ))
-              MID="$(fly machine list --app app-modulo --json 2>/dev/null | python3 -c '
+              MID="$(fly machine list --app farna-control --json 2>/dev/null | python3 -c '
            import json, os, sys
            image = os.environ.get("PREMIGRATE_IMAGE_REF", "")
            try:
@@ -2837,7 +2916,7 @@ jobs:
           attempt=0
           while [ "$attempt" -lt "$ATTEMPTS" ]; do
             attempt=$(( attempt + 1 ))
-            STATE="$(fly machine list --app app-modulo --json 2>/dev/null | python3 -c '
+            STATE="$(fly machine list --app farna-control --json 2>/dev/null | python3 -c '
           import json, os, sys
           mid = os.environ.get("MID", "")
           try:
@@ -2859,7 +2938,7 @@ jobs:
               # 0), so a missing exit_code is treated as success, exactly like
               # the real pre-migrate machine's gate below: the real run still
               # gates the deploy on migration success.
-              EXIT_CODE="$(fly machine list --app app-modulo --json 2>/dev/null | python3 -c '
+              EXIT_CODE="$(fly machine list --app farna-control --json 2>/dev/null | python3 -c '
           import json, os, sys
           mid = os.environ.get("MID", "")
           try:
@@ -2881,7 +2960,7 @@ jobs:
               if [ -n "$EXIT_CODE" ] && [ "$EXIT_CODE" != "0" ]; then
                 echo "::error::REHEARSAL migration machine ${MID} exited with code ${EXIT_CODE} - the rehearsal FAILED (a migration would fail against the real database); aborting the deploy before the real migration."
                 echo "Capturing rehearsal machine logs for diagnosis (FAR-717) ..."
-                fly logs --app app-modulo --machine "$MID" --no-tail > /tmp/prerehearse-failure.log 2>&1 || true
+                fly logs --app farna-control --machine "$MID" --no-tail > /tmp/prerehearse-failure.log 2>&1 || true
                 echo "----- rehearsal machine log (tail) -----"
                 tail -200 /tmp/prerehearse-failure.log || true
                 echo "----- end rehearsal machine log -----"
@@ -2900,7 +2979,7 @@ jobs:
           done
           echo "::error::Migration rehearsal did not complete within ${TIMEOUT_MIN} minutes (machine ${MID} still running) - failing the run so the deploy is aborted; fix the root cause."
           echo "Capturing rehearsal machine logs for diagnosis (FAR-717) ..."
-          fly logs --app app-modulo --machine "$MID" --no-tail > /tmp/prerehearse-failure.log 2>&1 || true
+          fly logs --app farna-control --machine "$MID" --no-tail > /tmp/prerehearse-failure.log 2>&1 || true
           echo "----- rehearsal machine log (tail) -----"
           tail -100 /tmp/prerehearse-failure.log || true
           echo "----- end rehearsal machine log -----"
@@ -2928,7 +3007,7 @@ jobs:
           if [ -z "$MID" ]; then
             # Fallback: find a machine running the pre-migrate image that was
             # not present before the rehearsal step created anything.
-            fly machine list --app app-modulo --json > /tmp/prerehearse-destroy.json 2>/dev/null || true
+            fly machine list --app farna-control --json > /tmp/prerehearse-destroy.json 2>/dev/null || true
             MID="$(python3 -c '
           import json, os
           image = os.environ.get("PREMIGRATE_IMAGE_REF", "")
@@ -2953,7 +3032,7 @@ jobs:
           ' 2>/dev/null || true)"
           fi
           if [ -n "$MID" ]; then
-            fly machine destroy "$MID" --app app-modulo --force || true
+            fly machine destroy "$MID" --app farna-control --force || true
             echo "Pre-rehearsal machine ${MID} destroyed (or already gone)."
           else
             echo "No pre-rehearsal machine found to destroy (it may never have been created)."
@@ -3038,7 +3117,7 @@ jobs:
 
           # Snapshot machine IDs BEFORE creating the one-off machine so ID
           # discovery (and the destroy step's fallback) can single it out.
-          fly machine list --app app-modulo --json > /tmp/premigrate-before.json 2>/dev/null || true
+          fly machine list --app farna-control --json > /tmp/premigrate-before.json 2>/dev/null || true
           python3 -c '
           import json
           try:
@@ -3091,7 +3170,7 @@ jobs:
             # --detach means RC=0 iff creation succeeded, so a retried attempt
             # does not leak a second machine; the single destroy below is
             # sufficient to clean up the one machine this loop creates.
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app app-modulo --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --detach \
@@ -3099,6 +3178,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/premigrate-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             # FAR-486: even with --detach, flyctl can still exit non-zero with
@@ -3170,7 +3258,7 @@ jobs:
             discovery_attempt=0
             while [ "$discovery_attempt" -lt "$DISCOVERY_ATTEMPTS" ]; do
               discovery_attempt=$(( discovery_attempt + 1 ))
-              MID="$(fly machine list --app app-modulo --json 2>/dev/null | python3 -c '
+              MID="$(fly machine list --app farna-control --json 2>/dev/null | python3 -c '
            import json, os, sys
            image = os.environ.get("PREMIGRATE_IMAGE_REF", "")
            try:
@@ -3234,7 +3322,7 @@ jobs:
           attempt=0
           while [ "$attempt" -lt "$ATTEMPTS" ]; do
             attempt=$(( attempt + 1 ))
-            STATE="$(fly machine list --app app-modulo --json 2>/dev/null | python3 -c '
+            STATE="$(fly machine list --app farna-control --json 2>/dev/null | python3 -c '
           import json, os, sys
           mid = os.environ.get("MID", "")
           try:
@@ -3257,7 +3345,7 @@ jobs:
               # release command in `fly deploy` remains the authoritative
               # migration gate). Events are newest-first; the first "exit"
               # event is the latest.
-              EXIT_CODE="$(fly machine list --app app-modulo --json 2>/dev/null | python3 -c '
+              EXIT_CODE="$(fly machine list --app farna-control --json 2>/dev/null | python3 -c '
           import json, os, sys
           mid = os.environ.get("MID", "")
           try:
@@ -3279,7 +3367,7 @@ jobs:
               if [ -n "$EXIT_CODE" ] && [ "$EXIT_CODE" != "0" ]; then
                 echo "::error::Pre-deploy migration machine ${MID} exited with code ${EXIT_CODE} - migrations failed; aborting the deploy before the swap."
                 echo "Capturing pre-migrate machine logs for diagnosis (FAR-717) ..."
-                fly logs --app app-modulo --machine "$MID" --no-tail > /tmp/premigrate-failure.log 2>&1 || true
+                fly logs --app farna-control --machine "$MID" --no-tail > /tmp/premigrate-failure.log 2>&1 || true
                 echo "----- pre-migrate machine log (tail) -----"
                 tail -200 /tmp/premigrate-failure.log || true
                 echo "----- end pre-migrate machine log -----"
@@ -3298,7 +3386,7 @@ jobs:
           done
           echo "::error::Pre-deploy migrations did not complete within ${TIMEOUT_MIN} minutes (machine ${MID} still running) - failing the run so the deploy is aborted; fix the root cause."
           echo "Capturing pre-migrate machine logs for diagnosis (FAR-717) ..."
-          fly logs --app app-modulo --machine "$MID" --no-tail > /tmp/premigrate-failure.log 2>&1 || true
+          fly logs --app farna-control --machine "$MID" --no-tail > /tmp/premigrate-failure.log 2>&1 || true
           echo "----- pre-migrate machine log (tail) -----"
           tail -100 /tmp/premigrate-failure.log || true
           echo "----- end pre-migrate machine log -----"
@@ -3384,7 +3472,76 @@ jobs:
           echo "::error::production still has active sandbox runs after ${WORKER_DRAIN_TIMEOUT_MINUTES} minutes; deploy was not started to avoid killing in-flight work."
           exit 1
 
-      - name: Deploy to app-modulo
+      # FAR-2656: a brand-new app, or one fully scaled to zero, has no worker
+      # machine, so /healthz/ready can never pass and `fly deploy` times out
+      # waiting on the app machine's health check before it creates the worker
+      # (observed twice against a zero-machine deployment). Create the worker
+      # process group first, from the SAME pre-built image, so the main
+      # deploy's health gate can pass. Skipped whenever the app already has an
+      # app/worker machine, so an ordinary deploy is unchanged.
+      - name: Pre-create worker process group from zero machines (production)
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          IMAGE_REF: ${{ steps.build.outputs.IMAGE_REF }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/install-flyctl.sh
+          export FLYCTL_INSTALL="/home/runner/.fly"
+          export PATH="$FLYCTL_INSTALL/bin:$PATH"
+
+          # The one-off pre-migrate machine still exists at this point; it is
+          # NOT app capacity. Exclude the ids the rehearsal/pre-migrate steps
+          # recorded, and count only machines that belong to a real process
+          # group (the same attribute "Ensure worker machine exists" reads).
+          # Zero means the app is deploying from nothing.
+          PREMIGRATE_ID=""
+          if [ -f /tmp/premigrate-machine-id.txt ]; then
+            PREMIGRATE_ID="$(cat /tmp/premigrate-machine-id.txt 2>/dev/null || true)"
+          fi
+          REHEARSE_ID=""
+          if [ -f /tmp/prerehearse-machine-id.txt ]; then
+            REHEARSE_ID="$(cat /tmp/prerehearse-machine-id.txt 2>/dev/null || true)"
+          fi
+
+          if ! MACHINES_JSON="$(flyctl machines list -a "$DEPLOY_APP" --json)"; then
+            echo "::error::from-zero check: 'flyctl machines list -a ${DEPLOY_APP}' failed - cannot tell whether the app has machines. Refusing to deploy blind (an app that does not exist yet must be created before deploying)."
+            exit 1
+          fi
+          if ! MACHINE_COUNT="$(printf '%s' "$MACHINES_JSON" | jq -r --arg pre "$PREMIGRATE_ID" --arg rehearse "$REHEARSE_ID" '
+            if type != "array" then error("machines list did not return an array") else
+              [ .[]
+                | select(.id != $pre and .id != $rehearse)
+                | select(
+                    ((.config.metadata.fly_process_group // "") == "app")
+                    or ((.config.metadata.fly_process_group // "") == "worker")
+                    or ((.config.env.FLY_PROCESS_GROUP // "") == "app")
+                    or ((.config.env.FLY_PROCESS_GROUP // "") == "worker")
+                  )
+              ] | length
+            end' 2>/dev/null)"; then
+            echo "::error::from-zero check: could not parse 'flyctl machines list' output - refusing to deploy blind."
+            exit 1
+          fi
+          case "$MACHINE_COUNT" in
+            '' | *[!0-9]*)
+              echo "::error::from-zero check: machine count '${MACHINE_COUNT}' is not a number - refusing to deploy blind."
+              exit 1
+              ;;
+            *) : ;;
+          esac
+          if [ "$MACHINE_COUNT" -ne 0 ]; then
+            echo "machines present (${MACHINE_COUNT}): skipping from-zero pre-create"
+            exit 0
+          fi
+
+          echo "from-zero: pre-creating worker process group"
+          if ! timeout 900 flyctl deploy --app "$DEPLOY_APP" --image "$IMAGE_REF" --config "$DEPLOY_FLY_CONFIG" --process-groups worker; then
+            echo "::error::from-zero pre-create of the worker process group failed - the main deploy would time out on /healthz/ready. Failing now instead."
+            exit 1
+          fi
+
+      - name: Deploy to farna-control
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -3404,7 +3561,7 @@ jobs:
           RETRY_DELAY=10
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "--- Deploy attempt $attempt of $MAX_RETRIES ---"
-            if fly deploy --app app-modulo --image "$IMAGE_REF" --config fly.toml; then
+            if fly deploy --app "$DEPLOY_APP" --image "$IMAGE_REF" --config "$DEPLOY_FLY_CONFIG"; then
               echo "Deploy succeeded on attempt $attempt"
               exit 0
             else
@@ -3415,7 +3572,7 @@ jobs:
                 # out identically (2026-10-23 staging outage). Recover it first:
                 # restart it, or destroy it if the restart itself fails, so the
                 # retry creates a fresh machine instead of updating a corpse.
-                bash .github/scripts/restart-wedged-app-machines.sh app-modulo
+                bash .github/scripts/restart-wedged-app-machines.sh "$DEPLOY_APP"
                 DELAY=$((RETRY_DELAY * 2 ** (attempt - 1)))
                 echo "Deploy failed (exit $EXIT_CODE) -- retrying in ${DELAY}s..."
                 sleep $DELAY
@@ -3449,7 +3606,7 @@ jobs:
           if [ -z "$MID" ]; then
             # Fallback: find a machine running the pre-migrate image that was
             # not present before the pre-migrate step created anything.
-            fly machine list --app app-modulo --json > /tmp/premigrate-destroy.json 2>/dev/null || true
+            fly machine list --app farna-control --json > /tmp/premigrate-destroy.json 2>/dev/null || true
             MID="$(python3 -c '
           import json, os
           image = os.environ.get("PREMIGRATE_IMAGE_REF", "")
@@ -3474,7 +3631,7 @@ jobs:
           ' 2>/dev/null || true)"
           fi
           if [ -n "$MID" ]; then
-            fly machine destroy "$MID" --app app-modulo --force || true
+            fly machine destroy "$MID" --app farna-control --force || true
             echo "Pre-migrate machine ${MID} destroyed (or already gone)."
           else
             echo "No pre-migrate machine found to destroy (it may never have been created)."
@@ -3499,7 +3656,7 @@ jobs:
           export PATH="$FLYCTL_INSTALL/bin:$PATH"
           LOG_DIR="/tmp/app-machine-logs"
           mkdir -p "$LOG_DIR" 2>/dev/null || true
-          fly machine list --app app-modulo --json > "$LOG_DIR/machines.json" 2>&1 || true
+          fly machine list --app farna-control --json > "$LOG_DIR/machines.json" 2>&1 || true
           python3 - "$LOG_DIR" <<'PY' > "$LOG_DIR/machines.tsv" 2>/dev/null || true
           import json
           import os
@@ -3523,7 +3680,7 @@ jobs:
             [ -z "$MID" ] && continue
             OUT="${LOG_DIR}/${GROUP}-${MID}.log"
             # Bounded: a log fetch must never add another multi-minute wait.
-            timeout 90 fly logs --app app-modulo --machine "$MID" --no-tail > "$OUT" 2>&1 || true
+            timeout 90 fly logs --app farna-control --machine "$MID" --no-tail > "$OUT" 2>&1 || true
             # The entrypoint prints the DATABASE_URL prefix; redact credentials
             # before the capture is echoed or persisted. Match on the
             # `://user:pw@` shape, not a bare `postgres(ql)://` prefix, so
@@ -3587,14 +3744,21 @@ jobs:
             done
             echo "TIMEOUT"; return 1
           }
-          if wait_healthy "https://control.farna.dev" "$HEALTH_GATE_MIN"; then
+          # FAR-2656: verify the app this job actually deployed. The production
+          # target moved to farna-control, but the custom domain
+          # (control.farna.dev) stays on the old app until the domain move, so
+          # resolving through the domain here would read the old app in that
+          # window and could report a false green for a broken new release.
+          # The app's own <app>.fly.dev host always serves the machine this job
+          # just rolled out.
+          if wait_healthy "https://farna-control.fly.dev" "$HEALTH_GATE_MIN"; then
             echo "deploy_healthy=true" >> "$GITHUB_OUTPUT"
             echo "rolled_back=false" >> "$GITHUB_OUTPUT"
-            echo "control.farna.dev healthy - new release deployed."
+            echo "farna-control.fly.dev healthy - new release deployed."
             exit 0
           fi
-          echo "::error::control.farna.dev not healthy after deploy - rolling back to last complete release"
-          LAST_GOOD=$(fly releases --app app-modulo --json 2>/dev/null | python3 -c 'import json,sys
+          echo "::error::farna-control.fly.dev not healthy after deploy - rolling back to last complete release"
+          LAST_GOOD=$(fly releases --app farna-control --json 2>/dev/null | python3 -c 'import json,sys
           try:
               rels=json.load(sys.stdin)
           except Exception:
@@ -3607,8 +3771,8 @@ jobs:
             echo "rolled_back=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
-          echo "Rolling back app-modulo to $LAST_GOOD"
-          if ! fly deploy --app app-modulo --image "$LAST_GOOD"; then
+          echo "Rolling back farna-control to $LAST_GOOD"
+          if ! fly deploy --app farna-control --image "$LAST_GOOD"; then
             echo "::error::Rollback deploy also failed - manual intervention required (FAR-403)."
             echo "deploy_healthy=false" >> "$GITHUB_OUTPUT"
             echo "rolled_back=false" >> "$GITHUB_OUTPUT"
@@ -3624,17 +3788,60 @@ jobs:
         if: steps.verify.outputs.rolled_back == 'false'
         id: deployed
         shell: pwsh
+        # FAR-2656: a from-zero deploy starts brand-new machines, and the app
+        # can be several seconds away from answering its first request. Probe
+        # with a bounded wait instead of a single curl, so a cold start does
+        # not fail a deploy that is otherwise healthily rolling out.
         run: |
           $expectedSha = "${{ steps.git.outputs.git-sha }}".Substring(0, 7)
-          $info = curl -s -m 10 "https://control.farna.dev/api/v1/deployment" 2>$null
-          if (-not $info) { Write-Host "No deployment info"; exit 1 }
+          # FAR-2656: the deployed-SHA check must read the app this job
+          # deployed (farna-control), not the custom domain, which still points
+          # at the old app until the domain move.
+          $hostName = "farna-control.fly.dev"
+          # 1) Wait (bounded) for the app to answer its readiness endpoint.
+          #    24 attempts at 5s intervals, capped at 120s wall clock, so a
+          #    hung probe cannot stretch the step past its budget.
+          $readyAttempts = 24
+          $ready = $false
+          $attempt = 0
+          $deadline = (Get-Date).AddSeconds(120)
+          while ($attempt -lt $readyAttempts -and (Get-Date) -lt $deadline) {
+            $attempt++
+            $code = curl -s -o /dev/null -m 5 -w "%{http_code}" "https://farna-control.fly.dev/healthz/ready" 2>$null
+            if ($code -eq "200") { $ready = $true; break }
+            Write-Host "Readiness attempt $attempt/$readyAttempts on $hostName returned '$code'; retrying in 5s"
+            Start-Sleep -Seconds 5
+          }
+          if (-not $ready) {
+            Write-Host "::error::$hostName did not report readiness (HTTP 200) after $attempt attempts"
+            exit 1
+          }
+          # 2) Read the deployment info with a bounded retry. An empty body or
+          #    a non-2xx response is retryable; exhaustion fails loudly below.
+          $infoAttempts = 6
+          $info = ""
+          $infoFile = [System.IO.Path]::GetTempFileName()
+          for ($attempt = 1; $attempt -le $infoAttempts; $attempt++) {
+            $code = curl -s -m 5 -o $infoFile -w "%{http_code}" "https://farna-control.fly.dev/api/v1/deployment" 2>$null
+            $raw = if (Test-Path -LiteralPath $infoFile) { Get-Content -Raw -LiteralPath $infoFile } else { $null }
+            $info = if ($raw) { $raw.Trim() } else { "" }
+            if ($code -eq "200" -and $info) { break }
+            $info = ""
+            Write-Host "Deployment info attempt $attempt/$infoAttempts on $hostName returned HTTP '$code'; retrying in 5s"
+            if ($attempt -lt $infoAttempts) { Start-Sleep -Seconds 5 }
+          }
+          Remove-Item -LiteralPath $infoFile -ErrorAction SilentlyContinue
+          if (-not $info) {
+            Write-Host "::error::No deployment info from $hostName after $infoAttempts attempts"
+            exit 1
+          }
           $deployInfo = $info | ConvertFrom-Json
           $deployedSha = if ($deployInfo.git_sha) { $deployInfo.git_sha.Substring(0, 7) } else { "?" }
           if ($deployedSha -ne $expectedSha) {
             Write-Host "SHA MISMATCH: deployed=$deployedSha expected=$expectedSha"
             exit 1
           }
-          Write-Host "control.farna.dev SHA match: $deployedSha"
+          Write-Host "farna-control.fly.dev SHA match: $deployedSha"
           "deployed_sha=$deployedSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       # FAR-954: annotate the deployed SHA on the job log so the Actions UI
@@ -3643,7 +3850,7 @@ jobs:
         if: steps.verify.outputs.rolled_back == 'false' && steps.deployed.outputs.deployed_sha
         shell: bash
         run: |
-          echo "::notice::DEPLOYED: control.farna.dev is now running ${{ steps.deployed.outputs.deployed_sha }} (commit ${{ steps.git.outputs.git-sha }})"
+          echo "::notice::DEPLOYED: farna-control is now running ${{ steps.deployed.outputs.deployed_sha }} (commit ${{ steps.git.outputs.git-sha }})"
 
       - name: Ensure worker machine exists (production)
         if: steps.verify.outputs.rolled_back == 'false'
@@ -3656,7 +3863,7 @@ jobs:
           # Guard the parse: a transient `fly machine list` failure must not
           # fail the whole deploy job. Only machines in the 'started' state
           # count -- a stopped/crash-looping worker does not satisfy the check.
-          fly machine list --app app-modulo --json > /tmp/worker-machines.json 2>/dev/null || true
+          fly machine list --app farna-control --json > /tmp/worker-machines.json 2>/dev/null || true
           # Snapshot the machine IDs that exist BEFORE this step creates/clones
           # anything. The "Clean up stray machines" step uses this list so it
           # never destroys a machine this deploy just created/cloned.
@@ -3707,16 +3914,16 @@ jobs:
             # the correct process_group, so no --process-group flag is needed.
             if [ -n "$WORKER_ID" ]; then
               echo "No started worker machine -- cloning existing worker machine: $WORKER_ID"
-              fly machine clone "$WORKER_ID" --app app-modulo --region lhr
+              fly machine clone "$WORKER_ID" --app farna-control --region lhr
             elif [ -n "$IMAGE" ]; then
               # No worker machine exists at all -- create one from the deployed
               # image. The [processes] section of fly.toml assigns the group.
               echo "No worker machine exists -- creating one from the deployed image: $IMAGE"
-              fly machine run "$IMAGE" --app app-modulo --region lhr -c fly.toml
+              fly machine run "$IMAGE" --app farna-control --region lhr -c fly.toml
             else
               # Last resort: fresh build, still using the config for the worker group.
               echo "No worker machine and no deployed image resolvable -- creating one from a fresh build"
-              fly machine run . --app app-modulo --region lhr -c fly.toml
+              fly machine run . --app farna-control --region lhr -c fly.toml
             fi
           else
             echo "Started worker machine(s) already exist: $WORKER_COUNT"
@@ -3750,7 +3957,7 @@ jobs:
           attempt=0
           while [ "$attempt" -lt "$ATTEMPTS" ]; do
             attempt=$(( attempt + 1 ))
-            fly checks list --app app-modulo --json > /tmp/worker-checks.json 2>/dev/null || true
+            fly checks list --app farna-control --json > /tmp/worker-checks.json 2>/dev/null || true
             PASSING_MACHINES="$(python3 -c '
           import json
           try:
@@ -3825,10 +4032,10 @@ jobs:
           # Machines with NO process group are strays created by the old broken
           # worker-ensure parse (fly machine run without a group) and must be
           # destroyed or they accumulate and hit the Fly machine limit.
-          fly machine list --app app-modulo --json > /tmp/cleanup-machines.json 2>/dev/null || true
+          fly machine list --app farna-control --json > /tmp/cleanup-machines.json 2>/dev/null || true
           python3 - <<'PYEOF' || true
           import json
-          app = "app-modulo"
+          app = "farna-control"
           try:
               with open("/tmp/cleanup-machines.json") as f:
                   machines = json.load(f)
@@ -3877,7 +4084,7 @@ jobs:
     # FAR-908: deploy-production infrastructure failures (Fly API errors,
     # image build failures, migration failures) previously had NO
     # notification. Same rationale as notify-deploy-staging-failure: the
-    # Branch Fixer webhook creates a visible Modulo pipeline run for triage,
+    # Branch Fixer webhook creates a visible Farna Control pipeline run for triage,
     # and the staleness-check/watchdog handle re-dispatch independently.
     #
     # The FEEDBACK text begins with "INFRASTRUCTURE FAILURE" to distinguish
@@ -3908,7 +4115,7 @@ jobs:
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
-          DISPATCH_LABEL: "Modulo Branch Fixer"
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
           BRANCH: main
           PR_NUMBER: "0"
           HEAD_SHA: ${{ github.sha }}
@@ -4007,12 +4214,16 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install chromium
 
-      - name: Run @smoke Playwright tests against control.farna.dev
+      - name: Run @smoke Playwright tests against farna-control.fly.dev
         id: smoke-tests
         run: pnpm run test:e2e:smoke -- --reporter=line
         timeout-minutes: 10
         env:
           E2E_TARGET: app
+          # FAR-2656: exercise the app deploy-production just rolled out, not the
+          # old app still behind control.farna.dev until the domain move.
+          # `E2E_BASE_URL` overrides the app base URL in getBaseUrl().
+          E2E_BASE_URL: https://farna-control.fly.dev
           E2E_NO_WEBSERVER: "true"
           E2E_ADMIN_EMAIL: ${{ secrets.E2E_PROD_ADMIN_EMAIL }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_PROD_ADMIN_PASSWORD }}
@@ -4151,24 +4362,24 @@ jobs:
           |---|---|---|---|---|
           | `deploy-throttle` | Yes | Yes (skips deploy) | Fails loud (::error::) | Actions tab |
           | `deploy-throttle-status` | No | No (visibility only) | N/A — summary annotation | Step summary |
-          | `backend-lint` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `backend-unit` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `frontend-checks` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `integration-tests` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `security-audit` | Yes | Yes (via gate) | Branch Fixer webhook | Modulo pipeline |
-          | `pre-deploy-gate` | Yes | Yes (aggregates above) | Branch Fixer webhook | Modulo pipeline |
-          | `notify-deploy-failure` | Yes | No (notification only) | Branch Fixer webhook (ALL downstream failures) | Modulo pipeline |
-          | `deploy-staging` | Yes | Yes | Branch Fixer webhook (triage) + watchdog re-dispatch | Modulo pipeline + Actions |
+          | `backend-lint` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `backend-unit` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `frontend-checks` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `integration-tests` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `security-audit` | Yes | Yes (via gate) | Branch Fixer webhook | Farna Control pipeline |
+          | `pre-deploy-gate` | Yes | Yes (aggregates above) | Branch Fixer webhook | Farna Control pipeline |
+          | `notify-deploy-failure` | Yes | No (notification only) | Branch Fixer webhook (ALL downstream failures) | Farna Control pipeline |
+          | `deploy-staging` | Yes | Yes | Branch Fixer webhook (triage) + watchdog re-dispatch | Farna Control pipeline + Actions |
           | `notify-deploy-staging-failure` | Yes | No (notification only) | N/A — IS the signal | — |
-          | `staging-e2e` | Yes | Yes | Branch Fixer webhook | Modulo pipeline |
+          | `staging-e2e` | Yes | Yes | Branch Fixer webhook | Farna Control pipeline |
           | `notify-staging-e2e-failure` | Yes | No (notification only) | N/A — IS the signal | — |
-          | `deploy-production` | Yes | Yes | Branch Fixer webhook (triage) + staleness-check escalation | Modulo pipeline + Actions |
+          | `deploy-production` | Yes | Yes | Branch Fixer webhook (triage) + staleness-check escalation | Farna Control pipeline + Actions |
           | `notify-deploy-production-failure` | Yes | No (notification only) | N/A — IS the signal | — |
-          | `prod-smoke` | Yes | Yes | Branch Fixer webhook | Modulo pipeline |
+          | `prod-smoke` | Yes | Yes | Branch Fixer webhook | Farna Control pipeline |
           | `notify-prod-smoke-failure` | Yes | No (notification only) | N/A — IS the signal | — |
 
           ### Coverage rules
-          - **Code failures** (tests, lint): routed to Branch Fixer via webhook → Modulo pipeline run
+          - **Code failures** (tests, lint): routed to Branch Fixer via webhook → Farna Control pipeline run
           - **Infrastructure failures** (deploy-staging, deploy-production): routed to Branch Fixer as triage + deploy-watchdog re-dispatches + deploy-staleness-check escalates
           - **ALL deploy-stage failures** (FAR-912): `notify-deploy-failure` now fires on ANY downstream failure (pre-deploy-gate, deploy-staging, staging-e2e, deploy-production, prod-smoke) — the broad catch-all dispatch for the Branch Fixer; the per-stage notify-* jobs add stage-specific feedback
           - **Notification-only jobs** (notify-*): always succeed; their purpose IS the signal

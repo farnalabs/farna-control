@@ -1,7 +1,8 @@
 <template>
   <div :class="rootClass" role="alert" aria-live="assertive">
     <div class="min-w-0">
-      <p v-if="isProblem">{{ problem!.title }}: {{ problem!.detail }}</p>
+      <slot v-if="$slots.default" />
+      <p v-else-if="isProblem">{{ problem!.title }}: {{ problem!.detail }}</p>
       <p v-else-if="message">{{ message }}</p>
       <button type="button"
         v-if="onRetry && retryable !== false"
@@ -11,6 +12,9 @@
       >
         {{ $t('components.ErrorAlert.retry') }}
       </button>
+      <div v-if="$slots.actions" class="mt-2 flex flex-wrap items-center gap-2">
+        <slot name="actions" />
+      </div>
     </div>
     <button
       v-if="onDismiss && dismissLabel && dismissIcon"
@@ -43,6 +47,17 @@
  * rendered but never announced. Call sites that already pass `role="alert"`
  * (FolderListError, the pipeline move banner) keep working unchanged, and a
  * caller-supplied role still wins via attribute fallthrough.
+ *
+ * There is exactly ONE live region (this root). A caller that passes body
+ * content through the default slot — a validation-error list, a bespoke
+ * message shape — must not add a second `role="alert"`/`aria-live` inside it:
+ * the body is part of this root's announcement.
+ *
+ * Slots:
+ * - default: replaces the message text (a `ProblemDetail` or `message` string)
+ *   when supplied; the retry/dismiss controls stay available.
+ * - actions: extra controls beneath the body (e.g. a retry button for surfaces
+ *   that do not use the inline `onRetry` affordance).
  */
 import { computed } from 'vue'
 import { X } from '@lucide/vue'

@@ -61,6 +61,11 @@ def _pg_session(statements: list[Any], rows: list[object], *, guc_prev: tuple[An
 
     Dispatches on SQL text: the GUC read returns ``guc_prev``, the candidate
     SELECT returns ``rows``, the set_config statements return a blank result.
+
+    ``guc_prev``'s org MUST be the org passed to the read (ADR 070 §3): the
+    widen is refused unless the session is already bound to it, which every
+    authenticated request path establishes (``set_rls_org`` from the
+    principal) before running a team-scope gate.
     """
     session = AsyncMock()
     bind = MagicMock()
@@ -114,7 +119,7 @@ async def test_postgres_read_saves_widens_selects_then_restores_in_order() -> No
     """
     conn = _hidden_team_connector()
     statements: list[Any] = []
-    session = _pg_session(statements, [conn], guc_prev=("", ""))
+    session = _pg_session(statements, [conn], guc_prev=(str(_ORG_ID), ""))
 
     mismatches = await find_connector_team_mismatches(session, _ORG_ID, _TEAM_A, _binding(conn))
 
@@ -133,7 +138,10 @@ async def test_postgres_read_saves_widens_selects_then_restores_in_order() -> No
     widen_kwargs = statements[1][1]
     assert widen_kwargs == {"oid": str(_ORG_ID)}, "the widened read must stay AND-gated to this org"
     restore_kwargs = statements[3][1]
-    assert restore_kwargs == {"oid": "", "exec_ctx": ""}, "the caller's previous GUCs must be restored"
+    # The restored org is by construction the one already in force (ADR 070 §3:
+    # the widen is refused unless the session is bound to it), so the restore's
+    # load-bearing half is the TEAM clause going back to the caller's value.
+    assert restore_kwargs == {"oid": str(_ORG_ID), "exec_ctx": ""}, "the caller's previous GUCs must be restored"
 
     # The widened read surfaced Team-B's hidden row and judged it: without the
     # fix this list was EMPTY (row absent -> silently skipped -> save accepted).
@@ -154,14 +162,14 @@ async def test_postgres_read_restores_the_context_even_when_the_select_raises() 
     """A failed SELECT must not leave the request transaction team-blind."""
     conn = _hidden_team_connector()
     statements: list[Any] = []
-    session = _pg_session(statements, [conn], guc_prev=("prev-org", "prev-exec"))
+    session = _pg_session(statements, [conn], guc_prev=(str(_ORG_ID), "prev-exec"))
 
     async def _boom(stmt: Any, *args: Any, **kwargs: Any) -> Any:
         statements.append((str(stmt), args[0] if args else kwargs))
         if "FROM connector_instances" in str(stmt):
             raise RuntimeError("connection lost")
         guc_result = MagicMock()
-        guc_result.one.return_value = ("prev-org", "prev-exec")
+        guc_result.one.return_value = (str(_ORG_ID), "prev-exec")
         return guc_result
 
     session.execute = AsyncMock(side_effect=_boom)
@@ -172,7 +180,7 @@ async def test_postgres_read_restores_the_context_even_when_the_select_raises() 
     restore_statements = [sql for sql, _kw in statements if "set_config" in sql and "'true'" not in sql]
     assert restore_statements, f"the context must be restored in a finally; statements: {[s for s, _ in statements]}"
     restore_kwargs = [kw for sql, kw in statements if "set_config" in sql and "'true'" not in sql]
-    assert restore_kwargs[-1] == {"oid": "prev-org", "exec_ctx": "prev-exec"}
+    assert restore_kwargs[-1] == {"oid": str(_ORG_ID), "exec_ctx": "prev-exec"}
 
 
 @pytest.mark.asyncio
@@ -203,7 +211,7 @@ async def test_postgres_read_reports_an_unresolvable_binding_as_a_refusal() -> N
     from farna.core.team_visibility import ConnectorBindingMissingError
 
     statements: list[Any] = []
-    session = _pg_session(statements, [], guc_prev=("", ""))
+    session = _pg_session(statements, [], guc_prev=(str(_ORG_ID), ""))
     missing_id = uuid.uuid4()
 
     with pytest.raises(ConnectorBindingMissingError) as excinfo:

@@ -155,9 +155,62 @@ See the feature's contract line in `docs/product-map/system/runtime.md`.
 
 ## Upgrade Path: Dump Before Migrating
 
-A schema change is a migration event. Take a dump before running
-`alembic upgrade heads`, so a bad upgrade has a recovery point that does not
-depend on the migration itself.
+A schema change is a migration event. Every upgrade path that can take the
+dump takes it itself, immediately before the migrations run, so a bad upgrade
+always has a recovery point that does not depend on the operator remembering a
+command:
+
+| Path | Who takes the snapshot | Where it lands |
+|------|------------------------|----------------|
+| Container (compose) | the image entrypoint, immediately before `alembic upgrade heads` and only when a migration is pending | `/backups/pre-upgrade-dump-<TAG>-<ts>/` in the `snapshot_data` volume |
+| Native bundle | `farna-control upgrade` / the installer, before the binary swap and only when a migration is pending against the new bundle | `<data-dir>/pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/` |
+| Fly.io | nobody — the `[release]` command migrates before any machine boots, so the boot cannot see a pending migration; take an out-of-band backup before a schema-changing deploy | n/a |
+
+Every path calls the same helper and shares the same guarantees:
+
+- **Only when a migration is pending.** A database already at the code's
+  migration head cannot be changed by the boot, so no snapshot is taken (one
+  line says so). The decision is made inside the shared helper, so no caller —
+  not the container boot, not the installer — can bypass it. This is what stops
+  a release that migrates and then crash-loops from replacing its own
+  pre-upgrade recovery point on each restart, and what stops an installer
+  re-run from rotating it for nothing.
+- **Proven complete at dump time.** A plain SQL dump that is cut short still
+  replays as a shorter script, so the snapshot is accepted only if pg_dump's
+  completion marker is the final non-empty line of the file and the dump
+  checksums. An incomplete dump is swept and the upgrade is refused.
+- **Refused when there is no room.** The output filesystem must have at least
+  `max(2 GB, 1.25 x pg_database_size(current_database()))` free, plus the bytes
+  of the snapshots retention keeps. Otherwise the upgrade refuses and says so;
+  nothing is changed.
+- **Retention keeps the recovery points that matter.** Dump, verify, then
+  prune. Kept: the two newest verified snapshots, plus the newest snapshot
+  recording EXACTLY the database's current schema — the recovery point a
+  database that did not move since (a failed migration, a rollback) depends on.
+  At most three directories survive; older generations are superseded and
+  deleted, so snapshots cannot accumulate until the disk guard refuses every
+  upgrade. Nothing is deleted before its replacement verifies, and a corrupt
+  (checksum-mismatched) snapshot is the one that is pruned, not the good one
+  beside it.
+- **Replayable by the release that took it.** pg_dump emits the settings of the
+  *client* it came from; a client newer than the server writes settings the
+  server rejects (pg_dump 17 writes `SET transaction_timeout` /
+  `SELECT pg_catalog.set_config('transaction_timeout', ...)`, PostgreSQL 16
+  refuses it) and wraps the dump in `\restrict` / `\unrestrict` meta-commands an
+  older psql rejects. The dump's preamble is rewritten to drop settings the
+  target server does not know and those meta-commands, so the snapshot restores
+  into the server it came from.
+
+The manual dump below remains the out-of-band fallback (for example when the
+stack is stopped, or to keep a recovery point on separate media).
+
+### 1. Take a dump by hand (fallback)
+
+```bash
+cd /opt/modulo/backend
+uv run farna-control backup --db-url "$DATABASE_URL" \
+  --output-dir "/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S)"
+```
 
 ### Which tool, which artifact
 
@@ -170,27 +223,33 @@ This page documents two backup tools. They produce different artifacts and are
 | `farna-control backup` | a **directory** holding `database.sql`, the three checkpoint JSON exports, `credentials_references.json` and `backup-info.json` | `farna-control restore <directory>` | **No** - the directory is written unencrypted |
 
 `scripts/restore.py --input` reads only a `scripts/backup.py` archive, and
-`farna-control restore` reads only a directory written by `farna-control backup`. The
-version-upgrade procedure in
-[`docs/upgrade-process.md`](../upgrade-process.md) uses the `scripts/backup.py`
-/ `scripts/restore.py` pair - the encrypted archive - so that is the pair to
-use when following that procedure. The `farna-control backup` / `farna-control restore` pair
-described below is the in-product database-level dump; the AES-256-CBC claim in
-the Overview applies to `scripts/backup.py` only, so store a `farna-control backup`
-directory on encrypted media if the archive itself must be encrypted.
+`farna-control restore` reads only a directory written by `farna-control backup`
+(or by an upgrade's automatic pre-upgrade snapshot, which writes the same
+directory shape). The automatic upgrade snapshots described above use the
+`farna-control` directory, so that is the format a bad upgrade is recovered
+with. The `scripts/backup.py` / `scripts/restore.py` pair remains the
+encrypted-media / offsite tool. The AES-256-CBC claim in the Overview applies
+to `scripts/backup.py` only, so store a `farna-control backup` directory on
+encrypted media if the archive itself must be encrypted.
 `scripts/backup-prune.py` prunes only `modulo-backup-*.tar.gz.enc` files, so it
 does NOT prune `farna-control backup` directories - delete those yourself.
 
 The `farna-control` and `alembic` commands in this section run from `backend/`, where
-`alembic.ini` and the `farna-control` entry point live (step 1 changes into it).
+`alembic.ini` and the `farna-control` entry point live — run the commands below from it.
 
 ### 1. Take the dump
 
 ```bash
-cd /opt/modulo/backend
-uv run farna-control backup --db-url "$DATABASE_URL" \
-  --output-dir "/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S)"
+# Run from the backend/ directory (the fallback example above shows the path).
+uv run farna-control backup --output-dir "/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S)"
 ```
+
+`farna-control backup` and `restore` resolve their maintenance connection from
+`--db-url` if given, else `DATABASE_ADMIN_URL`, else the configured
+`DATABASE_URL` — in that order. `DATABASE_ADMIN_URL` is preferred because the
+application role is `NOBYPASSRLS` (a dump through it is row-partial, and a
+restore cannot DROP/CREATE), and because leaving the URL out of the command
+keeps the superuser password out of the shell history and the process argv.
 
 Give every dump its own directory. `--output-dir` creates the directory when it
 is missing but reuses it when it exists, and the files inside it are
@@ -202,8 +261,14 @@ That writes `database.sql` (a `pg_dump` of schema and data), the three
 LangGraph checkpoint JSON exports (`checkpoints.json`,
 `checkpoint_blobs.json`, `checkpoint_writes.json`),
 `credentials_references.json`, and a `backup-info.json` manifest recording the
-schema head and a SHA-256 checksum per file. `pg_dump` and `psql` must be on
-`PATH`, at the same major version as the server.
+schema head, a SHA-256 checksum per file, and the dump-time completeness
+attestation. `pg_dump` and `psql` must be on `PATH`; a client whose major is
+newer than the server is supported (the dump preamble is rewritten to drop
+settings the server does not know).
+
+`farna-control backup` now refuses a dump that is empty, truncated, or a
+pg_dump custom-format (`-Fc`) archive: the snapshot is proven complete before
+the manifest is written.
 
 ### 2. Upgrade and check the result
 
@@ -222,15 +287,100 @@ Check the archive first, then restore it (substituting the timestamped
 directory you dumped in step 1):
 
 ```bash
-uv run farna-control restore /backups/pre-upgrade-<timestamp> --db-url "$DATABASE_URL" --dry-run
-uv run farna-control restore /backups/pre-upgrade-<timestamp> --db-url "$DATABASE_URL" --yes
+uv run farna-control restore /backups/pre-upgrade-<timestamp> --dry-run
+uv run farna-control restore /backups/pre-upgrade-<timestamp> --yes
 ```
 
 `restore` verifies every file against the manifest's checksums before it
-touches the database; `--dry-run` performs those checks and stops. Because
-`database.sql` is a dump of the whole database, restoring it also restores the
-pre-upgrade `alembic_version` row, leaving the database recorded at the
-revision it was dumped from.
+touches the database; `--dry-run` performs those checks and stops, with no side
+effects (it does not stop the launcher or take the data-dir lock). It also
+refuses, loudly and before anything is written, a dump that:
+
+- is **missing** while the manifest describes one (a manifest entry that
+  records a `database.sql` checksum, or an upgrade snapshot, must have the file
+  on disk — a silent no-op restore is worse than a refusal);
+- the manifest records **no checksum** for (a foreign or hand-assembled
+  archive cannot be proven to belong to this backup);
+- fails pg_dump's completion re-check, when the manifest attested completeness
+  at dump time (a file truncated after the manifest was written). The marker
+  must be the final non-empty line, not merely present somewhere in the tail;
+- is a pg_dump **custom-format** (`-Fc`) archive, which this restore path
+  cannot replay.
+
+A manifest filename that escapes the archive directory (an absolute path, `..`,
+or a symlink) is refused as well: the checksum loop would otherwise hash an
+arbitrary file and print its digest. psql runs with `-X`, so an operator's
+`~/.psqlrc` cannot turn `ON_ERROR_STOP` off and let a rolled-back restore exit
+zero.
+
+`--verify-target-schema` is the compose path's stand-in for the data-dir
+instance identity: it refuses unless the TARGET database records exactly the
+schema revisions the archive was taken from. `--replace-cluster` overrides it.
+The disk pre-flight measures the DATABASE's filesystem — pass `--target-fs` (or
+set `DB_CAPACITY_PATH`, which the compose deployment does) when the archive is
+on a different volume from the database.
+
+Because `database.sql` is a dump of the whole database, restoring it also
+restores the pre-upgrade `alembic_version` row, leaving the database recorded
+at the revision it was dumped from.
+
+With `--data-dir`, restore **stops a running launcher itself** and leaves the
+stack stopped; it prints the exact `farna-control start --data-dir <dir>`
+command on failure as well as success — and on a Ctrl-C / `SIGTERM` interrupt,
+which is the same dark-stack risk — a failed restore must not leave a dark
+stack with nothing to copy, and never restarts anything. Without `--data-dir`
+it prints the compose start command instead. Nothing is auto-restarted: a
+half-verified database must not be handed to an application.
+
+That stop also takes down the bundled PostgreSQL the launcher supervises, and
+the safety dump and the replay both need a server. So a `--data-dir` restore
+whose target IS that bundled cluster **starts only the cluster** for the
+duration of the dump and the replay (the API and the SAQ workers stay stopped),
+then stops it again: a native recovery needs no extra flag, and the operator
+still starts the release deliberately with the printed command.
+
+```
+# native recovery, after a failed upgrade
+farna-control restore <snapshot-dir> --data-dir <data-dir> --yes
+#   ... writers stopped, bundled PostgreSQL started for the dump+replay, stopped again
+#   -> then run the printed: farna-control start --data-dir <data-dir>
+```
+
+Where the connection settings come from, in order:
+
+1. `--db-url` / `--app-db-url` (the operator's own arguments);
+2. an exported `DATABASE_ADMIN_URL` / `DATABASE_URL`;
+3. the data dir's own `config.env` — the launcher's pinned configuration, the
+   only place a native installation's generated credentials live;
+4. the process `DATABASE_URL` (the compose path, where the service environment
+   supplies it).
+
+A target the stop did not take down — an explicitly named external database —
+is never shadowed by a cluster the restore started. A bundled cluster that is
+already accepting connections is reused and left running, because the restore
+only stops what it started.
+
+The cluster the window starts runs in its own session, so nothing supervises it.
+For the whole window the restore handles `SIGTERM`, `SIGINT` and `SIGHUP`: each
+stops that cluster (PostgreSQL's fast shutdown, then `SIGTERM`, then `SIGKILL`)
+before the command unwinds, the shell's previous handlers are restored
+afterwards, and a second Ctrl-C while that stop is running is ignored so the
+shutdown can finish. The pid of the cluster the window started is recorded in
+`<data-dir>/restore-window-postmaster.pid` while the window is open.
+
+**If the process is killed with `SIGKILL`** (a timeout wrapper, the OOM killer, a
+service manager) no handler can run: the postmaster keeps its data directory and
+its port with nothing supervising it. The pid file is what makes that
+recoverable rather than cryptic:
+
+- `farna-control restore <snapshot> --data-dir <data-dir>` reports the leftover
+  by pid and stops it before starting a fresh window;
+- `farna-control start --data-dir <data-dir>` refuses with the pid, the file it
+  was recorded in, and the command to run — instead of only "belongs to a live
+  postgres process" or a port-in-use error.
+
+Either way the process to stop is named for you:
+`kill -INT <pid>` is the same fast shutdown the restore performs itself.
 
 Note the two different versions in play. The manifest's `schema_versions` field
 records the **migration head of the code that wrote the backup** (`alembic`
@@ -369,7 +519,7 @@ uv run scripts/restore.py --input /backups/daily/backup-20260624.tar.gz.enc --fu
 systemctl start modulo
 
 # 5. Check health
-curl https://modulo.example.com/health
+curl https://farna-control.example.com/health
 ```
 
 ## Disaster Recovery Guide

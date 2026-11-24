@@ -190,15 +190,26 @@ async def list_ratings_for_primitive(
     session: AsyncSession,
     primitive_id: uuid.UUID,
     *,
+    org_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
 ) -> PageResult[PrimitiveRating]:
-    """List ratings for a primitive, newest first."""
+    """List ratings for a primitive, newest first.
+
+    FAR-2686: the parent id alone is not an org boundary — carry an explicit
+    ``organisation_id`` predicate on both the COUNT and the item query so a
+    ``BYPASSRLS``/misconfigured-RLS session cannot read another org's ratings
+    for a primitive id it guessed. ``organisation_id`` is NOT NULL on
+    ``primitive_ratings`` and ratings are written with the rater's org (see
+    :func:`submit_rating`), so the clamp matches the aggregate's org scope.
+    ``org_id`` is REQUIRED so a future caller cannot fall back to the
+    parent-id-only shape.
+    """
     offset = (page - 1) * page_size
     try:
-        count_stmt = select(func.count()).select_from(PrimitiveRating).where(PrimitiveRating.primitive_id == primitive_id)
+        count_stmt = select(func.count()).select_from(PrimitiveRating).where(PrimitiveRating.primitive_id == primitive_id, PrimitiveRating.organisation_id == org_id)
         total = (await session.execute(count_stmt)).scalar_one()
-        stmt = select(PrimitiveRating).where(PrimitiveRating.primitive_id == primitive_id).order_by(PrimitiveRating.created_at.desc()).offset(offset).limit(page_size)
+        stmt = select(PrimitiveRating).where(PrimitiveRating.primitive_id == primitive_id, PrimitiveRating.organisation_id == org_id).order_by(PrimitiveRating.created_at.desc()).offset(offset).limit(page_size)
         result = await session.execute(stmt)
         items = list(result.scalars())
     except ProgrammingError:

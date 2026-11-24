@@ -378,12 +378,12 @@
 
         <!-- Parameter Sets Tab -->
         <TabPanel value="sets" class="space-y-4 pt-4">
-          <header class="flex items-center justify-between">
-            <h3 class="text-base font-semibold">{{ $t('views.ParameterSchemasView.parameter_sets') }}</h3>
-            <Button size="small" @click="startNewSet" data-testid="paramschema-new-set">
-              {{ $t('views.ParameterSchemasView.new_set') }}
-            </Button>
-          </header>
+          <DataCard :title="$t('views.ParameterSchemasView.parameter_sets')" heading-level="h2" variant="bordered" padding="md">
+            <template #headerActions>
+              <Button size="small" @click="startNewSet" data-testid="paramschema-new-set">
+                {{ $t('views.ParameterSchemasView.new_set') }}
+              </Button>
+            </template>
 
           <div v-if="setsLoading">
             <output class="sr-only" aria-live="polite">{{ $t('views.ParameterSchemasView.loading_sets') }}</output>
@@ -447,6 +447,7 @@
               </div>
             </div>
           </div>
+          </DataCard>
 
           <!-- Set Editor -->
           <div v-if="editingSet" class="rounded-lg border bg-card p-4 space-y-4">
@@ -721,12 +722,12 @@
             <div v-if="validateResult.valid" class="rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text">
               {{ $t('views.ParameterSchemasView.validation_passed') }}
             </div>
-            <div v-else class="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+            <ErrorAlert v-else compact>
               <p class="text-sm font-medium text-destructive-text">{{ $t('views.ParameterSchemasView.validation_failed') }}</p>
               <ul v-if="validateResult.errors?.length" class="mt-1 list-inside list-disc text-sm text-destructive-text">
                 <li v-for="e in validateResult.errors" :key="e">{{ e.field || e.message || e }}</li>
               </ul>
-            </div>
+            </ErrorAlert>
           </div>
         </TabPanel>
       </TabPanels>
@@ -747,6 +748,7 @@ import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import Button from 'primevue/button'
 import Tabs from 'primevue/tabs'

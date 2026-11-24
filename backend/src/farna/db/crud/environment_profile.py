@@ -122,12 +122,18 @@ async def get_environment_profile(session: AsyncSession, profile_id: uuid.UUID, 
 async def list_environment_profiles(
     session: AsyncSession,
     *,
+    org_id: uuid.UUID,
     page: int = 1,
     page_size: int = 20,
     cursor: str | None = None,
     include_deleted: bool = False,
 ) -> PageResult[EnvironmentProfile]:
-    count_where = []
+    # FAR-2686: explicit organisation predicate, shared by the COUNT, the item
+    # page and the cursor base so every statement is clamped. ``organisation_id``
+    # is NOT NULL and ``visibility`` (org/team) still scopes within a single
+    # org, so there is no cross-org shared profile the clamp would hide.
+    # REQUIRED so a future caller cannot fall back to the RLS-only shape.
+    count_where = [EnvironmentProfile.organisation_id == org_id]
     if not include_deleted:
         count_where.append(EnvironmentProfile.deleted_at.is_(None))
     if cursor is not None:

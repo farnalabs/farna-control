@@ -1470,7 +1470,7 @@ class TestCrudTeamFilterSQL:
 
         session.execute = fake_execute
 
-        page = await db_list_runs(session, page=1, page_size=20, team_id=team)
+        page = await db_list_runs(session, organisation_id=uuid.uuid4(), page=1, page_size=20, team_id=team)
 
         assert page.total == 0
         count_sql = self._compile(captured[0]).lower()
@@ -1496,7 +1496,7 @@ class TestCrudTeamFilterSQL:
 
         session.execute = fake_execute
 
-        page = await db_list_runs(session, page=1, page_size=20, account_id=account_id)
+        page = await db_list_runs(session, organisation_id=uuid.uuid4(), page=1, page_size=20, account_id=account_id)
 
         assert page.total == 0
         sql = self._compile(captured[0])

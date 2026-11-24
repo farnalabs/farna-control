@@ -1,9 +1,9 @@
 <template>
-  <div class="json-viewer" data-testid="json-viewer">
+  <div class="json-viewer" :data-testid="`json-viewer-${viewerUid}`">
     <div v-if="showToolbar" class="mb-2 flex items-center gap-2">
       <button
         type="button"
-        data-testid="json-viewer-copy"
+        :data-testid="`json-viewer-copy-${viewerUid}`"
         class="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         :aria-label="t('components.JsonViewer.copy')"
         @click="copyValue"
@@ -12,7 +12,7 @@
       </button>
       <button
         type="button"
-        data-testid="json-viewer-expand-all"
+        :data-testid="`json-viewer-expand-all-${viewerUid}`"
         class="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         :aria-label="t('components.JsonViewer.expand_all')"
         @click="deepRef = 999"
@@ -21,7 +21,7 @@
       </button>
       <button
         type="button"
-        data-testid="json-viewer-collapse-all"
+        :data-testid="`json-viewer-collapse-all-${viewerUid}`"
         class="rounded-md border border-input bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         :aria-label="t('components.JsonViewer.collapse_all')"
         @click="deepRef = 1"
@@ -37,7 +37,7 @@
       <template v-if="isPlainString">
         <pre
           class="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground"
-          :data-testid="plainStringTruncated ? 'json-viewer-string-truncated' : undefined"
+          :data-testid="plainStringTruncated ? `json-viewer-string-truncated-${viewerUid}` : undefined"
         >{{ expandedPlainString ? rawString : plainStringPreview }}</pre>
         <div v-if="plainStringTruncated" class="mt-2 flex items-center gap-2">
           <span class="json-viewer-string-count" aria-live="polite">{{ t('components.JsonViewer.truncated_count', { count: formatCount(rawString.length) }) }}</span>
@@ -45,7 +45,7 @@
             v-if="!expandedPlainString"
             type="button"
             class="json-viewer-string-toggle"
-            data-testid="json-viewer-string-expand"
+            :data-testid="`json-viewer-string-expand-${viewerUid}`"
             :aria-expanded="false"
             :aria-label="t('components.JsonViewer.expand_string')"
             @click="expandedPlainString = true"
@@ -56,7 +56,7 @@
             v-else
             type="button"
             class="json-viewer-string-toggle"
-            data-testid="json-viewer-string-collapse"
+            :data-testid="`json-viewer-string-collapse-${viewerUid}`"
             :aria-expanded="true"
             :aria-label="t('components.JsonViewer.collapse_string')"
             @click="expandedPlainString = false"
@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, ref, watch } from 'vue'
+import { computed, h, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VueJsonPretty from 'vue-json-pretty'
 import 'vue-json-pretty/lib/styles.css'
@@ -119,6 +119,15 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+// FAR-2714: a page can render more than one viewer (e.g. /admin/system/config,
+// a run-output diff), so the root and its toolbar need per-instance ids.
+// FAR-2719: the long-string expand/collapse toggles carry the same suffix, so
+// two viewers each showing an expandable string do not collide (strict-mode
+// getByTestId matches exactly one element).
+// FAR-2724: the per-value truncated/expanded containers carry it too, so two
+// plain-string viewers (truncated) and two object viewers (expanded) stay
+// unique per instance.
+const viewerUid = useId()
 const copied = ref(false)
 const deepRef = ref(props.deep)
 
@@ -214,6 +223,7 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
   if (full.length <= props.stringTruncateLength) return defaultValue
 
   const path = node.path
+  const nodeUid = `${viewerUid}-${path}`
   const expanded = expandedPaths.value.has(path)
   const toggle = (event: MouseEvent) => {
     event.stopPropagation()
@@ -224,14 +234,14 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
   }
 
   if (expanded) {
-    return h('span', { class: 'json-viewer-string-expanded', 'data-testid': 'json-viewer-string-expanded' }, [
+    return h('span', { class: 'json-viewer-string-expanded', 'data-testid': `json-viewer-string-expanded-${nodeUid}` }, [
       h('span', { class: 'json-viewer-string-expanded-text', role: 'status' }, full),
       h(
         'button',
         {
           type: 'button',
           class: 'json-viewer-string-toggle',
-          'data-testid': 'json-viewer-string-collapse',
+          'data-testid': `json-viewer-string-collapse-${nodeUid}`,
           'aria-expanded': 'true',
           'aria-label': t('components.JsonViewer.collapse_string'),
           onClick: toggle,
@@ -241,14 +251,14 @@ function renderNodeValue({ node, defaultValue }: { node: ViewerNode; defaultValu
     ])
   }
 
-  return h('span', { class: 'json-viewer-string-truncated', 'data-testid': 'json-viewer-string-truncated' }, [
+  return h('span', { class: 'json-viewer-string-truncated', 'data-testid': `json-viewer-string-truncated-${nodeUid}` }, [
     h('span', { class: 'json-viewer-string-truncated-text' }, full.slice(0, props.stringTruncateLength)),
     h(
       'button',
       {
         type: 'button',
         class: 'json-viewer-string-toggle',
-        'data-testid': 'json-viewer-string-expand',
+        'data-testid': `json-viewer-string-expand-${nodeUid}`,
         'aria-expanded': 'false',
         'aria-label': t('components.JsonViewer.expand_string'),
         onClick: toggle,

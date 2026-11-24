@@ -1,4 +1,4 @@
-"""Unit tests for the ``modulo users`` CLI command group (FAR-680).
+"""Unit tests for the ``farna-control users`` CLI command group (FAR-680).
 
 Exercises add / list / reset-password end-to-end against a hermetic
 file-backed SQLite database (aiosqlite) — the same DB-direct style as

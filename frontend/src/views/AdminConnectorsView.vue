@@ -3,7 +3,7 @@
        so this page stays open on Community. `plugin_management` is broader than
        the pages it gates (it is Team-tier); FAR-2665 narrows it. Neither the
        /admin/connectors route nor its API carries a feature gate. -->
-  <FeatureGate feature-name="plugin_management" required-tier="community" show-disabled>
+  <FeatureGate feature-name="plugin_management" show-disabled>
 
     <div class="page-wide">
     <PageHeader :title="$t('views.AdminConnectorsView.title')" :subtitle="$t('views.AdminConnectorsView.subtitle')">
@@ -119,7 +119,7 @@
                 <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminConnectorsView.credentials_help') }}</p>
               </div>
             </div>
-            <div v-if="formError" id="adminconnectors-add-form-error" role="alert" class="text-sm text-destructive">{{ formError }}</div>
+            <ErrorAlert v-if="formError" id="adminconnectors-add-form-error" compact :message="formError" :retryable="false" />
             <div class="flex items-center gap-2">
               <Button :disabled="saving || !formData.name.trim()" type="submit" data-testid="admin-connectors-submit">
                 {{ saving ? $t('views.AdminConnectorsView.creating') : $t('views.AdminConnectorsView.create') }}
@@ -298,7 +298,7 @@
                 <p id="adminconnectors-edit-credentials-help" class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminConnectorsView.credentials_help') }}</p>
               </div>
             </div>
-            <div v-if="formError" id="adminconnectors-edit-form-error" role="alert" class="text-sm text-destructive">{{ formError }}</div>
+            <ErrorAlert v-if="formError" id="adminconnectors-edit-form-error" compact :message="formError" :retryable="false" />
             <div class="flex items-center gap-2">
               <Button :disabled="saving || !formData.name.trim()" type="submit" data-testid="admin-connectors-save">
                 {{ saving ? $t('views.AdminConnectorsView.saving') : $t('views.AdminConnectorsView.save') }}

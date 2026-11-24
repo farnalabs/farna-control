@@ -46,7 +46,7 @@ status: covered
 
 `farna-control apply -f <config.yaml>` applies an organization's schemas (+ versions),
 model backends, pipelines and triggers to a live deployment from one YAML file
-(`api_version: modulo.dev/v1`), driven by `FARNA_CONTROL_URL` +
+(`api_version: farna.dev/v1`), driven by `FARNA_CONTROL_URL` +
 `FARNA_CONTROL_API_KEY` (a bearer `mk_` org key). The installed executable is
 `farna-control` (`backend/pyproject.toml` `[project.scripts]`). The API routes the CLI writes to are `/api/v1/schemas`,
 `/api/v1/model-backends`, `/api/v1/pipelines`,
@@ -57,12 +57,12 @@ surfaces are `/admin/model-backends` and `/settings/triggers`; there is no
 dedicated CLI page in the nav. Built on the
 schemas, model-backends, pipelines and triggers features. For a copy-paste
 Terraform-style CI loop (plan on every pull request, apply on merge to `main`),
-see the [`farna-control apply` GitHub Actions example](../../modulo-apply-github-actions.md).
+see the [`farna-control apply` GitHub Actions example](../../farna-control-apply-github-actions.md).
 
 ## Behaviors
 
 - [x] `farna-control apply -f <file>` loads single- or multi-document YAML
-      (`api_version` `modulo.dev/v1` major-gated, minor suffixes merge
+      (`api_version` `farna.dev/v1` major-gated, minor suffixes merge
       leniently) declaring `entities.schemas` / `entities.model_backends` /
       `entities.pipelines` / `entities.triggers`; duplicate names per kind
       (triggers keyed `pipeline/name`) and trigger forward-references to a

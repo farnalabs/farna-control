@@ -41,7 +41,7 @@ from farna.api.mcp_tools._patch_surface import (
     _ctx_user_id_val,
     _log,
     _parse_uuid_param,
-    _require_plan_feature,
+    _require_plan_entitlement,
     _session,
     get_settings,
     resolve_plan_context,
@@ -183,7 +183,7 @@ async def list_agents(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_agents(s, cursor=cursor, page_size=lim)
+            result = await db_list_agents(s, org_id=org_id, cursor=cursor, page_size=lim)
 
         return {
             "data": [_agent_item(a) for a in result.items],
@@ -288,8 +288,12 @@ async def list_teams(page: int = 1, page_size: int = 20) -> dict[str, Any]:
         from farna.db.crud.team import list_teams as db_list_teams
 
         org_id = _ctx_org_id_val()
-        # REST parity: GET /api/v1/teams is router-gated require_feature("team_rbac").
-        feat_err = await _require_plan_feature(org_id, get_settings(), "team_rbac")
+        # REST parity: GET /api/v1/teams is router-gated by
+        # require_entitlement("identity") — the Identity bundle (sso / scim /
+        # team_rbac). Gate the MCP tool on the SAME entitlement, not on a
+        # single member flag: killing team_rbac alone must not refuse MCP while
+        # the REST route stays open on sso/scim.
+        feat_err = await _require_plan_entitlement(org_id, get_settings(), "identity")
         if feat_err:
             return feat_err
         pg = max(1, page)

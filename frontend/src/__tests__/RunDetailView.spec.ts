@@ -797,7 +797,7 @@ describe('RunDetailView', () => {
     // The pure return has no explicit `input` key, so the input panel renders
     // as an empty state and only the output panel gets a JsonViewer.
     expect(wrapper.find('[data-testid="run-detail-no-input"]').exists()).toBe(true)
-    const viewers = ioRow.findAll('[data-testid="json-viewer"]')
+    const viewers = ioRow.findAll('.json-viewer')
     expect(viewers.length).toBe(1)
     const outputPanel = viewers[0]
     expect(outputPanel.text()).toContain('pure agent return')
@@ -991,7 +991,7 @@ describe('RunDetailView', () => {
     await nextTick()
 
     const ioRow = wrapper.find('[data-testid="run-detail-io-row"]')
-    const viewers = ioRow.findAll('[data-testid="json-viewer"]')
+    const viewers = ioRow.findAll('.json-viewer')
     expect(viewers.length).toBe(2)
     const inputPanel = viewers[0]
     expect(inputPanel.text()).toContain('hello')
@@ -3006,7 +3006,7 @@ describe('RunDetailView rendering extras', () => {
     })
     const ioRow = wrapper.find('[data-testid="run-detail-io-row"]')
     expect(ioRow.exists()).toBe(true)
-    const viewers = ioRow.findAll('[data-testid="json-viewer"]')
+    const viewers = ioRow.findAll('.json-viewer')
     expect(viewers.length).toBe(2)
     expect(viewers[0].text()).toContain('hi')
     expect(viewers[1].text()).toContain('legacy')
@@ -3019,7 +3019,7 @@ describe('RunDetailView rendering extras', () => {
       input_payload: { q: 'hi' },
     })
     const ioRow = wrapper.find('[data-testid="run-detail-io-row"]')
-    const viewers = ioRow.findAll('[data-testid="json-viewer"]')
+    const viewers = ioRow.findAll('.json-viewer')
     expect(viewers.length).toBe(2)
     expect(viewers[0].text()).toContain('hi')
     expect(viewers[1].text()).toContain('plain string return')

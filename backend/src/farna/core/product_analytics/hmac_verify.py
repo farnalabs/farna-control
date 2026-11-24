@@ -24,8 +24,10 @@ This module is the signer/verifier for the inbound *rotation-request* protocol
 (see :mod:`farna.api.routes.product_analytics_identity`).  It is **NOT**
 interchangeable with ``sign_outbound_batch`` in
 :mod:`farna.core.product_analytics.vendor_client`, which signs outbound metrics
-batches with the ``<payload><timestamp>:<sequence>`` format.  The two protocols
-intentionally use different wire formats and must never be cross-used.
+batches with the ``<canonical payload JSON><timestamp><sequence>`` layout — the
+three parts concatenated with **no separator** (no colon, pipe or other
+delimiter).  The two protocols intentionally use different wire formats and must
+never be cross-used.
 """
 
 from __future__ import annotations

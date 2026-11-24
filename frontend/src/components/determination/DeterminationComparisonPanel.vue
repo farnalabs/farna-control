@@ -1,10 +1,12 @@
 <template>
-  <section class="card p-4 space-y-5" data-testid="determination-comparison">
-    <header class="space-y-1">
-      <h2 class="text-lg font-semibold">{{ $t('views.DeterminationView.comparison_title') }}</h2>
-      <p class="text-sm text-muted-foreground">{{ $t('views.DeterminationView.comparison_hint') }}</p>
-    </header>
-
+  <DataCard
+    as="section"
+    data-testid="determination-comparison"
+    :title="$t('views.DeterminationView.comparison_title')"
+    :description="$t('views.DeterminationView.comparison_hint')"
+    heading-level="h2"
+  >
+    <div class="space-y-5">
     <p
       class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
       data-testid="determination-comparison-not-activated"
@@ -87,16 +89,14 @@
       <span>{{ $t('views.DeterminationView.comparison_loading') }}</span>
     </div>
 
-    <div
+    <ErrorAlert
       v-else-if="error"
-      role="alert"
-      aria-live="assertive"
-      class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-destructive-text"
+      compact
       data-testid="determination-comparison-error"
     >
       <p class="text-sm font-medium">{{ $t('views.DeterminationView.comparison_failed') }}</p>
       <p class="text-sm">{{ error }}</p>
-    </div>
+    </ErrorAlert>
 
     <p
       v-else-if="!comparison"
@@ -407,13 +407,16 @@
         </section>
       </template>
     </template>
-  </section>
+    </div>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import ErrorAlert from '../shared/ErrorAlert.vue'
+import DataCard from '../ui/DataCard.vue'
 import DeterminationComparisonProvenance from './DeterminationComparisonProvenance.vue'
 import { confidenceBadgeClass } from './confidencePresentation'
 import {

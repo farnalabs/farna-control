@@ -5,12 +5,14 @@
       :subtitle="$t('views.ComplianceEvidenceIndex.subtitle')"
     />
 
-    <div
-      class="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm"
+    <BaseCard
+      variant="context"
+      padding="md"
+      class="text-sm"
       data-testid="compliance-evidence-index-scope-note"
     >
       {{ $t('views.ComplianceEvidenceIndex.scope_note') }}
-    </div>
+    </BaseCard>
 
     <div
       v-if="loading"
@@ -88,35 +90,41 @@
 
       <h2 id="evidence-index-pack-heading" class="sr-only">{{ $t('views.ComplianceEvidenceIndex.pack_heading') }}</h2>
       <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-labelledby="evidence-index-pack-heading">
-        <div class="card p-4" data-testid="compliance-evidence-index-pack-version">
+        <BaseCard padding="md" data-testid="compliance-evidence-index-pack-version">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.pack_version') }}</dt>
           <dd class="mt-1 font-mono text-sm">{{ indexData.pack_version }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-pack-hash">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-pack-hash">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.pack_hash') }}</dt>
           <dd class="mt-1 break-all font-mono text-xs">{{ indexData.pack_content_hash }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-product-version">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-product-version">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.product_version') }}</dt>
           <dd class="mt-1 font-mono text-sm">{{ indexData.product_version }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-frameworks">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-frameworks">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.frameworks') }}</dt>
           <dd class="mt-1 text-sm">{{ indexData.framework_ids.join(', ') }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-pack-published-at">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-pack-published-at">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.pack_published_at') }}</dt>
           <dd class="mt-1 text-sm">{{ formatTimestamp(indexData.pack_published_at) }}</dd>
-        </div>
-        <div class="card p-4" data-testid="compliance-evidence-index-generated-at">
+        </BaseCard>
+        <BaseCard padding="md" data-testid="compliance-evidence-index-generated-at">
           <dt class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ $t('views.ComplianceEvidenceIndex.generated_at') }}</dt>
           <dd class="mt-1 text-sm">{{ formatTimestamp(indexData.generated_at) }}</dd>
-        </div>
+        </BaseCard>
       </dl>
 
-      <section class="space-y-3" aria-labelledby="evidence-index-coverage-heading" data-testid="compliance-evidence-index-coverage">
-        <h2 id="evidence-index-coverage-heading" class="text-lg font-semibold">{{ $t('views.ComplianceEvidenceIndex.coverage_heading') }}</h2>
-        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-labelledby="evidence-index-coverage-heading" tabindex="0" data-testid="compliance-evidence-index-coverage-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
+      <DataCard
+        :title="$t('views.ComplianceEvidenceIndex.coverage_heading')"
+        heading-level="h2"
+        variant="bordered"
+        role="region"
+        :aria-label="$t('views.ComplianceEvidenceIndex.coverage_heading')"
+        data-testid="compliance-evidence-index-coverage"
+      >
+        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" :aria-label="$t('views.ComplianceEvidenceIndex.coverage_heading')" tabindex="0" data-testid="compliance-evidence-index-coverage-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
           <table class="w-full text-left text-sm">
             <thead>
               <tr>
@@ -134,16 +142,21 @@
             </tbody>
           </table>
         </div>
-      </section>
+      </DataCard>
 
-      <section class="space-y-3" aria-labelledby="evidence-index-artifacts-heading">
-        <div class="flex items-baseline justify-between gap-3">
-          <h2 id="evidence-index-artifacts-heading" class="text-lg font-semibold">{{ $t('views.ComplianceEvidenceIndex.artifacts_heading') }}</h2>
+      <DataCard
+        :title="$t('views.ComplianceEvidenceIndex.artifacts_heading')"
+        heading-level="h2"
+        variant="bordered"
+        role="region"
+        :aria-label="$t('views.ComplianceEvidenceIndex.artifacts_heading')"
+      >
+        <template #headerActions>
           <p aria-live="polite" class="text-sm text-muted-foreground" data-testid="compliance-evidence-index-artifact-count">
             {{ $t('views.ComplianceEvidenceIndex.artifact_count', { count: indexData.artifacts.length }) }}
           </p>
-        </div>
-        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" aria-labelledby="evidence-index-artifacts-heading" tabindex="0" data-testid="compliance-evidence-index-artifacts-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
+        </template>
+        <div class="table-wrapper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" role="region" :aria-label="$t('views.ComplianceEvidenceIndex.artifacts_heading')" tabindex="0" data-testid="compliance-evidence-index-artifacts-scroll"> <!-- NOSONAR: This named, focusable scroll region preserves keyboard access to the wide table. -->
           <table class="w-full min-w-[1050px] text-left text-sm">
             <thead>
               <tr>
@@ -219,7 +232,7 @@
             </tbody>
           </table>
         </div>
-      </section>
+      </DataCard>
 
       <section
         class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm"
@@ -240,6 +253,8 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/schema'
 import { useDataFetch } from '../composables/useDataFetch'

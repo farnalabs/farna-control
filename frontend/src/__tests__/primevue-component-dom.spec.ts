@@ -32,9 +32,9 @@ import Tooltip from 'primevue/tooltip'
  *      `src/__tests__/__snapshots__/`.
  *   2. When `PRIMEVUE_DOM_OUT` is set, a normalised JSON signature per
  *      component, written there. The v5 and v4 signatures are diffed by
- *      `scripts/compare-primevue-baseline.mjs` to produce the downgrade's DOM
- *      delta (the committed snapshot can only hold one version at a time, so
- *      JSON is the cross-version comparison record).
+ *      `frontend/tests/visual-baseline/compare.mjs` to produce the
+ *      downgrade's DOM delta (the committed snapshot can only hold one
+ *      version at a time, so JSON is the cross-version comparison record).
  *
  * Everything generated per-run (PrimeVue's `pv_id_*` element ids) is
  * normalised so a snapshot cannot churn on an id sequence.

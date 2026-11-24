@@ -61,6 +61,7 @@ from farna.core.runtime_provider import (
     egress_tier_for_provider_type,
 )
 from farna.core.runtime_provider.hub import RuntimeProviderHub
+from farna.core.workspace_labels import EGRESS_POSTURE, NODE_ID, ORG_ID, RUN_ID, stamp
 from farna.settings import MAX_NODE_TIMEOUT_SECONDS
 from farna.util import validate_workspace_network
 
@@ -71,6 +72,15 @@ if TYPE_CHECKING:
 
 
 _log = logging.getLogger(__name__)
+
+# FAR-2693: the pre-rename workspace-metadata keys. Stamped alongside the
+# current keys and read as a fallback, so a workspace created before the
+# dual-write release is still attributed and reclaimable; remove once no live
+# workspace can predate it (see farna.core.workspace_labels).
+_LEGACY_RUN_ID = "modulo.run.id"
+_LEGACY_ORG_ID = "modulo.org.id"
+_LEGACY_NODE_ID = "modulo.node.id"
+_LEGACY_EGRESS_POSTURE = "modulo.egress.posture"
 
 _E2B_MAX_TIMEOUT_SECONDS = MAX_NODE_TIMEOUT_SECONDS
 _OUTPUT_JSON_PATH = "/home/user/output.json"
@@ -498,7 +508,7 @@ def _workspace_spec_for_dispatch(
     Hardening (ADR 029 / plan D4): non-root user, read-only rootfs + tmpfs
     workdir (adequate $HOME sizing), dropped caps + no-new-privileges, 1.0
     CPU / 1 GiB (fixed committed value), structured labels mapped to
-    container Labels (modulo.run/org/node.id), the dedicated workspace
+    container Labels (run/org/node id), the dedicated workspace
     bridge network (never the compose/backend network), and the egress
     default permitted (the tier's purpose) with the per-profile ``none``
     opt-in.
@@ -516,11 +526,14 @@ def _workspace_spec_for_dispatch(
     )
 
     cfg = getattr(profile, "config_json", None) or {}
-    metadata: dict[str, str] = {
-        "modulo.run.id": run_id,
-        "modulo.org.id": str(org_id) if org_id else "",
-        "modulo.node.id": node_id,
-    }
+    # FAR-2693 dual-write: each attribution key is stamped under its current
+    # AND legacy name so a workspace created after this release is
+    # recognisable both by the current reader and by anything still reading
+    # the pre-rename spelling during the transition.
+    metadata: dict[str, str] = {}
+    stamp(metadata, RUN_ID, _LEGACY_RUN_ID, run_id)
+    stamp(metadata, ORG_ID, _LEGACY_ORG_ID, str(org_id) if org_id else "")
+    stamp(metadata, NODE_ID, _LEGACY_NODE_ID, node_id)
 
     # FAR-1085: canonical egress resolution — node -> profile -> provider default,
     # with tier capability check (e.g. Docker cannot enforce "selected").
@@ -554,8 +567,8 @@ def _workspace_spec_for_dispatch(
     # ``enforced_by_substrate`` for a restrictive docker policy and ``none``
     # for the unrestricted default; the value names HOW the posture is
     # established so a permissive tier is never read as an enforcement it
-    # does not perform.
-    metadata["modulo.egress.posture"] = egress_resolved.posture.value
+    # does not perform. FAR-2693 dual-write: both the current and legacy key.
+    stamp(metadata, EGRESS_POSTURE, _LEGACY_EGRESS_POSTURE, egress_resolved.posture.value)
 
     # Map canonical policy to WorkspaceSpec egress_policy vocabulary
     # LOSSLESSLY (FAR-1050): the shared helper is the single owner of this
@@ -1238,7 +1251,7 @@ async def _resolve_sandbox_envs_with_script_setup(
 
     # FAR-1690 slice A1: EVERY dispatch mode (script AND llm) issues a
     # short-TTL, run-scoped credential through the CredentialIssuer seam and
-    # stamps its issuance provenance (``modulo_minted`` — attested, NEVER
+    # stamps its issuance provenance (``self_minted`` — attested, NEVER
     # ``observed``). Fail-open: an issuance failure leaves the key absent (the
     # workspace still runs).
     issued = await _sandbox_issue_run_credential_for_sandbox(

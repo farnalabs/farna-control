@@ -189,7 +189,7 @@ async def test_memberships_isolated_between_orgs(db_engine: AsyncEngine) -> None
             text("SELECT set_config('app.organisation_id', :oid, true)"),
             {"oid": str(org_a)},
         )
-        members_a = await list_team_members(session, team_id=team_a.id, page=1, page_size=50)
+        members_a = await list_team_members(session, team_id=team_a.id, org_id=org_a, page=1, page_size=50)
         assert len(members_a.items) == 1
 
     async with factory() as session:
@@ -197,7 +197,7 @@ async def test_memberships_isolated_between_orgs(db_engine: AsyncEngine) -> None
             text("SELECT set_config('app.organisation_id', :oid, true)"),
             {"oid": str(org_b)},
         )
-        members_b = await list_team_members(session, team_id=team_b.id, page=1, page_size=50)
+        members_b = await list_team_members(session, team_id=team_b.id, org_id=org_b, page=1, page_size=50)
         assert not members_b.items
 
 
@@ -413,7 +413,7 @@ async def test_membership_round_trip(db_engine: AsyncEngine) -> None:
         assert by_team_user is not None
         assert by_team_user.id == membership.id
 
-        members = await list_team_members(session, team_id=team.id, page=1, page_size=50)
+        members = await list_team_members(session, team_id=team.id, org_id=org, page=1, page_size=50)
         assert len(members.items) == 1
 
         updated = await update_member_role(session, membership.id, "operator")

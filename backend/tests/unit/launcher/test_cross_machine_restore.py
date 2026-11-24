@@ -77,6 +77,7 @@ def _enter_restore_patches(stack: contextlib.ExitStack, fernet_key: str) -> None
         ),
         lambda: patch("farna.cli.backup._db_has_modulo_tables", return_value=False),
         lambda: patch("farna.cli.backup._get_schema_versions", return_value=["rev1"]),
+        lambda: patch("farna.cli.backup._known_revisions", return_value=["rev1"]),
         lambda: patch("farna.cli.backup._take_safety_dump", return_value=Path("pre-restore-dump-fake")),
         lambda: patch("farna.cli.backup._check_collation_versions_sync"),
     ):

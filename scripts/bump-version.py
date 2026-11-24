@@ -9,7 +9,7 @@ reads the current version from there and writes it to every mirror:
 * ``backend/uv.lock``                   ``version = "X.Y.Z"`` (the editable
   ``farna-control`` package entry — uv records the project version there)
 * ``frontend/package.json``             ``"version": "X.Y.Z"``
-* ``deploy/helm/modulo/Chart.yaml``     ``version: X.Y.Z`` AND ``appVersion: "X.Y.Z"``
+* ``deploy/helm/farna-control/Chart.yaml``     ``version: X.Y.Z`` AND ``appVersion: "X.Y.Z"``
 
 Every version file carries a plain numeric ``X.Y.Z`` only. A pre-release
 suffix (``-rc1``) lives in GIT TAGS ONLY (e.g. ``v0.4.0-rc1``) and is never
@@ -36,7 +36,7 @@ UV_LOCK_FILENAME = "uv.lock"
 BACKEND_PYPROJECT = PROJECT_ROOT / "backend" / "pyproject.toml"
 BACKEND_UV_LOCK = PROJECT_ROOT / "backend" / UV_LOCK_FILENAME
 FRONTEND_PACKAGE = PROJECT_ROOT / "frontend" / "package.json"
-HELM_CHART = PROJECT_ROOT / "deploy" / "helm" / "modulo" / "Chart.yaml"
+HELM_CHART = PROJECT_ROOT / "deploy" / "helm" / "farna-control" / "Chart.yaml"
 
 _VALID_PARTS = {"major", "minor", "patch"}
 _SET_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -45,13 +45,13 @@ _SET_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 # Anchored on the block so an unrelated dependency's version line can never be
 # rewritten; a format change makes the pattern miss, which the fail-loud
 # contract below reports instead of silently skipping the mirror.
-_UV_LOCK_MODULO_BLOCK_RE = re.compile(r'(?m)^\[\[package\]\]\r?\nname = "farna-control"\r?\nversion = "([^"]+)"')
+_UV_LOCK_FARNA_BLOCK_RE = re.compile(r'(?m)^\[\[package\]\]\r?\nname = "farna-control"\r?\nversion = "([^"]+)"')
 
 
 def _extract_version(content: str, path: Path) -> str | None:
     """Pull the version value out of one target file's content."""
     if path.name == UV_LOCK_FILENAME:
-        m = _UV_LOCK_MODULO_BLOCK_RE.search(content)
+        m = _UV_LOCK_FARNA_BLOCK_RE.search(content)
     elif path.suffix == ".toml":
         m = re.search(r'(?m)^version\s*=\s*"([^"]+)"', content)
     elif path.suffix in (".yaml", ".yml"):

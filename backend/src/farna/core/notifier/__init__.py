@@ -88,6 +88,7 @@ __all__ = [
     "EVENT_TRIGGER_STREAK_ALERT",
     "MAX_ATTEMPTS",
     "MAX_DEAD_LETTERS",
+    "NOTIFIER_USER_AGENT",
     "RETRY_DELAYS",
     "DispatchResult",
     "Notifier",
@@ -95,6 +96,13 @@ __all__ = [
 ]
 
 _log = logging.getLogger(__name__)
+
+#: ``User-Agent`` every outbound notification POST carries. Defined ONCE here
+#: (the real delivery path) and imported by the admin route that sends a test
+#: delivery, so the two can never drift. ``1.0`` names the notifier PROTOCOL,
+#: not the product release: bump it only on a breaking change to the webhook
+#: contract, never on a product rename.
+NOTIFIER_USER_AGENT = "Farna-Control-Notifier/1.0"
 
 # FAR-250: fire-and-forget post-commit SSE broadcast tasks (kept referenced
 # so the event loop does not garbage-collect them mid-flight).
@@ -795,7 +803,7 @@ class Notifier:
                         "Content-Type": "application/json",
                         "X-Farna-Control-Signature": signature,
                         "X-Farna-Control-Timestamp": datetime.now(UTC).isoformat(),
-                        "User-Agent": "Modulo-Notifier/1.0",
+                        "User-Agent": NOTIFIER_USER_AGENT,
                     },
                 )
                 response_code = resp.status_code

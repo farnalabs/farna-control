@@ -6,17 +6,13 @@
        :tabs="costPageTabs"
     />
 
-    <FeatureGate feature-name="admin_spend_limits" required-tier="team" show-disabled class="space-y-6">
+    <FeatureGate feature-name="admin_spend_limits" show-disabled class="space-y-6">
       <!-- STATE-3 (ux-conformance): teams/form layout is known before data
            arrives, so the loading placeholder is a determinate pulse skeleton
            instead of an indeterminate spinner. -->
       <div v-if="loading" class="space-y-6" aria-busy="true" data-testid="admin-spend-limits-loading">
         <span class="sr-only" role="status">{{ $t('common.loading') }}</span>
-        <div v-for="n in 3" :key="n" class="card space-y-3 p-6">
-          <SkeletonBlock height-class="h-5 w-48" />
-          <SkeletonBlock height-class="h-4 w-72" />
-          <SkeletonBlock height-class="h-10 w-full" />
-        </div>
+        <CardSkeleton v-for="n in 3" :key="n" class="p-6" :lines="3" />
       </div>
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadData" />
@@ -42,7 +38,7 @@
            </template>
          </DataCard>
 
-        <FeatureGate feature-name="admin_cost_controls" required-tier="team" show-disabled>
+        <FeatureGate feature-name="admin_cost_controls" show-disabled>
            <DataCard
              heading-level="h2"
              :title="$t('views.AdminSpendLimitsView.hard_spend_ceilings')"
@@ -120,6 +116,7 @@
           <template #default>
             <EmptyState
               v-if="teams.length === 0"
+              variant="bare"
               :title="$t('views.AdminSpendLimitsView.no_teams_found')"
               :description="$t('views.AdminSpendLimitsView.no_teams_found_description')"
               data-testid="admin-spend-limits-teams-empty"
@@ -192,6 +189,7 @@
               </div>
               <EmptyState
                 v-else
+                variant="bare"
                 :title="$t('views.AdminSpendLimitsView.no_team_cost_data_available')"
                 :description="$t('views.AdminSpendLimitsView.no_team_cost_data_description')"
                 data-testid="admin-spend-limits-costs-empty"
@@ -217,6 +215,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import { formatMoney } from '../lib/money'

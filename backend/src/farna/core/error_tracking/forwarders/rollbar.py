@@ -76,7 +76,7 @@ class RollbarErrorForwarder(BaseForwarder):
                     json=body,
                     headers={
                         "Content-Type": "application/json",
-                        "User-Agent": "Modulo-Error-Forwarder/1.0",
+                        "User-Agent": "Farna-Control-Error-Forwarder/1.0",
                     },
                 )
                 if resp.is_success:

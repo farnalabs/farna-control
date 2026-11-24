@@ -808,6 +808,36 @@ def test_type_declaration_modules_are_excluded_from_the_gate():
     assert mod._is_excluded("frontend/src/components/NotificationBell.vue") is False
 
 
+def test_typescript_declaration_files_are_excluded_from_the_gate():
+    """``*.d.ts`` declaration files emit no runtime code and never appear in LCOV.
+
+    Regression: a global type rename in ``frontend/src/env.d.ts`` changed a
+    declaration line that v8 can never instrument, so the gate charged it as an
+    unmeasured 0% line and failed a PR whose only frontend change was a type.
+    Declaration files are out of scope; runtime modules stay gated (same class
+    as ``frontend/src/types/**``).
+    """
+    assert mod._is_excluded("frontend/src/env.d.ts") is True
+    assert mod._is_excluded("frontend/src/yaml.d.ts") is True
+    # Runtime TypeScript must still be gated.
+    assert mod._is_excluded("frontend/src/config/runtime.ts") is False
+    assert mod._is_excluded("frontend/src/main.ts") is False
+
+
+def test_frontend_public_static_assets_are_excluded_from_the_gate():
+    """``frontend/public/**`` assets are served verbatim, never imported by vitest.
+
+    The container-startup ``runtime-config.js`` is rewritten at deploy time and
+    copied into the build unchanged, so the v8 scan never loads it and it never
+    reaches the LCOV report. Static public assets are out of scope; client
+    source elsewhere stays gated.
+    """
+    assert mod._is_excluded("frontend/public/runtime-config.js") is True
+    assert mod._is_excluded("frontend/public/robots.txt") is True
+    # Client source elsewhere must still be gated.
+    assert mod._is_excluded("frontend/src/config/runtime.ts") is False
+
+
 def test_frontend_build_config_files_are_excluded_from_the_gate():
     """Frontend build-config files are never instrumented by the vitest scan.
 

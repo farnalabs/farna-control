@@ -12,8 +12,6 @@
     :title="$t('components.RunAttemptHistory.title')"
     :description="$t('components.RunAttemptHistory.help')"
     heading-level="h2"
-    title-class="text-base font-semibold tracking-tight"
-    description-class="text-xs text-muted-foreground"
     padding="lg"
     elevation="sm"
   >

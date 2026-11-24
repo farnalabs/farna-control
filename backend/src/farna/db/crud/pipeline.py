@@ -112,7 +112,7 @@ def normalize_circuit_breaker_threshold(value: Decimal | float | str | None) -> 
     ``None`` disables the breaker. Any set value must be a finite number
     ``> 0`` that fits the column (<= ``CIRCUIT_BREAKER_THRESHOLD_MAX`` at 6dp);
     anything else raises ``ValueError`` with a caller-facing message. Shared by
-    the REST models, the CRUD writers, the MCP tools and ``modulo apply`` so
+    the REST models, the CRUD writers, the MCP tools and ``farna-control apply`` so
     every surface enforces the same rule the DB CHECK constraint backs.
     """
     if value is None:
@@ -162,7 +162,7 @@ def circuit_breaker_threshold_change_allowed(
 
     ONE shared rule, applied on every surface that can set the threshold
     (REST create + ``PATCH /pipelines/{id}``, the MCP ``create_pipeline`` +
-    ``set_pipeline_circuit_breaker`` tools, and ``modulo apply`` — which is
+    ``set_pipeline_circuit_breaker`` tools, and ``farna-control apply`` — which is
     refused server-side by the REST gate and surfaces the 403 as an apply
     failure):
 
@@ -1832,7 +1832,7 @@ async def _ensure_declared_gate(
     """Create the gate row for a declared block, or update it in place.
 
     Runs under the per-eval advisory lock. A live row with the same action is a
-    no-op (so a repeated ``modulo apply`` is idempotent — no id/version churn);
+    no-op (so a repeated ``farna-control apply`` is idempotent — no id/version churn);
     a live row with a different action is updated IN PLACE (version bump +
     ``pre_version_raw`` snapshot, mirroring the authoring route); no live row is
     created ENABLED with ``enabled_at`` stamped at creation — the same

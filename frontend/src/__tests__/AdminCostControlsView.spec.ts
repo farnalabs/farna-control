@@ -76,6 +76,22 @@ describe('AdminCostControlsView', () => {
     return wrapper
   }
 
+  // The design-system card owns the padding for both its header and its
+  // content (BaseCard maps padding="none" to `p-0`, which strips the padding
+  // from the CardHeader title too). Resolve the card by the heading it renders
+  // so a regression that re-introduces `padding="none"` on a titled card is
+  // visible as a missing `p-4` rather than as a hard-to-attribute layout drift.
+  function cardForHeading(wrapper: ReturnType<typeof mount>, title: string): HTMLElement {
+    const headings = wrapper.findAll(
+      '.card-base .card-header h2, .card-base .card-header h3, .card-base .card-header h4',
+    )
+    const heading = headings.find((h) => h.text() === title)
+    expect(heading, `a card headed "${title}" must render`).toBeDefined()
+    const card = heading!.element.closest('.card-base')
+    expect(card, `"${title}" must sit inside a .card-base card`).not.toBeNull()
+    return card as HTMLElement
+  }
+
   it('renders without crashing', async () => {
     const wrapper = await mountView()
     expect(wrapper.exists()).toBe(true)
@@ -91,6 +107,53 @@ describe('AdminCostControlsView', () => {
     expect(page.classes()).not.toContain('font-sans')
     expect(page.get('h1[data-page-heading]').classes()).not.toContain('font-mono')
     expect(page.get('[data-testid="cc-team-budget-team-1"]').classes()).not.toContain('font-mono')
+  })
+
+  it('pads every titled card with the design-system default (FAR-2694)', async () => {
+    const wrapper = await mountView()
+
+    const titledCards = [
+      'Budget Overview',
+      'Team Budgets',
+      'Alert Thresholds',
+      'Circuit Breaker',
+      'Billing Settings',
+    ]
+    for (const title of titledCards) {
+      const card = cardForHeading(wrapper, title)
+      expect(card.classList.contains('p-0'), `"${title}" must not sit at zero card padding`).toBe(false)
+      expect(card.classList.contains('p-4'), `"${title}" must carry the default card padding`).toBe(true)
+    }
+    wrapper.unmount()
+  })
+
+  it('gives every titled card an h2 so the outline never skips a level (FAR-2694)', async () => {
+    const wrapper = await mountView()
+
+    const titledCards = [
+      'Budget Overview',
+      'Team Budgets',
+      'Alert Thresholds',
+      'Circuit Breaker',
+      'Billing Settings',
+    ]
+    for (const title of titledCards) {
+      const card = cardForHeading(wrapper, title)
+      expect(card.querySelector('.card-header h2'), `"${title}" must render its heading as an h2`).not.toBeNull()
+      expect(card.querySelector('.card-header h3'), `"${title}" must not fall back to the CardHeader default h3`).toBeNull()
+    }
+    wrapper.unmount()
+  })
+
+  it('lets the Budget Overview card pad its own content instead of a hand-rolled p-6 (FAR-2694)', async () => {
+    const wrapper = await mountView()
+
+    const card = cardForHeading(wrapper, 'Budget Overview')
+    const content = card.querySelector('.card-content > div')
+    expect(content, 'the Budget Overview content wrapper must render').not.toBeNull()
+    expect(content!.classList.contains('space-y-4')).toBe(true)
+    expect(content!.classList.contains('p-6')).toBe(false)
+    wrapper.unmount()
   })
 
   it('displays budget overview with spend and remaining', async () => {
@@ -373,10 +436,21 @@ describe('AdminCostControlsView', () => {
   })
 
   it('shows locked state when feature is disabled', async () => {
+    // FAR-2665: the lock copy is decided by the plan payload's ENTITLEMENT
+    // registry, not a per-view `required-tier` prop. `admin_cost_controls` maps
+    // to the cost_governance capability, so a switched-off flag still gets the
+    // commercial wording with the upgrade path rather than behaviour-off copy.
     mockGet.mockImplementation((path: string) => {
-      if (path === '/api/v1/admin/feature-flags') {
+      if (path === '/api/v1/plan') {
         return Promise.resolve({
-          data: { license: { tier: 'community', has_license_key: false, is_valid: true }, flags: [{ name: 'admin_cost_controls', description: 'Cost Controls', tier: 'team', currently_active: false, depends_on: null }], would_activate: [] },
+          data: {
+            license: { tier: 'community', expires_at: null, org_id: null },
+            dev_mode: false,
+            flags: [{ name: 'admin_cost_controls', currently_active: false }],
+            entitlements: [
+              { key: 'cost_governance', name: 'Cost governance', description: '', granted: false, flags: ['admin_spend_limits', 'admin_cost_controls', 'admin_cost_breakdown'] },
+            ],
+          },
           error: undefined,
         })
       }

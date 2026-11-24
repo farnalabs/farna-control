@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="model_backend_management" required-tier="community" show-disabled>
+  <FeatureGate feature-name="model_backend_management" show-disabled>
     <div class="page-wide">
       <PageHeader :title="$t('views.AdminModelBackendsView.model_backends')" :subtitle="$t('views.AdminModelBackendsView.manage_llm_backend_connections_and_credentials')">
         <template #right>
@@ -306,29 +306,31 @@
                             {{ $t('views.AdminModelBackendsView.no_pipeline_refs') }}
                           </div>
                           <template v-else>
-                            <table class="w-full text-left text-xs" :data-testid="`admin-model-backends-refs-table-${backend.id}`">
-                              <thead>
-                                <tr>
-                                  <th class="table-header">{{ $t('views.AdminModelBackendsView.pipeline_name') }}</th>
-                                  <th class="table-header">{{ $t('views.AdminModelBackendsView.agent_name') }}</th>
-                                  <th class="table-header">{{ $t('views.AdminModelBackendsView.reference_type') }}</th>
-                                </tr>
-                              </thead>
-                              <tbody class="divide-y divide-border">
-                                <tr v-for="ref in refsState[backend.id]?.data?.items ?? []" :key="`${ref.pipeline_id}-${ref.agent_id ?? 'direct'}`" class="hover:bg-muted/30">
-                                  <td class="table-cell font-medium">{{ ref.pipeline_name }}</td>
-                                  <td class="table-cell text-muted-foreground">{{ ref.agent_name || '\u2014' }}</td>
-                                  <td class="table-cell">
-                                    <span
-                                      class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                                      :class="ref.reference_type === 'direct_node' ? 'bg-primary/10 text-primary-text' : 'bg-warning/10 text-warning-text'"
-                                    >
-                                      {{ ref.reference_type === 'direct_node' ? $t('views.AdminModelBackendsView.ref_type_direct') : $t('views.AdminModelBackendsView.ref_type_agent') }}
-                                    </span>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
+                            <div class="table-wrapper">
+                              <table class="w-full text-left text-xs" :data-testid="`admin-model-backends-refs-table-${backend.id}`">
+                                <thead>
+                                  <tr>
+                                    <th class="table-header">{{ $t('views.AdminModelBackendsView.pipeline_name') }}</th>
+                                    <th class="table-header">{{ $t('views.AdminModelBackendsView.agent_name') }}</th>
+                                    <th class="table-header">{{ $t('views.AdminModelBackendsView.reference_type') }}</th>
+                                  </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border">
+                                  <tr v-for="ref in refsState[backend.id]!.data!.items" :key="`${ref.pipeline_id}-${ref.agent_id ?? 'direct'}`" class="hover:bg-muted/30">
+                                    <td class="table-cell font-medium">{{ ref.pipeline_name }}</td>
+                                    <td class="table-cell text-muted-foreground">{{ ref.agent_name || '\u2014' }}</td>
+                                    <td class="table-cell">
+                                      <span
+                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                                        :class="ref.reference_type === 'direct_node' ? 'bg-primary/10 text-primary-text' : 'bg-warning/10 text-warning-text'"
+                                      >
+                                        {{ ref.reference_type === 'direct_node' ? $t('views.AdminModelBackendsView.ref_type_direct') : $t('views.AdminModelBackendsView.ref_type_agent') }}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
                             <div v-if="refsHasPagination(backend.id)" class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                               <span>{{ $t('views.AdminModelBackendsView.refs_page_info', { page: refsPage(backend.id), total: refsTotalPages(backend.id) }) }}</span>
                               <button type="button"

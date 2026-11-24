@@ -44,9 +44,14 @@ invariants of the PR-reviewer / Branch-Fixer / merge-queue triangle:
   (FAR-2001).
 - **Every product job reaches every notifier** — each notifier's ``needs:`` list
   must name every product job (every job except the notifiers themselves), so a
-  failing job is never invisible to the Branch Fixer / self-report guard
+  failing job is never invisible to the Branch Fixer guard
   (FAR-2308). The few genuine per-notifier exceptions are an explicit,
   verified allowlist.
+- **A from-zero deploy creates the worker first** — both deploy legs must
+  pre-create the worker process group when the app has zero app/worker
+  machines, before the main ``fly deploy`` whose ``/healthz/ready`` gate would
+  otherwise time out waiting for a worker that never gets created
+  (FAR-2656).
 
 Every lens reports actionable diagnostics instead of a bare failure, mirroring
 the sibling architecture tests.
@@ -198,10 +203,10 @@ def test_pr_review_dispatches_on_red_ci_too() -> None:
     never goes green would never be quality-reviewed, and the gate re-couples
     the reviewer to CI colour.
     """
-    job = _job_named(_load_yaml(PR_REVIEW_YML), "Trigger Modulo PR Review")
+    job = _job_named(_load_yaml(PR_REVIEW_YML), "Trigger Farna Control PR Review")
     condition = job.get("if")
-    assert isinstance(condition, str), "pr-review.yml: the 'Trigger Modulo PR Review' job has no scalar `if:` gate — reviewer dispatch is no longer conditioned on the product-CI conclusion"
-    assert condition.strip(), "pr-review.yml: the 'Trigger Modulo PR Review' job has a blank `if:` gate — the product-CI conclusion is no longer inspected"
+    assert isinstance(condition, str), "pr-review.yml: the 'Trigger Farna Control PR Review' job has no scalar `if:` gate — reviewer dispatch is no longer conditioned on the product-CI conclusion"
+    assert condition.strip(), "pr-review.yml: the 'Trigger Farna Control PR Review' job has a blank `if:` gate — the product-CI conclusion is no longer inspected"
     code = condition.replace('"', "'")
     violations: list[str] = []
     if "workflow_run" not in code:
@@ -362,7 +367,7 @@ def test_pr_review_manual_delivery_gate_is_not_bypassed_on_the_early_path() -> N
     that it is at the top level of the script (``if`` depth 0), not nested in one
     event branch.
     """
-    step = _step("Trigger Modulo PR Review", "Set PR details")
+    step = _step("Trigger Farna Control PR Review", "Set PR details")
     run = step.get("run") or ""
     lines = run.splitlines()
     arms = [index for index, line in enumerate(lines) if "*,manual-delivery,*" in line]
@@ -388,11 +393,11 @@ def test_pr_review_fork_gate_is_not_bypassed_on_the_early_path() -> None:
     gate's ``if:`` must therefore stay event-agnostic (``ready`` only), and the
     checkout that provides the versioned guard script must not be event-gated.
     """
-    step = _step("Trigger Modulo PR Review", "Same-repo author gate (FAR-264)")
+    step = _step("Trigger Farna Control PR Review", "Same-repo author gate (FAR-264)")
     condition = str(step.get("if") or "")
     assert "github.event_name" not in condition, "pr-review.yml: the same-repo author gate is restricted by event name — the early path would dispatch a review for a fork / external-author PR (FAR-264)"
     assert "same-repo-author-guard.py" in (step.get("run") or ""), "pr-review.yml: the same-repo author gate no longer calls the shared versioned guard script"
-    checkout = _step("Trigger Modulo PR Review", "Checkout repository (for the gate scripts)")
+    checkout = _step("Trigger Farna Control PR Review", "Checkout repository (for the gate scripts)")
     assert "github.event_name" not in str(checkout.get("if") or ""), "pr-review.yml: the gate-script checkout is event-gated — the dedup and fork gates cannot run on the early path without it"
 
 
@@ -408,7 +413,7 @@ def test_pr_review_early_path_is_deduplicated_per_head_sha() -> None:
     draft marked ready (or a second ``ready_for_review`` on an unchanged head)
     would review the same SHA twice.
     """
-    step = _step("Trigger Modulo PR Review", "Skip when head already reviewed (dedup)")
+    step = _step("Trigger Farna Control PR Review", "Skip when head already reviewed (dedup)")
     condition = str(step.get("if") or "")
     violations: list[str] = []
     if "workflow_dispatch" not in condition:
@@ -447,7 +452,7 @@ def test_merge_queue_ci_gate_references_only_product_ci() -> None:
     for ref in _workflow_refs(raw):
         if ref not in ALLOWED_MERGE_QUEUE_WORKFLOW_REFS:
             violations.append(f"  merge-queue.yml: --workflow {ref!r} is not in the allowed set {sorted(ALLOWED_MERGE_QUEUE_WORKFLOW_REFS)} — the merge gate may consult product CI only")
-    if "pr-review" in raw or "Review: Modulo Agent" in raw:
+    if "pr-review" in raw or "Review: Farna Control Agent" in raw:
         violations.append("  merge-queue.yml: references the PR-reviewer workflow — a review outage must not gate merges")
     assert not violations, "merge-queue.yml CI gate is no longer product-CI-only (FAR-1843):\n" + "\n".join(violations)
 
@@ -929,7 +934,7 @@ _PRE_FIX_STEP = (
     "  notify-pr-failure:\n"
     "    name: Trigger Branch Fixer\n"
     "    steps:\n"
-    "      - name: Trigger Modulo Branch Fixer\n"
+    "      - name: Trigger Farna Control Branch Fixer\n"
     "        shell: bash\n"
     "        env:\n"
     "          GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}\n"
@@ -952,7 +957,7 @@ jobs:
   notify-pr-failure:
     name: Trigger Branch Fixer
     steps:
-      - name: Trigger Modulo Branch Fixer
+      - name: Trigger Farna Control Branch Fixer
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN || github.token }}
@@ -1008,7 +1013,7 @@ def test_notification_guard_honours_gh_repo_env(tmp_path: Path) -> None:
 jobs:
   notify:
     env:
-      GH_REPO: farnalabs/modulo
+      GH_REPO: farnalabs/farna-control
     steps:
       - name: Comment
         run: gh pr comment "$PR_NUM" --body "done"
@@ -1026,7 +1031,7 @@ jobs:
     steps:
       - name: Comment
         continue-on-error: true
-        run: gh pr comment "$PR_NUM" --repo farnalabs/modulo --body "done"
+        run: gh pr comment "$PR_NUM" --repo farnalabs/farna-control --body "done"
 """
     violations = _notification_violations("wf.yml", _write_workflow(tmp_path, body))
     assert any(violation.kind == "continue-on-error" for violation in violations), "guard did not flag continue-on-error on a notification step:\n" + "\n".join(str(v) for v in violations)
@@ -1057,7 +1062,7 @@ jobs:
           gh pr list --state open
           gh run list --workflow "CI: Fast Validation"
           gh api "/repos/${REPO}/pulls/1" --jq '.head.sha' 2>/dev/null || echo ""
-          gh api "repos/farnalabs/modulo/branches" --paginate
+          gh api "repos/farnalabs/farna-control/branches" --paginate
 """
     violations = _notification_violations("wf.yml", _write_workflow(tmp_path, body))
     assert not violations, "non-notification gh calls must not be flagged:\n" + "\n".join(str(v) for v in violations)
@@ -1116,8 +1121,8 @@ def _branch_fixer_dispatch_runs(workflow: dict) -> dict[str, str]:
     for job_id in BRANCH_FIXER_NOTIFY_JOBS:
         job = jobs.get(job_id)
         assert isinstance(job, dict), f"ci.yml: job {job_id!r} is missing — the Branch Fixer dispatch moved"
-        dispatch = [step for step in (job.get("steps") or []) if isinstance(step, dict) and step.get("name") == "Trigger Modulo Branch Fixer"]
-        assert len(dispatch) == 1, f"ci.yml job {job_id!r}: expected exactly one 'Trigger Modulo Branch Fixer' step, found {len(dispatch)}"
+        dispatch = [step for step in (job.get("steps") or []) if isinstance(step, dict) and step.get("name") == "Trigger Farna Control Branch Fixer"]
+        assert len(dispatch) == 1, f"ci.yml job {job_id!r}: expected exactly one 'Trigger Farna Control Branch Fixer' step, found {len(dispatch)}"
         runs[job_id] = dispatch[0].get("run") or ""
     return runs
 
@@ -1697,12 +1702,113 @@ def test_production_deploy_waits_for_active_sandbox_runs_before_fly_swap() -> No
     assert "Wait for active sandbox runs to finish (production)" in names
     wait_step = next(step for step in production_steps if isinstance(step, dict) and step.get("name") == "Wait for active sandbox runs to finish (production)")
     script = str(wait_step.get("run") or "")
-    deploy_index = names.index("Deploy to app-modulo")
+    deploy_index = names.index("Deploy to farna-control")
     wait_index = names.index("Wait for active sandbox runs to finish (production)")
     assert wait_index < deploy_index
     assert "/api/v1/deployment" in script
     assert "active_sandbox_runs" in script
     assert "exit 1" in script
+
+
+# --- FAR-2656: a from-zero deploy pre-creates the worker process group ------
+
+#: (job id, from-zero pre-create step name, main deploy step name, Fly config).
+FROM_ZERO_LEGS = (
+    (
+        "deploy-staging",
+        "Pre-create worker process group from zero machines (staging)",
+        "Deploy to staging-farna-control",
+        "deploy/fly/fly.staging.toml",
+    ),
+    (
+        "deploy-production",
+        "Pre-create worker process group from zero machines (production)",
+        "Deploy to farna-control",
+        "fly.toml",
+    ),
+)
+
+
+def _fly_config_app(relative_path: str) -> str:
+    """The ``app = '...'`` a Fly config declares — the deploy target's truth."""
+    path = REPO / relative_path
+    assert path.exists(), f"Fly config missing: {path}"
+    match = re.search(r"^app\s*=\s*['\"]([^'\"]+)['\"]", path.read_text(encoding="utf-8"), re.MULTILINE)
+    assert match, f"{path.name}: no top-level app = '...' declaration"
+    return match.group(1)
+
+
+def test_from_zero_deploy_precreates_the_worker_process_group_first() -> None:
+    """A deploy onto an app with no machines must create the worker FIRST.
+
+    ``fly deploy`` gates on the app's ``[[http_service.checks]]`` probe of
+    ``/healthz/ready``, and that probe requires a live worker. On a brand-new
+    or fully scaled-to-zero app no machines exist, so the app machine comes up,
+    readiness returns 503 indefinitely, and the deploy times out before it ever
+    creates the worker - the release never lands (observed twice against a
+    zero-machine deployment). The fix pre-creates the worker process group from
+    the SAME pre-built image whenever the app reports zero app/worker machines.
+
+    This test pins the wiring that makes it real rather than a comment: the
+    step exists on both legs, it runs BEFORE the main deploy step, it is gated
+    on an actual zero-machine count, it ships the same image/config variables
+    as the main deploy, and it fails loudly rather than silently skipping when
+    the machine list cannot be read.
+    """
+    violations: list[str] = []
+    jobs = _deploy_jobs()
+    for job_id, precreate_name, deploy_name, config_path in FROM_ZERO_LEGS:
+        job = jobs.get(job_id)
+        if not isinstance(job, dict):
+            violations.append(f"  {job_id}: job is missing")
+            continue
+        job_env = {str(key): str(value) for key, value in (job.get("env") or {}).items()}
+        steps = [step for step in job.get("steps") or [] if isinstance(step, dict)]
+        names = [str(step.get("name") or "") for step in steps]
+        if precreate_name not in names:
+            violations.append(f"  {job_id}: no step named {precreate_name!r} - the from-zero pre-create is gone")
+            continue
+        if deploy_name not in names:
+            violations.append(f"  {job_id}: no step named {deploy_name!r}")
+            continue
+        precreate_index = names.index(precreate_name)
+        deploy_index = names.index(deploy_name)
+        if precreate_index > deploy_index:
+            violations.append(f"  {job_id}: {precreate_name!r} (index {precreate_index}) runs after {deploy_name!r} (index {deploy_index})")
+        script = str(steps[precreate_index].get("run") or "")
+        main_script = str(steps[deploy_index].get("run") or "")
+        # Gated on a real zero-machine count, never on a toggle or a guess.
+        if "flyctl machines list" not in script or "--json" not in script:
+            violations.append(f"  {job_id}: the from-zero step no longer counts machines with 'flyctl machines list --json'")
+        if "jq" not in script:
+            violations.append(f"  {job_id}: the from-zero step no longer reduces the machine list with jq")
+        if "-ne 0" not in script:
+            violations.append(f"  {job_id}: the from-zero step is not gated on a zero-machine count")
+        if "skipping from-zero pre-create" not in script:
+            violations.append(f"  {job_id}: the machines-present path is no longer logged")
+        # The fix itself: the worker process group is created from the same
+        # pre-built image the main deploy ships.
+        if "--process-groups worker" not in script:
+            violations.append(f"  {job_id}: the from-zero step no longer pre-creates the worker process group")
+        if "$IMAGE_REF" not in script:
+            violations.append(f"  {job_id}: the from-zero step does not ship the main deploy's $IMAGE_REF")
+        # A machine-list failure (missing app, Fly API error) must fail loudly.
+        if "exit 1" not in script:
+            violations.append(f"  {job_id}: the from-zero step cannot fail loudly on a machine-list failure")
+        # One identity, two steps: the app name and config come from job-level
+        # env, and that env matches the Fly config's own `app` declaration, so
+        # an app rename cannot leave the pre-create pointing at the old app.
+        expected_app = _fly_config_app(config_path)
+        if job_env.get("DEPLOY_APP") != expected_app:
+            violations.append(f"  {job_id}: DEPLOY_APP is {job_env.get('DEPLOY_APP')!r}, but {config_path} declares app = {expected_app!r}")
+        if job_env.get("DEPLOY_FLY_CONFIG") != config_path:
+            violations.append(f"  {job_id}: DEPLOY_FLY_CONFIG is {job_env.get('DEPLOY_FLY_CONFIG')!r}, expected {config_path!r}")
+        for var in ("DEPLOY_APP", "DEPLOY_FLY_CONFIG"):
+            if f"${var}" not in script:
+                violations.append(f"  {job_id}: the from-zero step does not read ${var} from job-level env")
+            if f"${var}" not in main_script:
+                violations.append(f"  {job_id}: the main deploy step does not read ${var} from job-level env")
+    assert not violations, "the from-zero worker pre-create is missing or mis-wired:\n" + "\n".join(violations)
 
 
 def test_production_deploy_still_verifies_the_shipped_sha() -> None:
@@ -1720,9 +1826,98 @@ def test_production_deploy_still_verifies_the_shipped_sha() -> None:
     for needle in ("steps.git.outputs.git-sha", "SHA MISMATCH", '"deployed_sha=$deployedSha"'):
         if needle not in run:
             violations.append(f"  the deployed-SHA check lost {needle!r}")
+    # FAR-2656: the SHA check must read the app this job deployed. Probing the
+    # custom domain would read the old app during the cutover window and could
+    # confirm the wrong release's SHA.
+    if "https://farna-control.fly.dev/api/v1/deployment" not in run:
+        violations.append("  the deployed-SHA check no longer reads https://farna-control.fly.dev/api/v1/deployment")
     if "exit 1" not in run:
         violations.append("  a SHA mismatch no longer fails the step")
     assert not violations, "the production SHA verification was weakened:\n" + "\n".join(violations)
+
+
+#: (job id, the app host that job's deployed-SHA check probes).
+DEPLOYED_SHA_LEGS = (
+    ("deploy-staging", "staging-farna-control.fly.dev"),
+    ("deploy-production", "farna-control.fly.dev"),
+)
+
+
+def test_deployed_sha_check_survives_a_cold_start() -> None:
+    """Both deployed-SHA checks must wait out a cold start, not fire once.
+
+    A from-zero deploy creates brand-new machines, so the first requests can
+    arrive before the app answers. A single ``curl -m 10`` then fails the step
+    with "No deployment info" even though the app becomes healthy minutes later
+    (observed 2026-11-24). Each leg must poll ``/healthz/ready`` with a bounded
+    budget, fetch ``/api/v1/deployment`` with a bounded retry, and fail loudly
+    on exhaustion - while keeping the SHA comparison itself.
+    """
+    violations: list[str] = []
+    jobs = _deploy_jobs()
+    for job_id, host in DEPLOYED_SHA_LEGS:
+        steps = (jobs.get(job_id) or {}).get("steps") or []
+        step = next(
+            (s for s in steps if isinstance(s, dict) and s.get("name") == "Check deployed SHA"),
+            None,
+        )
+        if step is None:
+            violations.append(f"  {job_id}: no 'Check deployed SHA' step")
+            continue
+        run = str(step.get("run") or "")
+        # Probes the same app host as before.
+        if host not in run:
+            violations.append(f"  {job_id}: the step does not probe {host}")
+        # Waits for readiness before reading the deployment info.
+        if "healthz/ready" not in run:
+            violations.append(f"  {job_id}: the step does not wait for /healthz/ready before checking the SHA")
+        # A bounded retry: numeric attempt caps for BOTH the readiness wait and
+        # the deployment-info fetch, a loop, and a sleep between attempts.
+        attempt_caps = re.findall(r"\$\w*[Aa]ttempts\s*=\s*\d+", run)
+        if len(attempt_caps) < 2:
+            violations.append(f"  {job_id}: expected bounded attempt caps for the readiness and deployment-info waits (found {attempt_caps!r})")
+        if not re.search(r"\b(?:for|while)\b", run):
+            violations.append(f"  {job_id}: the deployed-SHA check has no retry loop")
+        if not re.search(r"Start-Sleep\s+-Seconds\s+\d+", run):
+            violations.append(f"  {job_id}: the retry loop never sleeps between attempts")
+        # Exhaustion is loud, never a silent fall-through.
+        if "::error::" not in run:
+            violations.append(f"  {job_id}: exhausting the retry budget is not reported with a ::error:: annotation")
+        # The SHA comparison itself is preserved.
+        for needle in ("steps.git.outputs.git-sha", ".Substring(0, 7)", "SHA MISMATCH", "exit 1"):
+            if needle not in run:
+                violations.append(f"  {job_id}: the SHA comparison lost {needle!r}")
+    assert not violations, "a deployed-SHA check can fail on a cold start:\n" + "\n".join(violations)
+
+
+def test_production_post_deploy_gates_target_the_deployed_app_host() -> None:
+    """The post-deploy gates must exercise the app this job deployed (FAR-2656).
+
+    The production target moved to ``farna-control``, but the custom domain
+    (``control.farna.dev``) still serves the old app until the domain move. The
+    health gate and the ``@smoke`` run must therefore probe the app's own
+    ``farna-control.fly.dev`` host - reading through the domain would report a
+    false green for the old app while a broken new release ships. Pin the host
+    in each gate so a revert to ``control.farna.dev`` fails this suite.
+    """
+    app_host = "https://farna-control.fly.dev"
+    production_steps = (_deploy_jobs().get("deploy-production") or {}).get("steps") or []
+    violations: list[str] = []
+
+    verify = next(s for s in production_steps if isinstance(s, dict) and s.get("name") == "Post-deploy verify + auto-rollback (never leave prod down)")
+    verify_run = str(verify.get("run") or "")
+    if f'wait_healthy "{app_host}"' not in verify_run:
+        violations.append(f"  the post-deploy health gate no longer probes {app_host}")
+    if 'wait_healthy "https://control.farna.dev"' in verify_run:
+        violations.append("  the post-deploy health gate reads the custom domain instead of the deployed app")
+
+    smoke_steps = (_deploy_jobs().get("prod-smoke") or {}).get("steps") or []
+    smoke = next(s for s in smoke_steps if isinstance(s, dict) and str(s.get("name") or "").startswith("Run @smoke Playwright tests"))
+    smoke_env = smoke.get("env") or {}
+    if smoke_env.get("E2E_BASE_URL") != app_host:
+        violations.append(f"  the @smoke step E2E_BASE_URL is {smoke_env.get('E2E_BASE_URL')!r}, expected {app_host!r}")
+
+    assert not violations, "post-deploy gates do not target the deployed app host:\n" + "\n".join(violations)
 
 
 def test_production_drain_clears_only_after_all_post_deploy_gates() -> None:
@@ -1895,7 +2090,7 @@ def test_interpolated_run_scripts_stay_under_the_expression_length_cap() -> None
 #: Jobs that NOTIFY about a run's outcome rather than produce a product check.
 #: They are deliberately excluded from each other's ``needs``: a notifier cannot
 #: list itself, and ``notify-main-failure`` never runs on a PR.
-NOTIFIER_JOBS = frozenset({"notify-pr-failure", "notify-main-failure", "self-report-ci"})
+NOTIFIER_JOBS = frozenset({"notify-pr-failure", "notify-main-failure"})
 
 #: The ``if:`` fragment that makes a job PR-only.
 PR_ONLY_CONDITION = "github.event_name == 'pull_request'"
@@ -1910,7 +2105,6 @@ NOTIFIER_NEEDS_EXEMPTIONS: dict[str, dict[str, str]] = {
     "notify-main-failure": {
         "sonar-new-issues-gate": ("PR-only (`if: github.event_name == 'pull_request'`) - it never runs, so it cannot fail, on the push/workflow_dispatch events this notifier handles"),
     },
-    "self-report-ci": {},
 }
 
 
@@ -1918,10 +2112,9 @@ def test_every_product_job_is_in_every_notifier_needs_list() -> None:
     """Each notifier's ``needs:`` must name every product job (FAR-2308).
 
     A notifier's guard reads ``needs.*.result``, so a job omitted from ``needs``
-    is invisible: its failure never reaches the Branch Fixer (``notify-*``) and
-    never suppresses the "ci" self-report. The set is DERIVED from ``jobs:``
-    rather than hand-maintained, so adding a job (e.g. ``uv-lock-check``) fails
-    here until all three lists are updated.
+    is invisible: its failure never reaches the Branch Fixer (``notify-*``). The
+    set is DERIVED from ``jobs:`` rather than hand-maintained, so adding a job
+    (e.g. ``uv-lock-check``) fails here until both lists are updated.
     """
     workflow = _load_yaml(CI_YML)
     jobs = workflow.get("jobs") or {}
@@ -1967,7 +2160,7 @@ def test_every_product_job_is_in_every_notifier_needs_list() -> None:
 
 #: (workflow, job id, dispatch step name) of every MAIN-branch failure dispatch.
 MAIN_FAILURE_DISPATCH_SITES = (
-    (CI_YML, "notify-main-failure", "Trigger Modulo Branch Fixer"),
+    (CI_YML, "notify-main-failure", "Trigger Farna Control Branch Fixer"),
     (DEPLOY_YML, "notify-deploy-failure", "Dispatch Branch Fixer webhook"),
     (DEPLOY_YML, "notify-staging-e2e-failure", "Dispatch Branch Fixer webhook"),
     (DEPLOY_YML, "notify-prod-smoke-failure", "Dispatch Branch Fixer webhook"),
@@ -2011,7 +2204,7 @@ def test_main_failure_fingerprints_do_not_embed_the_commit_sha() -> None:
 
 def test_ci_main_failure_fingerprint_keys_on_the_failed_jobs() -> None:
     """ci.yml keys main failures on the failed `needs` jobs, failing closed to a constant."""
-    _job, step = _main_failure_dispatch(CI_YML, "notify-main-failure", "Trigger Modulo Branch Fixer")
+    _job, step = _main_failure_dispatch(CI_YML, "notify-main-failure", "Trigger Farna Control Branch Fixer")
     run = str(step.get("run") or "")
     env = step.get("env") or {}
     assert str(env.get("NEEDS_JSON") or "") == "${{ toJSON(needs) }}"

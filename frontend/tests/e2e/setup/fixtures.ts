@@ -1,15 +1,32 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { test as base, expect, type Page } from '@playwright/test'
+import yaml from 'js-yaml'
 import { startCoverage, stopCoverage } from './coverage'
 import { getLocalE2eBaseUrl, getTestEnv, type TestEnv } from './env'
 import { loginThroughUi } from './login'
-import { installTeamTierNavigationGuard } from './target-tier'
+import { installEntitlementNavigationGuard } from './target-tier'
 
 type SsoBackendProcess = { stop: () => Promise<void> }
 
+/**
+ * How long the spawned fixture may take to answer `/healthz`.
+ *
+ * The fixture imports the production FastAPI app (hundreds of modules) before
+ * it can serve anything, so its cold-start cost is the app's import cost, not
+ * the server's bind time. Measured 15.1 s on a warm venv on this shared host
+ * (2026-11-24, FAR-2718), which the original 15 s deadline raced: the first
+ * SSO case failed while the second passed from the same tree. A cold venv is
+ * slower still, because the first import compiles bytecode for the whole app.
+ * The wait stays BOUNDED: a genuinely broken boot (e.g. the settings validator
+ * refusing the DSN) still fails here after this deadline, with the recorded
+ * probe error and the child's exit code.
+ */
+const SSO_FIXTURE_READY_TIMEOUT_MS = 60_000
+
 async function waitForPort(port: number, child: ChildProcess): Promise<void> {
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + SSO_FIXTURE_READY_TIMEOUT_MS
   let lastProbeError: unknown
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`[sso-fixture] backend exited before readiness (code ${child.exitCode})`)
@@ -24,7 +41,7 @@ async function waitForPort(port: number, child: ChildProcess): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   throw new Error(
-    `[sso-fixture] backend did not become ready on port ${port} within 15000ms (last probe error: ${String(lastProbeError)})`,
+    `[sso-fixture] backend did not become ready on port ${port} within ${SSO_FIXTURE_READY_TIMEOUT_MS}ms (last probe error: ${String(lastProbeError)})`,
     { cause: lastProbeError },
   )
 }
@@ -48,6 +65,12 @@ async function startLocalSsoBackend(): Promise<SsoBackendProcess> {
       FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED: 'false',
       REDIS_URL: 'redis://127.0.0.1:0/0',
       FARNA_CONTROL_DB: 'sqlite',
+      // FARNA_CONTROL_DB=sqlite is a TEST-ONLY opt-in (ADR 068): the settings
+      // validator refuses to boot a 'sqlite' runtime DSN unless the opt-in is
+      // also set. This fixture IS the test suite, so it opts in here next to
+      // the other FARNA_CONTROL_* vars it owns. Without it the fixture exits
+      // before /healthz and the two SSO cases in login.spec.ts fail on boot.
+      FARNA_CONTROL_ALLOW_SQLITE: '1',
     },
   })
   child.stdout?.on('data', (chunk) => process.stderr.write(`[sso-fixture] ${chunk}`))
@@ -79,7 +102,7 @@ export const test = base.extend<{ env: TestEnv; localSsoBackend: SsoBackendProce
     // can only redirect to the dashboard there. Skip such a navigation with a
     // clear reason instead of failing the heading assertion (see
     // setup/target-tier.ts). Inert on local / a Team-licensed target.
-    installTeamTierNavigationGuard(page, env, (reason) => testInfo.skip(true, reason))
+    installEntitlementNavigationGuard(page, env, (reason) => testInfo.skip(true, reason))
     const enabled = process.env.VITE_COVERAGE === 'true'
     if (enabled) await startCoverage(page)
     await use(page)
@@ -134,6 +157,219 @@ export function mintMockAccessToken(overrides: Record<string, unknown> = {}): st
 const MOCK_ACCESS_TOKEN = mintMockAccessToken()
 const MOCK_REFRESH_TOKEN = 'mock-refresh-token-for-e2e-tests'
 
+// FAR-2665: the plan payload now carries the commercial ENTITLEMENT grant, and
+// a behaviour flag is no longer opened by a tier. Before FAR-2665 the local
+// mock answered with `flags: []` plus `license.tier: 'enterprise'`, and the
+// FeatureGate's `required-tier` fallback (enterprise rank 2 >= community/team)
+// opened every gated page. That fallback is gone, so the mock must model the
+// fully-licensed, everything-enabled target explicitly: every gated behaviour
+// flag active and every entitlement granted. Without it `flags: []` fails every
+// FeatureGate closed (#settingsmcpview-client never renders) and hides the
+// entitlement-gated routes (/settings/sso, /admin/audit, /admin/costs, ...).
+const MOCK_ENTITLEMENTS = [
+  { key: 'identity', name: 'Identity', description: 'SSO, SCIM and team RBAC', granted: true, flags: ['sso', 'scim', 'team_rbac'] },
+  { key: 'audit_evidence', name: 'Audit and evidence', description: 'Audit viewer and run retention', granted: true, flags: ['audit_viewer', 'admin_run_retention'] },
+  { key: 'cost_governance', name: 'Cost governance', description: 'Spend limits, cost controls and breakdown', granted: true, flags: ['admin_spend_limits', 'admin_cost_controls', 'admin_cost_breakdown'] },
+]
+
+// Every behaviour flag a view gates on with a `feature-name` FeatureGate. On
+// main each was opened by the tier fallback above; keep them all active so the
+// mock target stays the fully-enabled instance those specs were written for.
+const MOCK_ACTIVE_FLAGS = [
+  'assistant',
+  'audit_viewer',
+  'plugin_management',
+  'admin_cost_breakdown',
+  'admin_cost_controls',
+  'error_tracking',
+  'model_backend_management',
+  'webhook_notification_log',
+  'team_rbac',
+  'admin_run_retention',
+  'environment_profiles',
+  'admin_spend_limits',
+  'runtime_config',
+  'user_management',
+  'eval_system',
+  'schema_version_history',
+  'email_config',
+  'error_forwarders',
+  'mcp_server',
+  'observability',
+  'rate_limits',
+  'sso',
+  'webhook_trigger',
+]
+
+const MOCK_PLAN = {
+  license: { tier: 'enterprise', org_id: '1', expires_at: null },
+  dev_mode: true,
+  flags: MOCK_ACTIVE_FLAGS.map((name) => ({ name, currently_active: true })),
+  entitlements: MOCK_ENTITLEMENTS,
+}
+
+/**
+ * FAR-2713: the caller-scoped permission list the router gate and the sidebar
+ * read (`GET /api/v1/auth/permissions` → `{ permissions: string[] }`, resolved
+ * server-side from the backend permission registry). It is NOT the generic
+ * `{items,total}` envelope: answering that shape leaves
+ * `planStore.userPermissions` empty, the gate fails closed, and every route
+ * declaring `required_permissions` (the compliance evidence index, analytics,
+ * determination, evals, library search, system maps, ...) is refused before its
+ * view ever mounts.
+ *
+ * The mock models a fully-enabled org admin, so it grants exactly the
+ * permissions the product's own route manifest declares. Deriving them from
+ * `src/manifest.yaml` (rather than hard-coding a list) keeps the mock in step
+ * when a route adds a gate — a static list would silently refuse that route
+ * again.
+ */
+function manifestRoutePermissions(): string[] {
+  const manifestPath = resolve(__dirname, '../../../src/manifest.yaml')
+  const manifest = yaml.load(readFileSync(manifestPath, 'utf-8')) as {
+    routes?: Record<string, { required_permissions?: string[] | null }>
+  }
+  const names = new Set<string>()
+  for (const entry of Object.values(manifest.routes ?? {})) {
+    for (const name of entry.required_permissions ?? []) names.add(name)
+  }
+  return [...names].sort()
+}
+
+const MOCK_PERMISSIONS = manifestRoutePermissions()
+
+/**
+ * FAR-2713: fixtures for the four admin surfaces the general mock answered with
+ * the generic envelope. Each payload mirrors the generated OpenAPI type the
+ * view actually consumes (frontend/src/lib/api/schema.ts), with at least one
+ * row so cards, tables and definition tiles render content rather than an
+ * empty or error state.
+ */
+const MOCK_NOW = '2026-07-07T09:00:00Z'
+
+// GET /api/v1/evidence/redaction-rules → RedactionRuleResponse[] (bare array).
+// The seeded catch-all (`*` / viewer) mirrors migration 0320 / org creation.
+const MOCK_REDACTION_RULES = [
+  {
+    id: '00000000-0000-4000-8000-00000000e001',
+    key_pattern: '*',
+    role: 'viewer',
+    redacted_fields: [],
+    created_at: MOCK_NOW,
+    updated_at: MOCK_NOW,
+  },
+  {
+    id: '00000000-0000-4000-8000-00000000e002',
+    key_pattern: 'api_key',
+    role: 'operator',
+    redacted_fields: ['sensitive_output'],
+    created_at: MOCK_NOW,
+    updated_at: MOCK_NOW,
+  },
+  {
+    id: '00000000-0000-4000-8000-00000000e003',
+    key_pattern: 'internal_metadata',
+    role: 'admin',
+    redacted_fields: ['internal_metadata'],
+    created_at: MOCK_NOW,
+    updated_at: MOCK_NOW,
+  },
+]
+
+// GET /api/v1/compliance/evidence-index → EvidenceIndex (a structured object,
+// never the envelope). `detail.human_only_counts_are_lower_bounds` and a
+// `pipeline-snapshot:` identifier are included so the view's lower-bound banner
+// and its concise snapshot label render too.
+const MOCK_EVIDENCE_INDEX = {
+  pack_version: '2026.07.1',
+  pack_content_hash: 'sha256:4f1c0f4b9a2e7d3c8b5a6f0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c',
+  pack_published_at: '2026-07-01T00:00:00Z',
+  generated_at: MOCK_NOW,
+  period_from: null,
+  period_to: null,
+  product_version: '0.9.0',
+  organisation_id: '1',
+  framework_ids: ['soc2', 'iso27001'],
+  coverage: {
+    soc2: { access_control: 4, audit_logging: 3 },
+    iso27001: { access_control: 2 },
+  },
+  complete: true,
+  missing_artifact_types: [],
+  artifacts: [
+    {
+      artifact_type: 'audit_log',
+      status: 'present',
+      provenance: 'observed',
+      description: 'Organisation audit trail export',
+      location: '/api/v1/admin/audit',
+      identifiers: ['audit-log:2026-07'],
+      record_count: 42,
+      detail: { human_only_counts_are_lower_bounds: false },
+      mapping_row_ids: ['soc2-cc6.1', 'iso27001-a.12.4'],
+      absence_reason: null,
+    },
+    {
+      artifact_type: 'run_snapshot',
+      status: 'present',
+      provenance: 'observed',
+      description: 'Frozen pipeline snapshot for a completed run',
+      location: '/runs/101',
+      identifiers: ['pipeline-snapshot:00000000-0000-4000-8000-00000000e101@v2'],
+      record_count: 1,
+      detail: { human_only_counts_are_lower_bounds: true },
+      mapping_row_ids: ['soc2-cc7.2'],
+    },
+    {
+      artifact_type: 'customer_policy',
+      status: 'customer_supplied',
+      provenance: 'customer-supplied',
+      description: 'Customer-managed security policy document',
+      location: 'customer-managed',
+      identifiers: ['policy:acme-sec-1'],
+      record_count: null,
+      detail: {},
+      mapping_row_ids: ['iso27001-a.5.1'],
+    },
+  ],
+}
+
+// GET /api/v1/plugins → PluginResponse[] (bare array). `capabilities` is a
+// JSON array (the backend field is a set), which the view's pluginTypeLabel
+// calls `.includes` on.
+const MOCK_PLUGINS = [
+  {
+    PLUGIN_ID: 'farnalabs.github-connector',
+    display_name: 'GitHub Connector',
+    description: 'Bidirectional GitHub integration for pipelines and pull requests',
+    version: '1.4.0',
+    capabilities: ['connector_type'],
+    health_ok: true,
+    health_detail: 'Registry reachable',
+    health_checked_at: MOCK_NOW,
+  },
+  {
+    PLUGIN_ID: 'farnalabs.anthropic-backend',
+    display_name: 'Anthropic Model Backend',
+    description: 'Anthropic Claude model backend',
+    version: '2.0.1',
+    capabilities: ['model_backend'],
+    health_ok: false,
+    health_detail: 'API key not configured',
+    health_checked_at: MOCK_NOW,
+  },
+  {
+    PLUGIN_ID: 'farnalabs.core-tools',
+    display_name: 'Core Tools',
+    description: 'Built-in pipeline node types',
+    version: '0.9.0',
+    capabilities: [],
+    health_ok: true,
+    health_detail: 'OK',
+    health_checked_at: null,
+  },
+]
+
 // Shared date spine for the dashboard summary/trends fixtures. Kept as data
 // (rather than inlined per series) so the seven trends arrays stay the same
 // length and every series lines up on the same dates for the charts.
@@ -164,6 +400,16 @@ export async function setupLocalMockApi(page: Page) {
     if (url.includes('/api/v1/me/settings')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ locale: 'en-US' }) })
     }
+    if (url.includes('/api/v1/auth/permissions')) {
+      // FAR-2713: `{ permissions: string[] }` — never the generic
+      // {items,total} envelope (see MOCK_PERMISSIONS). Registered before the
+      // generic GET catch-all so `required_permissions` routes render.
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ permissions: MOCK_PERMISSIONS }),
+      })
+    }
     if (url.includes('/api/v1/me')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: '1', email: 'admin@example.com', display_name: 'Admin' }) })
     }
@@ -174,22 +420,14 @@ export async function setupLocalMockApi(page: Page) {
       // planStore bootstraps from the caller-scoped GET /api/v1/plan (FAR-1809
       // collapsed the old instance-admin /api/v1/admin/feature-flags reads into
       // it); the instance-admin endpoint still backs the admin feature-flags
-      // page, so answer both with the plan payload shape.
+      // page, so answer both with the plan payload shape. FAR-2665: the payload
+      // also carries the entitlement grant — see MOCK_PLAN.
       // dev_mode: true so private_preview routes (evals, runs-diff, feedback
       // inbox, saved views, node categories, feature flags, monitoring,
       // error forwarders, runtime config, rate limits, ...) resolve on the
       // local mock-API target instead of redirecting to the dashboard. Local
       // e2e mirrors staging, which also runs with dev mode on.
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ flags: [], license: { tier: 'enterprise' }, dev_mode: true }) })
-    }
-    if (url.includes('/api/v1/plan')) {
-      // FAR-1809: the caller-scoped plan bootstrap (`GET /api/v1/plan`) that
-      // replaced the instance-admin `/admin/feature-flags` + `/admin/license`
-      // pair the app's planStore used to read. Same vocabulary (tier, licence
-      // view, dev_mode, effective flag map) — dev_mode: true so private_preview
-      // routes resolve on the local mock-API target instead of redirecting to
-      // the dashboard (local e2e mirrors staging, which also runs dev mode on).
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ flags: [], license: { tier: 'enterprise', org_id: '1', expires_at: null }, dev_mode: true }) })
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_PLAN) })
     }
     if (url.includes('/api/v1/admin/license')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ expires_at: null, org_id: '1', tier: 'enterprise' }) })
@@ -335,6 +573,31 @@ export async function setupLocalMockApi(page: Page) {
       // `TypeError: anomalies.value.filter is not a function` (FAR-2614).
       // Registered BEFORE the generic GET catch-all below so it is reachable.
       return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    }
+    if (url.includes('/api/v1/evidence/redaction-rules') && method === 'GET') {
+      // `list_redaction_rules_endpoint` returns a BARE ARRAY (`list[RedactionRuleResponse]`).
+      // AdminEvidenceRedactionView reads `rules.value.some(...)` / `.length` /
+      // iteration over it, so the {items,total} envelope throws
+      // `TypeError: rules.value.some is not a function` and the whole view's
+      // render fails (no h1, no table). Registered before the generic GET
+      // catch-all below.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_REDACTION_RULES) })
+    }
+    if (url.includes('/api/v1/compliance/evidence-index') && method === 'GET') {
+      // Structured `EvidenceIndex` object (coverage map + artifacts array),
+      // never the envelope: ComplianceEvidenceIndexView reads
+      // `indexData.coverage` and `.artifacts.filter(...)`, so the envelope
+      // throws `Cannot read properties of undefined (reading 'filter')` and
+      // the definition tiles never render.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_EVIDENCE_INDEX) })
+    }
+    if (url.includes('/api/v1/plugins') && method === 'GET') {
+      // `list_plugins_endpoint` returns a BARE ARRAY (`list[PluginResponse]`).
+      // AdminPluginsView iterates it and calls `capabilities.includes(...)` in
+      // pluginTypeLabel; the envelope makes each row an object whose
+      // `capabilities` is undefined, so the render throws and the page has no
+      // h1 or table.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_PLUGINS) })
     }
     if (method === 'GET') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], total: 0 }) })

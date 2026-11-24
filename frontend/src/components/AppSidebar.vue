@@ -7,7 +7,7 @@
     :aria-label="$t('components.AppLayout.main_navigation')"
     aria-labelledby="desktop-navigation-heading"
   >
-    <h2 id="desktop-navigation-heading" class="sr-only">{{ $t('components.AppLayout.main_navigation') }}</h2>
+    <span id="desktop-navigation-heading" class="sr-only">{{ $t('components.AppLayout.main_navigation') }}</span>
     <SidebarRail
       v-if="collapsed"
       ref="railRef"
@@ -46,7 +46,7 @@
       :aria-label="$t('components.AppLayout.main_navigation')"
       aria-labelledby="mobile-rail-navigation-heading"
     >
-      <h2 id="mobile-rail-navigation-heading" class="sr-only">{{ $t('components.AppLayout.main_navigation') }}</h2>
+      <span id="mobile-rail-navigation-heading" class="sr-only">{{ $t('components.AppLayout.main_navigation') }}</span>
       <SidebarRail
         ref="railRef"
         :is-system-admin="isSystemAdmin"
@@ -76,7 +76,7 @@
       @cancel="closeMobilePanel"
       @close="mobileExpanded = false"
     >
-      <h2 id="mobile-panel-navigation-heading" class="sr-only">{{ $t('components.AppLayout.main_navigation') }}</h2>
+      <span id="mobile-panel-navigation-heading" class="sr-only">{{ $t('components.AppLayout.main_navigation') }}</span>
       <SidebarFull
         :is-system-admin="isSystemAdmin"
         :user-role="userRole"

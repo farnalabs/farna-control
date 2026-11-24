@@ -1,0 +1,19 @@
+apiVersion: v2
+name: farna-control
+description: >-
+  Vendor-neutral Helm chart for the Farna Control stack — backend API, SAQ
+  workers, frontend SPA, and Redis. Postgres is external/optional.
+type: application
+version: 0.3.330
+appVersion: "0.3.330"
+keywords:
+  - farna-control
+  - agent-governance
+  - sdlc
+  - helm
+home: https://farna.dev/control/
+sources:
+  - https://github.com/farnalabs/farna-control
+maintainers:
+  - name: FarnaLabs
+    url: https://farnalabs.com

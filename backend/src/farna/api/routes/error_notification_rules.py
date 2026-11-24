@@ -1,4 +1,13 @@
-"""CRUD for error notification rules."""
+"""CRUD for error notification rules.
+
+FAR-2698 / ADR 069: availability and a licence limit are separate axes. The
+behaviour flag ``error_tracking`` decides whether this surface is AVAILABLE
+(``require_feature`` on the router); it must never decide a licence LIMIT. The
+per-org cap is a flat 10 on every plan: FAR-2665 re-tiered error tracking to
+Community as operational capability, and no entitlement covers notification
+scale, so a tier-differentiated cap had no licence behind it. Switching the
+flag off returns 402 and never lowers the cap.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +28,7 @@ from farna.api.constants import (
     MSG_UNEXPECTED_ERROR_OCCURRED_WHILE,
 )
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
-from farna.api.dependencies import get_db_session, get_plan_context, require_permission
+from farna.api.dependencies import get_db_session, require_feature, require_permission
 from farna.api.models.error_notification_rule import (
     ErrorNotificationRuleCreate,
     ErrorNotificationRuleListResponse,
@@ -29,7 +38,6 @@ from farna.api.models.error_notification_rule import (
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
-from farna.core.feature_flags import PlanContext
 from farna.core.ssrf import validate_outbound_url_async
 from farna.db.models.error_notification_rule import ErrorNotificationRule
 from farna.db.rls import set_rls_org
@@ -43,10 +51,21 @@ _CODE_ERROR_NOTIFICATION_RULES_DELETE_NOTIFICATION_RULE = "error_notification_ru
 
 _log = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/errors/notification-rules", tags=["error-notification-rules"])
+router = APIRouter(
+    prefix="/api/v1/errors/notification-rules",
+    tags=["error-notification-rules"],
+    # FAR-2698: the behaviour flag governs AVAILABILITY only. It is not a
+    # licence signal, so it is applied here as a gate and never read to pick a
+    # rule limit. The sibling error-tracking admin surface
+    # (``admin_monitor_config``) gates the same way.
+    dependencies=[require_feature("error_tracking")],
+)
 
+# FAR-2698: one flat licence limit for every plan. FAR-2665 re-tiered error
+# tracking to Community (operational capability), and none of the three
+# entitlements (identity, audit/evidence, cost governance) covers notification
+# scale, so the old Community/Team split had no licence behind it any more.
 _MAX_RULES_PER_ORG = 10
-_MAX_RULES_COMMUNITY = 3
 
 
 def _serialize_rule(rule: ErrorNotificationRule) -> dict[str, Any]:
@@ -71,7 +90,19 @@ async def list_notification_rules(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = Depends(get_current_tenant_user),
+    # FAR-2683: the list discloses admin-class delivery configuration (the rule
+    # set and each rule's webhook_url), and every write to it is already gated
+    # by ``error_notification.manage`` (admin). Reuse that admin floor for the
+    # read rather than a viewer/runner read key — a reader who may not manage
+    # where alerts are delivered must not be able to enumerate it either.
+    # FAR-2685: confirmed the admin floor is the intended shape, not a stopgap.
+    # No product surface reads this route (there is no notification-rules view;
+    # the frontend only carries the generated API type), no documented operator
+    # need exists, and the sibling outbound-endpoint surface
+    # (``GET /api/v1/admin/notifications``, ``admin.notification.manage``) is
+    # admin-class too. Operators receive the alerts but do not own their
+    # delivery configuration, so no operator read key is warranted.
+    principal: TenantPrincipal = require_permission(_CODE_ERROR_NOTIFICATION_MANAGE),
 ) -> dict[str, Any]:
     org_id = principal.organisation_id
     if org_id is None:
@@ -128,19 +159,13 @@ async def create_notification_rule(
     req: ErrorNotificationRuleCreate,
     session: AsyncSession = Depends(get_db_session),
     principal: TenantPrincipal = require_permission(_CODE_ERROR_NOTIFICATION_MANAGE),
-    plan: PlanContext = Depends(get_plan_context),
 ) -> dict[str, Any]:
     org_id = principal.organisation_id
     if org_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=MSG_NO_ORGANISATION)
 
-    is_team = plan.feature_enabled("error_tracking")
-    max_rules = _MAX_RULES_PER_ORG if is_team else _MAX_RULES_COMMUNITY
-    if not is_team and req.action_type == "webhook":
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Webhook notification rules require the Team tier",
-        )
+    # FAR-2698: no tier branch. The cap is flat for every plan and webhook rules
+    # are available on every plan (still subject to the SSRF gate below).
 
     # SSRF gate (fail closed): the webhook_url is tenant-supplied and will be
     # fetched server-side by the alert dispatcher, so it is validated here in
@@ -160,10 +185,10 @@ async def create_notification_rule(
             )
             current_count = count_result.scalar_one() or 0
 
-            if current_count >= max_rules:
+            if current_count >= _MAX_RULES_PER_ORG:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=f"Maximum {max_rules} notification rules per organisation reached",
+                    detail=f"Maximum {_MAX_RULES_PER_ORG} notification rules per organisation reached",
                 )
 
             rule = ErrorNotificationRule(
@@ -185,7 +210,7 @@ async def create_notification_rule(
         _log.warning("error_notification_rules.create_notification_rule_integrity")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"Maximum {max_rules} notification rules per organisation reached",
+            detail=f"Maximum {_MAX_RULES_PER_ORG} notification rules per organisation reached",
         ) from exc
     except ProgrammingError as exc:
         _log.exception(_CODE_ERROR_NOTIFICATION_RULES_CREATE_NOTIFICATION_RULE)
@@ -220,14 +245,6 @@ async def _validate_webhook_url(url: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"webhook_url rejected: {exc}",
         ) from exc
-
-
-def _validate_webhook_tier_for_update(req: ErrorNotificationRuleUpdate, is_team: bool) -> None:
-    if not is_team and (req.action_type == "webhook" or req.webhook_url is not None):
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Webhook notification rules require the Team tier",
-        )
 
 
 def _apply_rule_updates(rule: ErrorNotificationRule, req: ErrorNotificationRuleUpdate) -> None:
@@ -282,16 +299,14 @@ async def update_notification_rule(
     req: ErrorNotificationRuleUpdate,
     session: AsyncSession = Depends(get_db_session),
     principal: TenantPrincipal = require_permission(_CODE_ERROR_NOTIFICATION_MANAGE),
-    plan: PlanContext = Depends(get_plan_context),
 ) -> dict[str, Any]:
     org_id = principal.organisation_id
     if org_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=MSG_NO_ORGANISATION)
 
-    is_team = plan.feature_enabled("error_tracking")
-    _validate_webhook_tier_for_update(req, is_team)
-    # SSRF gate (fail closed): same rule as create — validate any new webhook_url
-    # before it can be persisted.
+    # FAR-2698: webhook rules are no longer tier-refused — they are available on
+    # every plan. SSRF gate (fail closed): same rule as create — validate any new
+    # webhook_url before it can be persisted.
     if req.webhook_url is not None:
         await _validate_webhook_url(req.webhook_url)
 

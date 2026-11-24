@@ -1,0 +1,209 @@
+# ============================================================================
+# Farna Control Helm Chart — values.eks.example.yaml
+# ============================================================================
+# Validated EKS example. Uses AWS managed services:
+#   - Amazon RDS (Postgres 16) — set postgres.external.*
+#   - Amazon ElastiCache (Redis 7) — set redis.external.*
+#   - AWS ALB Ingress Controller — set ingress.className=alb
+#
+# Prerequisites:
+#   1. EKS cluster with the AWS Load Balancer Controller installed
+#   2. RDS instance accessible from the cluster (VPC peering or same VPC)
+#   3. ElastiCache Redis accessible from the cluster
+#   4. Secrets stored in AWS Secrets Manager or Kubernetes Secrets
+#
+# Usage:
+#   helm install farna-control ./deploy/helm/farna-control \
+#     -f deploy/helm/farna-control/values.eks.example.yaml \
+#     --set postgres.password=<rds-password> \
+#     --set backend.env.SECRET_KEY=<32-byte-key> \
+#     --set backend.env.FERNET_KEY=<32-byte-key>
+# ============================================================================
+
+# -- Namespace --------------------------------------------------------------
+namespace:
+  create: true
+  name: farna-control
+  annotations:
+    app.kubernetes.io/managed-by: helm
+
+# -- ResourceQuota (right-sized for EKS) ------------------------------------
+resourceQuota:
+  enabled: true
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    pods: "50"
+
+# -- LimitRange (EKS defaults) ----------------------------------------------
+limitRange:
+  enabled: true
+  default:
+    cpu: "1"
+    memory: "1Gi"
+    ephemeral-storage: 2Gi
+  defaultRequest:
+    cpu: "250m"
+    memory: "256Mi"
+    ephemeral-storage: 512Mi
+
+# -- Kubernetes runtime provider (optional) ---------------------------------
+# This validated example leaves token mounting OFF (the default): nothing in
+# the stack calls the Kubernetes API unless you enable the Kubernetes runtime
+# provider. Enable both halves together when you run agent workspaces as pods
+# on this cluster — backend, saq-runner and saq-system then need a mounted
+# token to create/exec/log those pods (the frontend stays unmounted). This is
+# declarative, so it survives `helm upgrade`; the old `kubectl patch` workaround
+# did not. Bind only a namespaced Role to the ServiceAccount — see the chart
+# README, "Kubernetes Runtime Provider".
+#
+# serviceAccount:
+#   automountServiceAccountToken: true
+#
+# backend:
+#   env:
+#     FARNA_CONTROL_KUBERNETES_ENABLED: "1"
+# saqRunner:
+#   env:
+#     FARNA_CONTROL_KUBERNETES_ENABLED: "1"
+# saqSystem:
+#   env:
+#     FARNA_CONTROL_KUBERNETES_ENABLED: "1"
+
+# -- External Postgres (Amazon RDS) -----------------------------------------
+postgres:
+  host: modulo-db.cluster-xxxxxx.us-east-1.rds.amazonaws.com
+  port: 5432
+  database: modulo
+  username: farna_control_app       # Restricted runtime role (DATABASE_URL)
+  adminUsername: modulo      # Admin/superuser role (DATABASE_ADMIN_URL)
+  existingSecret: modulo-secrets
+
+# -- External Redis (Amazon ElastiCache) ------------------------------------
+redis:
+  embedded: false
+  host: modulo-redis.xxxxxx.0001.use1.cache.amazonaws.com
+  port: 6379
+  db: 0
+  existingSecret: modulo-secrets
+
+# -- Backend (2 replicas for HA) --------------------------------------------
+backend:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/farnalabs/farna-control/backend
+    digest: ""
+    # Empty means "use the chart's appVersion" (the released image tag).
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+      ephemeralStorage: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+      ephemeralStorage: 2Gi
+  env:
+    FARNA_CONTROL_PUBLIC_URL: "https://farna-control.example.com"
+    FARNA_CONTROL_LOG_LEVEL: info
+    FARNA_CONTROL_ENV: production
+    FARNA_CONTROL_MAX_LOCAL_CONCURRENCY: "4"
+    SAQ_WORKER_CONCURRENCY: "20"
+    SAQ_REDIS_POOL_SIZE: "50"
+    # REQUIRED: the saq-system worker fail-closes without non-empty values
+    # (saq_worker._assert_system_auth_configured is truthiness-only).
+    # See README "Required Values" for the full failure mode.
+    SAQ_AUTH_USERNAME: "admin"
+    SAQ_AUTH_PASSWORD: "change-me-saq-web-auth"
+
+# -- SAQ Runner (2 replicas for HA) ----------------------------------------
+saqRunner:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/farnalabs/farna-control/backend
+    digest: ""
+    # Empty means "use the chart's appVersion" (the released image tag).
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+      ephemeralStorage: 2Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+      ephemeralStorage: 4Gi
+  env:
+    SAQ_WORKER_CONCURRENCY: "20"
+    SAQ_REDIS_POOL_SIZE: "50"
+
+# -- SAQ System (single replica — single scheduler) -------------------------
+saqSystem:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/farnalabs/farna-control/backend
+    digest: ""
+    # Empty means "use the chart's appVersion" (the released image tag).
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+      ephemeralStorage: 1Gi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+      ephemeralStorage: 2Gi
+
+# -- Frontend (2 replicas for HA) ------------------------------------------
+frontend:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/farnalabs/farna-control/frontend
+    digest: ""
+    # Empty means "use the chart's appVersion" (the released image tag).
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+      ephemeralStorage: 256Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+      ephemeralStorage: 512Mi
+
+# -- Ingress (AWS ALB) ------------------------------------------------------
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz/ready
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: farna-control.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: modulo-tls
+      hosts:
+        - farna-control.example.com
+
+# -- HPA (backend + frontend) -----------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80

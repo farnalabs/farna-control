@@ -34,7 +34,7 @@ _PROD_COMPOSE_PATH = _REPO_ROOT / "deploy" / "compose" / "docker-compose.prod.ym
 # variable set - `_render` supplies it for the same reason it supplies the SMTP
 # variables: to reproduce the YAML Gatus actually parses.
 _IMAGE_DEFAULT_PROBE_URL = "http://backend:8000/healthz/ready"
-_PROD_PROBE_URL = "http://modulo:80/healthz/ready"
+_PROD_PROBE_URL = "http://farna-control:80/healthz/ready"
 
 # The app's SMTP variables - reused verbatim, never renamed (one SMTP setup
 # serves HITL email alerts and health alerts).
@@ -154,7 +154,7 @@ def test_watchdog_probe_url_is_parameterised_not_hardcoded():
     """The shared config must not pin one deployment's service topology.
 
     The root compose probes ``backend:8000`` and the production compose probes
-    ``modulo:80`` (the all-in-one image puts uvicorn behind nginx on port 80);
+    ``farna-control:80`` (the all-in-one image puts uvicorn behind nginx on port 80);
     a hardcoded URL would leave exactly one of them probing nothing.
     """
     raw = _CONFIG_PATH.read_text(encoding="utf-8")

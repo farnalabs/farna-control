@@ -2713,6 +2713,36 @@ async def _require_plan_feature(org_id: uuid.UUID, settings: Any, feature_name: 
     return None
 
 
+async def _require_plan_entitlement(org_id: uuid.UUID, settings: Any, entitlement_key: str) -> dict[str, Any] | None:
+    """Org-aware ENTITLEMENT gate for an MCP tool (FAR-2665).
+
+    Mirrors the REST ``require_entitlement`` dependency so a tool that mirrors
+    an entitled route reaches the SAME answer. An entitlement bundles several
+    behaviour flags, so it stays available while ANY implementing flag is still
+    active: gating on one member flag (say ``team_rbac``) would refuse a
+    capability the REST surface still honours whenever the operator kills only
+    that one flag.
+
+    Returns the standard ``feature_required`` error dict when the org does not
+    hold ``entitlement_key`` (not granted, or every implementing flag is
+    switched off), else ``None``.
+    """
+    from farna.core.entitlements import entitlement_available, get_entitlement
+    from farna.core.feature_flags import resolve_plan_context
+    from farna.db.crud.organisation import get_organisation
+
+    async with _session(org_id) as s:
+        org = await get_organisation(s, org_id)
+    async with _session(org_id) as s:
+        plan_ctx = await resolve_plan_context(settings, s, org)
+    if entitlement_available(plan_ctx, entitlement_key):
+        return None
+    return {
+        "error": "feature_required",
+        "detail": f"{get_entitlement(entitlement_key).name} is not available for this organisation",
+    }
+
+
 _EVAL_NAME_MAX_LENGTH = 255
 
 

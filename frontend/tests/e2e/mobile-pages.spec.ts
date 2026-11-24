@@ -21,7 +21,14 @@ const SHORT_MCP_URL = 'https://control.farna.dev/mcp'
 
 // Desktop geometry measured on origin/main (1280x800), in CSS px.
 const DESKTOP_MCP = { urlToActionsGap: 0, actionsToRowRight: 16 }
-const DESKTOP_TRIGGERS = { labelWidth: 861.9, labelToButtonGap: 0, buttonToCardRight: 0 }
+// The Triggers pause-all card now renders through CardHeader (title/description
+// + #headerActions) instead of the hand-built flex row. On desktop the primitive
+// gives the action its natural width (`sm:shrink-0`) and the label block is
+// flex-1, separated by the canonical `gap-4`: the button keeps its full 94 px
+// width (it used to flex-shrink to ~78.9 px), so the label block is
+// 942 - 16 - 94 = 832 px, with a 16 px label-to-button gap and the button still
+// flush to the header's right edge.
+const DESKTOP_TRIGGERS = { labelWidth: 832, labelToButtonGap: 16, buttonToCardRight: 0 }
 const DESKTOP_PROFILES = { buttonToRowRight: 0, centreOffset: 0 }
 
 const PROFILE = {
@@ -100,7 +107,12 @@ function mcpParts(page: Page) {
 
 function triggersParts(page: Page) {
   const pause = page.locator('[data-testid="settings-triggers-pause-all"]')
-  return { pause, label: pause.locator('xpath=preceding-sibling::div[1]'), card: pause.locator('xpath=..') }
+  // The pause-all card renders through CardHeader: the button lives in the
+  // header's actions block, its parent is that block and its grandparent is the
+  // `.card-header` row. The label (title + description) is the header's first
+  // child block; the header row itself is the card region the button anchors to.
+  const header = pause.locator('xpath=../..')
+  return { pause, label: header.locator('xpath=./div[1]'), card: header }
 }
 
 function profilesParts(page: Page) {

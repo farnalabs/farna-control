@@ -14,27 +14,27 @@
       -->
 
       <!-- Current Tier Card -->
-      <DataCard variant="bordered" padding="lg" elevation="sm">
-        <div v-if="licenseInfo.tier === 'team'" class="flex items-start justify-between">
-          <div>
-            <div class="flex items-center gap-2">
-              <h2 class="text-base font-semibold">{{ $t('views.SettingsLicenseView.team') }}</h2>
-              <Badge severity="info">{{ $t('common.active') }}</Badge>
-            </div>
-            <p v-if="licenseInfo.org_id" class="mt-2 text-sm text-muted-foreground">
-              {{ $t('views.SettingsLicenseView.licensed_to') }} <span class="font-medium text-foreground" :title="licenseInfo.org_id"><span class="select-all font-mono">{{ shortId(licenseInfo.org_id) }}</span></span>
-            </p>
-            <p v-if="licenseInfo.expires_at" class="mt-1 text-sm text-muted-foreground">
-              {{ $t('views.SettingsLicenseView.expires') }} <span class="font-medium text-foreground">{{ formatDate(licenseInfo.expires_at) }}</span>
-            </p>
-          </div>
+      <DataCard
+        variant="bordered"
+        padding="lg"
+        elevation="sm"
+        heading-level="h2"
+        :title="licenseInfo.tier === 'team' ? $t('views.SettingsLicenseView.team') : $t('views.SettingsLicenseView.community')"
+      >
+        <template #headerActions>
+          <Badge v-if="licenseInfo.tier === 'team'" severity="info">{{ $t('common.active') }}</Badge>
+          <Badge v-else severity="secondary" class="border border-border">{{ $t('views.SettingsLicenseView.community') }}</Badge>
+        </template>
+        <div v-if="licenseInfo.tier === 'team'">
+          <p v-if="licenseInfo.org_id" class="text-sm text-muted-foreground">
+            {{ $t('views.SettingsLicenseView.licensed_to') }} <span class="font-medium text-foreground" :title="licenseInfo.org_id"><span class="select-all font-mono">{{ shortId(licenseInfo.org_id) }}</span></span>
+          </p>
+          <p v-if="licenseInfo.expires_at" class="mt-1 text-sm text-muted-foreground">
+            {{ $t('views.SettingsLicenseView.expires') }} <span class="font-medium text-foreground">{{ formatDate(licenseInfo.expires_at) }}</span>
+          </p>
         </div>
         <div v-else>
-          <div class="flex items-center gap-2">
-            <h2 class="text-base font-semibold">{{ $t('views.SettingsLicenseView.community') }}</h2>
-            <Badge severity="secondary" class="border border-border">{{ $t('views.SettingsLicenseView.community') }}</Badge>
-          </div>
-          <p class="mt-2 text-sm text-muted-foreground">
+          <p class="text-sm text-muted-foreground">
             {{ $t('views.SettingsLicenseView.tier_upgrade_sentence', { currentTier: planStore.getTierLabel(licenseInfo.tier), teamTier: planStore.getTierLabel('team') }) }}
           </p>
           <Button as="a" href="https://farna.dev/control/pricing/" target="_blank" rel="noopener noreferrer" class="mt-4 border-primary/30 hover:border-primary/60">

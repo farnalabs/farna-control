@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from farna.settings import MAX_NODE_TIMEOUT_SECONDS, Settings, resolve_instance_identity
+from tests.helpers.env_prefixes import RETIRED_DOUBLED_ENV_PREFIX, retired_env_name
 
 _VALID_32 = "a" * 32
 _VALID_KEY = "x" * 32
@@ -45,7 +46,7 @@ def test_product_setting_reads_the_canonical_alias(monkeypatch: pytest.MonkeyPat
 def test_product_setting_ignores_a_bare_legacy_name(monkeypatch: pytest.MonkeyPatch) -> None:
     """A pre-rebrand legacy spelling no longer resolves to the field."""
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
-    monkeypatch.setenv("MOD" + "ULO" + "_DB", "sqlite")
+    monkeypatch.setenv(retired_env_name("DB"), "sqlite")
     monkeypatch.setenv("FARNA_CONTROL_ALLOW_SQLITE", "1")
 
     settings = Settings(**_BASE_ENV)
@@ -55,7 +56,7 @@ def test_product_setting_ignores_a_bare_legacy_name(monkeypatch: pytest.MonkeyPa
 
 def test_product_setting_rejects_doubled_legacy_alias(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FARNA_CONTROL_DB", raising=False)
-    doubled = "FARNA_CONTROL_" + "MOD" + "ULO" + "_DB"
+    doubled = RETIRED_DOUBLED_ENV_PREFIX + "DB"
     monkeypatch.setenv(doubled, "sqlite")
 
     settings = Settings(**_BASE_ENV)

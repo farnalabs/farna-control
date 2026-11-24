@@ -68,7 +68,7 @@ vi.mock('../lib/api/client', () => ({
 }))
 
 import AdminCostBreakdownView from '../views/AdminCostBreakdownView.vue'
-import StatCard from '../components/StatCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 
 describe('AdminCostBreakdownView', () => {
   beforeEach(() => {
@@ -110,7 +110,7 @@ describe('AdminCostBreakdownView', () => {
     const page = wrapper.get('.page-wide')
     expect(page.find('.page-wide > header.page-header').exists()).toBe(true)
     expect(page.find('.page-wide > .page-tabs-wrapper').exists()).toBe(true)
-    const gate = page.get('.page-wide > [data-testid="feature-gate"]')
+    const gate = page.get('.page-wide > [data-testid^="feature-gate-"]')
     expect(gate.classes()).toContain('space-y-6')
     expect(gate.find('.space-y-6').exists()).toBe(false)
 
@@ -770,7 +770,10 @@ describe('AdminCostBreakdownView', () => {
     ]
 
     for (const [testId, labelText] of metricLabels) {
-      const card = wrapper.get(`[data-testid="${testId}"]`).element.closest('.card-base')
+      // The tile's data-testid sits on its root element, with the shared card
+      // surface either being that root or a descendant of it.
+      const tile = wrapper.get(`[data-testid="${testId}"]`).element
+      const card = tile.classList.contains('card-base') ? tile : tile.querySelector('.card-base')
       expect(card).not.toBeNull()
       const label = Array.from(card!.querySelectorAll('p, span')).find(
         (element) => element.textContent?.trim() === labelText,

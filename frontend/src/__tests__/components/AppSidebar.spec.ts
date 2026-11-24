@@ -292,6 +292,16 @@ describe('AppSidebar', () => {
       expect(wrapper.find('#mobile-nav-panel').exists()).toBe(false)
     })
 
+    it('labels the navigation landmark without putting a heading before the page h1 (FAR-2715)', async () => {
+      mockMatchMedia(true)
+      const wrapper = mountSidebar()
+      await flushPromises()
+      const label = wrapper.find('#desktop-navigation-heading')
+      expect(label.element.tagName).toBe('SPAN')
+      expect(wrapper.find('aside').attributes('aria-labelledby')).toBe('desktop-navigation-heading')
+      expect(wrapper.findAll('h1,h2,h3,h4,h5,h6')).toHaveLength(0)
+    })
+
     it('renders the avatar as a router-link to /admin/my-profile in full mode', async () => {
       mockMatchMedia(true)
       const wrapper = mountSidebar()

@@ -91,10 +91,13 @@ through, with edges representing transitions between stages.
 - [x] Journey display on the map detail view is double-gated (FAR-654 +
       FAR-742): the journey cards on stage nodes, the Unattributed journeys
       section, load-more pagination and the journey detail panel render only
-      when the default-OFF `lifecycle_map_journeys` feature flag AND the
-      per-visit "Show work items" checkbox (default unchecked) are both on -
-      with either gate off the view makes no journeys API call, passes an
-      empty journeys list to the renderer and hides all journey UI while
+      when the server-resolved developer-mode signal is on (the map routes are
+      `visibility: in_dev`, operator/admin, `library.search.in_dev`) AND the
+      per-visit "Show work items" checkbox (default unchecked) is ticked -
+      the customer-configurable `lifecycle_map_journeys` flag this originally
+      used was retired (FAR-2200), and the view reads dev mode instead. With
+      either gate off the view makes no journeys API call, passes an empty
+      journeys list to the renderer and hides all journey UI while
       stages/edges render normally
       (`frontend/src/views/lifecycle-map/LifecycleMapView.vue`,
       `frontend/src/__tests__/LifecycleMapView.spec.ts`)

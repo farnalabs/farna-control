@@ -178,6 +178,7 @@ from farna.core.run_context.autonomy_telemetry import (
 )
 from farna.core.schema_registry.contract import write_schema_contract
 from farna.core.schema_registry.rendering import SchemaProfile, render_for_profile
+from farna.core.workspace_labels import EGRESS_POSTURE, NODE_ID, ORG_ID, RUN_ID, stamp
 from farna.db.crud.hitl_review_config import human_only_effective
 from farna.db.lifecycle_refs import (
     _SOURCE_RANK,
@@ -189,6 +190,15 @@ from farna.db.rls import set_rls_execution_context, set_rls_org
 from farna.settings import get_settings, work_item_refs_cap
 
 _log = logging.getLogger(__name__)
+
+# FAR-2693: the pre-rename workspace-metadata keys. Stamped alongside the
+# current keys and read as a fallback, so a workspace created before the
+# dual-write release is still attributed and reclaimable; remove once no live
+# workspace can predate it (see farna.core.workspace_labels).
+_LEGACY_RUN_ID_LABEL = "modulo.run.id"
+_LEGACY_ORG_ID_LABEL = "modulo.org.id"
+_LEGACY_NODE_ID_LABEL = "modulo.node.id"
+_LEGACY_EGRESS_POSTURE_LABEL = "modulo.egress.posture"
 
 # FAR-794 slice 2b: node INPUT injection — when a node's ``input_schema_json``
 # declares the ``work_item_refs`` INPUT property, the run's create-time refs
@@ -737,13 +747,24 @@ _SANDBOX_EGRESS_RESOLVE_TIMEOUT = 5.0
 # cannot drift.
 SANDBOX_AGENT_FAILED_SUMMARY = "Sandbox agent execution failed"
 
-# FAR-510: machine marker stamped on BOTH sandbox_agent synthetic failure
-# envelopes (generic-exception + schema-validation). The executor's
-# finalize-time downgrade predicate requires ``status == "failed"`` AND this
-# field True — marker-based, so an agent-authored failure shape (which never
-# carries the runner's internal marker) can never collide. Single source of
-# truth so runner and executor cannot drift.
-MODULO_SYNTHETIC_FAILURE_MARKER = "modulo_synthetic_failure"
+# FAR-510: machine marker stamped on a sandbox_agent synthetic failure envelope
+# (the generic-exception path). The executor's finalize-time downgrade predicate
+# requires ``status == "failed"`` AND this field True. Single source of truth so
+# runner and executor cannot drift.
+# Persisted value: NAMESPACED on purpose. The finalize scan also inspects the
+# pure agent return (``outputs_json``) for the envelope fields, so the marker
+# key must be collision-resistant: a bare ``synthetic_failure`` would let an
+# agent-authored ``{"status": "failed", "synthetic_failure": true}`` masquerade
+# as the runner's marker and downgrade a run that should finalize complete.
+# The product namespace keeps it out of the agent's business JSON. Rename the
+# CONSTANT, never the string.
+SYNTHETIC_FAILURE_MARKER = "farna_control_synthetic_failure"
+#: Legacy key written by releases before the rebrand. Persisted node telemetry
+#: (and older ``outputs_json`` rows) can still carry it, and a run can outlive a
+#: rolling deploy, so the writer stamps BOTH keys (dual-write) and the finalize
+#: predicate reads BOTH (dual-read) until the drop release. Do not write only
+#: this key.
+LEGACY_SYNTHETIC_FAILURE_MARKERS: tuple[str, ...] = ("modulo_synthetic_failure",)
 
 
 def _bridge_escalation_failure_detail(exit_code: int, stdout_raw: str) -> str | None:
@@ -8853,7 +8874,7 @@ async def _sandbox_issue_run_credential_for_sandbox(
     (``core.credential_issuer``). The default Modulo-minted provider computes
     the TTL as ``max(15 min, node_timeout + 5 min)`` capped by the org max
     (default 1 hour), links the key to the run (``OrgApiKey.run_id``), and
-    stamps the issuance provenance ``modulo_minted`` (attested — NEVER
+    stamps the issuance provenance ``self_minted`` (attested — NEVER
     ``observed``).
 
     Fail-open: a mint failure returns ``None`` — the sandbox runs without the
@@ -10028,7 +10049,11 @@ def _build_sandbox_node_envelope(
         ),
     )
     if output.modulo_synthetic_failure:
-        inner[MODULO_SYNTHETIC_FAILURE_MARKER] = True
+        inner[SYNTHETIC_FAILURE_MARKER] = True
+        # Dual-write: an older release may finalize a run this release wrote,
+        # and it reads only the legacy key. Both are persisted until R3.
+        for _legacy_marker in LEGACY_SYNTHETIC_FAILURE_MARKERS:
+            inner[_legacy_marker] = True
     inner["attempt_key"] = output.attempt_key
     # FAR-1780: type every agent-claimed datum in the envelope ``reported``
     # under the ONE envelope ``provenance`` key (a per-datum map) — the
@@ -10488,7 +10513,7 @@ async def _resolve_sandbox_git_content_config(config: _SandboxNodeConfig) -> _Sa
 
     The resolved pin (repo/sha/path) is logged by the resolver for audit; the
     pinned SHA itself is already resident in the run snapshot (graph-save
-    validation rejects unpinned refs, and ``modulo apply`` pins before write).
+    validation rejects unpinned refs, and ``farna-control apply`` pins before write).
     """
     from farna.core.pipeline_engine.git_content import (
         GIT_CONTENT_PREFIX,
@@ -11180,26 +11205,28 @@ def _sandbox_build_dispatch_metadata(
     # as the allowlist below. Full rationale lives on EgressPosture in
     # core/pipeline_engine/egress.py and the mirrored comment in
     # runner_dispatch._workspace_spec_for_dispatch; kept as a pointer here so
-    # the two dispatch sites cannot drift.
-    _metadata["modulo.egress.posture"] = _egress_resolved.posture.value
+    # the two dispatch sites cannot drift. FAR-2693 dual-write: the current
+    # and legacy key carry the same value.
+    stamp(_metadata, EGRESS_POSTURE, _LEGACY_EGRESS_POSTURE_LABEL, _egress_resolved.posture.value)
     if _egress_resolved.policy == "selected" and _egress_resolved.allowlist:
         _metadata["egress_allowlist"] = json.dumps(_egress_resolved.allowlist)
     # FAR-1051 (qa-iterate): run/org/node attribution rides the spec's
     # workspace_metadata — the SAME provider-neutral keys the Docker
     # route stamps in ``runner_dispatch._workspace_spec_for_dispatch``.
-    # Without them the Kubernetes workspace pod carries no
-    # ``modulo.run.id`` LABEL, and the workspace-orphan reconciler
-    # deliberately skips pods without one (no run to cross-reference),
-    # so a pod that outlives its dispatch could never be reclaimed.
-    # Empty identity values are dropped (parity with that mapper's
-    # ``if value`` filter) rather than stamped as "".
-    for _attribution_key, _attribution_value in (
-        ("modulo.run.id", run_id),
-        ("modulo.org.id", org_id),
-        ("modulo.node.id", node_id),
+    # Without them the Kubernetes workspace pod carries no run-id
+    # LABEL, and the workspace-orphan reconciler deliberately skips pods
+    # without one (no run to cross-reference), so a pod that outlives its
+    # dispatch could never be reclaimed. Empty identity values are dropped
+    # (parity with that mapper's ``if value`` filter) rather than stamped as
+    # "". FAR-2693 dual-write: the current and legacy key each carry the
+    # same value.
+    for _new_key, _legacy_key, _attribution_value in (
+        (RUN_ID, _LEGACY_RUN_ID_LABEL, run_id),
+        (ORG_ID, _LEGACY_ORG_ID_LABEL, org_id),
+        (NODE_ID, _LEGACY_NODE_ID_LABEL, node_id),
     ):
         if _attribution_value:
-            _metadata[_attribution_key] = str(_attribution_value)
+            stamp(_metadata, _new_key, _legacy_key, str(_attribution_value))
     return _metadata, _egress_resolved
 
 
@@ -12287,7 +12314,7 @@ async def _sandbox_prepare_exec_environment(
         # token and never only the long-lived host credentials. The key is
         # per-run, revoked at run finalization (and by the compensating
         # sweep), and its issuance provenance is stamped as
-        # ``modulo_minted`` (attested — NEVER ``observed``). Fail-open: an
+        # ``self_minted`` (attested — NEVER ``observed``). Fail-open: an
         # issuance failure leaves the key absent (the sandbox still runs).
         _issued_credential = await _exec_issue_run_credential_for_sandbox(_exec_ctx)
         if _issued_credential is not None:

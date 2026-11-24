@@ -17,7 +17,7 @@ exemptions: the seed only invokes the append; audit-chain semantics stay in
 core.
 
 FAR-1574: that append helper (:func:`append_user_grant_audit`) is public
-because ``modulo users add --admin`` escalates the membership the seeder just
+because ``farna-control users add --admin`` escalates the membership the seeder just
 created — a second privilege grant with its own honest ``actor_source``
 (``cli_admin_escalation``). The credential + initial membership stay covered
 by ``user_seeded``; the escalation records itself separately, never twice.
@@ -178,7 +178,7 @@ async def first_tenant_organisation(session: Any) -> Any:
 
     The sentinel rows the baseline migration seeds — the nil-UUID
     "Orphan (unattributed errors)" org (``SYSTEM_ORG_ID``) and the library
-    registry org (``MODULO_REGISTRY_ORG_ID``) — are infrastructure, never a
+    registry org (``REGISTRY_ORG_ID``) — are infrastructure, never a
     tenant. "Oldest org" without excluding them picks the orphan org on every
     fresh install, because the migration creates it first (FAR-2581): users
     seeded there are RLS-partitioned away from every tenant and the login
@@ -255,7 +255,7 @@ async def append_user_grant_audit(
 
     A seed entry creates a login credential and — for ``admin`` /
     ``admin@modulo.run`` — the ``admin`` role, with no HTTP principal in
-    scope; ``modulo users add --admin`` escalates a seeded membership to
+    scope; ``farna-control users add --admin`` escalates a seeded membership to
     ``admin`` the same way (FAR-1574). Either way the event carries the
     SYSTEM actor plus an honest ``actor_source`` (``boot_seed`` /
     ``cli_admin_escalation``), the same convention

@@ -6,35 +6,35 @@
        :tabs="costPageTabs"
     />
 
-    <FeatureGate feature-name="admin_cost_breakdown" required-tier="team" show-disabled class="space-y-6">
+    <FeatureGate feature-name="admin_cost_breakdown" show-disabled class="space-y-6">
       <LoadingSpinner v-if="loading" />
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadData" />
 
       <template v-else>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard
+          <StatCard
             :label="$t('views.AdminCostBreakdownView.total_spend_this_month')"
             :value="formatMoney(totalSpend, currencyCode)"
             data-testid="cost-total-spend"
           />
-          <MetricCard
+          <StatCard
             :label="$t('views.AdminCostBreakdownView.avg_cost_per_run')"
             :value="formatMoney(avgCostPerRun, currencyCode)"
             data-testid="cost-avg-per-run"
           />
-          <MetricCard
+          <StatCard
             :label="$t('views.AdminCostBreakdownView.cost_per_successful_run')"
             :value="successfulRuns > 0 ? formatMoney(costPerSuccessfulRun, currencyCode) : '—'"
             data-testid="cost-per-successful-run"
           >
-            <template #default>
+            <template #content>
               <p class="mt-1 text-xs text-muted-foreground" data-testid="cost-successful-runs-count">
                 {{ successfulRuns > 0 ? $t('views.AdminCostBreakdownView.successful_runs_count', { count: successfulRuns }) : $t('views.AdminCostBreakdownView.no_successful_runs') }}
               </p>
             </template>
-          </MetricCard>
-          <MetricCard
+          </StatCard>
+          <StatCard
             :label="$t('views.AdminCostBreakdownView.total_runs')"
             :value="totalRuns"
             data-testid="cost-total-runs"
@@ -49,6 +49,7 @@
           <template #default>
             <EmptyState
               v-if="items.length === 0"
+              variant="bare"
               :title="$t('views.AdminCostBreakdownView.no_team_cost_data_available')"
               data-testid="cost-team-empty"
             />
@@ -116,6 +117,7 @@
             />
             <EmptyState
               v-else-if="anomalies.length === 0"
+              variant="bare"
               :title="$t('views.AdminCostBreakdownView.no_anomalies_detected')"
               data-testid="cost-anomalies-empty"
             />
@@ -161,7 +163,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import MetricCard from '../components/ui/MetricCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import Button from 'primevue/button'
 import { DataTable } from '../components/ui/data-table'
 import { formatMoney } from '../lib/money'

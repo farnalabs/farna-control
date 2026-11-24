@@ -35,16 +35,6 @@ TESTS = BACKEND / "tests"
 FEATURES = TESTS / "bdd" / "features"
 QUARANTINE_FILE = REPO / ".quarantine.yml"
 
-#: Workflow self-report payloads (GitHub Actions → POST .../journeys/self-report)
-#: must name the lifecycle-map stage the workflow completes. The merge/deploy
-#: stages are EXTERNAL (a GitHub Actions workflow, no ``pipeline_id``), so the
-#: endpoint can only advance journeys into them via ``stage_id`` — a payload
-#: that drops it silently leaves journeys stuck at their old stage.
-SELF_REPORT_WORKFLOWS: dict[str, str] = {
-    "merge-queue.yml": "merge",
-    "deploy.yml": "deploy",
-}
-
 #: Scenarios deliberately excluded from every run via the
 #: ``awaiting-implementation`` marker (pyproject addopts). Keyed by feature
 #: file path relative to ``backend/``. Changing this set is a deliberate
@@ -264,30 +254,21 @@ def _workflow_run_blocks(workflow: Path) -> list[str]:
     return blocks
 
 
-def test_workflow_self_report_payloads_name_the_stage():
-    """The merge-queue and deploy workflows POST a self-report payload to
-    ``.../journeys/self-report`` naming the lifecycle-map stage they complete.
-    The merge/deploy stages are external (GitHub Actions, no ``pipeline_id``),
-    so the endpoint advances journeys into them via ``stage_id`` — a payload
-    that drops it silently leaves journeys stuck at their old stage. Drift
-    here is invisible to the unit tests, which exercise the endpoint with
-    hand-built bodies."""
+def test_no_workflow_self_reports_to_the_retired_lifecycle_map_endpoint():
+    """No GitHub Actions workflow may POST a ``workflow_self_report`` payload to
+    ``.../journeys/self-report``. That endpoint is gated behind developer mode
+    and the lifecycle-map surface retires at GA, so the POST cannot succeed
+    against a default deployment; the dead plumbing was deleted from
+    ``merge-queue.yml`` (FAR-2691) after ``ci.yml`` and ``deploy.yml``. This
+    guard keeps it from drifting back — reintroducing the step would restore a
+    call that fails against any normal deployment."""
     violations = []
-    for filename, expected_stage in SELF_REPORT_WORKFLOWS.items():
-        path = REPO / ".github" / "workflows" / filename
-        if not path.exists():
-            violations.append(f"  .github/workflows/{filename}: workflow file not found")
-            continue
-        found_self_report = False
+    workflows = REPO / ".github" / "workflows"
+    for path in sorted((*workflows.glob("*.yml"), *workflows.glob("*.yaml"))):
         for block in _workflow_run_blocks(path):
-            if "workflow_self_report" not in block:
-                continue
-            found_self_report = True
-            if f'stage_id: "{expected_stage}"' not in block:
-                violations.append(f'  .github/workflows/{filename}: workflow_self_report payload missing stage_id: "{expected_stage}" — the endpoint needs it to advance journeys into the external merge/deploy stage')
-        if not found_self_report:
-            violations.append(f"  .github/workflows/{filename}: no workflow_self_report payload step found")
-    assert not violations, "Workflow self-report payloads drifted from the lifecycle-map stage contract.\n" + "\n".join(violations)
+            if "workflow_self_report" in block:
+                violations.append(f"  .github/workflows/{path.name}: still emits a workflow_self_report payload — the lifecycle-map self-report endpoint is retired (FAR-2691)")
+    assert not violations, "A workflow reintroduced the retired lifecycle-map self-report POST.\n" + "\n".join(violations)
 
 
 def test_awaiting_implementation_set_is_pinned():

@@ -122,7 +122,7 @@ class TestListAgents:
 
         from farna.db.crud.agent import list_agents
 
-        result = await list_agents(mock_session, page=2, page_size=2)
+        result = await list_agents(mock_session, org_id=uuid.uuid4(), page=2, page_size=2)
         assert isinstance(result, PageResult)
         assert result.total == 5
         assert result.page == 2
@@ -133,7 +133,7 @@ class TestListAgents:
         mock_session.execute = AsyncMock(side_effect=ProgrammingError("missing", None, Exception("boom")))
         from farna.db.crud.agent import list_agents
 
-        result = await list_agents(mock_session, page=1, page_size=20)
+        result = await list_agents(mock_session, org_id=uuid.uuid4(), page=1, page_size=20)
         assert isinstance(result, PageResult)
         assert result.total == 0
         assert not result.items

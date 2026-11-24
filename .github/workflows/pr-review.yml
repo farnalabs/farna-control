@@ -1,4 +1,4 @@
-name: "Review: Modulo Agent"
+name: "Review: Farna Control Agent"
 
 # FAR-1843: the PR-reviewer dispatch lives HERE — in its own workflow, driven
 # by product-CI completion (workflow_run) or manual dispatch — never as a job
@@ -96,7 +96,7 @@ permissions:
 
 jobs:
   trigger-modulo-review:
-    name: Trigger Modulo PR Review
+    name: Trigger Farna Control PR Review
     # Only a CANCELLED product-CI run is skipped (it was superseded; the newer
     # run for that head SHA owns the dispatch). Every other conclusion
     # dispatches — success, failure, timed_out, action_required, neutral,
@@ -318,13 +318,13 @@ jobs:
               exit 1 ;;
           esac
 
-      - name: Send webhook to Modulo PR Review Agent
+      - name: Send webhook to Farna Control PR Review Agent
         id: webhook
         if: steps.pr-details.outputs.ready == 'true' && steps.dedup.outputs.skip != 'true' && steps.author-gate.outputs.skipped != 'true'
         env:
           DISPATCH_URL: ${{ secrets.FARNA_CONTROL_PR_REVIEW_WEBHOOK_URL }}
           DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_PR_REVIEW_WEBHOOK_SECRET }}
-          DISPATCH_LABEL: "Modulo PR Review"
+          DISPATCH_LABEL: "Farna Control PR Review"
           DISPATCH_ACCEPT_ANY_2XX: "1"
           PR_NUMBER: ${{ steps.pr-details.outputs.pr_number }}
           REPO: ${{ steps.pr-details.outputs.repo }}

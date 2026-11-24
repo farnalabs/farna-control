@@ -121,7 +121,7 @@ async def test_list_agents_pagination(rls_session: AsyncSession, test_org: uuid.
             prompt_template="List.",
             model_backend_id=mb_id,
         )
-    page1 = await list_agents(rls_session, page=1, page_size=2)
+    page1 = await list_agents(rls_session, org_id=test_org, page=1, page_size=2)
     assert page1.total >= 3
     assert len(page1.items) == 2
     assert page1.page == 1

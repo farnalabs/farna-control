@@ -164,7 +164,7 @@ detection work.
 | `FERNET_KEY_OLD` | No | – | Previous Fernet key for no-downtime rotation; decrypt falls back to this when `FERNET_KEY` is rotated |
 | `FARNA_CONTROL_USERS` | For seeding | – | Comma-separated `user:pass` pairs for initial user seed |
 | `FARNA_CONTROL_ADMIN_PASSWORD` | No | – | Admin password for single-admin alpha auth (at least one of `FARNA_CONTROL_ADMIN_PASSWORD` or `FARNA_CONTROL_USERS` must be set) |
-| `FARNA_CONTROL_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool). The legacy `MODULO_ADMIN_SECRET` spelling is still read as a fallback. |
+| `FARNA_CONTROL_ADMIN_SECRET` | No | – | **CLI-only**. Shared secret for `farna-control migrate` CLI auth bypass (not part of the Settings class; read directly by the CLI tool). `FARNA_CONTROL_ADMIN_SECRET` is the only spelling read; there is no legacy alias. |
 | `FARNA_CONTROL_ADMIN_TOKEN` | No | – | **CLI-only**. Admin JWT for `farna-control migrate` CLI (alternative to env; not part of the Settings class). The `--token` flag takes precedence. |
 | `FARNA_CONTROL_SECRETS_BACKEND` | No | `fernet` | Secrets backend: `fernet`, `vault`, or `aws` |
 | `GUARDRAIL_DESTROY_PEPPER` | For destroy-mode redaction | `""` | HMAC pepper used by guardrails in `destroy` redaction mode to key replacement tokens. Empty (the default) leaves it unset, and a guardrail that declares a destroy-mode redaction rule then fails closed - the rule is rejected at save time and the block is terminal at the edge. Never logged. Rotating it breaks cross-run linkage of already-destroyed tokens by design. |
@@ -550,6 +550,8 @@ LOAD.
 | `FARNA_CONTROL_MULTI_ORG_ENABLED` | No | `false` | Multi-organization mode. OFF (the single-org default for self-hosted, ADR 005) blocks org creation, rejects org-slug login and makes the login-context endpoint always report single-org. ON enables multi-org behavior and the org-slug login path. A multi-org deployment also refuses a globally scoped secrets backend (e.g. Vault) for credential references rather than risk a cross-org read |
 | `FARNA_CONTROL_SCHEMA_VALIDATOR_MODE` | No | `lenient` | Schema-validator strictness, one of `lenient` or `strict`; any other value resolves to `lenient`. Read directly from the environment as a **first-boot seed only**: once the effective setting exists in the DB (per-org `settings_json`, then the instance-wide `system_config` row) that value wins. See [`docs/configuration-precedence.md`](./configuration-precedence.md) |
 
+> Minting a licence key that carries `product_analytics_required`, and why it only sets a default an operator can override (including OFF), is documented in [`docs/operations/product-analytics-licensing.md`](./operations/product-analytics-licensing.md).
+
 ---
 
 ## Trigger Streak Detection
@@ -600,7 +602,7 @@ Both events are subscribable on the admin notification endpoints (see
 them. Nothing here gates or refuses admission – it is signal, not enforcement.
 
 The sweep's aggregate is served by the partial index
-`ix_runs_webhook_decay_sweep` (migration 0334): only webhook-triggered terminal
+`ix_runs_webhook_decay_sweep` (baseline migration `0350_baseline_schema.py`): only webhook-triggered terminal
 runs enter it, keyed on `completed_at`, so the per-minute window read is a
 bounded index scan rather than a scan of `runs`.
 
@@ -625,7 +627,7 @@ via the admin API. Unknown/absent keys default to safe values.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length). The legacy `MODULO_BACKUP_PASSPHRASE` spelling is still read as a fallback. |
+| `FARNA_CONTROL_BACKUP_PASSPHRASE` | For encryption | – | AES-256-CBC backup encryption passphrase (32+ chars recommended; the CLI does not enforce a length). `FARNA_CONTROL_BACKUP_PASSPHRASE` is the only spelling read; there is no legacy alias. |
 
 See [`docs/operations/backup.md`](./operations/backup.md) for backup configuration.
 
@@ -653,7 +655,7 @@ The same SMTP setup also sends the **error-tracking**, **readiness** and **worke
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FARNA_CONTROL_ENV` | No | `development` | Deployment environment name. Applied to error-tracking events and structured logs, and shown as `Environment: <value>` on error-tracking alert emails (an empty value renders as `N/A`) and on [readiness health](#readiness-health-alerts) / [worker-liveness watchdog](#worker-liveness-watchdog) alerts (an empty value renders as `unknown`). The Compose deployment sets it to `production` (`deploy/compose/docker-compose.prod.yml`) and the Helm chart defaults it to `production` (`deploy/helm/modulo/templates/configmap.yaml`). `FARNA_CONTROL_ENV` is the only spelling read; there is no legacy alias. |
+| `FARNA_CONTROL_ENV` | No | `development` | Deployment environment name. Applied to error-tracking events and structured logs, and shown as `Environment: <value>` on error-tracking alert emails (an empty value renders as `N/A`) and on [readiness health](#readiness-health-alerts) / [worker-liveness watchdog](#worker-liveness-watchdog) alerts (an empty value renders as `unknown`). The Compose deployment sets it to `production` (`deploy/compose/docker-compose.prod.yml`) and the Helm chart defaults it to `production` (`deploy/helm/farna-control/templates/configmap.yaml`). `FARNA_CONTROL_ENV` is the only spelling read; there is no legacy alias. |
 | `ALERT_CONTEXT` | No | – | Operator-supplied free text appended verbatim to every readiness and [worker-liveness watchdog](#worker-liveness-watchdog) alert – runbook links, escalation notes, ticket pointers. One item per line; blank lines are dropped and the rendering is bounded (at most 20 lines, 300 chars each, the environment line always first). Carried on email, generic webhook and Teams channels alike. Never written to logs (the setting is `repr=False`). |
 | `ALERT_ENVIRONMENTS` | No | – (alerts in every environment) | Comma-separated allowlist of deployment environments allowed to SEND operator alerts. Matched case-insensitively and trimmed against `FARNA_CONTROL_ENV` (`"production"`, `" production "` and `"Production"` are the same entry). Unset or blank (the default) = alerts fire in **every** environment, so a self-hosted install that never sets it keeps alerting out of the box – the allowlist is opt-in noise control, not a new default-off. When set, the [readiness health](#readiness-health-alerts) alert and the [worker-liveness watchdog](#worker-liveness-watchdog) send on **no channel at all** – email, generic webhook and Teams alike; the name is channel-neutral precisely because the gate suppresses the whole fan-out – unless this deployment's `FARNA_CONTROL_ENV` is listed. Health is still evaluated and the watchdog still ticks; only the send is skipped, and **each channel logs the suppression with its own message**: there is no single shared suppression log line. The watchdog logs `watchdog.alert_suppressed_environment conditions=<list> (ALERT_ENVIRONMENTS does not include environment=<env>)`, at most once per hour and only while a condition is active (healthy ticks log nothing); the readiness cron logs `health_alerts.disabled: readiness alerting is off for this environment - set ALERT_ENVIRONMENTS to include it …`, at most once per hour. Both also clear (never strand) their incident state while excluded, so a later re-inclusion can alert again. Example: the Fly staging deployment sets `ALERT_ENVIRONMENTS=production` (`deploy/fly/fly.staging.toml`, same value as `fly.toml`) so staging – a CI-only E2E environment with no live workload – stops paging the operator while `control.farna.dev` keeps alerting. The single parse lives in `core.alert_context.alerting_enabled_for_environment`, shared by both alert paths so they can never disagree. |
 
@@ -861,7 +863,7 @@ is best-effort and never gates readiness: it is skipped when no `GITHUB_TOKEN` /
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FARNA_CONTROL_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool (legacy `MODULO_ADMIN_SECRET` still read as a fallback) |
+| `FARNA_CONTROL_ADMIN_SECRET` | For CLI | – | Shared secret for `farna-control migrate` CLI tool. `FARNA_CONTROL_ADMIN_SECRET` is the only spelling read; there is no legacy alias. |
 | `FARNA_CONTROL_ADMIN_TOKEN` | For CLI | – | Admin JWT for `farna-control migrate` CLI tool |
 
 ---
@@ -897,8 +899,8 @@ SECRET_KEY=<random-64-char-string>
 FERNET_KEY=<random-44-char-base64>
 
 # Server
-FARNA_CONTROL_PUBLIC_URL=https://modulo.example.com
-CORS_ORIGINS=https://app.modulo.example.com,https://admin.modulo.example.com
+FARNA_CONTROL_PUBLIC_URL=https://farna-control.example.com
+CORS_ORIGINS=https://app.farna-control.example.com,https://admin.farna-control.example.com
 CORS_MAX_AGE=3600
 FARNA_CONTROL_LOG_LEVEL=INFO
 

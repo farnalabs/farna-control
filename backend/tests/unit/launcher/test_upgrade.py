@@ -81,13 +81,38 @@ def _allow_windows_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(secrets_file, "assert_supported_platform", lambda: None)
 
 
-def _fake_run(returncode: int = 0, payload: bytes = b"-- pg_dump output\n") -> Callable[..., Any]:
+#: FAR-2667: a PLAIN pg_dump ends with this trailer. Every fake dump the
+#: launcher snapshot path accepts must carry it, because an incomplete dump is
+#: now refused at dump time instead of being discovered during a recovery.
+_PG_DUMP_PAYLOAD = b"-- pg_dump output\n-- PostgreSQL database dump complete\n"
+
+
+def _fake_run(returncode: int = 0, payload: bytes = _PG_DUMP_PAYLOAD) -> Callable[..., Any]:
     def _run(argv: list[str], stdout: Any = None, **kwargs: Any) -> MagicMock:
         if stdout is not None and returncode == 0:
             stdout.write(payload)
         return MagicMock(returncode=returncode, stderr=b"connection refused" if returncode else b"")
 
     return _run
+
+
+@pytest.fixture(autouse=True)
+def _pinned_snapshot_seams(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the two seams that would otherwise need a live machine.
+
+    * the snapshot disk guard's ``pg_database_size`` probe (exercised for real
+      in test_upgrade_snapshot.py; here the dump orchestration is under test);
+    * the pg_dump resolution, so a CI runner without PostgreSQL client tools
+      still exercises the dump argv and completeness gate.
+    """
+    from farna.launcher import upgrade as upgrade_module
+
+    monkeypatch.setattr(upgrade_module, "_database_size_bytes", lambda _url, **_kwargs: 1024)
+    monkeypatch.setattr(upgrade_module, "_resolve_pg_dump", lambda _bin_dir: "pg_dump")
+    # The dump compatibility rewrite asks the target server for its GUC names.
+    from farna.db import plain_dump
+
+    monkeypatch.setattr(plain_dump, "server_guc_names", lambda _url, **_kwargs: {"statement_timeout"})
 
 
 def _enter_fake_run(stack: contextlib.ExitStack, **kwargs: Any) -> MagicMock:
@@ -114,7 +139,7 @@ def test_pre_upgrade_dump_reports_snapshot(tmp_path: Path, monkeypatch: pytest.M
     assert snapshot.directory.parent == data_dir
     assert snapshot.directory.name.startswith(SNAPSHOT_PREFIX)
     assert snapshot.dump_path.exists()
-    assert snapshot.bytes == len(b"-- pg_dump output\n")
+    assert snapshot.bytes == len(_PG_DUMP_PAYLOAD)
     manifest = json.loads((snapshot.directory / SNAPSHOT_MANIFEST_NAME).read_text(encoding="utf-8"))
     assert manifest["snapshot_for_upgrade"] is True
     assert manifest["dump_bytes"] == snapshot.bytes
@@ -171,7 +196,7 @@ def test_dump_carries_the_bundled_state(tmp_path: Path, monkeypatch: pytest.Monk
     def _capture(argv: list[str], stdout: Any = None, **kwargs: Any) -> MagicMock:
         seen["argv"] = argv
         if stdout is not None:
-            stdout.write(b"-- pg_dump output\n")
+            stdout.write(_PG_DUMP_PAYLOAD)
         return MagicMock(returncode=0)
 
     with patch("farna.launcher.upgrade.subprocess.run", new=_capture):
@@ -289,7 +314,7 @@ def test_dump_password_is_never_in_argv(tmp_path: Path, monkeypatch: pytest.Monk
         seen["argv"] = argv
         seen["env"] = kwargs.get("env")
         if stdout is not None:
-            stdout.write(b"-- pg_dump output\n")
+            stdout.write(_PG_DUMP_PAYLOAD)
         return MagicMock(returncode=0)
 
     with patch("farna.launcher.upgrade.subprocess.run", new=_capture):
@@ -645,10 +670,17 @@ def test_perform_upgrade_downgrade_refuses(tmp_path, monkeypatch, patched_trust_
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
         return _upgrade_dump_seam(data_dir, recorded_heads=["head-the-target-never-shipped"])(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
+    # The target bundle's migrations tree must be READABLE for this refusal to be
+    # a downgrade decision: the fixture bundle ships an EMPTY migrations dir, and
+    # an unreadable target set makes the check UNDECIDABLE (proceed), not a
+    # refusal. Pin the target's revisions so the refusal comes from the recorded
+    # head being absent from a real target set - the behaviour this test claims
+    # to pin - rather than from "an empty target set marks everything ahead".
+    monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"head-the-target-ships"})
     with pytest.raises(upgrade_module.UpgradeError, match="DOWNGRADE"):
         upgrade_module.perform_upgrade(
             data_dir,
@@ -742,7 +774,7 @@ def test_perform_upgrade_boot_failure_prints_snapshot_and_restore(tmp_path, monk
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
@@ -788,6 +820,10 @@ def test_perform_upgrade_boot_failure_prints_snapshot_and_restore(tmp_path, monk
     assert "restore" in captured_output
     assert str(data_dir / "pre-upgrade-dump-fake-1") in captured_output
     assert expected_restore_args in captured_output
+    # A native operator's shell has no DATABASE_ADMIN_URL, so the emitted
+    # command must never name --db-url (restore --data-dir resolves the
+    # bundled cluster from the data dir's own config.env).
+    assert "--db-url" not in captured_output
 
 
 @pytest.mark.skipif(os.name != "posix", reason="posix symlinks only (TODO(P3) windows seam)")
@@ -802,7 +838,7 @@ def test_upgrade_marker_written_before_boot(tmp_path, monkeypatch, patched_trust
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
 
-    def _dump(data_dir, *, bin_dir=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
@@ -1068,25 +1104,50 @@ def test_no_live_process_excludes_the_upgrading_process_itself(tmp_path, monkeyp
         live_child.wait(timeout=10)
 
 
+def _seed_verified_snapshot(data_dir: Path, *, schema_heads: list[str] | None = None) -> Path:
+    """A structurally-and-checksum VERIFIED pre-upgrade snapshot (FAR-2667).
+
+    Mirrors what ``pre_upgrade_dump`` writes: a trailer-complete dump plus the
+    two manifests ``snapshot_is_intact`` verifies. ``schema_heads=None``
+    records no ``schema_versions`` (the "snapshot cannot answer either" case
+    the skip-backup blind refusal must treat as unknown).
+    """
+    snapshot = data_dir / f"{SNAPSHOT_PREFIX}seeded"
+    snapshot.mkdir()
+    payload = b"-- the enforced dump\n-- PostgreSQL database dump complete\n"
+    (snapshot / "database.sql").write_bytes(payload)
+    checksum = hashlib.sha256(payload).hexdigest()
+    (snapshot / SNAPSHOT_MANIFEST_NAME).write_text(
+        json.dumps({"snapshot_for_upgrade": True, "dump_name": "database.sql", "dump_bytes": len(payload), "dump_sha256": checksum}),
+        encoding="utf-8",
+    )
+    restore_manifest: dict[str, Any] = {"dump_bytes": len(payload), "file_checksums": {"database.sql": checksum}}
+    if schema_heads is not None:
+        restore_manifest["schema_versions"] = schema_heads
+    (snapshot / _RESTORE_MANIFEST_NAME).write_text(json.dumps(restore_manifest), encoding="utf-8")
+    return snapshot
+
+
 def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched_trust_store):
-    """Finding 6: --skip-backup falls back to the LIVE _alembic_heads()
-    probe and NEVER runs the dump again (a stopped stack cannot be dumped)."""
+    """Finding 6: --skip-backup requires an ALREADY-VERIFIED snapshot and NEVER
+    runs the dump again (a stopped stack cannot be dumped)."""
     if os.name != "posix":
         pytest.skip("posix symlinks only (TODO(P3) windows seam)")
     monkeypatch.setattr(upgrade_module, "assert_upgrade_platform", lambda: None)
     monkeypatch.setattr(upgrade_module, "stop_running_stack", lambda data_dir, **kwargs: None)
     monkeypatch.setattr(upgrade_module, "no_live_process_inside", lambda _root: None)
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
+    monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _data_dir: ["3ab2c1d"])
 
-    def _dump_must_not_run(_data_dir, *, bin_dir=None):
+    def _dump_must_not_run(_data_dir, **_kwargs):
         raise AssertionError("skip_backup must NEVER call pre_upgrade_dump")
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump_must_not_run)
-    monkeypatch.setattr(upgrade_module, "_alembic_heads", lambda: ["3ab2c1d"])
 
     data_dir = tmp_path / "data"
     install_root = tmp_path / "install-root"
     _upgrade_seed_data_dir(data_dir)
+    snapshot_dir = _seed_verified_snapshot(data_dir, schema_heads=["3ab2c1d"])
     _upgrade_seed_install_root(install_root, previous_version="1.2.0")
     staging = tmp_path / "releases"
     staging.mkdir()
@@ -1099,29 +1160,37 @@ def test_perform_upgrade_skip_backup_runs_no_dump(tmp_path, monkeypatch, patched
         fetch=_upgrade_fetch_seam(release_fixture),
         boot=lambda boot_argv, *, api_port: 0,
     )
-    assert result.snapshot is None
+    assert result.snapshot == snapshot_dir
     marker = json.loads((data_dir / upgrade_module.UPGRADE_MARKER_FILENAME).read_text(encoding="utf-8"))
-    assert marker["pre_upgrade_snapshot"] is None
+    assert marker["pre_upgrade_snapshot"] == str(snapshot_dir)
 
 
 def test_skip_backup_with_unresolvable_heads_refuses_blind(tmp_path, monkeypatch, patched_trust_store):
-    """Finding 6: a skip-backup run whose live probe reads "unknown" REFUSES -
-    never a silent 'unknown == known' pass-through."""
+    """Finding 6: a skip-backup run whose live probe AND the snapshot read
+    "unknown" REFUSES - never a silent 'unknown == known' pass-through.
+
+    The refusal now comes from the STRICTER recovery-point guard: with the live
+    heads unreadable and a snapshot that records none, ``--skip-backup`` has no
+    snapshot of the CURRENT schema and is refused before the downgrade check
+    runs at all. The blind downgrade refusal itself is pinned directly by
+    ``test_check_no_downgrade_never_passes_unknown_through``.
+    """
     if os.name != "posix":
         pytest.skip("posix symlinks only (TODO(P3) windows seam)")
     monkeypatch.setattr(upgrade_module, "assert_upgrade_platform", lambda: None)
     monkeypatch.setattr(upgrade_module, "stop_running_stack", lambda data_dir, **kwargs: None)
     monkeypatch.setattr(upgrade_module, "no_live_process_inside", lambda _root: None)
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
-    monkeypatch.setattr(upgrade_module, "_alembic_heads", lambda: ["unknown"])
+    monkeypatch.setattr(upgrade_module, "live_database_revisions", lambda _data_dir: ["unknown"])
     data_dir = tmp_path / "data"
     install_root = tmp_path / "install-root"
     _upgrade_seed_data_dir(data_dir)
+    _seed_verified_snapshot(data_dir)  # no schema_heads -> the snapshot cannot answer either
     _upgrade_seed_install_root(install_root, previous_version="1.2.0")
     staging = tmp_path / "releases"
     staging.mkdir()
     release_fixture = _upgrade_release_fixture(staging)
-    with pytest.raises(upgrade_module.UpgradeError, match="cannot verify the database"):
+    with pytest.raises(upgrade_module.UpgradeError, match="Refusing --skip-backup: no verified pre-upgrade snapshot"):
         upgrade_module.perform_upgrade(
             data_dir,
             install_root=install_root,
@@ -1167,7 +1236,7 @@ def test_reupgrade_of_the_same_version_keeps_the_prior_bytes_for_restore(tmp_pat
     monkeypatch.setattr(upgrade_module, "no_live_process_inside", lambda _root: None)
     monkeypatch.setattr(upgrade_module, "_bundle_alembic_revisions", lambda _bundle: {"3ab2c1d"})
 
-    def _dump(data_dir, *, bin_dir=None):
+    def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
         return _upgrade_dump_seam(data_dir)(data_dir)
 
     monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)
@@ -1431,6 +1500,25 @@ class TestRestoreGuidance:
         assert "ln -sfn versions/1.0.0" in result
         assert "1.1.0" not in result.split("ln -sfn")[1]
 
+    def test_the_emitted_restore_command_is_copy_pasteable_on_a_native_install(self, tmp_path):
+        """FAR-2667: a native operator's shell has no DATABASE_ADMIN_URL.
+
+        The command must name the data dir only — the restore resolves the
+        bundled cluster from that dir's own config.env — and must never carry a
+        shell variable the native shell cannot expand.
+        """
+        data_dir = tmp_path / "data"
+        result = upgrade_module.restore_guidance(
+            snapshot=tmp_path / "snapshot",
+            previous_version="1.0.0",
+            install_root=tmp_path,
+            data_dir=data_dir,
+        )
+        restore_line = result.split("Exact manual restore command:")[1].strip()
+        assert f"farna-control restore {tmp_path / 'snapshot'} --data-dir {data_dir} --yes" in restore_line
+        assert "--db-url" not in restore_line
+        assert "$" not in restore_line
+
 
 class TestAssertNotHeldWindows:
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows branch only")
@@ -1523,6 +1611,29 @@ class TestCheckNoDowngradeExtended:
         snapshot_dir.mkdir()
         (snapshot_dir / "backup-info.json").write_text(json.dumps({"schema_versions": ["abc123"]}), encoding="utf-8")
         assert upgrade_module.check_no_downgrade([], snapshot_dir, bundle_dir) is None
+
+    def test_an_unreadable_target_tree_is_undecidable_not_a_downgrade(self, tmp_path, caplog):
+        """MAJOR: no target revisions must not fabricate a DOWNGRADE refusal.
+
+        With an empty target set every live revision compares as "ahead", so the
+        pre-fix code refused a LEGITIMATE install with the DOWNGRADE message and
+        never reached the snapshot. `_pending_for_target` already treats the same
+        unreadable bundle as undecidable and takes the snapshot; the guard must
+        agree - undecidable means proceed, logged.
+
+        The bundle here has no migrations tree at all, which is also the shape
+        when `walk_revisions` throws on a migration the old runtime cannot parse
+        (`_bundle_alembic_revisions` returns an empty set for both).
+        """
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+        with caplog.at_level(logging.WARNING, logger="farna.launcher.upgrade"):
+            assert upgrade_module.check_no_downgrade(["abc123"], None, bundle_dir) is None
+            # The pre-snapshot refusal shares the decision, so it must agree.
+            assert upgrade_module._refuse_a_live_downgrade(["abc123"], bundle_dir) is None
+
+        undecidable = [record.getMessage() for record in caplog.records if "downgrade_check_undecidable" in record.getMessage()]
+        assert undecidable
 
 
 class TestSnapshotSchemaVersions:
@@ -2201,20 +2312,6 @@ class TestAlembicHeads:
             assert result == ["unknown"]
 
 
-class TestRunDumpTimeout:
-    def test_timeout_raises_upgrade_error(self, tmp_path):
-        dump_path = tmp_path / "dump.sql"
-
-        def _timeout_run(*args, **kwargs):
-            raise upgrade_module.subprocess.TimeoutExpired(cmd="pg_dump", timeout=1800)
-
-        with (
-            patch("farna.launcher.upgrade.subprocess.run", side_effect=_timeout_run),
-            pytest.raises(UpgradeError, match="timed out"),
-        ):
-            upgrade_module._run_dump(["pg_dump"], dump_path)
-
-
 class TestMainErrorPath:
     def test_returns_1_on_error(self, tmp_path, capsys):
         with pytest.raises(UpgradeError):
@@ -2442,7 +2539,7 @@ class TestRunBootHealthy:
         with (
             patch("farna.launcher.upgrade.subprocess.Popen", return_value=mock_process),
             patch("farna.launcher.upgrade.tempfile.TemporaryFile", return_value=stderr_file),
-            patch("farna.launcher.upgrade.urllib.request.urlopen", return_value=mock_response),
+            patch("urllib.request.urlopen", return_value=mock_response),
             patch("farna.launcher.upgrade._terminate_boot_process_group"),
             patch("farna.launcher.upgrade.time.sleep"),
             patch("farna.launcher.upgrade.time.monotonic", side_effect=clock_steps(0.0, 0.1, 0.2)),
@@ -2513,7 +2610,7 @@ class TestRunBootHealthy:
         with (
             patch("farna.launcher.upgrade.subprocess.Popen", return_value=mock_process),
             patch("farna.launcher.upgrade.tempfile.TemporaryFile", return_value=stderr_file),
-            patch("farna.launcher.upgrade.urllib.request.urlopen", return_value=bad_response),
+            patch("urllib.request.urlopen", return_value=bad_response),
             patch("farna.launcher.upgrade._terminate_boot_process_group"),
             patch("farna.launcher.upgrade.time.sleep"),
             patch("farna.launcher.upgrade.time.monotonic", side_effect=clock_steps(0.0, 0.1, 10.0)),
@@ -2939,7 +3036,7 @@ class TestPerformUpgradeHappyPath:
         staging.mkdir()
         release_fixture = _upgrade_release_fixture(staging)
 
-        def _dump(data_dir, *, bin_dir=None):
+        def _dump(data_dir, *, bin_dir=None, output_dir=None, release=None, target_heads=None, target_bundle=None):
             return _upgrade_dump_seam(data_dir)(data_dir)
 
         monkeypatch.setattr(upgrade_module, "pre_upgrade_dump", _dump)

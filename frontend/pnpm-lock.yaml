@@ -13,8 +13,8 @@ overrides:
   '@redocly/openapi-core>js-yaml': 4.3.2
   postcss>nanoid: ^6.0.0
   rollup: 4.68.7
-  '@tanstack/query-core': 5.108.1
-  '@tanstack/vue-query': 5.108.1
+  '@tanstack/query-core': 5.108.2
+  '@tanstack/vue-query': 5.108.2
   mutation-server-protocol>zod: '>=4.6.6 <5'
   ajv>fast-uri: '>=3.1.9 <4'
   js-beautify>glob: '>=14.0.2'
@@ -31,7 +31,7 @@ importers:
         version: 5.3.0
       '@lucide/vue':
         specifier: ^1.41.0
-        version: 1.77.0(vue@3.5.46(@typescript/typescript6@6.0.2))
+        version: 1.79.0(vue@3.5.46(@typescript/typescript6@6.0.2))
       '@primeuix/styled':
         specifier: ^0.7.4
         version: 0.7.4
@@ -42,8 +42,8 @@ importers:
         specifier: ^10.74.0
         version: 10.78.0(pinia@4.1.0(@typescript/typescript6@6.0.2)(@vue/devtools-api@8.2.1)(vue@3.5.46(@typescript/typescript6@6.0.2)))(vue@3.5.46(@typescript/typescript6@6.0.2))
       '@tanstack/vue-query':
-        specifier: 5.108.1
-        version: 5.108.1(vue@3.5.46(@typescript/typescript6@6.0.2))
+        specifier: 5.108.2
+        version: 5.108.2(vue@3.5.46(@typescript/typescript6@6.0.2))
       '@vue-flow/background':
         specifier: ^1.3.2
         version: 1.3.2(@vue-flow/core@1.48.2(vue@3.5.46(@typescript/typescript6@6.0.2)))(vue@3.5.46(@typescript/typescript6@6.0.2))
@@ -234,7 +234,7 @@ importers:
         version: 7.18.0(@datadog/browser-logs@7.18.0)
       '@grafana/faro-web-sdk':
         specifier: ^2.8.2
-        version: 2.14.0
+        version: 2.15.0
 
 packages:
 
@@ -653,11 +653,11 @@ packages:
   '@fontsource-variable/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
 
-  '@grafana/faro-core@2.14.0':
-    resolution: {integrity: sha512-U1dydD2pQa3sgnaoGQsmsDoecef2S90Y6kVYyhdXjaSg8+bzJWwW5mGtO+7V15PjZSKA4tdXGKRHa1RGGJPY8Q==}
+  '@grafana/faro-core@2.15.0':
+    resolution: {integrity: sha512-kya8i2FHCKT7oVoh42KY5zUYZmeyPpmAJ5dfAwbv0YYzgakTytPkXD+zYCx17A8LHysQZzl5mz81zsgtDjufUw==}
 
-  '@grafana/faro-web-sdk@2.14.0':
-    resolution: {integrity: sha512-ZZu5GmNvx+2pA+ma8dMER7GiJ/UVbI5qXWV5rK5ms6uK6hrh2xXKNETp9s1R+U/yVfHlo7n/ArtjQB/8/8noTw==}
+  '@grafana/faro-web-sdk@2.15.0':
+    resolution: {integrity: sha512-d9xMaHUCoqZ2rwFd6emFxmz7Vdw1fJPhdbEoz4pke2m2eGG8dd6acqQBCA+rPAtVfOI39/GlwGXNR1fhgE1+6w==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -864,8 +864,8 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@lucide/vue@1.77.0':
-    resolution: {integrity: sha512-B+okr/d8qC2imLzNPJ5tW8Nf7uKC19DgiOafxU0bOMfLnkd5Tkss4GW640+s5FierTJjgl99LpuO40u+yni0qQ==}
+  '@lucide/vue@1.79.0':
+    resolution: {integrity: sha512-Qe9DrDeNmIPbClkaOzUC9gW0czx1J3YFmk8ua7CDEByY/JZ7CB4v1s9Ps6lLbuxOSQVLnC8LBei+lS9qI5X0iw==}
     peerDependencies:
       vue: '>=3.0.1'
 
@@ -1420,11 +1420,11 @@ packages:
     resolution: {integrity: sha512-DIpUSOhPfQ7u/qfUi/Wgm0wBO56MyBYXGvnlI0NcauDRPqdBUlAZZjW2Dxm92m+k1UWVhKw8YJ4f47+75Aujyw==}
     engines: {node: '>=20'}
 
-  '@tanstack/query-core@5.108.1':
-    resolution: {integrity: sha512-GBX6Xsc9E+9eVLLxuM7orQNbssQjpruOCbocBYwT78MjxOWT5I+CWdvEo0N+UM6+oCZEKxuSud1oFLvE3OEmIg==}
+  '@tanstack/query-core@5.108.2':
+    resolution: {integrity: sha512-0l+0xDKqn71hfJBKaAvFP/X7WYM0TbscEk6nK1pHaWQUWUEA+WJD0VlT8wF+HIJANMV9B/DouPWwDnX3w/l9BA==}
 
-  '@tanstack/vue-query@5.108.1':
-    resolution: {integrity: sha512-dkBQ9rEPmQ353xLiWixKJh6FBf91CuoiE2XIad9iecCo7se5SN2CCr+sA0zU4SMlkzz1B9fiDchszNM2RAF4pg==}
+  '@tanstack/vue-query@5.108.2':
+    resolution: {integrity: sha512-XWIygzG4QizQZwbyGW3t4SXWjFDm1C3ZmL6fE3DK2pW1UyvgaWB8KqozBPtzFGwBO+fS67Tb4jfRC6OEYKLrAA==}
     peerDependencies:
       '@vue/composition-api': ^1.1.2
       vue: ^2.6.0 || ^3.3.0
@@ -4033,15 +4033,15 @@ snapshots:
 
   '@fontsource-variable/jetbrains-mono@5.3.0': {}
 
-  '@grafana/faro-core@2.14.0':
+  '@grafana/faro-core@2.15.0':
     dependencies:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/otlp-transformer': 0.223.2(@opentelemetry/api@1.10.0)
     optional: true
 
-  '@grafana/faro-web-sdk@2.14.0':
+  '@grafana/faro-web-sdk@2.15.0':
     dependencies:
-      '@grafana/faro-core': 2.14.0
+      '@grafana/faro-core': 2.15.0
       ua-parser-js: 1.0.41
       web-vitals: 6.2.3
     optional: true
@@ -4236,7 +4236,7 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@lucide/vue@1.77.0(vue@3.5.46(@typescript/typescript6@6.0.2))':
+  '@lucide/vue@1.79.0(vue@3.5.46(@typescript/typescript6@6.0.2))':
     dependencies:
       vue: 3.5.46(@typescript/typescript6@6.0.2)
 
@@ -4717,12 +4717,12 @@ snapshots:
     dependencies:
       remove-accents: 0.5.0
 
-  '@tanstack/query-core@5.108.1': {}
+  '@tanstack/query-core@5.108.2': {}
 
-  '@tanstack/vue-query@5.108.1(vue@3.5.46(@typescript/typescript6@6.0.2))':
+  '@tanstack/vue-query@5.108.2(vue@3.5.46(@typescript/typescript6@6.0.2))':
     dependencies:
       '@tanstack/match-sorter-utils': 9.2.6
-      '@tanstack/query-core': 5.108.1
+      '@tanstack/query-core': 5.108.2
       '@vue/devtools-api': 6.6.4
       vue: 3.5.46(@typescript/typescript6@6.0.2)
       vue-demi: 0.14.10(vue@3.5.46(@typescript/typescript6@6.0.2))

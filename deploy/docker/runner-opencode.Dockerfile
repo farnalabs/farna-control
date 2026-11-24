@@ -2,7 +2,7 @@
 #
 # ghcr.io/farnalabs/farna-control/runner-opencode — the Bundled Runner first-party image (FAR-590, D4).
 #
-# Contains everything a Modulo sandbox_agent node needs to execute opencode
+# Contains everything a Farna Control sandbox_agent node needs to execute opencode
 # (or script-mode commands) inside a hardened workspace container:
 #   - git + common CLIs a script mode run may need
 #   - opencode (version pinned via the OPENCODE_VERSION build arg — the
@@ -29,7 +29,7 @@
 # image is re-scanned and the seed/docs digest constants advance with it.
 # Pin by DIGEST ONLY (no :tag) so the base image reference is unambiguous and
 # cannot silently drift to a different tag.
-ARG BASE_IMAGE=debian@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6
+ARG BASE_IMAGE=debian@sha256:3cda3ca472ce45507a5109c6a3907093e24d9ae67d55954c9a07a45665dafba2
 
 FROM ${BASE_IMAGE}
 
@@ -98,6 +98,6 @@ ENV HOME=/home/user \
 ENTRYPOINT ["/usr/bin/tini", "--", "sleep", "infinity"]
 
 LABEL org.opencontainers.image.base.name="debian:12-slim" \
-    org.opencontainers.image.description="Modulo Bundled Runner workspace image (opencode)" \
+    org.opencontainers.image.description="Farna Control Bundled Runner workspace image (opencode)" \
     org.opencontainers.image.licenses="BUSL-1.1" \
     modulo.runner.minor-support="current+n-1"

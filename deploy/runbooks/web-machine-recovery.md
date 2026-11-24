@@ -1,7 +1,7 @@
-# Web machine recovery (app-modulo)
+# Web machine recovery (farna-control)
 
 Runbook for the 2026-09-02 incident class: the production web machine of
-`app-modulo` (process group `app`) stays alive (state `started`) but wedged -
+`farna-control` (process group `app`) stays alive (state `started`) but wedged -
 its HTTP server on port 8080 stops answering, and the Fly service check
 `servicecheck-00-http-8080` goes critical and stays critical until the machine
 is restarted.
@@ -9,11 +9,11 @@ is restarted.
 ## Symptoms
 
 - Requests to control.farna.dev time out.
-- `flyctl checks list -a app-modulo` shows `servicecheck-00-http-8080`
+- `flyctl checks list -a farna-control` shows `servicecheck-00-http-8080`
   critical with output like "context deadline exceeded".
 - Fly proxy logs show "could not find a good candidate within 40 attempts at
   load balancing".
-- `flyctl machines list -a app-modulo` still shows the `app` process-group
+- `flyctl machines list -a farna-control` still shows the `app` process-group
   machine in state `started`.
 
 The machine being `started` is the key discriminator: this is a live-but-wedged
@@ -24,15 +24,15 @@ here - the machine needs a restart.
 
 ```sh
 # Service-check status: expect servicecheck-00-http-8080 critical.
-flyctl checks list -a app-modulo
+flyctl checks list -a farna-control
 
 # Machine states and process groups: the app machine should be `started`.
-flyctl machines list -a app-modulo
+flyctl machines list -a farna-control
 
 # Recent logs: worker machines keep logging actively while the app machine's
 # service check fails - that split (workers alive, web check critical) is the
 # signature of a wedge rather than a crash.
-flyctl logs -a app-modulo --no-tail
+flyctl logs -a farna-control --no-tail
 ```
 
 ## Recover
@@ -40,7 +40,7 @@ flyctl logs -a app-modulo --no-tail
 1. Identify the machine in the `app` process group:
 
    ```sh
-   flyctl machines list -a app-modulo
+   flyctl machines list -a farna-control
    ```
 
    Note the ID from the row whose PROCESS GROUP column is `app`.
@@ -48,14 +48,14 @@ flyctl logs -a app-modulo --no-tail
 2. Restart it (brief downtime; see Notes below):
 
    ```sh
-   flyctl machine restart <machine-id> -a app-modulo
+   flyctl machine restart <machine-id> -a farna-control
    ```
 
 3. Verify recovery:
 
    ```sh
    # Service check back to passing:
-   flyctl checks list -a app-modulo
+   flyctl checks list -a farna-control
 
    # Site returns HTTP 200:
    curl -sS -o /dev/null -w "%{http_code}\n" https://control.farna.dev
@@ -80,8 +80,8 @@ flyctl logs -a app-modulo --no-tail
   the LIVE machine takes an explicit update (brief restart):
 
   ```sh
-  flyctl machine update <machine-id> -a app-modulo --vm-size shared-cpu-4x
+  flyctl machine update <machine-id> -a farna-control --vm-size shared-cpu-4x
   ```
 
-  Find the app-group machine id via `flyctl machines list -a app-modulo`.
+  Find the app-group machine id via `flyctl machines list -a farna-control`.
   This matches the machine-budget comment block in `fly.toml`.

@@ -13,7 +13,9 @@
          GET/PUT /api/v1/admin/org/hitl-review-window is not plan-gated, so
          this control must render and work on every plan tier. Every other
          section stays inside the gate. -->
-    <SectionCard
+    <DataCard
+      variant="bordered"
+      heading-level="h2"
       :title="$t('views.AdminOrgSettingsView.hitl_review_window')"
       :description="$t('views.AdminOrgSettingsView.hitl_review_window_description')"
     >
@@ -99,13 +101,15 @@
           <p class="text-xs font-medium">{{ hitlWindowStatus }}</p>
         </div>
       </template>
-    </SectionCard>
+    </DataCard>
 
     <!-- Human-linked MCP authority (FAR-1972 / ADR 063 step 1): community-tier
          and org-level governance, so like the HITL review window it renders
          OUTSIDE the team-tier FeatureGate — an org admin on any plan can
          tighten how their own org's human-only gates may be decided. -->
-    <SectionCard
+    <DataCard
+      variant="bordered"
+      heading-level="h2"
       :title="$t('views.AdminOrgSettingsView.mcp_authority_title')"
       :description="$t('views.AdminOrgSettingsView.mcp_authority_description')"
     >
@@ -155,14 +159,16 @@
           data-testid="org-mcp-authority-saved"
         >{{ $t('views.AdminOrgSettingsView.mcp_authority_saved') }}</p>
       </template>
-    </SectionCard>
+    </DataCard>
 
     <!-- Organisation feature flags (FAR-2302): community-tier flags an org
          admin may set for their OWN org. Like the HITL review window and the
          MCP authority card, this renders OUTSIDE the team-tier FeatureGate —
          the endpoint is not plan-gated (team-tier flags are refused
          server-side), so an admin on any plan can manage their own usage. -->
-    <SectionCard
+    <DataCard
+      variant="bordered"
+      heading-level="h2"
       :title="$t('views.AdminOrgSettingsView.org_feature_flags_title')"
       :description="$t('views.AdminOrgSettingsView.org_feature_flags_description')"
     >
@@ -224,9 +230,9 @@
           data-testid="org-feature-flags-saved"
         >{{ $t('views.AdminOrgSettingsView.org_feature_flags_saved') }}</p>
       </template>
-    </SectionCard>
+    </DataCard>
 
-    <FeatureGate feature-name="team_rbac" required-tier="team" show-disabled>
+    <FeatureGate feature-name="team_rbac" show-disabled>
 
     <LoadingSpinner v-if="loading" />
     <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadData" />
@@ -272,7 +278,9 @@
       </DataCard>
 
       <!-- Data Export -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         :title="$t('views.AdminOrgSettingsView.data_export')"
         :description="$t('views.AdminOrgSettingsView.data_export_description')"
       >
@@ -324,7 +332,7 @@
             {{ $t('views.AdminOrgSettingsView.export_again') }}
           </button>
         </div>
-      </SectionCard>
+      </DataCard>
 
       <!-- Product Analytics -->
       <ProductAnalyticsSettings />
@@ -339,7 +347,6 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { ref, computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'

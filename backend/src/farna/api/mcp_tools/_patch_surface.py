@@ -186,6 +186,11 @@ def _require_plan_feature(*args: Any, **kwargs: Any) -> Any:
     return _resolve("_require_plan_feature")(*args, **kwargs)
 
 
+def _require_plan_entitlement(*args: Any, **kwargs: Any) -> Any:
+    """Forward to ``farna.api.mcp_server._require_plan_entitlement`` at call time (live patch target)."""
+    return _resolve("_require_plan_entitlement")(*args, **kwargs)
+
+
 def _require_unique_trigger_name(*args: Any, **kwargs: Any) -> Any:
     """Forward to ``farna.api.mcp_server._require_unique_trigger_name`` at call time (live patch target)."""
     return _resolve("_require_unique_trigger_name")(*args, **kwargs)

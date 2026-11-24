@@ -5,11 +5,16 @@
       :subtitle="$t('views.EvidenceView.subtitle')"
     />
 
-    <section class="space-y-3" aria-labelledby="evidence-run-picker-heading" data-testid="evidence-run-picker">
-      <div>
-        <h2 id="evidence-run-picker-heading" class="text-base font-semibold">{{ $t('views.EvidenceView.run_picker_title') }}</h2>
-        <p class="text-sm text-muted-foreground">{{ $t('views.EvidenceView.run_picker_description') }}</p>
-      </div>
+    <DataCard
+      :title="$t('views.EvidenceView.run_picker_title')"
+      :description="$t('views.EvidenceView.run_picker_description')"
+      heading-level="h2"
+      variant="bordered"
+      padding="md"
+      role="region"
+      :aria-label="$t('views.EvidenceView.run_picker_title')"
+      data-testid="evidence-run-picker"
+    >
       <div class="flex flex-wrap items-end gap-3">
         <div class="min-w-72 flex-1">
           <label for="evidence-run-search" class="mb-1 block text-sm font-medium">
@@ -55,7 +60,7 @@
       <p v-else-if="!recentRunsLoading && recentRuns.length === 0" class="text-sm text-muted-foreground" data-testid="evidence-recent-runs-empty">
         {{ $t('views.EvidenceView.no_recent_runs') }}
       </p>
-    </section>
+    </DataCard>
 
     <form class="flex flex-wrap items-end gap-3" @submit.prevent="load">
       <div>
@@ -171,6 +176,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { fetchRuns, type RunListItem } from '../lib/api/runs'

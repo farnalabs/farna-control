@@ -2,7 +2,7 @@
   <div class="page-narrow">
     <PageHeader :title="$t('views.SettingsObservabilityView.observability')" :subtitle="$t('views.SettingsObservabilityView.configure_opentelemetry_export_and_langsmith_integration')" />
 
-    <FeatureGate feature-name="observability" required-tier="team" show-disabled>
+    <FeatureGate feature-name="observability" show-disabled>
 
       <div v-if="envOverrideActive" data-testid="settings-observability-env-override" class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm text-warning-text">
         <p class="font-medium">{{ $t('views.SettingsObservabilityView.env_override_active') }}</p>

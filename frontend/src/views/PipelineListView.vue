@@ -89,39 +89,31 @@
           <div class="mb-4" aria-hidden="true">
             <div class="h-6 w-40 bg-muted rounded animate-pulse" />
           </div>
-          <div class="table-wrapper animate-pulse" aria-hidden="true">
-              <table class="w-full text-left text-sm">
-                <thead>
-                  <tr>
-                    <th v-for="i in 8" :key="`th-${i}`" class="table-header">
-                      <div class="h-4 w-16 bg-muted rounded" />
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-border">
-                  <tr v-for="i in 6" :key="`row-${i}`">
-                    <td v-for="j in 8" :key="`cell-${j}`" class="table-cell">
-                      <div class="h-6 bg-muted rounded" :class="j === 1 ? 'w-3/4' : 'w-full'" />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <!-- STATE-3 (ux-conformance): the column count is known before the
+               first row arrives, so the loading placeholder is the shared
+               determinate TableSkeleton (8 columns / 6 rows, matching the real
+               <th> row and row count) instead of a hand-rolled pulse table.
+               `aria-hidden` keeps the loading placeholder out of the
+               accessibility tree, as the bespoke placeholder was. -->
+          <TableSkeleton :columns="8" :rows="6" aria-hidden="true" />
         </div>
 
         <ErrorAlert v-else-if="error" :message="error" :on-retry="loadPipelines" class="mb-6" />
 
-        <div v-else-if="filteredPipelines.length === 0 && search" class="text-center py-16">
-          <p class="text-lg font-medium text-foreground">{{ $t('views.PipelineListView.no_pipelines_match_your_search') }}</p>
-          <p class="text-sm text-muted-foreground mt-1">{{ $t('views.PipelineListView.try_a_different_search_term') }}</p>
-        </div>
+        <EmptyState
+          v-else-if="filteredPipelines.length === 0 && search"
+          :title="$t('views.PipelineListView.no_pipelines_match_your_search')"
+          :description="$t('views.PipelineListView.try_a_different_search_term')"
+        />
 
-        <div v-else-if="allPipelines.length === 0 && !search" class="text-center py-16">
-          <FileStack :size="48" class="mx-auto mb-4 text-muted-foreground/40" aria-hidden="true" />
-          <p class="text-lg font-medium text-foreground">{{ $t('views.PipelineListView.no_pipelines_yet') }}</p>
-          <p class="text-sm text-muted-foreground mt-1 mb-6">
-            {{ $t('views.PipelineListView.empty_description') }}
-          </p>
+        <EmptyState
+          v-else-if="allPipelines.length === 0 && !search"
+          :title="$t('views.PipelineListView.no_pipelines_yet')"
+          :description="$t('views.PipelineListView.empty_description')"
+        >
+          <template #icon>
+            <FileStack :size="48" class="mx-auto mb-4 text-muted-foreground/40" aria-hidden="true" />
+          </template>
           <div class="flex items-center justify-center gap-3">
             <Button as="router-link" to="/library" data-testid="pipeline-list-new-pipeline">
               {{ $t('views.PipelineListView.new_pipeline') }}
@@ -130,7 +122,7 @@
               {{ $t('views.PipelineListView.browse_library') }}
             </Button>
           </div>
-        </div>
+        </EmptyState>
 
         <div v-else>
           <!-- Mobile folder filter — the FolderTree is hidden below md, so offer folder selection here -->
@@ -162,13 +154,19 @@
             <h2 v-else class="text-base font-semibold text-foreground">{{ $t('views.PipelineListView.all_pipelines') }}</h2>
           </div>
           <!-- Table / Tree view -->
-          <div class="card rounded-lg border border-border overflow-hidden">
+          <TableCard class="rounded-lg border border-border overflow-hidden">
             <p id="pipeline-list-table-scroll-instructions" class="sr-only">
               {{ $t('views.PipelineListView.table_scroll_instructions') }}
             </p>
             <div class="relative">
               <div class="pointer-events-none absolute right-0 top-0 z-10 h-full w-8 bg-gradient-to-l from-background to-transparent sm:hidden" aria-hidden="true" />
-              <div class="table-wrapper focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset" tabindex="0" aria-describedby="pipeline-list-table-scroll-instructions">
+              <!-- The scroll region is the shared CardTable primitive: it owns the
+                   focusable viewport, so the shell class and the sr-only scroll
+                   instruction attach to the scroll container itself. -->
+              <CardTable
+                class="table-wrapper focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset"
+                describedby="pipeline-list-table-scroll-instructions"
+              >
               <table class="w-full min-w-max text-left text-sm">
               <thead>
                 <tr>
@@ -278,9 +276,9 @@
                 </template>
               </tbody>
               </table>
-              </div>
+              </CardTable>
             </div>
-          </div>
+          </TableCard>
         </div>
 
       </div>
@@ -450,12 +448,16 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, type Ref } 
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
+import TableCard from '../components/ui/TableCard.vue'
+import CardTable from '../components/ui/CardTable.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import FolderTree from '../components/pipelines/FolderTree.vue'
 import FolderListError from '../components/pipelines/FolderListError.vue'
 import { useDataFetch } from '../composables/useDataFetch'
 import { FOCUSABLE_SELECTOR, trapTabInElement } from '../composables/useFocusTrap'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import TableSkeleton from '../components/shared/TableSkeleton.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import { ChevronRight, Folder, FolderOpen, MoreVertical, FileStack } from '@lucide/vue'
 import { formatApiError, throwOnError } from '../lib/api/formatError'
 import { invalidFolderListMessage, isFolderList, type FolderItem } from '../lib/api/folders'

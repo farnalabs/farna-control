@@ -332,7 +332,7 @@ describe('AdminAssistantView branches — save error catch blocks', () => {
       skills: [{ id: 's1', name: 'Test', description: 'd', triggers: ['t'], active: true }],
     })
 
-    await wrapper.find('[data-testid="assistant-skill-toggle"]').trigger('click')
+    await wrapper.find('[data-testid^="assistant-skill-toggle-"]').trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Failed to toggle skill')
@@ -614,7 +614,7 @@ describe('AdminAssistantView branches — inactive skill toggle', () => {
       skills: [{ id: 's1', name: 'Inactive Skill', description: 'd', triggers: ['t'], active: false }],
     })
 
-    const toggle = wrapper.find('[data-testid="assistant-skill-toggle"]')
+    const toggle = wrapper.find('[data-testid^="assistant-skill-toggle-"]')
     expect(toggle.exists()).toBe(true)
     expect(toggle.classes()).toContain('bg-muted')
     expect(toggle.classes()).toContain('text-muted-foreground')

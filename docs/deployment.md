@@ -186,7 +186,7 @@ the pinned image):
 - Scope: the root `docker-compose.yml` and the production compose
   (`deploy/compose/docker-compose.prod.yml`). The two probe different targets:
   the production compose runs the all-in-one image, so it probes
-  `GET http://modulo:80/healthz/ready` (service `modulo` behind nginx on port
+  `GET http://farna-control:80/healthz/ready` (service `farna-control` behind nginx on port
   80 - uvicorn's own `127.0.0.1:8000` is loopback-bound inside the container),
   and its dashboard is loopback-bound at `127.0.0.1:8083`. The Helm chart does
   not have it.
@@ -201,7 +201,7 @@ For production, terminate TLS at a reverse proxy:
 ```nginx
 server {
     listen 443 ssl;
-    server_name modulo.example.com;
+    server_name farna-control.example.com;
 
     ssl_certificate     /etc/ssl/certs/modulo.crt;
     ssl_certificate_key /etc/ssl/private/modulo.key;
@@ -219,12 +219,12 @@ server {
 
 **Caddy** (automatic TLS):
 ```caddyfile
-modulo.example.com {
+farna-control.example.com {
     reverse_proxy 127.0.0.1:8000
 }
 ```
 
-Set `FARNA_CONTROL_PUBLIC_URL=https://modulo.example.com` so OAuth redirect URIs and
+Set `FARNA_CONTROL_PUBLIC_URL=https://farna-control.example.com` so OAuth redirect URIs and
 WebSocket connections use the correct origin.
 
 ---
@@ -349,12 +349,12 @@ Cross-Origin Resource Sharing (CORS) is configured via environment variables.
 **`CORS_ORIGINS`** – Comma-separated list of allowed origins:
 
 ```env
-CORS_ORIGINS=http://localhost:5173,https://modulo.example.com
+CORS_ORIGINS=http://localhost:5173,https://farna-control.example.com
 ```
 
 Each origin must be a full origin including scheme and host, without a trailing slash:
-- ✅ `https://modulo.example.com`
-- ❌ `https://modulo.example.com/`
+- ✅ `https://farna-control.example.com`
+- ❌ `https://farna-control.example.com/`
 - ❌ `*`
 
 **`CORS_MAX_AGE`** – Preflight cache duration in seconds (default: `600` / 10 minutes):
@@ -366,7 +366,7 @@ CORS_MAX_AGE=3600
 ### Security recommendations
 
 1. **Never use `*` (wildcard) in production.** If `debug=False` and `CORS_ORIGINS` contains `*`, startup will reject the configuration. Wildcard origins prevent browsers from sending credentials and bypass the security model entirely.
-2. **Always explicitly list your frontend origins.** Include both the exact development URL (`http://localhost:5173`) and the production URL (`https://app.modulo.example.com`).
+2. **Always explicitly list your frontend origins.** Include both the exact development URL (`http://localhost:5173`) and the production URL (`https://app.farna-control.example.com`).
 3. **No trailing slashes.** Origins with trailing slashes are rejected at startup.
 4. **Per-origin method restrictions** are not supported by the underlying Starlette CORSMiddleware. The allowed methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`) apply uniformly to all origins. If per-origin method control is required, configure it at the reverse proxy layer.
 5. **CORS is enforced by the browser, not the server.** It does not protect against direct API calls from server-side or non-browser clients. Use authentication and rate limiting for API security.
@@ -476,10 +476,10 @@ healthy deployment looks broken. Create the first account with one of:
   `admin@modulo.run` gets the admin role, so any other address (for example
   `admin@example.com`) is seeded as a `runner` with no admin rights.
   Plaintext is bcrypt-hashed at seed time.
-- **Create it after the stack is up.** From the `modulo` container:
+- **Create it after the stack is up.** From the `farna-control` container:
 
   ```bash
-  docker compose -f deploy/compose/docker-compose.prod.yml exec modulo \
+  docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control \
     farna-control users add admin@example.com --admin
   # prompts for the password; pass --password '<pw>' for a non-interactive run
   ```
@@ -516,7 +516,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 # 401 = no such user (create one - step 1), or a wrong password
 ```
 
-**What runs.** The `modulo` service runs the **all-in-one image**: one
+**What runs.** The `farna-control` service runs the **all-in-one image**: one
 container whose `supervisord` starts the API (`uvicorn`), `nginx`, and **both
 SAQ queue workers** - `saq-runs` executes pipeline runs and `saq-system` owns
 the `system` queue (`fire_due_triggers`, i.e. every cron and polling trigger,
@@ -530,7 +530,7 @@ Worker output lands beside the API and nginx logs, under
 `/var/log/supervisor/` inside the container:
 
 ```bash
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo \
+docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control \
   tail -f /var/log/supervisor/saq-runs.out.log     # also: saq-system.*, backend.*, nginx.*
 ```
 
@@ -542,14 +542,14 @@ Download it to a file and run it rather than streaming it into a shell:
 `curl ... | bash` pipe skips that verification entirely.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/farnalabs/farna-control/main/scripts/install.sh -o modulo-install.sh
-bash modulo-install.sh
+curl -fsSL https://raw.githubusercontent.com/farnalabs/farna-control/main/scripts/install.sh -o farna-control-install.sh
+bash farna-control-install.sh
 ```
 
 | Component | How it runs |
 |---|---|
 | Database | PostgreSQL 16 (separate container) |
-| Application + web tier | uvicorn + nginx inside the single `modulo` container, under supervisord |
+| Application + web tier | uvicorn + nginx inside the single `farna-control` container, under supervisord |
 | Task scheduling | SAQ system-worker cron (`fire_due_triggers`) - the `saq-system` program in the **same** container's supervisord |
 | Task queue | SAQ Redis queue, consumed by the `saq-runs` program in the **same** container's supervisord |
 | Rate limiting | Redis sliding window |
@@ -580,7 +580,7 @@ operator sees the pressure before any enqueue is refused. If you point
 policy are yours to set.
 
 The two queue workers are **not** separate compose services here - they are
-supervisord programs inside the `modulo` container
+supervisord programs inside the `farna-control` container
 (`deploy/supervisor/supervisord.conf`), which is what keeps the deployment
 "all-in-one": one artifact, one environment, no duplicated credentials block.
 They run the same commands the root `docker-compose.yml` uses for its
@@ -606,7 +606,7 @@ does not re-run the role bootstrap to correct it. The symptom is
 readiness. Reconcile the role once after upgrading:
 
 ```bash
-docker compose -f deploy/compose/docker-compose.prod.yml exec modulo \
+docker compose -f deploy/compose/docker-compose.prod.yml exec farna-control \
   python -m farna.db.bootstrap_role
 ```
 
@@ -617,13 +617,13 @@ reports `dispatcher_reconcile: ok`.
 ### Kubernetes (production, multi-replica)
 
 A maintained, vendor-neutral Helm chart ships in this repository at
-`deploy/helm/modulo/`. It deploys the **Farna Control stack** - backend API, SAQ
+`deploy/helm/farna-control/`. It deploys the **Farna Control stack** - backend API, SAQ
 runner and system workers, frontend, and an optional in-cluster Redis, against
 an external PostgreSQL - and includes ResourceQuota, LimitRange, optional HPA,
-ingress and namespace templates. `deploy/helm/modulo/values.eks.example.yaml`
+ingress and namespace templates. `deploy/helm/farna-control/values.eks.example.yaml`
 is a validated EKS example (RDS, ElastiCache, ALB), and the chart was deployed
 end-to-end on a real EKS cluster on 2026-09-23 (FAR-1052); see
-`deploy/helm/modulo/README.md` §Validation Status for exactly what was proven
+`deploy/helm/farna-control/README.md` §Validation Status for exactly what was proven
 and which follow-ups remain open.
 
 **Stack versus runtime provider.** The chart installs the stack, not the agent
@@ -636,7 +636,7 @@ long-lived pods in the customer's cluster under that cluster's ServiceAccount
 (FAR-1053); the scheduled managed-cluster leg has not run yet - its kubeconfig
 secrets are not provisioned - so no managed cluster is claimed
 (`docs/deployment/k8s-conformance-parity.md` records exactly what each leg
-proves). Chart setup and validation status: `deploy/helm/modulo/README.md`.
+proves). Chart setup and validation status: `deploy/helm/farna-control/README.md`.
 The reader-facing guide covering both halves - installing the stack and
 running agent workspaces as pods - is published at
 https://farna.dev/control/docs/kubernetes.

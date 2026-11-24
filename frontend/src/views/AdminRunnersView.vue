@@ -1,10 +1,11 @@
 <template>
   <div class="page-wide">
-    <FeatureGate feature-name="environment_profiles" required-tier="community" show-disabled>
+    <FeatureGate feature-name="environment_profiles" show-disabled>
       <PageHeader
         :title="$t('views.AdminRunnersView.runners')"
         :subtitle="$t('views.AdminRunnersView.subtitle')"
         :tabs="tabs"
+        :title-as="contextTitleAs"
       />
 
       <ErrorAlert
@@ -27,6 +28,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import PageHeader from '../components/shared/PageHeader.vue'
 import RunnerStatusStrip from '../components/runners/RunnerStatusStrip.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
@@ -41,6 +43,20 @@ const tabs = [
   { label: t('views.AdminRunnersView.tab_profiles'), to: '/admin/runners/profiles' },
   { label: t('views.AdminRunnersView.tab_concurrency'), to: '/admin/runners/concurrency' },
 ]
+
+// FAR-2723: the nested profile editor renders its own <h1> — "New Environment
+// Profile" / "Edit Environment Profile" — which is the meaningful page title
+// for those routes. The layout's "Runners" title stays visible as a context
+// label, but as a non-heading, so the route has exactly one <h1> and one
+// focus target. Every other tab keeps the real heading.
+const NESTED_EDITOR_ROUTES: ReadonlySet<string> = new Set([
+  'admin-runners-profile-new',
+  'admin-runners-profile-edit',
+])
+const route = useRoute()
+const contextTitleAs = computed<'h1' | 'p'>(() =>
+  NESTED_EDITOR_ROUTES.has(String(route.name ?? '')) ? 'p' : 'h1',
+)
 
 const { data: status, error: statusFetchError, load: reloadStatus } = useDataFetch<RunnersStatus>(
   () => api.GET('/api/v1/runners/status'),

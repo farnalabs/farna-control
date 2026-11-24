@@ -1133,7 +1133,7 @@ class PipelineResponse(BaseModel):
     # is the state the ``create_run`` gate enforces (false = present, visible,
     # non-executing); the reason/timestamp name the first cause ('operator' |
     # 'circuit_breaker'). Carried on every response so the UI can badge it and
-    # ``modulo apply``'s drift hash can read the live value. Additive with
+    # ``farna-control apply``'s drift hash can read the live value. Additive with
     # safe defaults (pre-migration / partial stand-ins serialise as running).
     run_enabled: bool = True
     run_disabled_reason: str | None = None
@@ -1408,7 +1408,7 @@ class CapabilityScope(BaseModel):
 class PipelineGraphPolicyGate(BaseModel):
     """Node-attached policy-gate configuration (FAR-1109).
 
-    Declared on a :class:`PipelineGraphNode` so a declarative ``modulo apply``
+    Declared on a :class:`PipelineGraphNode` so a declarative ``farna-control apply``
     config can carry the gate as part of the graph write. ``action`` is the
     gate's configured action (the ``policy_gates.action`` CHECK vocabulary);
     ``eval_id`` references the eval bound to this node (the CLI never
@@ -1636,7 +1636,7 @@ class PipelineGraphNode(StdoutRetentionValidatorMixin, BaseModel):
     # FAR-1109: node-attached policy-gate configuration (declarative
     # config-as-code surface). Declared here so the REST + MCP graph contracts
     # do NOT silently drop the block on save — a dropped declarative field
-    # would create permanent plan drift in ``modulo apply`` and the write would
+    # would create permanent plan drift in ``farna-control apply`` and the write would
     # never carry the gate. Absent = no gate declared on this node.
     policy_gate: PipelineGraphPolicyGate | None = Field(
         default=None,
@@ -2482,7 +2482,7 @@ class PipelineGraphResponse(PipelineGraphUpdate):
         re-materialises the model defaults, so serialising the model verbatim would
         emit ``resource: null`` / ``filters: {}`` / ``data: {}`` for keys the
         persisted graph does not carry. The read contract must match the write
-        contract: the frontend flow is GET → edit → PUT, and ``modulo apply`` hashes
+        contract: the frontend flow is GET → edit → PUT, and ``farna-control apply`` hashes
         fetched graphs against declared state, so an asymmetric wire shape is drift
         on both.
 
@@ -3327,8 +3327,16 @@ async def create_pipeline_endpoint(
 async def get_pipeline_endpoint(
     pipeline_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    principal: TenantPrincipal = require_permission(_CODE_PIPELINE_LIST),
-    _: TenantPrincipal = require_team_membership_or_admin(resolve_pipeline_team_scope),
+    # any_credential (FAR-2726): the pipeline RECORD is read by the same mk_
+    # org API-key consumers that already read the GRAPH (declarative apply's
+    # hash/verify, drift checks). Before this the graph route accepted an mk_
+    # key but the record route 401'd, inverting the sensitivity boundary.
+    # Both gates MUST be the any-credential flavour together: the team gate
+    # resolves its own principal, so pairing the any-credential permission with
+    # the JWT-only team gate (or vice versa) would 401 the mk_ request - the
+    # same pairing rule the graph route's comment records.
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_PIPELINE_LIST),
+    _: TenantPrincipal = require_team_membership_or_admin_any_credential(resolve_pipeline_team_scope),
 ) -> PipelineResponse:
     try:
         async with session.begin():
@@ -6457,7 +6465,7 @@ def _graph_nodes_as_models(nodes: list[dict[str, Any]]) -> list[PipelineGraphNod
     """Stored graph node dicts -> models, for the save-time reference checks.
 
     The sibling graph-write endpoints receive these models already validated
-    by the request body (REST, MCP and ``modulo apply`` all round-trip through
+    by the request body (REST, MCP and ``farna-control apply`` all round-trip through
     ``PipelineGraphUpdate``); the two node-conversion endpoints read them back
     out of ``graph_nodes_json``, so they are (re)validated here. Strict first -
     the same bar a request-payload node must clear - then the ``legacy_read``

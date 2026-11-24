@@ -10,18 +10,22 @@
     </p>
 
     <div class="mt-6 space-y-4" data-testid="governance-levels">
-      <article
+      <BaseCard
         v-for="level in levels"
         :key="level.id"
-        class="card p-6"
+        as="article"
+        padding="lg"
         :data-testid="`governance-level-${level.id}`"
       >
-        <header>
-          <h2 class="text-base font-semibold">
-            <span class="mr-2 text-muted-foreground" aria-hidden="true">{{ level.order }}.</span>{{ $t(level.titleKey) }}
-          </h2>
-          <p class="mt-1 text-sm text-muted-foreground">{{ $t(level.primitiveKey) }}</p>
-        </header>
+        <CardHeader
+          heading-level="h2"
+          :title="$t(level.titleKey)"
+          :description="$t(level.primitiveKey)"
+        >
+          <template #leading>
+            <span class="text-muted-foreground" aria-hidden="true">{{ level.order }}.</span>
+          </template>
+        </CardHeader>
 
         <p
           v-if="level.noteKey"
@@ -33,7 +37,6 @@
 
         <FeatureGate
           :feature-name="level.featureName ?? ''"
-          :required-tier="level.requiredTier"
           show-disabled
         >
           <div class="mt-4" :data-testid="`governance-level-body-${level.id}`">
@@ -123,7 +126,7 @@
             </div>
           </div>
         </FeatureGate>
-      </article>
+      </BaseCard>
     </div>
   </div>
 </template>
@@ -135,6 +138,8 @@ import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import PageHeader from '../components/shared/PageHeader.vue'
 import FeatureGate from '../components/FeatureGate.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import Badge from 'primevue/badge'
 
 const { t } = useI18n()
@@ -167,7 +172,6 @@ interface LevelDef {
   noteKey?: string
   gateKey: string
   featureName?: string
-  requiredTier: string
   links: LevelLink[]
 }
 
@@ -190,7 +194,6 @@ const LEVEL_DEFS: LevelDef[] = [
     countLabelKey: 'views.GovernanceStackView.level_models_count',
     gateKey: 'views.GovernanceStackView.gate_models',
     featureName: 'model_backend_management',
-    requiredTier: 'community',
     links: [{ to: '/admin/model-backends', labelKey: 'views.GovernanceStackView.level_models_link' }],
   },
   {
@@ -203,10 +206,8 @@ const LEVEL_DEFS: LevelDef[] = [
     featureName: 'plugin_management',
     // This level is the CONNECTORS surface ("Tools" -> /admin/connectors), not
     // the Plugins page: connecting external tools is a first-run requirement,
-    // so it stays open on Community as FAR-2604 requires. `plugin_management`
-    // is broader than the pages it gates (it is Team-tier); FAR-2665 narrows
-    // it. The /admin/connectors route and API carry no feature gate.
-    requiredTier: 'community',
+    // so it stays open on Community as FAR-2604 requires. FAR-2665 lowered
+    // `plugin_management` to Community, so the gate now agrees with the route.
     links: [{ to: '/admin/connectors', labelKey: 'views.GovernanceStackView.level_tools_link' }],
   },
   {
@@ -218,7 +219,6 @@ const LEVEL_DEFS: LevelDef[] = [
     noteKey: 'views.GovernanceStackView.level_mcp_note',
     gateKey: 'views.GovernanceStackView.gate_mcp',
     featureName: 'mcp_server',
-    requiredTier: 'community',
     links: [{ to: '/settings/mcp', labelKey: 'views.GovernanceStackView.level_mcp_link' }],
   },
   {
@@ -229,7 +229,6 @@ const LEVEL_DEFS: LevelDef[] = [
     countLabelKey: 'views.GovernanceStackView.level_agents_count',
     noteKey: 'views.GovernanceStackView.level_agents_note',
     gateKey: 'views.GovernanceStackView.gate_agents',
-    requiredTier: 'community',
     links: [{ to: '/library', labelKey: 'views.GovernanceStackView.level_agents_link' }],
   },
   {
@@ -240,7 +239,6 @@ const LEVEL_DEFS: LevelDef[] = [
     countLabelKey: 'views.GovernanceStackView.level_commands_count',
     noteKey: 'views.GovernanceStackView.level_commands_note',
     gateKey: 'views.GovernanceStackView.gate_commands',
-    requiredTier: 'community',
     links: [{ to: '/library', labelKey: 'views.GovernanceStackView.level_commands_link' }],
   },
   {
@@ -250,7 +248,6 @@ const LEVEL_DEFS: LevelDef[] = [
     primitiveKey: 'views.GovernanceStackView.level_autonomy_primitive',
     countLabelKey: 'views.GovernanceStackView.level_autonomy_count',
     gateKey: 'views.GovernanceStackView.gate_autonomy',
-    requiredTier: 'community',
     links: [{ to: '/pipelines', labelKey: 'views.GovernanceStackView.level_autonomy_link' }],
   },
   {
@@ -261,7 +258,6 @@ const LEVEL_DEFS: LevelDef[] = [
     countLabelKey: 'views.GovernanceStackView.level_telemetry_count',
     gateKey: 'views.GovernanceStackView.gate_telemetry',
     featureName: 'observability',
-    requiredTier: 'team',
     links: [
       { to: '/settings/observability', labelKey: 'views.GovernanceStackView.level_telemetry_link' },
       { to: '/admin/errors', labelKey: 'views.GovernanceStackView.level_telemetry_link_errors' },

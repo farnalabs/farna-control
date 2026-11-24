@@ -21,6 +21,7 @@ from starlette.testclient import TestClient
 from farna.api import main as main_module
 from farna.api.main import _init_once_mount_spa
 from farna.launcher import env_contract
+from tests.helpers.env_prefixes import retired_env_name
 
 ASSET_NAME = "app-a1b2c3d4.js"
 
@@ -120,7 +121,7 @@ def test_runtime_config_route_serves_allowlisted_keys_only(tmp_path: Path, monke
     response = client.get("/runtime-config.js")
     assert response.status_code == 200
     body = response.text
-    assert body.startswith("window.__MODULO_CONFIG__")
+    assert body.startswith("window.__FARNA_CONFIG__")
     assert '"monitor"' in body
     assert '"autoLogin"' in body
     assert response.headers["cache-control"].startswith("no-cache")
@@ -164,7 +165,7 @@ def test_lan_origin_via_the_mount_helper(tmp_path: Path) -> None:
 def test_a_pre_rebrand_lan_origins_spelling_is_not_honoured(tmp_path: Path) -> None:
     """Only the canonical LAN knob is read; a pre-rebrand spelling is ignored."""
     dist = _dist(tmp_path)
-    stale = "MOD" + "ULO" + "_LAN_ORIGINS"
+    stale = retired_env_name("LAN_ORIGINS")
     _, client = _spa_app(dist, {stale: "192.168.1.10"})
 
     assert client.get("/", headers={"Host": "192.168.1.10"}).status_code == 403
@@ -208,7 +209,7 @@ def test_a_stale_legacy_dist_is_never_read(tmp_path: Path) -> None:
     stale = tmp_path / "stale"
     stale.mkdir()
     (stale / "index.html").write_text("<html><body>STALE-SHELL</body></html>", encoding="utf-8")
-    legacy_dist = "MOD" + "ULO" + "_FRONTEND_DIST"
+    legacy_dist = retired_env_name("FRONTEND_DIST")
 
     app = _plain_api_app()
     mounted = _init_once_mount_spa(

@@ -1,6 +1,6 @@
 """Single shared runtime-config allowlist (FAR-671 slice 3 / ADR 031).
 
-``window.__MODULO_CONFIG__`` is the browser-side runtime configuration the SPA
+``window.__FARNA_CONFIG__`` is the browser-side runtime configuration the SPA
 reads before anything else. Two delivery paths produce it:
 
 * the container path — ``deploy/fly/entrypoint.sh`` renders
@@ -79,8 +79,8 @@ def build_runtime_config_payload(env: Mapping[str, str] | None = None) -> dict[s
 
 
 def render_runtime_config_js(payload: Mapping[str, object]) -> str:
-    """Render the ``window.__MODULO_CONFIG__`` assignment line."""
-    return "window.__MODULO_CONFIG__ = Object.assign(window.__MODULO_CONFIG__ || {}, " + json.dumps(payload, separators=(",", ":"), ensure_ascii=True) + ");\n"
+    """Render the ``window.__FARNA_CONFIG__`` assignment line."""
+    return "window.__FARNA_CONFIG__ = Object.assign(window.__FARNA_CONFIG__ || {}, " + json.dumps(payload, separators=(",", ":"), ensure_ascii=True) + ");\n"
 
 
 def write_runtime_config_js(payload: Mapping[str, object], destination: str | os.PathLike[str]) -> None:

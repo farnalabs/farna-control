@@ -2,22 +2,11 @@
   <div data-theme="agent" class="page-wide">
     <PageHeader :title="$t('views.SettingsRateLimitsView.rate_limits')" data-testid="rate-limits-title" :subtitle="$t('views.SettingsRateLimitsView.view_perroute_rate_limiting_rules_and_current_usage')" />
 
-    <FeatureGate feature-name="rate_limits" required-tier="team" show-disabled>
+    <FeatureGate feature-name="rate_limits" show-disabled>
 
     <div v-if="loading" class="space-y-6">
-      <div class="card p-6 animate-pulse">
-        <div class="mb-4 flex items-center justify-between">
-          <div class="h-5 w-24 bg-muted rounded" />
-          <div class="h-5 w-20 bg-muted rounded" />
-        </div>
-        <div class="h-4 w-64 bg-muted rounded" />
-      </div>
-      <div class="card p-6 animate-pulse">
-        <div class="mb-4 h-5 w-20 bg-muted rounded" />
-        <div class="h-4 w-full bg-muted rounded" />
-        <div class="mt-3 h-4 w-3/4 bg-muted rounded" />
-        <div class="mt-3 h-4 w-1/2 bg-muted rounded" />
-      </div>
+      <CardSkeleton class="p-6" :lines="1" />
+      <CardSkeleton class="p-6" :lines="3" />
     </div>
 
     <ErrorAlert v-else-if="loadError && !featureRequired" :message="loadError" :on-retry="loadRules" />
@@ -54,6 +43,7 @@
       >
         <EmptyState
           v-if="rules.length === 0"
+          variant="bare"
           :title="$t('views.SettingsRateLimitsView.no_rate_limit_rules_configured')"
         />
         <div v-else class="table-wrapper">
@@ -87,6 +77,7 @@ import { useDataFetch } from '../composables/useDataFetch'
 import { formatApiError, isFeatureRequiredProblem } from '../lib/api/formatError'
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import FeatureGate from '../components/FeatureGate.vue'

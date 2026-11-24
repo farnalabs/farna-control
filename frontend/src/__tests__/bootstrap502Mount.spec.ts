@@ -11,9 +11,10 @@
  * from the Vite dev proxy produces. They pin the observed invariant:
  *
  *   1. a 502 settles `/api/v1/plan` terminally as `flagsSource === 'unavailable'`;
- *   2. the guard FAILS OPEN for an authenticated tier-gated route (FAR-1809:
- *      the tier check is gated on `planStore.loaded &&`, and a failed fetch never
- *      sets `loaded`), returning `true` rather than a redirect;
+ *   2. the guard FAILS OPEN for an authenticated entitlement-gated route
+ *      (FAR-1809 / FAR-2665: the grant check is gated on `planStore.loaded &&`,
+ *      and a failed fetch never sets `loaded`), returning `true` rather than a
+ *      redirect;
  *   3. the navigation therefore SETTLES — so `router.isReady()` resolves and
  *      `main.ts` mounts;
  *   4. the unauthenticated first-goto path (a fresh Playwright context with no
@@ -110,12 +111,12 @@ describe('FAR-1888 — a 502 on a bootstrap call cannot block the SPA mount', ()
     )
   })
 
-  it('fails OPEN on a 502 for an authenticated tier-gated route — returns `true`, not a redirect', async () => {
+  it('fails OPEN on a 502 for an authenticated entitlement-gated route — returns `true`, not a redirect', async () => {
     await mockBootstrap502()
     const token = jwt({ org_id: 'acme', org_role: 'admin' })
     vi.mocked(getAccessToken).mockReturnValue(token)
 
-    const result = await enforceRoleTierVisibility(route({ requiredTier: 'team' }), token)
+    const result = await enforceRoleTierVisibility(route({ requiredEntitlement: 'identity' }), token)
 
     expect(result).toBe(true)
     const store = usePlanStore()
@@ -132,7 +133,7 @@ describe('FAR-1888 — a 502 on a bootstrap call cannot block the SPA mount', ()
     const guard = registeredGuard()
 
     const started = Date.now()
-    await expect(guard(route({ requiredTier: 'team' }))).resolves.toBeUndefined()
+    await expect(guard(route({ requiredEntitlement: 'identity' }))).resolves.toBeUndefined()
     expect(Date.now() - started).toBeLessThan(15000)
 
     // Non-vacuity: the retrieved callback must be the REAL guard, so it must have

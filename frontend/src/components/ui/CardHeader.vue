@@ -13,43 +13,56 @@
         <component
           :is="headingLevel"
           v-if="title"
-          class="text-base font-semibold"
           :class="titleClass"
         >
           {{ title }}
         </component>
         <p
           v-if="description"
-          class="mt-1 text-sm"
-          :class="descriptionClass || 'text-muted-foreground'"
+          :class="descriptionClass"
         >
           {{ description }}
         </p>
       </div>
     </div>
-    <div v-if="$slots.actions" data-testid="card-header-actions" class="actions-nowrap flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
+    <div v-if="$slots.actions" :data-testid="`card-header-actions-${headerUid}`" class="actions-nowrap flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
       <slot name="actions" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, useSlots } from 'vue'
+import { computed, useId, useSlots } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   title?: string
   description?: string
   headingLevel?: 'h2' | 'h3' | 'h4'
-  titleClass?: string
-  descriptionClass?: string
-  headerClass?: string
+  size?: 'md' | 'sm'
   divider?: boolean
+  headerClass?: string
   dataTestId?: string
-}>()
+}>(), {
+  headingLevel: 'h3',
+  size: 'md',
+  divider: false,
+})
 
 const slots = useSlots()
-const headingLevel = computed(() => props.headingLevel ?? 'h3')
+// FAR-2714: a page can render more than one CardHeader with actions, so the
+// actions wrapper needs a per-instance id for Playwright strict-mode getByTestId.
+const headerUid = useId()
 const hasHeaderContent = computed(() =>
   !!props.title || !!props.description || !!slots.actions || !!slots.leading
+)
+
+const titleClass = computed(() =>
+  props.size === 'sm' ? 'text-sm font-medium' : 'text-base font-semibold'
+)
+
+const descriptionClass = computed(() =>
+  props.size === 'sm'
+    ? 'mt-1 text-xs text-muted-foreground'
+    : 'mt-1 text-sm text-muted-foreground'
 )
 </script>

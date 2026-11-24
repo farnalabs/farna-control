@@ -69,7 +69,11 @@ export function useNavVisibilityContext(
       userPermissions,
       devMode: planStore.devMode,
       tierInfoLoaded: !!planStore.tierRanks && Object.keys(planStore.tierRanks).length > 0,
-      isAtMinimumTier: (tier: string) => planStore.isAtMinimumTier(tier),
+      // FAR-2665: entitlement gating reads the PLAN payload (the licence
+      // answer), not the tier catalogue, so a paid item stays hidden until the
+      // licence is known.
+      planLoaded: planStore.loaded,
+      isEntitlementGranted: (key: string) => planStore.hasEntitlement(key),
       // FAR-656: flag-gated nav items resolve through the plan store so the
       // sidebar stays consistent with the manifest feature_flag router guard.
       isFeatureEnabled: (flag: string) => planStore.featureEnabled(flag),

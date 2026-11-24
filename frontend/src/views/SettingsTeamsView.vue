@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="team_rbac" required-tier="team" show-disabled>
+  <FeatureGate feature-name="team_rbac" show-disabled>
     <div class="page-wide">
     <PageHeader :title="$t('views.SettingsTeamsView.page_title')" :subtitle="$t('views.SettingsTeamsView.page_subtitle')">
       <template #right>
@@ -13,8 +13,13 @@
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadTeams" />
 
     <div v-if="!loading && !error">
-      <div v-if="showCreateForm" class="card max-w-3xl p-6">
-        <h2 class="mb-4 text-base font-semibold">{{ $t('views.SettingsTeamsView.new_team') }}</h2>
+      <DataCard
+        v-if="showCreateForm"
+        padding="lg"
+        class="max-w-3xl"
+        :title="$t('views.SettingsTeamsView.new_team')"
+        heading-level="h2"
+      >
         <div class="space-y-4">
           <div>
             <label for="settingsteamsview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTeamsView.name') }}</label>
@@ -45,9 +50,9 @@
             </button>
           </div>
         </div>
-        <div v-if="createError" class="mt-3 text-sm text-destructive">{{ createError }}</div>
+        <ErrorAlert v-if="createError" compact class="mt-3" :message="createError" :retryable="false" />
         <div v-if="createSuccess" class="mt-3 text-sm text-success-text">{{ createSuccess }}</div>
-      </div>
+      </DataCard>
 
       <EmptyState
         v-if="teams.length === 0"
@@ -56,7 +61,7 @@
       />
 
       <div class="space-y-3">
-        <div v-for="team in teams" :key="team.id" class="card">
+        <BaseCard v-for="team in teams" :key="team.id" padding="none">
           <div class="flex items-start gap-3 p-4 max-sm:flex-wrap sm:items-center" :class="{ 'border-b': expandedTeamId === team.id }">
             <button
               type="button"
@@ -111,14 +116,17 @@
             <div v-if="membersLoading[team.id]" class="flex items-center justify-center py-4">
               <LoadingSpinner />
             </div>
-            <div v-else-if="membersError[team.id]" class="mb-3 text-sm text-destructive">
-              {{ membersError[team.id] }}
-              <button type="button" class="ml-2 underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</button>
-            </div>
+            <ErrorAlert v-else-if="membersError[team.id]" compact class="mb-3" :message="membersError[team.id]" :retryable="false">
+              <template #actions>
+                <button type="button" class="underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</button>
+              </template>
+            </ErrorAlert>
             <div v-else>
-              <div v-if="membersByTeam[team.id]?.length === 0" class="py-4 text-center text-sm text-muted-foreground">
-                {{ $t('views.SettingsTeamsView.no_members_yet') }}
-              </div>
+              <EmptyState
+                v-if="membersByTeam[team.id]?.length === 0"
+                variant="bare"
+                :title="$t('views.SettingsTeamsView.no_members_yet')"
+              />
               <div v-else class="table-wrapper">
                 <table class="w-full text-sm">
                 <thead>
@@ -224,7 +232,7 @@
             <h3 class="mb-3 mt-6 text-sm font-semibold text-muted-foreground uppercase tracking-wider">{{ $t('views.SettingsTeamsView.webhook_notifications') }}</h3>
             <TeamNotificationEndpoints :team-id="team.id" />
           </section>
-        </div>
+        </BaseCard>
       </div>
     </div>
     </div>
@@ -243,6 +251,8 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import TeamNotificationEndpoints from '../components/TeamNotificationEndpoints.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import { ChevronRight, Plus } from '@lucide/vue'

@@ -88,7 +88,7 @@ from farna.core.email_service import EmailSendingError, send_email
 from farna.core.ssrf import pinned_async_client
 from farna.settings import Settings, get_settings, resolve_instance_identity
 
-_log = logging.getLogger("modulo.watchdog")
+_log = logging.getLogger("farna_control.watchdog")
 
 # Redis keys owned by this watchdog. The alert-state key stores the active
 # incident (JSON: conditions + started_at) so the watchdog is edge-triggered:
@@ -350,7 +350,7 @@ async def _post_webhook_payload(url: str, payload: bytes, channel: str) -> None:
             resp = await client.post(
                 url,
                 content=payload,
-                headers={"Content-Type": "application/json", "User-Agent": "Modulo-Watchdog/1.0"},
+                headers={"Content-Type": "application/json", "User-Agent": "Farna-Control-Watchdog/1.0"},
             )
         if not resp.is_success:
             _log.warning("watchdog.%s_http_error status=%s", channel, resp.status_code)

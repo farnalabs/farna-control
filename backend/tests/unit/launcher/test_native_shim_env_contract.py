@@ -45,6 +45,7 @@ from pathlib import Path
 import pytest
 
 from farna.launcher import upgrade as upgrade_module
+from tests.helpers.env_prefixes import retired_env_name
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -408,7 +409,7 @@ _SPA_NAMES = {"FARNA_CONTROL_FRONTEND_DIST", "FARNA_CONTROL_SERVE_SPA"}
 
 def test_guard_rejects_a_pre_rebrand_spa_export() -> None:
     """The exact FAR-2564 defect: the launcher exports a pre-rebrand name."""
-    stale = "MOD" + "ULO" + "_SERVE_SPA"
+    stale = retired_env_name("SERVE_SPA")
     shim_sets = {_MACOS_BUNDLE: {stale, "FARNA_CONTROL_FRONTEND_DIST"}}
 
     violations = contract_violations(shim_sets, _SPA_NAMES)
@@ -447,7 +448,7 @@ def test_guard_rejects_a_stale_allowlist_entry() -> None:
 
 def test_guard_rejects_a_pre_rebrand_name_even_when_allowlisted() -> None:
     """The allowlist is for unread shell-only names, never for a stale prefix."""
-    stale = "MOD" + "ULO" + "_BIN_DIR"
+    stale = retired_env_name("BIN_DIR")
     allowed = {stale: "attempted exemption"}
     shim_sets = {_LINUX_INSTALLER: {stale}}
 

@@ -37,13 +37,7 @@
 
     <section class="page-wide">
       <div v-if="store.isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div v-for="i in 6" :key="i" class="card p-5 animate-pulse">
-          <div class="h-5 w-3/4 bg-muted rounded mb-2" />
-          <div class="h-3 w-full bg-muted rounded mb-1" />
-          <div class="h-3 w-2/3 bg-muted rounded mb-4" />
-          <div class="h-4 w-16 bg-muted rounded mb-3" />
-          <div class="h-8 w-full bg-muted rounded" />
-        </div>
+        <CardSkeleton v-for="i in 6" :key="i" class="p-5" :lines="4" />
       </div>
 
       <ErrorAlert v-else-if="store.error" :message="store.error" :on-retry="loadMaps" class="mb-6" />
@@ -70,9 +64,10 @@
           v-for="m in pagedMaps"
           :key="m.id"
           variant="bordered"
-          padding="none"
+          padding="lg"
+          pressable
           data-testid="lifecycle-map-list-card"
-          card-class="card-hover w-full p-5 text-left cursor-pointer"
+          class="w-full text-left"
           @click="openMap(m)"
           @keydown.enter.self="openMap(m)"
           @keydown.space.self.prevent="openMap(m)"
@@ -217,6 +212,7 @@ import FilterBar from '../../components/shared/FilterBar.vue'
 import { useLifecycleMapsStore } from '../../stores/lifecycleMaps'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
 import EmptyState from '../../components/shared/EmptyState.vue'
+import CardSkeleton from '../../components/ui/CardSkeleton.vue'
 import Button from 'primevue/button'
 import type { LifecycleMapSummary } from '../../stores/lifecycleMaps'
 import { formatDateShort } from '../../lib/formatDate'

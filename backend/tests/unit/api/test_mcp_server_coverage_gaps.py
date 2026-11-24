@@ -831,8 +831,8 @@ class TestOauthAuthorizeHandler:
         params = params if params is not None else self._VALID_PARAMS
         request = self._request(params)
         default_settings = MagicMock(
-            public_url="https://modulo.example.com",
-            cors_origins="https://modulo.example.com",
+            public_url="https://farna-control.example.com",
+            cors_origins="https://farna-control.example.com",
         )
         stack = [patch.object(ms, "get_settings", return_value=default_settings)]
         stack.extend(patch(target, **kwargs) for target, kwargs in patches.items())

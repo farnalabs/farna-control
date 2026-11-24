@@ -28,8 +28,11 @@
     <ErrorAlert v-else-if="connectorsError" :message="connectorsError" :on-retry="loadConnectors" />
 
     <template v-else>
-      <section class="rounded-lg border bg-card p-6 shadow-sm">
-        <h2 class="mb-4 text-base font-semibold">{{ $t('views.SchemaInferenceView.source') }}</h2>
+      <DataCard
+        :title="$t('views.SchemaInferenceView.source')"
+        heading-level="h2"
+        padding="lg"
+      >
         <div class="space-y-4">
           <div>
             <label for="schemainferenceview-connector" class="mb-1 block text-sm font-medium">{{ $t('views.SchemaInferenceView.connector') }}</label>
@@ -85,10 +88,14 @@
           </div>
         </div>
         <ErrorAlert v-if="inferError" compact class="mt-3" :message="inferError" :on-retry="inferSchema" />
-      </section>
+      </DataCard>
 
-      <section v-if="draftSchema" class="rounded-lg border bg-card p-6 shadow-sm">
-        <h2 class="mb-4 text-base font-semibold">{{ $t('views.SchemaInferenceView.draft_schema') }}</h2>
+      <DataCard
+        v-if="draftSchema"
+        :title="$t('views.SchemaInferenceView.draft_schema')"
+        heading-level="h2"
+        padding="lg"
+      >
 
         <div class="mb-3">
           <span class="block text-sm font-medium text-muted-foreground">{{ $t('views.SchemaInferenceView.name_label') }}</span>
@@ -102,31 +109,33 @@
 
         <div class="mb-4">
           <span class="mb-2 block text-sm font-medium text-muted-foreground">{{ $t('views.SchemaInferenceView.fields_label') }}</span>
-          <table v-if="draftSchema.fields.length > 0" class="w-full text-sm">
-            <thead>
-              <tr class="border-b text-left text-muted-foreground">
-                <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_name') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_type') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_required') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_description') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="field in draftSchema.fields" :key="field.name" class="border-b last:border-0">
-                <td class="py-2 font-mono text-xs">{{ field.name }}</td>
-                <td class="py-2 font-mono text-xs text-muted-foreground">{{ field.type }}</td>
-                <td class="py-2">
-                  <span
-                    class="inline-block rounded px-1.5 py-0.5 text-xs font-medium"
-                    :class="field.required ? 'bg-primary/10 text-primary-text' : 'bg-muted text-muted-foreground'"
-                  >
-                    {{ field.required ? $t('views.SchemaInferenceView.yes') : $t('views.SchemaInferenceView.no') }}
-                  </span>
-                </td>
-                <td class="py-2 text-xs text-muted-foreground">{{ field.description ?? '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="draftSchema.fields.length > 0" class="table-wrapper">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b text-left text-muted-foreground">
+                  <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_name') }}</th>
+                  <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_type') }}</th>
+                  <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_required') }}</th>
+                  <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_description') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="field in draftSchema.fields" :key="field.name" class="border-b last:border-0">
+                  <td class="py-2 font-mono text-xs">{{ field.name }}</td>
+                  <td class="py-2 font-mono text-xs text-muted-foreground">{{ field.type }}</td>
+                  <td class="py-2">
+                    <span
+                      class="inline-block rounded px-1.5 py-0.5 text-xs font-medium"
+                      :class="field.required ? 'bg-primary/10 text-primary-text' : 'bg-muted text-muted-foreground'"
+                    >
+                      {{ field.required ? $t('views.SchemaInferenceView.yes') : $t('views.SchemaInferenceView.no') }}
+                    </span>
+                  </td>
+                  <td class="py-2 text-xs text-muted-foreground">{{ field.description ?? '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="text-sm text-muted-foreground">{{ $t('views.SchemaInferenceView.no_fields_inferred') }}</p>
         </div>
 
@@ -164,7 +173,7 @@
         </div>
         <ErrorAlert v-if="publishError" compact class="mt-3" :message="publishError" />
         <div v-if="publishSuccess" class="mt-3 text-sm text-success-text">{{ publishSuccess }}</div>
-      </section>
+      </DataCard>
     </template>
   </div>
 </template>
@@ -181,6 +190,7 @@ import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import Button from 'primevue/button'
 import Select from '../components/shared/AppSelect.vue'
 

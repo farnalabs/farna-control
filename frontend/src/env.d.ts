@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface Window {
-  __MODULO_CONFIG__?: {
+  __FARNA_CONFIG__?: {
     autoLogin?: {
       username?: unknown
       password?: unknown

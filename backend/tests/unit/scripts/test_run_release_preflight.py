@@ -57,7 +57,7 @@ def _make_dummy_repo(tmp_path: Path) -> Path:
     (tmp_path / "frontend" / "Dockerfile.prod").write_text("FROM alpine\n", encoding="utf-8")
     (tmp_path / "deploy" / "docker" / "runner-opencode.Dockerfile").write_text("FROM alpine\n", encoding="utf-8")
 
-    chart_dir = tmp_path / "deploy" / "helm" / "modulo"
+    chart_dir = tmp_path / "deploy" / "helm" / "farna-control"
     chart_dir.mkdir(parents=True, exist_ok=True)
     (chart_dir / "Chart.yaml").write_text("apiVersion: v2\nname: modulo\nversion: 0.1.0\n", encoding="utf-8")
     (chart_dir / "values.yaml").write_text("{}\n", encoding="utf-8")
@@ -843,7 +843,7 @@ def test_azure_signing_secrets_cut_passes_when_present(tmp_path: Path):
 # -----------------------------------------------------------------------------
 def test_helm_chart_fails_when_required_file_missing(tmp_path: Path):
     repo = _make_dummy_repo(tmp_path)
-    (repo / "deploy" / "helm" / "modulo" / "Chart.yaml").unlink()
+    (repo / "deploy" / "helm" / "farna-control" / "Chart.yaml").unlink()
     checker = ReleasePreflightChecker(mode="cut", version="0.1.0", repo_root=repo)
     res = checker.check_helm_chart()
     assert not res.passed
@@ -853,9 +853,9 @@ def test_helm_chart_fails_when_required_file_missing(tmp_path: Path):
 
 def test_helm_chart_fails_when_chart_directory_missing(tmp_path: Path):
     repo = _make_dummy_repo(tmp_path)
-    (repo / "deploy" / "helm" / "modulo" / "values.yaml").unlink()
-    (repo / "deploy" / "helm" / "modulo" / "Chart.yaml").unlink()
-    (repo / "deploy" / "helm" / "modulo").rmdir()
+    (repo / "deploy" / "helm" / "farna-control" / "values.yaml").unlink()
+    (repo / "deploy" / "helm" / "farna-control" / "Chart.yaml").unlink()
+    (repo / "deploy" / "helm" / "farna-control").rmdir()
     checker = ReleasePreflightChecker(mode="cut", version="0.1.0", repo_root=repo)
     res = checker.check_helm_chart()
     assert not res.passed
@@ -883,7 +883,7 @@ def test_helm_chart_runs_helm_lint_when_available(tmp_path: Path, monkeypatch):
     checker = ReleasePreflightChecker(mode="cut", version="0.1.0", repo_root=repo, run_cmd=fake_run)
     res = checker.check_helm_chart()
     assert res.passed
-    assert calls == [["/usr/bin/helm", "lint", str(repo / "deploy" / "helm" / "modulo")]]
+    assert calls == [["/usr/bin/helm", "lint", str(repo / "deploy" / "helm" / "farna-control")]]
 
 
 def test_helm_chart_fails_when_helm_lint_fails(tmp_path: Path, monkeypatch):

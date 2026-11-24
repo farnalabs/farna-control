@@ -169,9 +169,9 @@ fi
 if [[ -f /tmp/system_database_url.env ]]; then
   SYSTEM_URL=$(cat /tmp/system_database_url.env)
   # Export the canonical name (farna.launcher.env_contract): farna.db.bootstrap_role
-  # reads ONLY this name, so exporting just the pre-rebrand
-  # MODULO_SYSTEM_DATABASE_URL left it with no system URL and it created the
-  # system role with a random placeholder password (FAR-2563). The pre-rebrand
+  # reads ONLY this name, so exporting just the pre-rebrand spelling left it
+  # with no system URL and it created the system role with a random placeholder
+  # password (FAR-2563). The pre-rebrand
   # spelling is no longer read anywhere, so an operator must supply the
   # canonical name; there is no compatibility alias to fall back on.
   export FARNA_CONTROL_SYSTEM_DATABASE_URL="$SYSTEM_URL"
@@ -188,6 +188,21 @@ echo "=== Running DB migrations ==="
 # non-zero exit is the legible refusal and `set -e` stops the container here
 # instead of leaving it in alembic's "Can't locate revision" retry loop.
 python3 -m farna.db.alignment
+
+# FAR-2667: this boot takes NO pre-upgrade snapshot, deliberately. The Fly
+# [release] command (deploy/fly/release.sh) is the NORMAL migrator and runs
+# BEFORE any machine boots, so in the normal path this entrypoint finds the
+# schema at head and skips the migration work below. That is NOT the same as
+# "this file never migrates": the fallback loop below runs
+# `alembic upgrade heads` when the at-head probe says the database is behind -
+# and, because that probe is fail-safe, on ANY probe error - and that migration
+# path is NOT snapshot-protected. It stays a KNOWN GAP (see
+# docs/product-map/infra/backup-restore.md), so Fly is the documented exception
+# to "every upgrade path keeps a recovery point": take an out-of-band backup
+# (farna-control backup, or pg_dump) before a schema-changing deploy. Do not
+# re-add an opt-in here without moving the snapshot into release.sh, where the
+# normal migration happens.
+
 # The Fly [release] command (release.sh) now owns migrations (ONCE per deploy BEFORE machines
 # roll out). This boot path is a FAST-PATH SKIP + FALLBACK: when the DB is already at head,
 # skip the advisory-lock migration loop entirely (no lock, no alembic run) — machines previously
@@ -526,7 +541,7 @@ PY
 
     echo "=== Starting uvicorn ==="
     uvicorn farna.api.main:app \
-        --host 0.0.0.0 --port ${PORT:-8000} \
+        --host 0.0.0.0 --port "${PORT:-8000}" \
         --proxy-headers \
         --timeout-keep-alive 30 \
         --timeout-graceful-shutdown 30 \

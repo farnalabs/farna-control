@@ -57,13 +57,14 @@ describe('MyProfileView', () => {
   })
 
   it('renders the My Teams section with team names and roles', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     const wrapper = mount(MyProfileView)
     await nextTick()
     await nextTick()
 
     expect(wrapper.text()).toContain('My Teams')
-    const teamRows = wrapper.findAll('[data-testid="my-profile-my-team"]')
+    const teamRows = wrapper.findAll('[data-testid^="my-profile-my-team-"]')
     expect(teamRows.length).toBe(2)
     expect(teamRows[0].text()).toContain('Engineering')
     expect(teamRows[0].text()).toContain('Operator')
@@ -72,7 +73,8 @@ describe('MyProfileView', () => {
   })
 
   it('shows empty state when the user belongs to no teams', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/teams/my') return Promise.resolve({ data: [], error: undefined })
       return Promise.resolve({
@@ -121,11 +123,12 @@ describe('MyProfileView', () => {
     await nextTick()
     await nextTick()
 
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(true)
   })
 
   it('shows the My Teams error card only when the feature is enabled', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/teams/my') {
         return Promise.resolve({
@@ -150,7 +153,7 @@ describe('MyProfileView', () => {
     await nextTick()
     await nextTick()
 
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Failed to load teams')
     expect(wrapper.findAll('[data-testid="error-alert-retry"]').length).toBe(1)
   })
@@ -471,7 +474,7 @@ describe('MyProfileView HITL email alerts', () => {
     })
 
     expect(wrapper.text()).toContain('Failed to load preferences')
-    const preferenceError = wrapper.find('[data-testid="my-profile-hitl-email-section"] > div.my-profile-hitl-email-load-error')
+    const preferenceError = wrapper.find('[data-testid="my-profile-hitl-email-section"] .my-profile-hitl-email-load-error')
     // Exactly one live region for this message: ErrorAlert's root owns it, and
     // the wrapper must not add a second announcement of the same failure.
     expect(preferenceError.attributes('role')).toBeUndefined()
@@ -608,7 +611,8 @@ describe('MyProfileView loading placeholders and fallbacks', () => {
   })
 
   it('renders accessible skeleton placeholders while both sections load', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     mockGet.mockImplementation(() => new Promise(() => {}))
 
     const wrapper = mount(MyProfileView)
@@ -636,7 +640,8 @@ describe('MyProfileView loading placeholders and fallbacks', () => {
   })
 
   it('shows a profile skeleton until the profile request resolves', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     let resolveProfile: (value: unknown) => void = () => {}
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/auth/me') {
@@ -667,7 +672,8 @@ describe('MyProfileView loading placeholders and fallbacks', () => {
   })
 
   it('shows an actionable error and recovers when profile loading fails', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     let profileAttempts = 0
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/auth/me') {
@@ -706,7 +712,8 @@ describe('MyProfileView loading placeholders and fallbacks', () => {
   })
 
   it('shows an actionable error when the profile request throws', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     mockGet.mockImplementation((url: string) => {
       if (url === '/api/v1/auth/me') return Promise.reject(new Error('Profile network error'))
       if (url === '/api/v1/teams/my') return Promise.resolve({ data: [], error: undefined })
@@ -730,7 +737,8 @@ describe('MyProfileView loading placeholders and fallbacks', () => {
   })
 
   it('falls back to an em dash when org_role is missing', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     mockLoadedView({ ...PROFILE, org_role: '' })
 
     const wrapper = mount(MyProfileView)
@@ -742,7 +750,8 @@ describe('MyProfileView loading placeholders and fallbacks', () => {
   })
 
   it('falls back to an em dash when created_at is missing', async () => {
-    usePlanStore().currentTier = 'team'
+    // FAR-2665: the gate reads the resolved behaviour flag, not the tier.
+    usePlanStore().$patch({ features: { team_rbac: true } })
     mockLoadedView({ ...PROFILE, created_at: '' })
 
     const wrapper = mount(MyProfileView)

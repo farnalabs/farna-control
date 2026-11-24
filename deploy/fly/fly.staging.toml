@@ -1,4 +1,4 @@
-app = 'staging-modulo'
+app = 'staging-farna-control'
 
 # ===== Machine budget (stay within the org limit) =====
 # Standing footprint (verified live 2026-09-02 via `fly scale show`): 1 x app
@@ -13,7 +13,7 @@ app = 'staging-modulo'
 # manual resize. Paired with the [checks.app_liveness] block below and the
 # web-watchdog staging coverage, which heal a wedge that still occurs.
 # Whole-org standing (verified 2026-09-02): 11 machines across 7 apps in org
-# `personal`, ~8 started 24/7: app-modulo 3 + staging-modulo 2 + modulo-telemetry 2
+# `personal`, ~8 started 24/7: farna-control 3 + staging-farna-control 2 + farna-control-telemetry 2
 # (fra, 1 running) + library-modulo 1 (ams, autostop, mostly stopped) + 3 Fly MPG
 # Postgres machines (modulo-app-db 2CPU/4gb, modulo-staging-db, library-modulo-db).
 # MPG machines bill as separate "MPG Cluster" lines, NOT in the "Machines" usage
@@ -24,7 +24,7 @@ app = 'staging-modulo'
 # deploy (`if: always()`); it bills in the 1x "Machines" lines while it runs.
 # Rolling deploys peak at N+1 per process group. There is no automated budget guard
 # in CI: deploy.yml only prunes group-less strays ("Clean up stray machines") - a
-# GROUPED stray is never auto-cleaned; run `fly machines list -a staging-modulo`
+# GROUPED stray is never auto-cleaned; run `fly machines list -a staging-farna-control`
 # after incidents. The limit is enforced by this standing footprint + manual review
 # before scaling up.
 # Do NOT add process groups or machines without updating this block.

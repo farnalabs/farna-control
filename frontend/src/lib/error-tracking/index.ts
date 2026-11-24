@@ -5,6 +5,7 @@ import { gatherContext } from './context'
 import { initTransport, disposeTransport } from './transport'
 import { onAuthChange } from '../api/client'
 import type { Router } from 'vue-router'
+import { isErrorTrackingDisabled } from '../../config/runtime'
 import { MonitorBackendRegistry } from '../../monitor/registry'
 import type { UserInfo, MonitorBackend } from '../../monitor/types'
 
@@ -200,7 +201,7 @@ export class ErrorTracker {
 }
 
 function isDisabled(): boolean {
-  return !!(window as unknown as Record<string, unknown>).__MODULO_ERROR_TRACKING_DISABLED__
+  return isErrorTrackingDisabled()
 }
 
 function buildBaseEvent(): ErrorEventInput {

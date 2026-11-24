@@ -1,21 +1,22 @@
 <template>
-  <section class="card p-4" data-testid="capacity-queue-panel" aria-labelledby="capacity-queue-heading">
-    <div class="mb-3 flex items-start justify-between gap-3">
-      <div>
-        <h2 id="capacity-queue-heading" class="text-base font-semibold">
-          {{ $t('views.AnalyticsView.capacity_panel_title') }}
-        </h2>
-        <p class="mt-0.5 text-xs text-muted-foreground">
-          {{ $t('views.AnalyticsView.capacity_panel_subtitle') }}
-        </p>
-      </div>
-      <div class="flex items-center gap-2">
+  <BaseCard
+    padding="md"
+    role="region"
+    :aria-label="$t('views.AnalyticsView.capacity_panel_title')"
+    data-testid="capacity-queue-panel"
+  >
+    <CardHeader
+      heading-level="h2"
+      :title="$t('views.AnalyticsView.capacity_panel_title')"
+      :description="$t('views.AnalyticsView.capacity_panel_subtitle')"
+    >
+      <template #actions>
         <output
           v-if="store.capacity"
           class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
           :class="verdictClass"
           data-testid="capacity-verdict"
-          aria-labelledby="capacity-queue-heading"
+          :aria-label="$t('views.AnalyticsView.capacity_panel_title')"
         >
           {{ verdictLabel }}
         </output>
@@ -28,56 +29,58 @@
         >
           {{ $t('views.AnalyticsView.capacity_refresh') }}
         </button>
-      </div>
-    </div>
+      </template>
+    </CardHeader>
 
-    <p
+    <ErrorAlert
       v-if="store.capacityError"
-      class="rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-sm text-destructive-text"
-      role="alert"
+      compact
+      :message="store.capacityError"
+      :retryable="false"
       data-testid="capacity-error"
-    >
-      {{ store.capacityError }}
-    </p>
+    />
 
     <div v-else-if="store.capacityLoading && !store.capacity" class="text-sm text-muted-foreground" data-testid="capacity-loading">
       {{ $t('views.AnalyticsView.capacity_loading') }}
     </div>
 
     <div v-else-if="store.capacity" class="space-y-4">
-      <div
+      <ErrorAlert
         v-if="health.stall_suspected"
-        class="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive-text"
-        role="alert"
+        compact
         data-testid="capacity-stall-alert"
       >
-        <span class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true"></span>
-        <div>
-          <p class="font-medium">{{ $t('views.AnalyticsView.capacity_stall_title') }}</p>
-          <p class="mt-0.5">{{ $t('views.AnalyticsView.capacity_stall_detail', { intervals: health.stall_intervals }) }}</p>
+        <div class="flex items-start gap-2">
+          <span class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-destructive" aria-hidden="true"></span>
+          <div>
+            <p class="font-medium">{{ $t('views.AnalyticsView.capacity_stall_title') }}</p>
+            <p class="mt-0.5">{{ $t('views.AnalyticsView.capacity_stall_detail', { intervals: health.stall_intervals }) }}</p>
+          </div>
         </div>
-      </div>
+      </ErrorAlert>
 
-      <dl class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-lg border border-border p-3">
-          <dt class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_pending_now') }}</dt>
-          <dd class="mt-1 text-lg font-semibold tabular-nums" data-testid="capacity-pending-total">{{ capacity.pending.total }}</dd>
-        </div>
-        <div class="rounded-lg border border-border p-3">
-          <dt class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_oldest_pending') }}</dt>
-          <dd class="mt-1 text-lg font-semibold tabular-nums" data-testid="capacity-oldest-pending">
-            {{ formatDuration(capacity.pending.oldest_pending_age_seconds) }}
-          </dd>
-        </div>
-        <div class="rounded-lg border border-border p-3">
-          <dt class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_drain_ratio') }}</dt>
-          <dd class="mt-1 text-lg font-semibold tabular-nums" data-testid="capacity-drain-ratio">{{ drainRatioLabel }}</dd>
-        </div>
-        <div class="rounded-lg border border-border p-3">
-          <dt class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_org_cap_use') }}</dt>
-          <dd class="mt-1 text-lg font-semibold tabular-nums" data-testid="capacity-org-cap-use">{{ orgCapUseLabel }}</dd>
-        </div>
-      </dl>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          :label="$t('views.AnalyticsView.capacity_pending_now')"
+          :value="capacity.pending.total"
+          data-testid="capacity-pending-total"
+        />
+        <StatCard
+          :label="$t('views.AnalyticsView.capacity_oldest_pending')"
+          :value="formatDuration(capacity.pending.oldest_pending_age_seconds)"
+          data-testid="capacity-oldest-pending"
+        />
+        <StatCard
+          :label="$t('views.AnalyticsView.capacity_drain_ratio')"
+          :value="drainRatioLabel"
+          data-testid="capacity-drain-ratio"
+        />
+        <StatCard
+          :label="$t('views.AnalyticsView.capacity_org_cap_use')"
+          :value="orgCapUseLabel"
+          data-testid="capacity-org-cap-use"
+        />
+      </div>
 
       <div class="rounded-lg border border-border p-3 text-sm" data-testid="capacity-limits">
         <div class="flex flex-wrap gap-x-6 gap-y-1">
@@ -140,66 +143,51 @@
 
       <div v-if="capacity.pending.by_pipeline.length" data-testid="capacity-by-pipeline">
         <h3 class="mb-2 text-sm font-medium">{{ $t('views.AnalyticsView.capacity_by_pipeline_title') }}</h3>
-        <div class="table-wrapper">
-          <table class="w-full text-sm">
-            <thead>
-              <tr>
-                <th class="table-header">{{ $t('views.AnalyticsView.capacity_col_pipeline') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_pending') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_oldest') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_cap') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_stale') }}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr v-for="row in pipelineRows" :key="row.pipeline_id">
-                <td class="table-cell font-medium">{{ row.pipeline_name || shortId(row.pipeline_id) }}</td>
-                <td class="table-cell-numeric">{{ row.pending_count }}</td>
-                <td class="table-cell-numeric">{{ formatDuration(row.oldest_pending_age_seconds) }}</td>
-                <td class="table-cell-numeric">{{ row.max_concurrent_runs ?? $t('views.AnalyticsView.capacity_none') }}</td>
-                <td class="table-cell-numeric">{{ row.stale_heartbeat_count }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          :columns="pipelineColumns"
+          :rows="pipelineTableRows"
+          :row-clickable="false"
+        >
+          <template #cell-pipeline="{ value }">
+            <span class="font-medium">{{ value }}</span>
+          </template>
+          <template #cell-oldest_pending_age_seconds="{ value }">
+            {{ formatDuration(value as number | null | undefined) }}
+          </template>
+          <template #cell-max_concurrent_runs="{ value }">
+            {{ value ?? $t('views.AnalyticsView.capacity_none') }}
+          </template>
+        </DataTable>
       </div>
 
       <div v-if="capacity.series.length" data-testid="capacity-series">
         <h3 class="mb-2 text-sm font-medium">{{ $t('views.AnalyticsView.capacity_series_title') }}</h3>
-        <div class="table-wrapper">
-          <table class="w-full text-sm">
-            <thead>
-              <tr>
-                <th class="table-header">{{ $t('views.AnalyticsView.capacity_col_interval') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_created') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_started') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_completed') }}</th>
-                <th class="table-header table-cell-numeric">{{ $t('views.AnalyticsView.capacity_col_depth') }}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr v-for="bucket in capacity.series" :key="bucket.interval_start">
-                <td class="table-cell tabular-nums">{{ formatInterval(bucket.interval_start) }}</td>
-                <td class="table-cell-numeric">{{ bucket.created }}</td>
-                <td class="table-cell-numeric">{{ bucket.started }}</td>
-                <td class="table-cell-numeric">{{ bucket.completed }}</td>
-                <td class="table-cell-numeric">{{ bucket.pending_depth }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          :columns="seriesColumns"
+          :rows="seriesTableRows"
+          :row-clickable="false"
+        >
+          <template #cell-interval_start="{ value }">
+            <span class="tabular-nums">{{ formatInterval(String(value)) }}</span>
+          </template>
+        </DataTable>
       </div>
 
       <p class="text-xs text-muted-foreground">
         {{ $t('views.AnalyticsView.capacity_generated_at', { at: formatInterval(capacity.generated_at) }) }}
       </p>
     </div>
-  </section>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
+import BaseCard from "../ui/BaseCard.vue";
 import { useI18n } from "vue-i18n";
+import CardHeader from "../ui/CardHeader.vue";
+import { DataTable, type Column, type DataTableRow } from "../ui/data-table";
+import StatCard from "../ui/StatCard.vue";
+import ErrorAlert from "../shared/ErrorAlert.vue";
 import {
   formatCapacityDuration,
   useAnalyticsStore,
@@ -357,6 +345,48 @@ const pipelineRows = computed<PipelineRow[]>(() => {
     stale_heartbeat_count: attribution.get(row.pipeline_id)?.stale_heartbeat_count ?? 0,
   }));
 });
+
+// Read-only tables (FAR-2728): the shared DataTable primitive owns the shell,
+// the header row and the rows. `id` carries the source key so the row key stays
+// stable, and the display-only cells that are formatted rather than raw
+// (pipeline label, duration, "None" fallback, interval time) are cell slots.
+const pipelineColumns: Column[] = [
+  { key: "pipeline", label: t("views.AnalyticsView.capacity_col_pipeline") },
+  { key: "pending_count", label: t("views.AnalyticsView.capacity_col_pending"), numeric: true },
+  { key: "oldest_pending_age_seconds", label: t("views.AnalyticsView.capacity_col_oldest"), numeric: true },
+  { key: "max_concurrent_runs", label: t("views.AnalyticsView.capacity_col_cap"), numeric: true },
+  { key: "stale_heartbeat_count", label: t("views.AnalyticsView.capacity_col_stale"), numeric: true },
+];
+
+const pipelineTableRows = computed<DataTableRow[]>(() =>
+  pipelineRows.value.map((row) => ({
+    id: row.pipeline_id,
+    pipeline: row.pipeline_name || shortId(row.pipeline_id),
+    pending_count: row.pending_count,
+    oldest_pending_age_seconds: row.oldest_pending_age_seconds,
+    max_concurrent_runs: row.max_concurrent_runs,
+    stale_heartbeat_count: row.stale_heartbeat_count,
+  })),
+);
+
+const seriesColumns: Column[] = [
+  { key: "interval_start", label: t("views.AnalyticsView.capacity_col_interval") },
+  { key: "created", label: t("views.AnalyticsView.capacity_col_created"), numeric: true },
+  { key: "started", label: t("views.AnalyticsView.capacity_col_started"), numeric: true },
+  { key: "completed", label: t("views.AnalyticsView.capacity_col_completed"), numeric: true },
+  { key: "pending_depth", label: t("views.AnalyticsView.capacity_col_depth"), numeric: true },
+];
+
+const seriesTableRows = computed<DataTableRow[]>(() =>
+  capacity.value.series.map((bucket) => ({
+    id: bucket.interval_start,
+    interval_start: bucket.interval_start,
+    created: bucket.created,
+    started: bucket.started,
+    completed: bucket.completed,
+    pending_depth: bucket.pending_depth,
+  })),
+);
 
 onMounted(() => {
   void store.fetchCapacity();

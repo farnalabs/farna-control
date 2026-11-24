@@ -209,7 +209,7 @@ async def list_profiles(
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
             await set_rls_user_context(session, principal.account_id, principal.org_role)
-            result = await list_environment_profiles(session, page=page, page_size=page_size)
+            result = await list_environment_profiles(session, org_id=principal.organisation_id, page=page, page_size=page_size)
     except ProgrammingError:
         _log.exception(_CODE_ENVIRONMENT_PROFILES_LIST_PROFILES)
         raise HTTPException(

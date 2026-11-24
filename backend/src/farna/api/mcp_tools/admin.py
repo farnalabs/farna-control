@@ -72,6 +72,7 @@ from farna.api.mcp_tools._patch_surface import (
     _ctx_user_id_val,
     _log,
     _parse_uuid_param,
+    _require_plan_entitlement,
     _require_plan_feature,
     _session,
     _system_maps_discovery_session,
@@ -382,11 +383,12 @@ async def get_audit_log(
         _check_agent_tool_scope("get_audit_log")
 
         org_id = _ctx_org_id_val()
-        # Plan gate parity with the audit REST surface: reading the audit trail
-        # is the Team-tier ``audit_viewer`` entitlement, enforced there by
-        # ``require_feature``. MCP must enforce it too rather than stay an
-        # unentitled way in (FAR-2119).
-        feat_err = await _require_plan_feature(org_id, get_settings(), "audit_viewer")
+        # Plan gate parity with the audit REST surface: GET /api/v1/admin/audit
+        # is guarded by ``require_entitlement("audit_evidence")``. MCP must
+        # reach the SAME answer rather than gate on one member flag, otherwise
+        # killing ``audit_viewer`` alone leaves REST open while MCP refuses
+        # (FAR-2119, FAR-2665).
+        feat_err = await _require_plan_entitlement(org_id, get_settings(), "audit_evidence")
         if feat_err:
             return feat_err
 
@@ -793,10 +795,11 @@ async def list_sso_providers() -> dict[str, Any]:
 
         org_id = _ctx_org_id_val()
         # Plan gate parity with GET /api/v1/admin/sso/providers: SSO
-        # configuration is the ``sso`` entitlement, enforced there by
-        # ``require_feature``. MCP must enforce it too rather than stay an
-        # unentitled way in (FAR-2129).
-        feat_err = await _require_plan_feature(org_id, get_settings(), "sso")
+        # configuration is guarded by ``require_entitlement("identity")``. MCP
+        # must reach the SAME answer rather than gate on one member flag,
+        # otherwise killing ``sso`` alone leaves REST open while MCP refuses
+        # (FAR-2129, FAR-2665).
+        feat_err = await _require_plan_entitlement(org_id, get_settings(), "identity")
         if feat_err:
             return feat_err
 

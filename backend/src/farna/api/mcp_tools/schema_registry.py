@@ -99,7 +99,7 @@ async def get_schema_versions(
             # Belt-and-braces org check (mirrors the REST route's 404).
             if schema is None or schema.organisation_id != org_id:
                 return {"error": "not_found", "detail": f"Schema {schema_id} not found"}
-            result = await list_schema_versions(s, schid, page=pg, page_size=ps)
+            result = await list_schema_versions(s, schid, org_id=org_id, page=pg, page_size=ps)
 
         return {
             "data": [
@@ -214,7 +214,7 @@ async def list_schemas(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_schemas(s, cursor=cursor, limit=lim)
+            result = await db_list_schemas(s, org_id=org_id, cursor=cursor, limit=lim)
 
         return {
             "data": [
@@ -269,7 +269,7 @@ async def list_environment_profiles(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_environment_profiles(s, cursor=cursor, page_size=lim)
+            result = await db_list_environment_profiles(s, org_id=org_id, cursor=cursor, page_size=lim)
 
         return {
             "data": [

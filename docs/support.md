@@ -79,8 +79,8 @@ You do not need to install anything. Capture the cluster facts and ask the app
 pod to build the bundle, then hand the files to whoever operates the cluster.
 
 ```bash
-NAMESPACE=modulo   # namespace the release is installed in
-RELEASE=modulo     # helm release name
+NAMESPACE=farna-control   # namespace the release is installed in
+RELEASE=farna-control     # helm release name
 
 # 1. What is running, and what is failing?
 kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/instance="$RELEASE" -o wide
@@ -97,7 +97,7 @@ kubectl -n "$NAMESPACE" cp "$POD":/tmp/modulo-support.zip ./modulo-support.zip
 ```
 
 Send `modulo-support.zip` and the three log files to `support@modulo.run`. The
-labels above come from the chart in `deploy/helm/modulo/`; if your release uses
+labels above come from the chart in `deploy/helm/farna-control/`; if your release uses
 different names, read them from the pod labels
 (`kubectl -n "$NAMESPACE" get pods --show-labels`).
 

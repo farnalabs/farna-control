@@ -32,11 +32,7 @@
         data-testid="analytics-error"
       />
 
-      <div v-if="store.loading" class="card p-4" data-testid="analytics-loading">
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div v-for="n in 4" :key="n" class="h-20 animate-pulse rounded-lg bg-muted" />
-        </div>
-      </div>
+      <CardSkeleton v-if="store.loading" data-testid="analytics-loading" :lines="3" />
 
       <template v-else-if="store.results">
         <div
@@ -60,9 +56,12 @@
         />
 
         <div v-else class="space-y-4">
-          <div class="card p-4" data-testid="analytics-overview-chart">
-            <div class="mb-3 flex items-center justify-between">
-              <h2 class="text-base font-semibold">{{ chartTitle }}</h2>
+          <DataCard
+            :title="chartTitle"
+            heading-level="h2"
+            data-testid="analytics-overview-chart"
+          >
+            <template #headerActions>
               <button
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
@@ -73,7 +72,7 @@
                 <span class="inline-block h-2 w-2 rounded-full bg-amber-400" aria-hidden="true"></span>
                 {{ $t('views.AnalyticsView.capacity_overlay_toggle') }}
               </button>
-            </div>
+            </template>
 
             <!-- Capacity summary cards -->
             <div
@@ -82,22 +81,22 @@
               data-testid="analytics-capacity-summary"
               aria-live="polite"
             >
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_avg_queue_wait') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ formatCapacityMs(store.capacitySummary.avgQueueWaitMs) }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_failures') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ store.capacitySummary.totalCapacityFailures.toLocaleString() }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_avg_wait') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ formatCapacityMs(store.capacitySummary.avgCapacityWaitMs) }}</p>
-              </div>
-              <div class="rounded-lg border border-border p-3">
-                <p class="text-xs text-muted-foreground">{{ $t('views.AnalyticsView.capacity_stalls') }}</p>
-                <p class="mt-1 text-lg font-semibold tabular-nums">{{ store.capacitySummary.totalStalls.toLocaleString() }}</p>
-              </div>
+              <StatCard
+                :label="$t('views.AnalyticsView.capacity_avg_queue_wait')"
+                :value="formatCapacityMs(store.capacitySummary.avgQueueWaitMs)"
+              />
+              <StatCard
+                :label="$t('views.AnalyticsView.capacity_failures')"
+                :value="store.capacitySummary.totalCapacityFailures.toLocaleString()"
+              />
+              <StatCard
+                :label="$t('views.AnalyticsView.capacity_avg_wait')"
+                :value="formatCapacityMs(store.capacitySummary.avgCapacityWaitMs)"
+              />
+              <StatCard
+                :label="$t('views.AnalyticsView.capacity_stalls')"
+                :value="store.capacitySummary.totalStalls.toLocaleString()"
+              />
             </div>
 
             <AnalyticsChart
@@ -107,16 +106,13 @@
               :dimension="store.filters.dimension"
               :show-overlay="store.showCapacityOverlay"
             />
-          </div>
+          </DataCard>
 
-          <details class="card p-4" data-testid="analytics-details">
-            <summary class="cursor-pointer list-none font-medium [&::-webkit-details-marker]:hidden">
-              <span class="inline-flex items-center gap-2">
-                <span aria-hidden="true">▸</span>
-                {{ $t('views.AnalyticsView.show_details') }}
-              </span>
-              <span class="ml-2 text-xs font-normal text-muted-foreground">{{ $t('views.AnalyticsView.delta_hint') }}</span>
-            </summary>
+          <CollapsibleCard
+            data-testid="analytics-details"
+            :title="$t('views.AnalyticsView.show_details')"
+            :description="$t('views.AnalyticsView.delta_hint')"
+          >
             <div class="mt-4" data-testid="analytics-table">
               <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-base font-semibold">{{ $t('views.AnalyticsView.trend_table_title') }}</h2>
@@ -155,20 +151,15 @@
                 </table>
               </div>
             </div>
-          </details>
+          </CollapsibleCard>
 
-          <details class="card p-4" data-testid="analytics-capacity-details">
-            <summary class="cursor-pointer list-none font-medium [&::-webkit-details-marker]:hidden">
-              <span class="inline-flex items-center gap-2">
-                <span aria-hidden="true">▸</span>
-                {{ $t('views.AnalyticsView.capacity_panel_title') }}
-              </span>
-              <span class="ml-2 text-xs font-normal text-muted-foreground">
-                {{ $t('views.AnalyticsView.capacity_panel_subtitle') }}
-              </span>
-            </summary>
+          <CollapsibleCard
+            data-testid="analytics-capacity-details"
+            :title="$t('views.AnalyticsView.capacity_panel_title')"
+            :description="$t('views.AnalyticsView.capacity_panel_subtitle')"
+          >
             <CapacityQueuePanel class="mt-4" />
-          </details>
+          </CollapsibleCard>
         </div>
       </template>
     </template>
@@ -185,6 +176,10 @@ import EmptyState from "../components/shared/EmptyState.vue";
 import AnalyticsChart from "../components/analytics/AnalyticsChart.vue";
 import AnalyticsFilterBar from "../components/analytics/AnalyticsFilterBar.vue";
 import CapacityQueuePanel from "../components/analytics/CapacityQueuePanel.vue";
+import DataCard from "../components/ui/DataCard.vue";
+import CollapsibleCard from "../components/ui/CollapsibleCard.vue";
+import CardSkeleton from "../components/ui/CardSkeleton.vue";
+import StatCard from "../components/ui/StatCard.vue";
 import { formatApiError } from "../lib/api/formatError";
 import { errorCodeLabel, executionOriginLabel } from "../utils/runUtils";
 import {

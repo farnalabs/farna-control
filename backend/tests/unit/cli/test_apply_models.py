@@ -27,30 +27,39 @@ def _config(tx: dict) -> ApplyConfig:
 
 class TestApiVersionGate:
     def test_supported_version_accepted(self) -> None:
-        config = _config({"api_version": "modulo.dev/v1", "entities": {}})
-        assert config.api_version == "modulo.dev/v1"
+        config = _config({"api_version": "farna.dev/v1", "entities": {}})
+        assert config.api_version == "farna.dev/v1"
 
     def test_major_mismatch_rejected(self) -> None:
         with pytest.raises(ValidationError, match="major mismatch"):
-            _config({"api_version": "modulo.dev/v2", "entities": {}})
+            _config({"api_version": "farna.dev/v2", "entities": {}})
 
     def test_minor_suffix_lenient(self) -> None:
-        config = _config({"api_version": "modulo.dev/v1.3", "entities": {}})
-        assert config.api_version == "modulo.dev/v1.3"
+        config = _config({"api_version": "farna.dev/v1.3", "entities": {}})
+        assert config.api_version == "farna.dev/v1.3"
 
     def test_unrecognised_prefix_rejected(self) -> None:
         with pytest.raises(ValidationError):
             _config({"api_version": "kubernetes/v1", "entities": {}})
 
+    def test_retired_modulo_dev_prefix_rejected(self) -> None:
+        """FAR-2651: the format identifier moved to farna.dev/v1.
+
+        The retired ``modulo.dev/v1`` value must fail cleanly with the same
+        prefix error as any other unrecognised scheme, never be accepted.
+        """
+        with pytest.raises(ValidationError, match="api_version must start with"):
+            _config({"api_version": "modulo.dev/v1", "entities": {}})
+
 
 class TestExtraForbid:
     def test_unknown_top_level_key_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            _config({"api_version": "modulo.dev/v1", "entities": {}, "widgets": 1})
+            _config({"api_version": "farna.dev/v1", "entities": {}, "widgets": 1})
 
     def test_unknown_schema_field_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {"schemas": [{"name": "s", "nope": True}]},
         }
         with pytest.raises(ValidationError):
@@ -58,7 +67,7 @@ class TestExtraForbid:
 
     def test_unknown_backend_field_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {"model_backends": [{"name": "b", "api_key": "x", "nope": 1}]},
         }
         with pytest.raises(ValidationError):
@@ -143,7 +152,7 @@ class TestManagedViews:
         assert view["api_key"] == "${env:SK}"
 
     def test_schema_managed_view_excludes_name(self) -> None:
-        schema = ApplyConfig.model_validate({"api_version": "modulo.dev/v1", "entities": {"schemas": [{"name": "s"}]}}).entities.schemas[0]
+        schema = ApplyConfig.model_validate({"api_version": "farna.dev/v1", "entities": {"schemas": [{"name": "s"}]}}).entities.schemas[0]
         view = schema.managed_view()
         assert view == {"description": None, "abstract_name": None, "versions": []}
 
@@ -151,7 +160,7 @@ class TestManagedViews:
 class TestUniqueNames:
     def test_duplicate_schema_names_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {"schemas": [{"name": "s"}, {"name": "s"}]},
         }
         with pytest.raises(ValidationError):
@@ -159,7 +168,7 @@ class TestUniqueNames:
 
     def test_duplicate_backend_names_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {"model_backends": [{"name": "b", "display_name": "b", "provider": "p", "model_id": "m", "api_key": "${env:V}"}] * 2},
         }
         with pytest.raises(ValidationError):
@@ -169,31 +178,31 @@ class TestUniqueNames:
 class TestMergeMajors:
     def test_minor_suffix_merges_across_documents(self) -> None:
         """Minors compare leniently: v1 + v1.3 merge (majors are what matter)."""
-        base = _config({"api_version": "modulo.dev/v1", "entities": {}})
-        other = _config({"api_version": "modulo.dev/v1.3", "entities": {}})
+        base = _config({"api_version": "farna.dev/v1", "entities": {}})
+        other = _config({"api_version": "farna.dev/v1.3", "entities": {}})
         merged = base.merge_entities(other)
-        assert merged.api_version == "modulo.dev/v1"
+        assert merged.api_version == "farna.dev/v1"
 
     def test_major_mismatch_merge_rejected_via_parsed_majors(self) -> None:
         """Merge compares parsed majors: v1 vs v2 majors differ."""
-        base = _config({"api_version": "modulo.dev/v1", "entities": {}})
+        base = _config({"api_version": "farna.dev/v1", "entities": {}})
         # model_construct bypasses the validators so a v2 doc can reach the
         # merge path (the normal validation gate rejects it at load time).
-        forged = ApplyConfig.model_construct(api_version="modulo.dev/v2", entities=None)
+        forged = ApplyConfig.model_construct(api_version="farna.dev/v2", entities=None)
         with pytest.raises(ValueError, match="major"):
             base.merge_entities(forged)
 
     def test_parse_api_version_major(self) -> None:
-        assert parse_api_version_major("modulo.dev/v1") == 1
-        assert parse_api_version_major("modulo.dev/v1.3") == 1
+        assert parse_api_version_major("farna.dev/v1") == 1
+        assert parse_api_version_major("farna.dev/v1.3") == 1
         with pytest.raises(ValueError, match="not parseable"):
-            parse_api_version_major("modulo.dev/vx.3")
+            parse_api_version_major("farna.dev/vx.3")
 
 
 class TestTriggerEntityContracts:
     def test_inline_secret_in_config_json_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {
@@ -215,7 +224,7 @@ class TestTriggerEntityContracts:
         the LEAF key of every walked path — smtp.password is a secret even
         though the top-level key is not."""
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {
@@ -234,7 +243,7 @@ class TestTriggerEntityContracts:
 
     def test_nested_sensitive_key_accepts_refs(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {
@@ -254,7 +263,7 @@ class TestTriggerEntityContracts:
         """A literal under a non-sensitive LEAF key inside a nested dict is
         not a secret (leaf-key rule, matching the server mask)."""
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {
@@ -271,7 +280,7 @@ class TestTriggerEntityContracts:
 
     def test_secret_value_patterns_rejected_under_any_key(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {
@@ -288,7 +297,7 @@ class TestTriggerEntityContracts:
 
     def test_env_ref_and_secretref_parse_in_config_json(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {
@@ -306,7 +315,7 @@ class TestTriggerEntityContracts:
     def test_empty_string_secret_value_allowed(self) -> None:
         """Empty strings are never masked server-side -> never a secret."""
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {
@@ -324,7 +333,7 @@ class TestTriggerEntityContracts:
 
     def test_unknown_trigger_type_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {"triggers": [{"pipeline": "p", "name": "hook", "trigger_type": "warp"}]},
         }
         with pytest.raises(ValidationError):
@@ -332,7 +341,7 @@ class TestTriggerEntityContracts:
 
     def test_duplicate_trigger_identity_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {"pipeline": "p", "name": "hook", "trigger_type": "webhook"},
@@ -345,7 +354,7 @@ class TestTriggerEntityContracts:
 
     def test_same_name_different_pipeline_distinct_identity(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "triggers": [
                     {"pipeline": "a", "name": "hook", "trigger_type": "webhook"},
@@ -609,7 +618,7 @@ class TestPipelineEntityContracts:
 
     def test_node_extra_field_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "pipelines": [
                     {
@@ -634,7 +643,7 @@ class TestPipelineEntityContracts:
     def test_node_agent_id_forbidden(self) -> None:
         """apply configs reference agents by NAME only."""
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "pipelines": [
                     {
@@ -704,7 +713,7 @@ class TestPipelineEntityContracts:
     def test_connector_node_with_query_binding_round_trips(self) -> None:
         """A ``connector`` node and its resource/filters/data reach the API payload."""
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "pipelines": [
                     {
@@ -741,7 +750,7 @@ class TestPipelineEntityContracts:
         """FAR-2089: a declarative manifest can carry resource/filters/data on a
         connector binding, and they survive into the API node payload."""
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "pipelines": [
                     {
@@ -776,7 +785,7 @@ class TestPipelineEntityContracts:
         """FAR-1273: the declarative CLI model carries the explicit
         single_pr_per_run guard flag through to the API node payload."""
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "pipelines": [
                     {
@@ -840,7 +849,7 @@ class TestPipelineEntityContracts:
 
     def test_graph_duplicate_node_ids_rejected(self) -> None:
         tx = {
-            "api_version": "modulo.dev/v1",
+            "api_version": "farna.dev/v1",
             "entities": {
                 "pipelines": [
                     {
@@ -1297,24 +1306,24 @@ class TestForwardReferenceMergeGate:
     def test_trigger_pipeline_in_later_document_rejected(self) -> None:
         base = _config(
             {
-                "api_version": "modulo.dev/v1",
+                "api_version": "farna.dev/v1",
                 "entities": {"triggers": [{"pipeline": "later", "name": "hook", "trigger_type": "webhook"}]},
             }
         )
-        other = _config({"api_version": "modulo.dev/v1", "entities": {"pipelines": [{"name": "later"}]}})
+        other = _config({"api_version": "farna.dev/v1", "entities": {"pipelines": [{"name": "later"}]}})
         with pytest.raises(ApplyConfigError, match="forward-references"):
             base.merge_entities(other)
 
     def test_trigger_pipeline_in_same_document_merges(self) -> None:
         base = _config(
             {
-                "api_version": "modulo.dev/v1",
+                "api_version": "farna.dev/v1",
                 "entities": {"pipelines": [{"name": "p"}]},
             }
         )
         other = _config(
             {
-                "api_version": "modulo.dev/v1",
+                "api_version": "farna.dev/v1",
                 "entities": {"triggers": [{"pipeline": "p", "name": "hook", "trigger_type": "webhook"}]},
             }
         )

@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="plugin_management" required-tier="team" show-disabled>
+  <FeatureGate feature-name="plugin_management" show-disabled>
     <div class="page-wide">
       <PageHeader title="Plugins" :subtitle="$t('views.AdminPluginsView.manage_installed_modulo_plugins_and_extensions')">
         <template #right>
@@ -14,12 +14,11 @@
       <ErrorAlert v-else-if="error" :message="error" :on-retry="loadPlugins" />
 
       <template v-else>
-        <div v-if="plugins.length === 0" class="card p-8 text-center">
-          <p class="text-lg font-medium">{{ $t('views.AdminPluginsView.no_plugins_installed') }}</p>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Install plugins via pip to extend Farna Control with additional connectors and model backends.
-          </p>
-        </div>
+        <EmptyState
+          v-if="plugins.length === 0"
+          :title="$t('views.AdminPluginsView.no_plugins_installed')"
+          :description="$t('views.AdminPluginsView.no_plugins_installed_description')"
+        />
 
         <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
@@ -151,6 +150,7 @@
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import { reactive, computed } from 'vue'
 import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'

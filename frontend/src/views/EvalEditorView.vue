@@ -1,5 +1,5 @@
 <template>
-  <FeatureGate feature-name="eval_system" required-tier="community" show-disabled>
+  <FeatureGate feature-name="eval_system" show-disabled>
 
     <div class="page-wide">
     <PageHeader
@@ -863,9 +863,13 @@
           </DataCard>
         </div>
 
-        <div class="lg:col-span-2">
-          <h2 class="mb-4 text-base font-semibold">{{ $t('views.EvalEditorView.existing_evals') }}</h2>
-
+        <DataCard
+          :title="$t('views.EvalEditorView.existing_evals')"
+          heading-level="h2"
+          variant="bordered"
+          padding="md"
+          class="lg:col-span-2"
+        >
           <ErrorAlert v-if="evalsError" :message="evalsError" :on-retry="loadEvals" compact class="mb-2" />
 
           <div v-if="!selectedPipelineId" class="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -885,10 +889,12 @@
           />
 
           <div v-else class="space-y-2">
-            <div
+            <BaseCard
               v-for="ev in evals"
               :key="ev.id"
-              class="rounded-lg border bg-card p-4 shadow-sm"
+              variant="bordered"
+              padding="md"
+              elevation="sm"
             >
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0 flex-1">
@@ -961,9 +967,9 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </BaseCard>
           </div>
-        </div>
+        </DataCard>
       </div>
     </template>
   </div>
@@ -984,6 +990,7 @@ import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
 import EmptyState from '../components/shared/EmptyState.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import { usePlanStore } from '../stores/planStore'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import FeatureGate from '../components/FeatureGate.vue'
