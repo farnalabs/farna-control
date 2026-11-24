@@ -35,8 +35,12 @@
       v-else-if="store.sortedSessions.length === 0"
       class="flex flex-col items-center justify-center py-8 px-4 text-center"
     >
-      <p class="text-sm text-muted-foreground">{{ $t('components.assistant.AssistantSessionDrawer.no_sessions_yet') }}</p>
-      <Button severity="primary" link size="small" @click="handleNewSession" class="mt-2">{{ $t('components.assistant.AssistantSessionDrawer.start_a_new_chat') }}</Button>
+      <EmptyState
+        variant="bare"
+        :title="$t('components.assistant.AssistantSessionDrawer.no_sessions_yet')"
+      >
+        <Button severity="primary" link size="small" @click="handleNewSession" class="mt-2">{{ $t('components.assistant.AssistantSessionDrawer.start_a_new_chat') }}</Button>
+      </EmptyState>
     </div>
 
     <div v-else class="divide-y">
@@ -95,6 +99,7 @@
 import { shortId } from "@/utils/format";
 import { useAssistantStore } from "@/composables/useAssistantStore";
 import Button from 'primevue/button'
+import EmptyState from "@/components/shared/EmptyState.vue";
 import { formatDateShort } from "@/lib/formatDate";
 
 const emit = defineEmits<{

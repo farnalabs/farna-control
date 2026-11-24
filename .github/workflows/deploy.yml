@@ -1282,6 +1282,11 @@ jobs:
     # default of 360 min (6h) silently swallows a hang as 'cancelled' rather
     # than routing it to the fix loop.
     timeout-minutes: 180
+    # The deploy target's identity, read by BOTH the from-zero pre-create step
+    # and the main deploy step, so an app rename moves them together (FAR-2656).
+    env:
+      DEPLOY_APP: staging-farna-control
+      DEPLOY_FLY_CONFIG: deploy/fly/fly.staging.toml
     steps:
       - name: Echo run identity (pre-checkout)
         shell: bash
@@ -1980,6 +1985,75 @@ jobs:
           echo "----- end pre-migrate machine log -----"
           exit 1
 
+      # FAR-2656: a brand-new app, or one fully scaled to zero, has no worker
+      # machine, so /healthz/ready can never pass and `fly deploy` times out
+      # waiting on the app machine's health check before it creates the worker
+      # (observed twice against a zero-machine deployment). Create the worker
+      # process group first, from the SAME pre-built image, so the main
+      # deploy's health gate can pass. Skipped whenever the app already has an
+      # app/worker machine, so an ordinary deploy is unchanged.
+      - name: Pre-create worker process group from zero machines (staging)
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          IMAGE_REF: ${{ steps.build.outputs.IMAGE_REF }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/install-flyctl.sh
+          export FLYCTL_INSTALL="/home/runner/.fly"
+          export PATH="$FLYCTL_INSTALL/bin:$PATH"
+
+          # The one-off pre-migrate machine still exists at this point; it is
+          # NOT app capacity. Exclude the ids the rehearsal/pre-migrate steps
+          # recorded, and count only machines that belong to a real process
+          # group (the same attribute "Ensure worker machine exists" reads).
+          # Zero means the app is deploying from nothing.
+          PREMIGRATE_ID=""
+          if [ -f /tmp/premigrate-machine-id.txt ]; then
+            PREMIGRATE_ID="$(cat /tmp/premigrate-machine-id.txt 2>/dev/null || true)"
+          fi
+          REHEARSE_ID=""
+          if [ -f /tmp/prerehearse-machine-id.txt ]; then
+            REHEARSE_ID="$(cat /tmp/prerehearse-machine-id.txt 2>/dev/null || true)"
+          fi
+
+          if ! MACHINES_JSON="$(flyctl machines list -a "$DEPLOY_APP" --json)"; then
+            echo "::error::from-zero check: 'flyctl machines list -a ${DEPLOY_APP}' failed - cannot tell whether the app has machines. Refusing to deploy blind (an app that does not exist yet must be created before deploying)."
+            exit 1
+          fi
+          if ! MACHINE_COUNT="$(printf '%s' "$MACHINES_JSON" | jq -r --arg pre "$PREMIGRATE_ID" --arg rehearse "$REHEARSE_ID" '
+            if type != "array" then error("machines list did not return an array") else
+              [ .[]
+                | select(.id != $pre and .id != $rehearse)
+                | select(
+                    ((.config.metadata.fly_process_group // "") == "app")
+                    or ((.config.metadata.fly_process_group // "") == "worker")
+                    or ((.config.env.FLY_PROCESS_GROUP // "") == "app")
+                    or ((.config.env.FLY_PROCESS_GROUP // "") == "worker")
+                  )
+              ] | length
+            end' 2>/dev/null)"; then
+            echo "::error::from-zero check: could not parse 'flyctl machines list' output - refusing to deploy blind."
+            exit 1
+          fi
+          case "$MACHINE_COUNT" in
+            '' | *[!0-9]*)
+              echo "::error::from-zero check: machine count '${MACHINE_COUNT}' is not a number - refusing to deploy blind."
+              exit 1
+              ;;
+            *) : ;;
+          esac
+          if [ "$MACHINE_COUNT" -ne 0 ]; then
+            echo "machines present (${MACHINE_COUNT}): skipping from-zero pre-create"
+            exit 0
+          fi
+
+          echo "from-zero: pre-creating worker process group"
+          if ! timeout 900 flyctl deploy --app "$DEPLOY_APP" --image "$IMAGE_REF" --config "$DEPLOY_FLY_CONFIG" --process-groups worker; then
+            echo "::error::from-zero pre-create of the worker process group failed - the main deploy would time out on /healthz/ready. Failing now instead."
+            exit 1
+          fi
+
       - name: Deploy to staging-farna-control
         shell: bash
         env:
@@ -1999,7 +2073,7 @@ jobs:
           RETRY_DELAY=10
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "--- Deploy attempt $attempt of $MAX_RETRIES ---"
-            if fly deploy --app staging-farna-control --image "$IMAGE_REF" --config deploy/fly/fly.staging.toml; then
+            if fly deploy --app "$DEPLOY_APP" --image "$IMAGE_REF" --config "$DEPLOY_FLY_CONFIG"; then
               echo "Deploy succeeded on attempt $attempt"
               exit 0
             else
@@ -2010,7 +2084,7 @@ jobs:
                 # out identically (2026-10-23 staging outage). Recover it first:
                 # restart it, or destroy it if the restart itself fails, so the
                 # retry creates a fresh machine instead of updating a corpse.
-                bash .github/scripts/restart-wedged-app-machines.sh staging-farna-control
+                bash .github/scripts/restart-wedged-app-machines.sh "$DEPLOY_APP"
                 DELAY=$((RETRY_DELAY * 2 ** (attempt - 1)))
                 echo "Deploy failed (exit $EXIT_CODE) -- retrying in ${DELAY}s..."
                 sleep $DELAY
@@ -2175,10 +2249,50 @@ jobs:
 
       - name: Check deployed SHA
         shell: pwsh
+        # FAR-2656: a from-zero deploy starts brand-new machines, and the app
+        # can be several seconds away from answering its first request. Probe
+        # with a bounded wait instead of a single curl, so a cold start does
+        # not fail a deploy that is otherwise healthily rolling out.
         run: |
           $expectedSha = "${{ steps.git.outputs.git-sha }}".Substring(0, 7)
-          $info = curl -s -m 10 "https://staging-farna-control.fly.dev/api/v1/deployment" 2>$null
-          if (-not $info) { Write-Host "No deployment info"; exit 1 }
+          $hostName = "staging-farna-control.fly.dev"
+          # 1) Wait (bounded) for the app to answer its readiness endpoint.
+          #    24 attempts at 5s intervals, capped at 120s wall clock, so a
+          #    hung probe cannot stretch the step past its budget.
+          $readyAttempts = 24
+          $ready = $false
+          $attempt = 0
+          $deadline = (Get-Date).AddSeconds(120)
+          while ($attempt -lt $readyAttempts -and (Get-Date) -lt $deadline) {
+            $attempt++
+            $code = curl -s -o /dev/null -m 5 -w "%{http_code}" "https://staging-farna-control.fly.dev/healthz/ready" 2>$null
+            if ($code -eq "200") { $ready = $true; break }
+            Write-Host "Readiness attempt $attempt/$readyAttempts on $hostName returned '$code'; retrying in 5s"
+            Start-Sleep -Seconds 5
+          }
+          if (-not $ready) {
+            Write-Host "::error::$hostName did not report readiness (HTTP 200) after $attempt attempts"
+            exit 1
+          }
+          # 2) Read the deployment info with a bounded retry. An empty body or
+          #    a non-2xx response is retryable; exhaustion fails loudly below.
+          $infoAttempts = 6
+          $info = ""
+          $infoFile = [System.IO.Path]::GetTempFileName()
+          for ($attempt = 1; $attempt -le $infoAttempts; $attempt++) {
+            $code = curl -s -m 5 -o $infoFile -w "%{http_code}" "https://staging-farna-control.fly.dev/api/v1/deployment" 2>$null
+            $raw = if (Test-Path -LiteralPath $infoFile) { Get-Content -Raw -LiteralPath $infoFile } else { $null }
+            $info = if ($raw) { $raw.Trim() } else { "" }
+            if ($code -eq "200" -and $info) { break }
+            $info = ""
+            Write-Host "Deployment info attempt $attempt/$infoAttempts on $hostName returned HTTP '$code'; retrying in 5s"
+            if ($attempt -lt $infoAttempts) { Start-Sleep -Seconds 5 }
+          }
+          Remove-Item -LiteralPath $infoFile -ErrorAction SilentlyContinue
+          if (-not $info) {
+            Write-Host "::error::No deployment info from $hostName after $infoAttempts attempts"
+            exit 1
+          }
           $deployInfo = $info | ConvertFrom-Json
           $deployedSha = if ($deployInfo.git_sha) { $deployInfo.git_sha.Substring(0, 7) } else { "?" }
           if ($deployedSha -ne $expectedSha) {
@@ -2538,6 +2652,11 @@ jobs:
     # pre-migrate + deploy + health gate). Without this, the GitHub default
     # of 360 min (6h) silently swallows a hang as 'cancelled'.
     timeout-minutes: 180
+    # The deploy target's identity, read by BOTH the from-zero pre-create step
+    # and the main deploy step, so an app rename moves them together (FAR-2656).
+    env:
+      DEPLOY_APP: farna-control
+      DEPLOY_FLY_CONFIG: fly.toml
     steps:
       - name: Echo run identity (pre-checkout)
         shell: bash
@@ -3353,6 +3472,75 @@ jobs:
           echo "::error::production still has active sandbox runs after ${WORKER_DRAIN_TIMEOUT_MINUTES} minutes; deploy was not started to avoid killing in-flight work."
           exit 1
 
+      # FAR-2656: a brand-new app, or one fully scaled to zero, has no worker
+      # machine, so /healthz/ready can never pass and `fly deploy` times out
+      # waiting on the app machine's health check before it creates the worker
+      # (observed twice against a zero-machine deployment). Create the worker
+      # process group first, from the SAME pre-built image, so the main
+      # deploy's health gate can pass. Skipped whenever the app already has an
+      # app/worker machine, so an ordinary deploy is unchanged.
+      - name: Pre-create worker process group from zero machines (production)
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          IMAGE_REF: ${{ steps.build.outputs.IMAGE_REF }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/install-flyctl.sh
+          export FLYCTL_INSTALL="/home/runner/.fly"
+          export PATH="$FLYCTL_INSTALL/bin:$PATH"
+
+          # The one-off pre-migrate machine still exists at this point; it is
+          # NOT app capacity. Exclude the ids the rehearsal/pre-migrate steps
+          # recorded, and count only machines that belong to a real process
+          # group (the same attribute "Ensure worker machine exists" reads).
+          # Zero means the app is deploying from nothing.
+          PREMIGRATE_ID=""
+          if [ -f /tmp/premigrate-machine-id.txt ]; then
+            PREMIGRATE_ID="$(cat /tmp/premigrate-machine-id.txt 2>/dev/null || true)"
+          fi
+          REHEARSE_ID=""
+          if [ -f /tmp/prerehearse-machine-id.txt ]; then
+            REHEARSE_ID="$(cat /tmp/prerehearse-machine-id.txt 2>/dev/null || true)"
+          fi
+
+          if ! MACHINES_JSON="$(flyctl machines list -a "$DEPLOY_APP" --json)"; then
+            echo "::error::from-zero check: 'flyctl machines list -a ${DEPLOY_APP}' failed - cannot tell whether the app has machines. Refusing to deploy blind (an app that does not exist yet must be created before deploying)."
+            exit 1
+          fi
+          if ! MACHINE_COUNT="$(printf '%s' "$MACHINES_JSON" | jq -r --arg pre "$PREMIGRATE_ID" --arg rehearse "$REHEARSE_ID" '
+            if type != "array" then error("machines list did not return an array") else
+              [ .[]
+                | select(.id != $pre and .id != $rehearse)
+                | select(
+                    ((.config.metadata.fly_process_group // "") == "app")
+                    or ((.config.metadata.fly_process_group // "") == "worker")
+                    or ((.config.env.FLY_PROCESS_GROUP // "") == "app")
+                    or ((.config.env.FLY_PROCESS_GROUP // "") == "worker")
+                  )
+              ] | length
+            end' 2>/dev/null)"; then
+            echo "::error::from-zero check: could not parse 'flyctl machines list' output - refusing to deploy blind."
+            exit 1
+          fi
+          case "$MACHINE_COUNT" in
+            '' | *[!0-9]*)
+              echo "::error::from-zero check: machine count '${MACHINE_COUNT}' is not a number - refusing to deploy blind."
+              exit 1
+              ;;
+            *) : ;;
+          esac
+          if [ "$MACHINE_COUNT" -ne 0 ]; then
+            echo "machines present (${MACHINE_COUNT}): skipping from-zero pre-create"
+            exit 0
+          fi
+
+          echo "from-zero: pre-creating worker process group"
+          if ! timeout 900 flyctl deploy --app "$DEPLOY_APP" --image "$IMAGE_REF" --config "$DEPLOY_FLY_CONFIG" --process-groups worker; then
+            echo "::error::from-zero pre-create of the worker process group failed - the main deploy would time out on /healthz/ready. Failing now instead."
+            exit 1
+          fi
+
       - name: Deploy to farna-control
         shell: bash
         env:
@@ -3373,7 +3561,7 @@ jobs:
           RETRY_DELAY=10
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "--- Deploy attempt $attempt of $MAX_RETRIES ---"
-            if fly deploy --app farna-control --image "$IMAGE_REF" --config fly.toml; then
+            if fly deploy --app "$DEPLOY_APP" --image "$IMAGE_REF" --config "$DEPLOY_FLY_CONFIG"; then
               echo "Deploy succeeded on attempt $attempt"
               exit 0
             else
@@ -3384,7 +3572,7 @@ jobs:
                 # out identically (2026-10-23 staging outage). Recover it first:
                 # restart it, or destroy it if the restart itself fails, so the
                 # retry creates a fresh machine instead of updating a corpse.
-                bash .github/scripts/restart-wedged-app-machines.sh farna-control
+                bash .github/scripts/restart-wedged-app-machines.sh "$DEPLOY_APP"
                 DELAY=$((RETRY_DELAY * 2 ** (attempt - 1)))
                 echo "Deploy failed (exit $EXIT_CODE) -- retrying in ${DELAY}s..."
                 sleep $DELAY
@@ -3600,13 +3788,53 @@ jobs:
         if: steps.verify.outputs.rolled_back == 'false'
         id: deployed
         shell: pwsh
+        # FAR-2656: a from-zero deploy starts brand-new machines, and the app
+        # can be several seconds away from answering its first request. Probe
+        # with a bounded wait instead of a single curl, so a cold start does
+        # not fail a deploy that is otherwise healthily rolling out.
         run: |
           $expectedSha = "${{ steps.git.outputs.git-sha }}".Substring(0, 7)
           # FAR-2656: the deployed-SHA check must read the app this job
           # deployed (farna-control), not the custom domain, which still points
           # at the old app until the domain move.
-          $info = curl -s -m 10 "https://farna-control.fly.dev/api/v1/deployment" 2>$null
-          if (-not $info) { Write-Host "No deployment info"; exit 1 }
+          $hostName = "farna-control.fly.dev"
+          # 1) Wait (bounded) for the app to answer its readiness endpoint.
+          #    24 attempts at 5s intervals, capped at 120s wall clock, so a
+          #    hung probe cannot stretch the step past its budget.
+          $readyAttempts = 24
+          $ready = $false
+          $attempt = 0
+          $deadline = (Get-Date).AddSeconds(120)
+          while ($attempt -lt $readyAttempts -and (Get-Date) -lt $deadline) {
+            $attempt++
+            $code = curl -s -o /dev/null -m 5 -w "%{http_code}" "https://farna-control.fly.dev/healthz/ready" 2>$null
+            if ($code -eq "200") { $ready = $true; break }
+            Write-Host "Readiness attempt $attempt/$readyAttempts on $hostName returned '$code'; retrying in 5s"
+            Start-Sleep -Seconds 5
+          }
+          if (-not $ready) {
+            Write-Host "::error::$hostName did not report readiness (HTTP 200) after $attempt attempts"
+            exit 1
+          }
+          # 2) Read the deployment info with a bounded retry. An empty body or
+          #    a non-2xx response is retryable; exhaustion fails loudly below.
+          $infoAttempts = 6
+          $info = ""
+          $infoFile = [System.IO.Path]::GetTempFileName()
+          for ($attempt = 1; $attempt -le $infoAttempts; $attempt++) {
+            $code = curl -s -m 5 -o $infoFile -w "%{http_code}" "https://farna-control.fly.dev/api/v1/deployment" 2>$null
+            $raw = if (Test-Path -LiteralPath $infoFile) { Get-Content -Raw -LiteralPath $infoFile } else { $null }
+            $info = if ($raw) { $raw.Trim() } else { "" }
+            if ($code -eq "200" -and $info) { break }
+            $info = ""
+            Write-Host "Deployment info attempt $attempt/$infoAttempts on $hostName returned HTTP '$code'; retrying in 5s"
+            if ($attempt -lt $infoAttempts) { Start-Sleep -Seconds 5 }
+          }
+          Remove-Item -LiteralPath $infoFile -ErrorAction SilentlyContinue
+          if (-not $info) {
+            Write-Host "::error::No deployment info from $hostName after $infoAttempts attempts"
+            exit 1
+          }
           $deployInfo = $info | ConvertFrom-Json
           $deployedSha = if ($deployInfo.git_sha) { $deployInfo.git_sha.Substring(0, 7) } else { "?" }
           if ($deployedSha -ne $expectedSha) {

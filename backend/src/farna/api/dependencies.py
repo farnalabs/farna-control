@@ -240,7 +240,7 @@ def require_in_dev_operator(
 
 
 def _require_internal_system_maps_access(
-    principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
+    principal: TenantPrincipal = Depends(get_current_tenant_user),
     settings: Settings = Depends(get_settings),
 ) -> TenantPrincipal:
     """Authorize the System Maps authoring surface.
@@ -252,6 +252,14 @@ def _require_internal_system_maps_access(
     mode, so a self-hosted Alpha deployment can dogfood it. The retained
     lifecycle-map ``library.search.in_dev`` grant keeps its developer-mode
     semantics; this gate is separate.
+
+    FAR-2730: resolved with the JWT-only principal (``get_current_tenant_user``),
+    not the any-credential variant. Every route this gate guards is JWT-only by
+    construction — each carries its own ``require_permission`` (JWT) AND the
+    router's ``require_org_feature`` (which resolves the plan through
+    ``get_current_user``), so the previous any-credential resolver implied an
+    ``mk_`` capability no route on the router could deliver. An internal
+    authoring surface is a human/operator session surface.
     """
     require_in_dev_operator(
         principal,
@@ -262,7 +270,7 @@ def _require_internal_system_maps_access(
 
 
 def _require_published_system_maps_read(
-    principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
+    principal: TenantPrincipal = Depends(get_current_tenant_user),
 ) -> TenantPrincipal:
     """Authorize the published System Maps read model for every viewer.
 
@@ -271,6 +279,14 @@ def _require_published_system_maps_read(
     mutation remain developer-mode/operator-only. The feature entitlement is
     checked by the router dependency; this dependency only establishes the
     tenant permission and API-key grant boundary.
+
+    FAR-2730: resolved with the JWT-only principal. The published read model is
+    a browser/viewer session surface; its router also carries
+    ``require_feature("system_maps_read")``, which resolves the plan through
+    ``get_current_user`` (JWT) and therefore already rejects an ``mk_`` key.
+    Resolving this probe any-credential implied a capability the route cannot
+    deliver. The MCP read tools that serve these same views call the handler
+    in-process, so they are unaffected.
     """
     required = resolve_required(SYSTEM_MAPS_READ_PERMISSION)
     try:
@@ -293,9 +309,17 @@ def _require_published_system_maps_read(
 
 
 def _system_maps_internal_access(
-    principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
+    principal: TenantPrincipal = Depends(get_current_tenant_user),
 ) -> bool:
     """Return whether a read caller may also inspect unpublished revisions.
+
+    Far-2730: the principal is the JWT-only variant for the same reason as
+    ``_require_published_system_maps_read`` — the two read routes that request
+    this probe are JWT-only by construction (endpoint ``require_permission`` +
+    the router's plan feature gate), so the any-credential resolver implied an
+    ``mk_`` capability neither route can deliver. The probe's answer (may this
+    caller see unpublished revisions) is unchanged for a JWT principal; the MCP
+    overview tool calls the handler in-process and is unaffected.
 
     Resolves the settings from the module-level ``get_settings`` name at call
     time rather than binding a ``Depends`` default, so the internal gate is
@@ -1032,7 +1056,11 @@ def require_entitlement(entitlement_key: str) -> DependsParameter:
     return cast("DependsParameter", Depends(_check))
 
 
-def require_org_feature(feature_name: str) -> DependsParameter:
+def require_org_feature(
+    feature_name: str,
+    *,
+    principal_dependency: Callable[..., Any] = get_current_tenant_user_or_api_key,
+) -> DependsParameter:
     """FastAPI dependency factory — feature gate that applies org overrides.
 
     ``require_feature`` reads only the tier/licence-derived plan default and
@@ -1048,11 +1076,18 @@ def require_org_feature(feature_name: str) -> DependsParameter:
     so an unreadable override must fail closed. Falling back to the plan
     default would silently fail OPEN for a future default-ON, org-toggleable
     flag even though the org may have disabled it.
+
+    ``principal_dependency`` selects the credential the org override is read
+    for. It defaults to the any-credential resolver so this gate keeps working
+    on a route that genuinely accepts an ``mk_`` key. A JWT-only route passes
+    ``get_current_tenant_user`` (FAR-2730): the override is read for the same
+    principal the route authenticates, and the gate no longer resolves a
+    credential kind the route cannot accept.
     """
 
     async def _check(
         ctx: PlanContext = Depends(get_plan_context),
-        principal: TenantPrincipal = Depends(get_current_tenant_user_or_api_key),
+        principal: TenantPrincipal = Depends(principal_dependency),
         session: AsyncSession = Depends(get_db_session),
     ) -> None:
         from farna.core.feature_flags import feature_overrides_from_settings

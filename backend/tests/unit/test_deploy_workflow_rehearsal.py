@@ -3866,14 +3866,18 @@ def test_attest_artefacts_verify_step_uses_oci_prefix() -> None:
     assert 'gh attestation verify "$subject" --repo "${{ github.repository }}"' in script
 
 
-def test_attest_artefacts_job_timeout_is_30_minutes() -> None:
-    """attest-artefacts timeout must be 30 minutes to accommodate artifact download variance."""
+def test_attest_artefacts_job_timeout_covers_artifact_download_variance() -> None:
+    """attest-artefacts timeout must comfortably cover artifact download variance."""
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
     attest_job = workflow["jobs"]["attest-artefacts"]
     # Run 41770073539 spent ~14.5 min downloading final-release-artefacts
-    # and ~5 min on the macOS artifact before attesting. The 20-minute cap
-    # left no headroom for artifact download variance.
-    assert attest_job.get("timeout-minutes") == 30, f"attest-artefacts timeout-minutes must be 30, got: {attest_job.get('timeout-minutes')}"
+    # and ~5 min on the macOS artifact before attesting. FAR-2744 raised this
+    # from 30 to 90 minutes after a 100-minute cut was cancelled at the
+    # publication boundary: the macOS installers grew the artefact set and a
+    # download timeout must never be the thing that fails a completed cut.
+    timeout = attest_job.get("timeout-minutes")
+    assert timeout is not None, "attest-artefacts must declare a job timeout-minutes"
+    assert timeout >= 90, f"attest-artefacts timeout-minutes must be at least 90, got: {timeout}"
 
 
 @pytest.mark.posix_only

@@ -47,6 +47,11 @@ invariants of the PR-reviewer / Branch-Fixer / merge-queue triangle:
   failing job is never invisible to the Branch Fixer guard
   (FAR-2308). The few genuine per-notifier exceptions are an explicit,
   verified allowlist.
+- **A from-zero deploy creates the worker first** — both deploy legs must
+  pre-create the worker process group when the app has zero app/worker
+  machines, before the main ``fly deploy`` whose ``/healthz/ready`` gate would
+  otherwise time out waiting for a worker that never gets created
+  (FAR-2656).
 
 Every lens reports actionable diagnostics instead of a bare failure, mirroring
 the sibling architecture tests.
@@ -1705,6 +1710,107 @@ def test_production_deploy_waits_for_active_sandbox_runs_before_fly_swap() -> No
     assert "exit 1" in script
 
 
+# --- FAR-2656: a from-zero deploy pre-creates the worker process group ------
+
+#: (job id, from-zero pre-create step name, main deploy step name, Fly config).
+FROM_ZERO_LEGS = (
+    (
+        "deploy-staging",
+        "Pre-create worker process group from zero machines (staging)",
+        "Deploy to staging-farna-control",
+        "deploy/fly/fly.staging.toml",
+    ),
+    (
+        "deploy-production",
+        "Pre-create worker process group from zero machines (production)",
+        "Deploy to farna-control",
+        "fly.toml",
+    ),
+)
+
+
+def _fly_config_app(relative_path: str) -> str:
+    """The ``app = '...'`` a Fly config declares — the deploy target's truth."""
+    path = REPO / relative_path
+    assert path.exists(), f"Fly config missing: {path}"
+    match = re.search(r"^app\s*=\s*['\"]([^'\"]+)['\"]", path.read_text(encoding="utf-8"), re.MULTILINE)
+    assert match, f"{path.name}: no top-level app = '...' declaration"
+    return match.group(1)
+
+
+def test_from_zero_deploy_precreates_the_worker_process_group_first() -> None:
+    """A deploy onto an app with no machines must create the worker FIRST.
+
+    ``fly deploy`` gates on the app's ``[[http_service.checks]]`` probe of
+    ``/healthz/ready``, and that probe requires a live worker. On a brand-new
+    or fully scaled-to-zero app no machines exist, so the app machine comes up,
+    readiness returns 503 indefinitely, and the deploy times out before it ever
+    creates the worker - the release never lands (observed twice against a
+    zero-machine deployment). The fix pre-creates the worker process group from
+    the SAME pre-built image whenever the app reports zero app/worker machines.
+
+    This test pins the wiring that makes it real rather than a comment: the
+    step exists on both legs, it runs BEFORE the main deploy step, it is gated
+    on an actual zero-machine count, it ships the same image/config variables
+    as the main deploy, and it fails loudly rather than silently skipping when
+    the machine list cannot be read.
+    """
+    violations: list[str] = []
+    jobs = _deploy_jobs()
+    for job_id, precreate_name, deploy_name, config_path in FROM_ZERO_LEGS:
+        job = jobs.get(job_id)
+        if not isinstance(job, dict):
+            violations.append(f"  {job_id}: job is missing")
+            continue
+        job_env = {str(key): str(value) for key, value in (job.get("env") or {}).items()}
+        steps = [step for step in job.get("steps") or [] if isinstance(step, dict)]
+        names = [str(step.get("name") or "") for step in steps]
+        if precreate_name not in names:
+            violations.append(f"  {job_id}: no step named {precreate_name!r} - the from-zero pre-create is gone")
+            continue
+        if deploy_name not in names:
+            violations.append(f"  {job_id}: no step named {deploy_name!r}")
+            continue
+        precreate_index = names.index(precreate_name)
+        deploy_index = names.index(deploy_name)
+        if precreate_index > deploy_index:
+            violations.append(f"  {job_id}: {precreate_name!r} (index {precreate_index}) runs after {deploy_name!r} (index {deploy_index})")
+        script = str(steps[precreate_index].get("run") or "")
+        main_script = str(steps[deploy_index].get("run") or "")
+        # Gated on a real zero-machine count, never on a toggle or a guess.
+        if "flyctl machines list" not in script or "--json" not in script:
+            violations.append(f"  {job_id}: the from-zero step no longer counts machines with 'flyctl machines list --json'")
+        if "jq" not in script:
+            violations.append(f"  {job_id}: the from-zero step no longer reduces the machine list with jq")
+        if "-ne 0" not in script:
+            violations.append(f"  {job_id}: the from-zero step is not gated on a zero-machine count")
+        if "skipping from-zero pre-create" not in script:
+            violations.append(f"  {job_id}: the machines-present path is no longer logged")
+        # The fix itself: the worker process group is created from the same
+        # pre-built image the main deploy ships.
+        if "--process-groups worker" not in script:
+            violations.append(f"  {job_id}: the from-zero step no longer pre-creates the worker process group")
+        if "$IMAGE_REF" not in script:
+            violations.append(f"  {job_id}: the from-zero step does not ship the main deploy's $IMAGE_REF")
+        # A machine-list failure (missing app, Fly API error) must fail loudly.
+        if "exit 1" not in script:
+            violations.append(f"  {job_id}: the from-zero step cannot fail loudly on a machine-list failure")
+        # One identity, two steps: the app name and config come from job-level
+        # env, and that env matches the Fly config's own `app` declaration, so
+        # an app rename cannot leave the pre-create pointing at the old app.
+        expected_app = _fly_config_app(config_path)
+        if job_env.get("DEPLOY_APP") != expected_app:
+            violations.append(f"  {job_id}: DEPLOY_APP is {job_env.get('DEPLOY_APP')!r}, but {config_path} declares app = {expected_app!r}")
+        if job_env.get("DEPLOY_FLY_CONFIG") != config_path:
+            violations.append(f"  {job_id}: DEPLOY_FLY_CONFIG is {job_env.get('DEPLOY_FLY_CONFIG')!r}, expected {config_path!r}")
+        for var in ("DEPLOY_APP", "DEPLOY_FLY_CONFIG"):
+            if f"${var}" not in script:
+                violations.append(f"  {job_id}: the from-zero step does not read ${var} from job-level env")
+            if f"${var}" not in main_script:
+                violations.append(f"  {job_id}: the main deploy step does not read ${var} from job-level env")
+    assert not violations, "the from-zero worker pre-create is missing or mis-wired:\n" + "\n".join(violations)
+
+
 def test_production_deploy_still_verifies_the_shipped_sha() -> None:
     """A deploying run must still prove production serves what it shipped.
 
@@ -1728,6 +1834,60 @@ def test_production_deploy_still_verifies_the_shipped_sha() -> None:
     if "exit 1" not in run:
         violations.append("  a SHA mismatch no longer fails the step")
     assert not violations, "the production SHA verification was weakened:\n" + "\n".join(violations)
+
+
+#: (job id, the app host that job's deployed-SHA check probes).
+DEPLOYED_SHA_LEGS = (
+    ("deploy-staging", "staging-farna-control.fly.dev"),
+    ("deploy-production", "farna-control.fly.dev"),
+)
+
+
+def test_deployed_sha_check_survives_a_cold_start() -> None:
+    """Both deployed-SHA checks must wait out a cold start, not fire once.
+
+    A from-zero deploy creates brand-new machines, so the first requests can
+    arrive before the app answers. A single ``curl -m 10`` then fails the step
+    with "No deployment info" even though the app becomes healthy minutes later
+    (observed 2026-11-24). Each leg must poll ``/healthz/ready`` with a bounded
+    budget, fetch ``/api/v1/deployment`` with a bounded retry, and fail loudly
+    on exhaustion - while keeping the SHA comparison itself.
+    """
+    violations: list[str] = []
+    jobs = _deploy_jobs()
+    for job_id, host in DEPLOYED_SHA_LEGS:
+        steps = (jobs.get(job_id) or {}).get("steps") or []
+        step = next(
+            (s for s in steps if isinstance(s, dict) and s.get("name") == "Check deployed SHA"),
+            None,
+        )
+        if step is None:
+            violations.append(f"  {job_id}: no 'Check deployed SHA' step")
+            continue
+        run = str(step.get("run") or "")
+        # Probes the same app host as before.
+        if host not in run:
+            violations.append(f"  {job_id}: the step does not probe {host}")
+        # Waits for readiness before reading the deployment info.
+        if "healthz/ready" not in run:
+            violations.append(f"  {job_id}: the step does not wait for /healthz/ready before checking the SHA")
+        # A bounded retry: numeric attempt caps for BOTH the readiness wait and
+        # the deployment-info fetch, a loop, and a sleep between attempts.
+        attempt_caps = re.findall(r"\$\w*[Aa]ttempts\s*=\s*\d+", run)
+        if len(attempt_caps) < 2:
+            violations.append(f"  {job_id}: expected bounded attempt caps for the readiness and deployment-info waits (found {attempt_caps!r})")
+        if not re.search(r"\b(?:for|while)\b", run):
+            violations.append(f"  {job_id}: the deployed-SHA check has no retry loop")
+        if not re.search(r"Start-Sleep\s+-Seconds\s+\d+", run):
+            violations.append(f"  {job_id}: the retry loop never sleeps between attempts")
+        # Exhaustion is loud, never a silent fall-through.
+        if "::error::" not in run:
+            violations.append(f"  {job_id}: exhausting the retry budget is not reported with a ::error:: annotation")
+        # The SHA comparison itself is preserved.
+        for needle in ("steps.git.outputs.git-sha", ".Substring(0, 7)", "SHA MISMATCH", "exit 1"):
+            if needle not in run:
+                violations.append(f"  {job_id}: the SHA comparison lost {needle!r}")
+    assert not violations, "a deployed-SHA check can fail on a cold start:\n" + "\n".join(violations)
 
 
 def test_production_post_deploy_gates_target_the_deployed_app_host() -> None:
