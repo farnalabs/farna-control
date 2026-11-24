@@ -8,15 +8,17 @@ name: "Provider contract probe (nightly)"
 # notices.
 #
 # Read-only: scripts/provider_contract_probe.py never issues a write (GET/HEAD,
-# plus a hardcoded read-only-POST allowlist). The script's config pins each
-# provider's allowed_host.
+# plus read-only POSTs pinned in code to their exact URL and body). Each
+# provider id is pinned to its host in code (PROVIDER_HOST_PINS), so a config
+# edit cannot redirect a credential or introduce a new host.
 #
 # Fail-closed: a golden that has not been recorded live, a missing golden, or a
-# missing credential FAILS the run unless the provider id is listed with a
-# reason in configs/provider-contract-probes.yaml. The committed goldens are
-# hand-authored and not yet recorded, so each is currently listed in
-# `allow_unrecorded_golden`; recording one (behind review) means deleting its
-# line, and it is then genuinely probed here.
+# missing credential FAILS the run. Nothing is excused in the committed config -
+# the goldens are hand-authored and not yet recorded - so this job is
+# DELIBERATELY RED until each golden is recorded live behind review. That red
+# state is the honest one: a shape nobody has verified against the live provider
+# proves nothing. A run that attempts zero probes also fails, so an all-skipped
+# run can never look green.
 #
 # The JSON report is uploaded as an artifact on every run, including failures,
 # so a drift can be triaged without re-running.

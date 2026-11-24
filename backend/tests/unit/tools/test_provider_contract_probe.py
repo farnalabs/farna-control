@@ -9,12 +9,15 @@ Proves the behaviours that make a nightly live probe safe:
 * a secret never reaches a golden, the report, or stdout/stderr;
 * fail-closed skips: a missing credential, a missing golden and an unrecorded
   golden each fail by default and pass only via an explicit allow list;
+* a run that ATTEMPTS zero probes fails, however many skips are excused;
 * transient 429/5xx are retried with backoff and end as ``provider_unavailable``,
   never as contract drift;
 * an array that silently empties (or a previously empty array that fills) is
   breaking drift, and array element shapes are unioned;
 * addition of an object key is breaking by default;
-* the loader enforces read-only host/method/env restrictions;
+* the loader enforces read-only host/method/env restrictions, and pins every
+  provider id to its host - and every read-only POST to its exact URL and body -
+  in code, so a config edit cannot redirect a credential or issue a write;
 * one probe's unexpected exception cannot abort the run and always leaves a
   report;
 * record mode rewrites only the selected provider, in the committed format;
@@ -25,6 +28,7 @@ Proves the behaviours that make a nightly live probe safe:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from importlib.machinery import SourceFileLoader
@@ -53,7 +57,24 @@ _loader.exec_module(_module)
 probe = _module
 
 _URL = "https://api.acme.test/ping"
+_OK_URL = "https://api.acme.test/ok"
 _RECORDED_AT = "2026-01-01T00:00:00+00:00"
+
+#: Hosts pinned IN CODE for the synthetic ids these tests use. The real pins
+#: live in ``PROVIDER_HOST_PINS``; a production config cannot add one.
+_TEST_HOST_PINS = {"acme": "api.acme.test", "acme_ok": "api.acme.test", "boom": "api.boom.test"}
+
+
+@pytest.fixture(autouse=True)
+def _pin_test_provider_hosts(monkeypatch: Any) -> None:
+    """Give the synthetic test ids a code-level host pin.
+
+    The loader now rejects any provider id whose host is not pinned in the
+    script, which is exactly what stops a merged config edit from redirecting a
+    credential. Tests that use a made-up provider therefore pin it the same way
+    production does - in code, not in the config under test.
+    """
+    monkeypatch.setattr(probe, "PROVIDER_HOST_PINS", {**probe.PROVIDER_HOST_PINS, **_TEST_HOST_PINS})
 
 
 def _probe(**overrides: Any) -> dict[str, Any]:
@@ -91,21 +112,33 @@ def _write_config(tmp_path: Path, providers: list[dict[str, Any]], skips: list[d
     return path
 
 
-def _write_goldens(tmp_path: Path, shape: dict[str, Any], max_depth: int = 1, recorded_at: str | None = _RECORDED_AT) -> Path:
-    goldens = {
-        "schema_version": 1,
-        "goldens": {
-            "acme/ping": {
-                "recorded_at": recorded_at,
-                "success_status_class": "2xx",
-                "max_depth": max_depth,
-                "shape": shape,
-            }
-        },
-    }
+def _ok_probe() -> dict[str, Any]:
+    """A second, healthy probe for a config.
+
+    Used where a test needs the run to attempt something, so an excused skip on
+    another probe can be shown not to fail the run on its own. It reads its own
+    credential (``OK_TOKEN``) so deleting ``ACME_TOKEN`` leaves it healthy.
+    """
+    return _probe(
+        id="acme_ok",
+        request={"method": "GET", "url": _OK_URL},
+        auth={"kind": "bearer", "env": "OK_TOKEN"},
+        env_vars=["OK_TOKEN"],
+    )
+
+
+def _golden_entry(shape: dict[str, Any], max_depth: int = 1, recorded_at: str | None = _RECORDED_AT) -> dict[str, Any]:
+    return {"recorded_at": recorded_at, "success_status_class": "2xx", "max_depth": max_depth, "shape": shape}
+
+
+def _write_goldens_entries(tmp_path: Path, entries: dict[str, Any]) -> Path:
     path = tmp_path / "goldens.json"
-    path.write_text(json.dumps(goldens), encoding="utf-8")
+    path.write_text(json.dumps({"schema_version": 1, "goldens": entries}), encoding="utf-8")
     return path
+
+
+def _write_goldens(tmp_path: Path, shape: dict[str, Any], max_depth: int = 1, recorded_at: str | None = _RECORDED_AT) -> Path:
+    return _write_goldens_entries(tmp_path, {"acme/ping": _golden_entry(shape, max_depth, recorded_at)})
 
 
 def _run(config: Path, goldens: Path, report: Path, *extra: str) -> int:
@@ -170,7 +203,7 @@ def test_addition_is_breaking_by_default(tmp_path: Path, monkeypatch: Any) -> No
     assert exit_code == 1
     result = _read_report(report)["results"][0]
     assert result["status"] == "drift"
-    assert result["drift"] == []
+    assert not result["drift"]
     assert result["additions"][0]["path"] == "$.beta"
 
 
@@ -211,7 +244,7 @@ def test_array_shape_unions_every_element() -> None:
 def test_optional_key_absence_is_not_drift() -> None:
     expected = {"type": "object", "keys": {"id": {"type": "string"}, "name": {"type": "string", "optional": True}}}
     actual = {"type": "object", "keys": {"id": {"type": "string"}}}
-    assert probe.diff_shape(expected, actual) == []
+    assert not probe.diff_shape(expected, actual)
 
 
 # ---------------------------------------------------------------------------
@@ -267,17 +300,29 @@ def test_missing_credential_fails_by_default(tmp_path: Path, monkeypatch: Any, c
 
 def test_missing_credential_allowed_when_listed(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.delenv("ACME_TOKEN", raising=False)
-    config = _write_config(tmp_path, [_probe()], allow_missing_credential={"acme": "token not yet provisioned"})
-    goldens = _write_goldens(tmp_path, {"type": "object", "keys": {"alpha": {"type": "string"}}})
+    monkeypatch.setenv("OK_TOKEN", "ok-token")
+    config = _write_config(tmp_path, [_probe(), _ok_probe()], allow_missing_credential={"acme": "token not yet provisioned"})
+    goldens = _write_goldens_entries(
+        tmp_path,
+        {
+            "acme/ping": _golden_entry({"type": "object", "keys": {"alpha": {"type": "string"}}}),
+            "acme_ok/ping": _golden_entry({"type": "object"}),
+        },
+    )
     report = tmp_path / "report.json"
 
-    with respx.mock(assert_all_called=False):
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(_OK_URL).mock(return_value=httpx.Response(200, json={}))
         exit_code = _run(config, goldens, report)
 
+    # The excused skip does not fail the run, which is green because the other
+    # probe was actually attempted and passed.
     assert exit_code == 0
-    result = _read_report(report)["results"][0]
-    assert result["status"] == "skipped"
-    assert result["allowed"] is True
+    results = {r["provider"]: r for r in _read_report(report)["results"]}
+    assert results["acme"]["status"] == "skipped"
+    assert results["acme"]["allowed"] is True
+    assert "ACME_TOKEN" in results["acme"]["reason"]
+    assert _read_report(report)["summary"]["attempted"] == 1
 
 
 def test_missing_golden_fails_by_default(tmp_path: Path, monkeypatch: Any) -> None:
@@ -298,15 +343,21 @@ def test_missing_golden_fails_by_default(tmp_path: Path, monkeypatch: Any) -> No
 
 def test_missing_golden_allowed_when_listed(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setenv("ACME_TOKEN", "test-token")
-    config = _write_config(tmp_path, [_probe()], allow_missing_golden={"acme": "new provider pending first record"})
-    goldens = tmp_path / "absent.json"
+    monkeypatch.setenv("OK_TOKEN", "ok-token")
+    config = _write_config(tmp_path, [_probe(), _ok_probe()], allow_missing_golden={"acme": "new provider pending first record"})
+    goldens = _write_goldens_entries(tmp_path, {"acme_ok/ping": _golden_entry({"type": "object"})})
     report = tmp_path / "report.json"
 
-    with respx.mock(assert_all_called=False):
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(_OK_URL).mock(return_value=httpx.Response(200, json={}))
         exit_code = _run(config, goldens, report)
 
     assert exit_code == 0
-    assert _read_report(report)["results"][0]["allowed"] is True
+    results = {r["provider"]: r for r in _read_report(report)["results"]}
+    assert results["acme"]["allowed"] is True
+    assert _read_report(report)["summary"]["attempted"] == 1
+    # Check mode never creates a golden, even for an excused missing one.
+    assert "acme/ping" not in json.loads(goldens.read_text(encoding="utf-8"))["goldens"]
 
 
 def test_unrecorded_golden_fails_by_default(tmp_path: Path, monkeypatch: Any) -> None:
@@ -328,33 +379,64 @@ def test_unrecorded_golden_fails_by_default(tmp_path: Path, monkeypatch: Any) ->
 
 def test_unrecorded_golden_allowed_when_listed(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setenv("ACME_TOKEN", "test-token")
-    config = _write_config(tmp_path, [_probe()], allow_unrecorded_golden={"acme": "hand-authored baseline"})
-    goldens = _write_goldens(tmp_path, {"type": "object", "keys": {"alpha": {"type": "string"}}}, recorded_at=None)
+    monkeypatch.setenv("OK_TOKEN", "ok-token")
+    config = _write_config(tmp_path, [_probe(), _ok_probe()], allow_unrecorded_golden={"acme": "hand-authored baseline"})
+    goldens = _write_goldens_entries(
+        tmp_path,
+        {
+            "acme/ping": _golden_entry({"type": "object", "keys": {"alpha": {"type": "string"}}}, recorded_at=None),
+            "acme_ok/ping": _golden_entry({"type": "object"}),
+        },
+    )
     report = tmp_path / "report.json"
 
-    with respx.mock(assert_all_called=False):
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(_OK_URL).mock(return_value=httpx.Response(200, json={}))
         exit_code = _run(config, goldens, report)
 
     assert exit_code == 0
-    assert _read_report(report)["results"][0]["allowed"] is True
+    results = {r["provider"]: r for r in _read_report(report)["results"]}
+    assert results["acme"]["allowed"] is True
+    assert _read_report(report)["summary"]["attempted"] == 1
 
 
-def test_all_probes_excused_has_zero_expected(tmp_path: Path, monkeypatch: Any) -> None:
+def test_zero_attempts_fails_even_when_every_skip_is_excused(tmp_path: Path, monkeypatch: Any, capsys: Any) -> None:
+    """The old bootstrap state (every probe excused) must be RED, not green.
+
+    Counting passes let ``passed:0 expected:0`` exit 0 while probing nothing.
+    Counting attempts cannot: a check that issued no request proves nothing,
+    however explicit the excuse.
+    """
     monkeypatch.delenv("ACME_TOKEN", raising=False)
     config = _write_config(tmp_path, [_probe()], allow_missing_credential={"acme": "excused"})
     goldens = _write_goldens(tmp_path, {"type": "object", "keys": {"alpha": {"type": "string"}}})
     report = tmp_path / "report.json"
 
-    with respx.mock(assert_all_called=False):
+    with respx.mock(assert_all_called=False) as mock:
+        route = mock.get(_URL).mock(return_value=httpx.Response(200, json={"alpha": "x"}))
         exit_code = _run(config, goldens, report)
 
-    # Nothing was attempted, so "no probe passed" is not a false clean run: the
-    # skip is explicit (allow-listed) and counted as expected == 0.
-    assert exit_code == 0
+    assert exit_code == 1
+    assert route.call_count == 0
     summary = _read_report(report)["summary"]
+    assert summary["attempted"] == 0
     assert summary["passed"] == 0
-    assert summary["expected"] == 0
     assert summary["skipped_unexcused"] == 0
+    assert "zero probes were attempted" in capsys.readouterr().err
+
+
+def test_one_attempt_is_enough_to_be_green(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setenv("ACME_TOKEN", "test-token")
+    config = _write_config(tmp_path, [_probe()])
+    goldens = _write_goldens(tmp_path, {"type": "object", "keys": {"alpha": {"type": "string"}}})
+    report = tmp_path / "report.json"
+
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(_URL).mock(return_value=httpx.Response(200, json={"alpha": "x"}))
+        exit_code = _run(config, goldens, report)
+
+    assert exit_code == 0
+    assert _read_report(report)["summary"]["attempted"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -419,15 +501,65 @@ def test_deadline_is_enforced_before_a_request() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_post_not_on_allowlist_is_rejected(tmp_path: Path) -> None:
+def test_post_not_pinned_in_code_is_rejected(tmp_path: Path) -> None:
     config = _write_config(tmp_path, [_probe(request={"method": "POST", "url": _URL})])
-    with pytest.raises(probe.ProbeConfigError, match="read-only-POST allowlist"):
+    with pytest.raises(probe.ProbeConfigError, match="pinned in code"):
         probe.load_config(config)
 
 
-def test_url_host_must_match_allowed_host(tmp_path: Path) -> None:
+def test_posting_provider_cannot_be_renamed_onto_a_write_endpoint(tmp_path: Path) -> None:
+    # Repro of the reported defect: the id is on the read-only POST list, but
+    # the URL is supplied by the config, so a merge could point it at a write.
+    slack = _probe(
+        id="slack",
+        request={"method": "POST", "url": "https://slack.com/api/chat.delete", "json": {"channel": "C1", "ts": "1"}},
+        allowed_host="slack.com",
+        auth={"kind": "bearer", "env": "MODULO_PROBE_SLACK_TOKEN"},
+        env_vars=["MODULO_PROBE_SLACK_TOKEN"],
+    )
+    config = _write_config(tmp_path, [slack])
+    with pytest.raises(probe.ProbeConfigError, match="does not match the endpoint pinned in code"):
+        probe.load_config(config)
+
+
+def test_pinned_post_body_must_match_exactly(tmp_path: Path) -> None:
+    slack = _probe(
+        id="slack",
+        request={"method": "POST", "url": "https://slack.com/api/auth.test", "json": {"channel": "C1"}},
+        allowed_host="slack.com",
+        auth={"kind": "bearer", "env": "MODULO_PROBE_SLACK_TOKEN"},
+        env_vars=["MODULO_PROBE_SLACK_TOKEN"],
+    )
+    config = _write_config(tmp_path, [slack])
+    with pytest.raises(probe.ProbeConfigError, match="body"):
+        probe.load_config(config)
+
+
+def test_url_host_must_match_the_host_pinned_in_code(tmp_path: Path) -> None:
     config = _write_config(tmp_path, [_probe(allowed_host="other.test")])
-    with pytest.raises(probe.ProbeConfigError, match="does not match allowed_host"):
+    with pytest.raises(probe.ProbeConfigError, match="does not match the host pinned in code"):
+        probe.load_config(config)
+
+
+def test_config_cannot_redirect_a_credential_to_a_new_host(tmp_path: Path) -> None:
+    # Repro of the reported defect: changing the URL and ``allowed_host``
+    # together used to be accepted, sending the token to the new host. The code
+    # pin makes that a load-time failure.
+    github = _probe(
+        id="github",
+        request={"method": "GET", "url": "https://evil.test/rate_limit"},
+        allowed_host="evil.test",
+        auth={"kind": "bearer", "env": "MODULO_PROBE_GITHUB_TOKEN"},
+        env_vars=["MODULO_PROBE_GITHUB_TOKEN"],
+    )
+    config = _write_config(tmp_path, [github])
+    with pytest.raises(probe.ProbeConfigError, match="pinned in code"):
+        probe.load_config(config)
+
+
+def test_unknown_provider_id_cannot_introduce_a_new_host(tmp_path: Path) -> None:
+    config = _write_config(tmp_path, [_probe(id="unpinned", request={"method": "GET", "url": "https://evil.test/ping"}, allowed_host="evil.test")])
+    with pytest.raises(probe.ProbeConfigError, match="no host is pinned"):
         probe.load_config(config)
 
 
@@ -451,6 +583,13 @@ def test_bad_header_template_is_rejected_at_load(tmp_path: Path) -> None:
 
 def test_form_body_is_sent(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setenv("ACME_TOKEN", "test-token")
+    # The real monday pin is a JSON body; pin a form body here so the transport
+    # path for ``form`` is exercised without weakening the production pin.
+    monkeypatch.setattr(
+        probe,
+        "READ_ONLY_POST_ENDPOINTS",
+        {**probe.READ_ONLY_POST_ENDPOINTS, "monday": probe.ReadOnlyPost("https://api.monday.com/v2", "form", {"query": "{ me { id } }"})},
+    )
     form_probe = _probe(
         id="monday",
         request={"method": "POST", "url": "https://api.monday.com/v2", "form": {"query": "{ me { id } }"}},
@@ -667,6 +806,40 @@ def test_real_config_and_goldens_are_consistent() -> None:
 
     # Every golden belongs to a configured provider (no orphan blocks).
     assert golden_keys == expected_keys
+
+
+def test_real_config_check_is_red_until_goldens_are_recorded(tmp_path: Path, monkeypatch: Any) -> None:
+    """The committed state is honest: no golden is recorded, and that is RED.
+
+    The golden gate runs before any credential is resolved, so this touches no
+    network. It must exit non-zero with zero attempts: the nightly is meant to
+    fail until each shape is recorded live behind review. An "all 36 excused"
+    allow list - which made this run green while probing nothing - must never
+    come back.
+    """
+    for name in [key for key in os.environ if key.startswith("MODULO_PROBE_")]:
+        monkeypatch.delenv(name)
+    report = tmp_path / "report.json"
+
+    exit_code = probe.main(
+        [
+            "--mode",
+            "check",
+            "--config",
+            str(_REPO_ROOT / "configs" / "provider-contract-probes.yaml"),
+            "--goldens",
+            str(_REPO_ROOT / "contract-goldens" / "provider-shapes.json"),
+            "--report",
+            str(report),
+        ]
+    )
+
+    assert exit_code == 1
+    summary = _read_report(report)["summary"]
+    assert summary["attempted"] == 0
+    assert summary["passed"] == 0
+    excused = set(_real_config()["allow_unrecorded_golden"])
+    assert excused != {p["id"] for p in _real_config()["providers"]}
 
 
 def _packages(root: Path) -> set[str]:

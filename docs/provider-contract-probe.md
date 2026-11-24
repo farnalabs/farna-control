@@ -69,11 +69,26 @@ python scripts/provider_contract_probe.py --mode record --provider github --oper
 ```
 
 Exit codes: `0` clean (or report-only / dry-run), `1` drift, a probe error, an
-unavailable provider, an unexcused skip, or "no probe passed although probes
-were expected", `2` config error / usage error.
+unavailable provider, an unexcused skip, or **zero attempted probes**, `2` config
+error / usage error.
 
 Useful flags: `--config PATH`, `--goldens PATH`, `--report PATH`,
 `--provider ID` (restrict a check to one provider).
+
+## A red nightly is the honest state
+
+The committed goldens are hand-authored from each provider's documented
+response contract and **none has been recorded against the live provider yet**
+(`recorded_at` is `null`). No provider is excused, so `--mode check` fails: every
+probe is an unexcused "not yet recorded" skip and the run exits `1`.
+
+That is deliberate. The nightly is **expected to be red** until each golden is
+recorded live behind review (see below). A green nightly in this state would
+mean the job was proving nothing.
+
+The run counts **attempts**, not passes: if it issues no request at all it exits
+non-zero, even when every skip is explicitly excused. This is what stops the
+bootstrap shape (all skips allow-listed, `passed: 0`) from reading as clean.
 
 ## Fail-closed skips
 
@@ -88,24 +103,41 @@ true` in the report, so it is always visible:
 | No golden entry for the probe            | `allow_missing_golden`      |
 | Golden exists but `recorded_at` is null  | `allow_unrecorded_golden`   |
 
-This catches a rotated secret (a recorded provider whose token disappeared) and
-a newly added provider nobody recorded. Our committed goldens are hand-authored,
-so every current provider is listed in `allow_unrecorded_golden`; recording a
-golden (below) means deleting its line, after which it is genuinely probed.
+All three lists are **empty** in the committed config. This catches a rotated
+secret (a recorded provider whose token disappeared) and a newly added provider
+nobody recorded. Recording a golden (below) sets its `recorded_at`, after which
+it is genuinely probed against the live provider.
 
-The run also fails if it attempted at least one probe and **none passed**.
+Add an allow-list entry **only** as a deliberate, reviewed, time-boxed
+exception, with a reason. Do not re-add every provider to
+`allow_unrecorded_golden`: that is the state that made the nightly green while
+probing nothing.
+
+Even with excused skips, a run that attempts **zero** probes fails.
 
 ## Read-only and credential confinement
 
-The config controls the URL, method and env var names, so the loader enforces
-the read-only guarantee before any request:
+The config names the URL, method and env var names, so the loader enforces the
+read-only guarantee before any request. Two things are pinned **in code**, so a
+config edit alone cannot widen them:
 
-- The URL must be `https`, must not embed userinfo, and its host must equal the
-  probe's `allowed_host`. Redirecting a credential to another host therefore
-  requires a visible `allowed_host` change.
-- Only `GET` and `HEAD` are accepted. `POST` is rejected unless the provider id
-  is on the hardcoded `READ_ONLY_POST_ALLOWLIST` in the script (currently
-  `dropbox_paper`, `linear`, `monday`, `slack` - each a read query).
+- **Host pin.** `PROVIDER_HOST_PINS` in the script maps every provider id to its
+  one permitted host. A probe whose id is not in that mapping is rejected, and a
+  URL whose host differs from the pin is rejected. `allowed_host` in the config
+  must agree with the pin, but the pin is the authority: changing the URL and
+  `allowed_host` together is still rejected, so a config edit cannot redirect a
+  credential to a new host.
+- **POST endpoint pin.** Only a handful of providers use a POST, and each is a
+  read query. `READ_ONLY_POST_ENDPOINTS` in the script pins every one of them to
+  its exact URL and exact body (`dropbox_paper`, `linear`, `monday`, `slack`). A
+  POST whose id, URL or body differs is rejected - renaming a probe onto a write
+  endpoint such as Slack `chat.delete` fails at load.
+
+Also enforced:
+
+- The URL must be `https`, must not embed userinfo, and must not carry a query
+  string (use `auth.params`).
+- Only `GET` and `HEAD` are accepted, except the pinned POSTs above.
 - `auth.env`, every `auth.params` value and every `extra_headers` value must
   appear in the probe's `env_vars`. A config edit cannot pull in an undeclared
   secret.
@@ -131,7 +163,11 @@ the in-script deadline.
 1. Decide whether it can be probed safely and cheaply. If not, add a **skip**
    entry with a reason (see below) - every connector type and model backend must
    appear in the config as either a probe or a skip.
-2. Add a probe under `providers:`:
+2. Add the provider id to `PROVIDER_HOST_PINS` in
+   `scripts/provider_contract_probe.py`, mapped to its one permitted host. The
+   loader rejects a probe whose id is unpinned, so this code change is the only
+   way to introduce a host.
+3. Add a probe under `providers:`:
 
    ```yaml
    - id: example
@@ -139,9 +175,9 @@ the in-script deadline.
      operation: users_me        # unique within the provider
      description: Current user identity (Example GET /users/me).
      request:
-       method: GET              # GET/HEAD, or POST only if allowlisted
+       method: GET              # GET/HEAD, or a pinned read-only POST
        url: https://api.example.com/users/me
-     allowed_host: api.example.com
+     allowed_host: api.example.com   # must equal the code pin
      auth:
        kind: bearer             # none | bearer | header | query
        env: MODULO_PROBE_EXAMPLE_TOKEN
@@ -153,11 +189,15 @@ the in-script deadline.
          rule: volatile
    ```
 
-3. Add the credential as a repo secret named exactly as the config's `env`
+   If the cheapest read is an HTTP POST, add its id, exact URL and exact body to
+   `READ_ONLY_POST_ENDPOINTS` in the same script first; a POST that does not
+   match a pin is rejected.
+
+4. Add the credential as a repo secret named exactly as the config's `env`
    (or `params` / `extra_headers` env names), and pass it through in the
    workflow's `Probe live provider contracts` step.
-4. Record the golden behind review (below), then commit it and delete the
-   provider's line from `allow_unrecorded_golden`.
+5. Record the golden behind review (below) and commit it. The nightly stays red
+   until it is recorded - that red is the correct signal.
 
 ### Request bodies
 
@@ -167,7 +207,8 @@ the in-script deadline.
   by Dropbox no-argument RPCs).
 - `form: {key: value}` - `application/x-www-form-urlencoded` body.
 
-At most one of `json` / `form` may be set.
+At most one of `json` / `form` may be set. For a POST the body must match the
+pinned `READ_ONLY_POST_ENDPOINTS` entry exactly (kind and value).
 
 ### Credential kinds
 
@@ -212,11 +253,13 @@ golden. When a provider legitimately changes shape:
    only the intended shape change. Record mode rewrites the file in the same
    canonical, compact inline-leaf format the repo commits, so re-recording one
    provider changes one block - nothing else reflows.
-4. Commit the golden with the change that depends on it, and remove that
-   provider from `allow_unrecorded_golden`.
+4. Commit the golden with the change that depends on it. Its `recorded_at` is
+   now set, so it is genuinely probed and is no longer an "unrecorded" skip.
 
 If a probe has no golden, check mode **fails** it by default (allow-list it
-explicitly if that is intended). Check mode never creates a golden.
+explicitly if that is intended, with a reason). Check mode never creates a
+golden. Recording the first golden is what turns the nightly from honestly red
+into a real check for that provider.
 
 ## Skip list and why
 
@@ -304,9 +347,11 @@ Model backends:
 `contract-goldens/report.json` is written after every probe (override with
 `--report`). It contains, per probe: `status` (`pass` / `drift` / `skipped` /
 `unavailable` / `error`), `status_code`, `attempts`, the breaking `drift` list,
-and the `additions` list, plus a summary (`expected`, `passed`, `drifted`,
-`unavailable`, `skipped`, `skipped_unexcused`, `errors`, `additions`) and the
-config's skip list. It never contains a credential, request header, or response
+and the `additions` list, plus a summary (`attempted`, `expected`, `passed`,
+`drifted`, `unavailable`, `skipped`, `skipped_unexcused`, `errors`, `additions`)
+and the config's skip list. `attempted` counts probes that actually issued a
+request; zero in check mode is always a non-zero exit. It never contains a
+credential, request header, or response
 value. In CI it is uploaded as the `provider-contract-report` artifact on every
 run, including failures.
 
@@ -324,11 +369,15 @@ no later step or third-party action can read it; it is not in workflow-level
 directory. It proves, among other things: a mutated golden fails; a changed
 shape is reported and not auto-accepted; a secret never appears in output;
 missing credential / missing golden / unrecorded golden each fail by default and
-pass only via an allow list; `429` is retried honouring `Retry-After` and a
+pass only via an allow list; a run that attempts **zero** probes fails even when
+every skip is excused; `429` is retried honouring `Retry-After` and a
 persistent `5xx` ends as `provider_unavailable` (not drift); an emptied or
 populated array is breaking and array shapes are unioned; `added` is breaking by
-default; the loader rejects a non-allowlisted POST, a host mismatch, embedded
-URL credentials and an undeclared header env var; one probe's exception does not
+default; the loader rejects a POST that is not pinned in code (including a
+probe renamed onto Slack `chat.delete`), a pinned POST whose body differs, a URL
+host that differs from the code pin, a config that changes the URL and
+`allowed_host` together to a new host, an unpinned provider id, embedded URL
+credentials and an undeclared header env var; one probe's exception does not
 abort the run and still writes the report; record mode rewrites only the
 selected provider in the committed format.
 

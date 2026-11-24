@@ -22,7 +22,10 @@
 #   operation:            operation id (unique within the provider)
 #   description:          what the call proves
 #   request:              {method, url, json?, form?}
-#   allowed_host:         the ONLY host the request.url may target (read-only)
+#   allowed_host:         the ONLY host the request.url may target. Must equal
+#                         the provider id's pin in PROVIDER_HOST_PINS
+#                         (scripts/provider_contract_probe.py), which is the
+#                         authority; a config edit cannot introduce a host.
 #   auth:                 credential declaration (see below)
 #   env_vars:             the ONLY env var names this probe may read; auth.env,
 #                         auth.params values and extra_headers values must be a
@@ -62,10 +65,14 @@
 # Paths are dot-separated. "*" matches every key of a dict at that level and
 # "[]" matches every element of a list at that level, e.g. "data.[].id".
 #
-# Read-only guarantee: only GET/HEAD are accepted, except the hardcoded
-# read-only-POST providers in scripts/provider_contract_probe.py. The host must
-# equal `allowed_host`, so a config edit cannot redirect a credential elsewhere
-# without that edit being visible against the pinned host.
+# Read-only guarantee: only GET/HEAD are accepted. `allowed_host` is a visible
+# declaration that must AGREE with the host pinned for the same provider id in
+# scripts/provider_contract_probe.py (PROVIDER_HOST_PINS) - the code pin is the
+# authority. A new host, or a URL pointing anywhere else, is rejected, so a
+# config edit alone cannot redirect a credential. The few read-only POSTs are
+# pinned to their exact URL and body in the same script
+# (READ_ONLY_POST_ENDPOINTS); any other POST is rejected, so a config edit
+# cannot turn a probe into a write.
 #
 # A secret value never enters a golden: goldens store a response SHAPE (key
 # names + value types), never response values.
@@ -662,54 +669,21 @@ providers:
       - MODULO_PROBE_TOGETHERAI_TOKEN
 
 # ---------------------------------------------------------------------------
-# Fail-closed exceptions. An entry needs a reason. Nothing is excused by
-# default: our hand-authored baseline goldens have NOT been recorded live, so
-# each provider below is listed explicitly until its `recorded_at` is set by a
-# reviewed `--mode record`. When a provider is recorded, delete its line here.
+# Fail-closed exceptions. An entry needs a reason. Nothing is excused here:
+# our hand-authored baseline goldens have NOT been recorded live, so the nightly
+# probe is deliberately RED until each golden is recorded behind review. That is
+# the honest state - a shape nobody has verified against the live provider
+# proves nothing. Recording a provider sets its `recorded_at`; there is no
+# allow-list line to delete because this list starts empty and stays empty.
 #
 # A NEW provider added to `providers:` with no golden, or a recorded provider
 # whose credential has rotated away, is NOT listed here and therefore fails the
-# run - which is the point.
+# run - which is the point. Add an entry ONLY as a deliberate, reviewed,
+# time-boxed exception, and say why.
 # ---------------------------------------------------------------------------
 allow_missing_credential: {}
 allow_missing_golden: {}
-allow_unrecorded_golden:
-  asana: "hand-authored baseline; not yet recorded live"
-  bitbucket: "hand-authored baseline; not yet recorded live"
-  buildkite: "hand-authored baseline; not yet recorded live"
-  circleci: "hand-authored baseline; not yet recorded live"
-  codeclimate: "hand-authored baseline; not yet recorded live"
-  datadog: "hand-authored baseline; not yet recorded live"
-  discord: "hand-authored baseline; not yet recorded live"
-  dropbox_paper: "hand-authored baseline; not yet recorded live"
-  github: "hand-authored baseline; not yet recorded live"
-  gitlab: "hand-authored baseline; not yet recorded live"
-  linear: "hand-authored baseline; not yet recorded live"
-  microsoft_teams: "hand-authored baseline; not yet recorded live"
-  monday: "hand-authored baseline; not yet recorded live"
-  notion: "hand-authored baseline; not yet recorded live"
-  npm: "hand-authored baseline; not yet recorded live"
-  opsgenie: "hand-authored baseline; not yet recorded live"
-  pagerduty: "hand-authored baseline; not yet recorded live"
-  pypi: "hand-authored baseline; not yet recorded live"
-  sentry: "hand-authored baseline; not yet recorded live"
-  shortcut: "hand-authored baseline; not yet recorded live"
-  slack: "hand-authored baseline; not yet recorded live"
-  snyk: "hand-authored baseline; not yet recorded live"
-  sonarqube: "hand-authored baseline; not yet recorded live"
-  trello: "hand-authored baseline; not yet recorded live"
-  anthropic: "hand-authored baseline; not yet recorded live"
-  cohere: "hand-authored baseline; not yet recorded live"
-  deepseek: "hand-authored baseline; not yet recorded live"
-  fireworks: "hand-authored baseline; not yet recorded live"
-  gemini: "hand-authored baseline; not yet recorded live"
-  grok: "hand-authored baseline; not yet recorded live"
-  groq: "hand-authored baseline; not yet recorded live"
-  mistral: "hand-authored baseline; not yet recorded live"
-  openai: "hand-authored baseline; not yet recorded live"
-  openrouter: "hand-authored baseline; not yet recorded live"
-  qwen: "hand-authored baseline; not yet recorded live"
-  togetherai: "hand-authored baseline; not yet recorded live"
+allow_unrecorded_golden: {}
 
 # ---------------------------------------------------------------------------
 # Skips - a provider we cannot probe safely, cheaply, or without per-tenant

@@ -17,9 +17,14 @@ record       explicitly (re)write ONE golden. This is the ONLY path that
 
 Design notes
 ------------
-* Read-only calls only. The config names the cheapest read-only operation for
-  each provider, pins ``allowed_host``, and the loader rejects any non-GET/HEAD
-  method unless the provider id is on a hardcoded read-only-POST allowlist.
+* Read-only calls only. Each provider id is pinned to its host IN CODE
+  (``PROVIDER_HOST_PINS``), so a config edit cannot introduce a host or redirect
+  a credential elsewhere. The loader rejects any non-GET/HEAD method, and pins
+  each read-only POST to its exact URL and body (``READ_ONLY_POST_ENDPOINTS``),
+  so a config edit cannot rename a probe onto a write endpoint.
+* A run that attempts ZERO probes is a failure, however many of its skips are
+  explicitly excused: counting attempts (not passes) is what stops an all-skipped
+  run from looking clean.
 * Goldens store a SHAPE, never response values, so a secret (or any customer
   data) can never reach a golden.
 * Volatile-value handling (ids, timestamps, etags) is declared in the probe
@@ -44,6 +49,7 @@ import json
 import os
 import sys
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -69,10 +75,72 @@ _BREAKING_KINDS = frozenset({"missing", "type_changed", "emptied", "populated"})
 #: Methods that can never mutate a provider.
 _READ_ONLY_METHODS = frozenset({"GET", "HEAD"})
 
-#: Providers whose pinned read-only operation is an HTTP POST (a read query),
-#: not a write. Hardcoded so a config edit cannot turn a POST into a write
-#: without a code review of this list.
-READ_ONLY_POST_ALLOWLIST = frozenset({"dropbox_paper", "linear", "monday", "slack"})
+#: The ONE host each provider id may target, pinned IN CODE. The loader rejects
+#: a probe whose id is absent here, whose URL host differs, or whose config
+#: ``allowed_host`` disagrees with the pin. A merged config edit therefore
+#: cannot point an existing credential at a different host: adding a host is a
+#: code change that has to be reviewed here.
+PROVIDER_HOST_PINS: dict[str, str] = {
+    # connectors
+    "asana": "app.asana.com",
+    "bitbucket": "api.bitbucket.org",
+    "buildkite": "api.buildkite.com",
+    "circleci": "circleci.com",
+    "codeclimate": "api.codeclimate.com",
+    "datadog": "api.datadoghq.com",
+    "discord": "discord.com",
+    "dropbox_paper": "api.dropboxapi.com",
+    "github": "api.github.com",
+    "gitlab": "gitlab.com",
+    "linear": "api.linear.app",
+    "microsoft_teams": "graph.microsoft.com",
+    "monday": "api.monday.com",
+    "notion": "api.notion.com",
+    "npm": "registry.npmjs.org",
+    "opsgenie": "api.opsgenie.com",
+    "pagerduty": "api.pagerduty.com",
+    "pypi": "pypi.org",
+    "sentry": "sentry.io",
+    "shortcut": "api.app.shortcut.com",
+    "slack": "slack.com",
+    "snyk": "api.snyk.io",
+    "sonarqube": "sonarcloud.io",
+    "trello": "api.trello.com",
+    # model backends
+    "anthropic": "api.anthropic.com",
+    "cohere": "api.cohere.com",
+    "deepseek": "api.deepseek.com",
+    "fireworks": "api.fireworks.ai",
+    "gemini": "generativelanguage.googleapis.com",
+    "grok": "api.x.ai",
+    "groq": "api.groq.com",
+    "mistral": "api.mistral.ai",
+    "openai": "api.openai.com",
+    "openrouter": "openrouter.ai",
+    "qwen": "dashscope.aliyuncs.com",
+    "togetherai": "api.together.xyz",
+}
+
+
+@dataclass(frozen=True)
+class ReadOnlyPost:
+    """A POST that is a read query, pinned to its exact URL and body."""
+
+    url: str
+    body_kind: str  # "json" | "form" | "none"
+    body: Any = None
+
+
+#: The few providers whose cheapest read-only operation is an HTTP POST (a read
+#: query, not a write), pinned IN CODE to their exact URL and body. The loader
+#: rejects any POST whose URL or body differs from the pin, so a merged config
+#: edit cannot rename a probe onto a write endpoint (e.g. Slack ``chat.delete``).
+READ_ONLY_POST_ENDPOINTS: dict[str, ReadOnlyPost] = {
+    "dropbox_paper": ReadOnlyPost("https://api.dropboxapi.com/2/users/get_current_account", "json", None),
+    "linear": ReadOnlyPost("https://api.linear.app/graphql", "json", {"query": "{ viewer { id name email } }"}),
+    "monday": ReadOnlyPost("https://api.monday.com/v2", "json", {"query": "{ me { id name email } }"}),
+    "slack": ReadOnlyPost("https://slack.com/api/auth.test", "none"),
+}
 
 #: A 429 or any 5xx means "cannot verify right now", never "the contract
 #: changed". Retried, then reported as ``provider_unavailable``.
@@ -471,6 +539,27 @@ def _validate_probe(probe: Any, defaults: dict[str, Any]) -> None:
             raise ProbeConfigError(f"{probe['id']}: invalid normalise rule {rule!r}")
 
 
+def _request_body(request: dict[str, Any]) -> tuple[str, Any]:
+    """Return the request body as (kind, payload) for exact comparison."""
+    if "json" in request:
+        return "json", request["json"]
+    if "form" in request:
+        return "form", request["form"]
+    return "none", None
+
+
+def _validate_read_only_post(probe: dict[str, Any], request: dict[str, Any], url: str) -> None:
+    """Reject a POST whose id, URL or body is not the pinned read-only call."""
+    pinned = READ_ONLY_POST_ENDPOINTS.get(probe["id"])
+    if pinned is None:
+        raise ProbeConfigError(f"{probe['id']}: POST is only allowed for the endpoints pinned in code (READ_ONLY_POST_ENDPOINTS); use GET/HEAD or add the endpoint there deliberately")
+    if url != pinned.url:
+        raise ProbeConfigError(f"{probe['id']}: POST url {url!r} does not match the endpoint pinned in code ({pinned.url!r})")
+    kind, body = _request_body(request)
+    if kind != pinned.body_kind or body != pinned.body:
+        raise ProbeConfigError(f"{probe['id']}: POST body ({kind}) does not match the body pinned in code")
+
+
 def _validate_request(probe: dict[str, Any]) -> None:
     request = probe.get("request")
     if not isinstance(request, dict):
@@ -479,8 +568,11 @@ def _validate_request(probe: dict[str, Any]) -> None:
     method = request.get("method")
     if not isinstance(method, str) or method not in _READ_ONLY_METHODS | {"POST"}:
         raise ProbeConfigError(f"{probe['id']}: request.method must be GET, HEAD or POST")
-    if method == "POST" and probe["id"] not in READ_ONLY_POST_ALLOWLIST:
-        raise ProbeConfigError(f"{probe['id']}: POST is only allowed for providers on the hardcoded read-only-POST allowlist; use GET/HEAD or add the provider there deliberately")
+
+    if "json" in request and "form" in request:
+        raise ProbeConfigError(f"{probe['id']}: request cannot set both json and form")
+    if "form" in request and not isinstance(request["form"], dict):
+        raise ProbeConfigError(f"{probe['id']}: request.form must be a mapping")
 
     url = request.get("url")
     if not isinstance(url, str) or not url.startswith("https://"):
@@ -493,16 +585,23 @@ def _validate_request(probe: dict[str, Any]) -> None:
     if parts.query:
         raise ProbeConfigError(f"{probe['id']}: request.url must not carry a query string; use auth.params")
 
+    pinned_host = PROVIDER_HOST_PINS.get(probe["id"])
+    if pinned_host is None:
+        raise ProbeConfigError(f"{probe['id']}: no host is pinned for this provider id in scripts/provider_contract_probe.py (PROVIDER_HOST_PINS); add the pin there deliberately")
+    if parts.hostname.lower() != pinned_host.lower():
+        raise ProbeConfigError(f"{probe['id']}: request.url host {parts.hostname!r} does not match the host pinned in code ({pinned_host!r})")
+
+    # ``allowed_host`` is a visible declaration in the config, but the code pin
+    # is the authority: the two must agree, so changing both together is still
+    # rejected unless the pin in this module changes (a reviewed code change).
     allowed_host = probe.get("allowed_host")
     if not isinstance(allowed_host, str) or not allowed_host.strip():
         raise ProbeConfigError(f"{probe['id']}: allowed_host is required")
-    if parts.hostname.lower() != allowed_host.lower():
-        raise ProbeConfigError(f"{probe['id']}: request.url host {parts.hostname!r} does not match allowed_host {allowed_host!r}")
+    if allowed_host.lower() != pinned_host.lower():
+        raise ProbeConfigError(f"{probe['id']}: allowed_host {allowed_host!r} does not match the host pinned in code ({pinned_host!r})")
 
-    if "json" in request and "form" in request:
-        raise ProbeConfigError(f"{probe['id']}: request cannot set both json and form")
-    if "form" in request and not isinstance(request["form"], dict):
-        raise ProbeConfigError(f"{probe['id']}: request.form must be a mapping")
+    if method == "POST":
+        _validate_read_only_post(probe, request, url)
 
 
 def _validate_auth(probe: dict[str, Any]) -> None:
@@ -834,13 +933,13 @@ def _shape_from_response(probe: dict[str, Any], defaults: dict[str, Any], respon
     return shape_of(normalised, 0, max_depth)
 
 
-def _row(probe: dict[str, Any], status: str, **fields: Any) -> dict[str, Any]:
-    return {"provider": probe["id"], "operation": probe["operation"], "status": status, **fields}
+def _row(probe: dict[str, Any], status: str, *, attempted: bool = False, **fields: Any) -> dict[str, Any]:
+    return {"provider": probe["id"], "operation": probe["operation"], "status": status, "attempted": attempted, **fields}
 
 
 def _skip(probe: dict[str, Any], reason: str, *, allowed: bool) -> dict[str, Any]:
     print(f"{'NOTE' if allowed else 'WARNING'}: skipping {_golden_key(probe['id'], probe['operation'])} - {reason}", file=sys.stderr)
-    return _row(probe, "skipped", reason=reason, allowed=allowed)
+    return _row(probe, "skipped", attempted=False, reason=reason, allowed=allowed)
 
 
 def _check_one(
@@ -854,6 +953,9 @@ def _check_one(
     secrets: list[str] = []
     provider_id = probe["id"]
     key = _golden_key(provider_id, probe["operation"])
+    #: True once a request is actually issued. A run that issues none cannot be
+    #: green, however many of its skips are explicitly excused.
+    attempted = False
     try:
         golden = manifest["goldens"].get(key)
         if golden is None:
@@ -861,25 +963,26 @@ def _check_one(
         if golden.get("recorded_at") in (None, ""):
             return _skip(probe, f"golden for {key} is not yet recorded; record it behind review", allowed=provider_id in allow["unrecorded_golden"])
         if not isinstance(golden.get("shape"), dict):
-            return _row(probe, "error", error="malformed golden entry (no shape)")
+            return _row(probe, "error", attempted=False, error="malformed golden entry (no shape)")
 
         headers, params, secrets, missing = _resolve_credentials(probe)
         if missing:
             return _skip(probe, "missing credential: " + ", ".join(missing), allowed=provider_id in allow["missing_credential"])
 
         expected_class = golden.get("success_status_class") or _probe_settings(probe, defaults)[0]
+        attempted = True
         response, attempts = _call_with_retries(client, probe, defaults, headers, params, deadline)
 
         actual_class = f"{response.status_code // 100}xx"
         if actual_class != expected_class:
             if response.status_code in _RETRYABLE_STATUS:
-                return _row(probe, "unavailable", status_code=response.status_code, attempts=attempts, error="provider_unavailable")
-            return _row(probe, "error", status_code=response.status_code, attempts=attempts, error=f"status class {actual_class} != expected {expected_class}")
+                return _row(probe, "unavailable", attempted=True, status_code=response.status_code, attempts=attempts, error="provider_unavailable")
+            return _row(probe, "error", attempted=True, status_code=response.status_code, attempts=attempts, error=f"status class {actual_class} != expected {expected_class}")
 
         try:
             actual_shape = _shape_from_response(probe, defaults, response)
         except ValueError as exc:
-            return _row(probe, "error", status_code=response.status_code, error=_scrub(f"non-JSON response: {exc}", secrets))
+            return _row(probe, "error", attempted=True, status_code=response.status_code, error=_scrub(f"non-JSON response: {exc}", secrets))
 
         diffs = diff_shape(golden["shape"], actual_shape)
         breaking = [diff for diff in diffs if diff["kind"] in _BREAKING_KINDS]
@@ -889,15 +992,16 @@ def _check_one(
         return _row(
             probe,
             "drift" if is_drift else "pass",
+            attempted=True,
             status_code=response.status_code,
             attempts=attempts,
             drift=breaking,
             additions=additions,
         )
     except ProviderUnavailableError as exc:
-        return _row(probe, "unavailable", error=_scrub(str(exc), secrets))
+        return _row(probe, "unavailable", attempted=attempted, error=_scrub(str(exc), secrets))
     except Exception as exc:  # a single probe must never abort the whole run
-        return _row(probe, "error", error=_scrub(f"{type(exc).__name__}: {exc}", secrets))
+        return _row(probe, "error", attempted=attempted, error=_scrub(f"{type(exc).__name__}: {exc}", secrets))
 
 
 def _record_one(
@@ -970,6 +1074,9 @@ def _build_report(mode: str, config_path: Path, goldens_path: Path, results: lis
     skipped_unexcused = [r for r in skipped if not r.get("allowed")]
     summary = {
         "total": len(results),
+        #: Probes that actually issued a request. Zero is always a failed run in
+        #: check mode: excused skips do not make an empty run green.
+        "attempted": sum(1 for r in results if r.get("attempted")),
         "passed": sum(1 for r in results if r["status"] == "pass"),
         "drifted": sum(1 for r in results if r["status"] == "drift"),
         "skipped": len(skipped),
@@ -1089,7 +1196,7 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = report["summary"]
     print(
-        f"summary: {summary['passed']} passed, {summary['drifted']} drifted, {summary['unavailable']} unavailable, {summary['skipped']} skipped ({summary['skipped_unexcused']} unexcused), {summary['errors']} errors, {summary['additions']} additive changes; report -> {args.report}",
+        f"summary: {summary['attempted']} attempted, {summary['passed']} passed, {summary['drifted']} drifted, {summary['unavailable']} unavailable, {summary['skipped']} skipped ({summary['skipped_unexcused']} unexcused), {summary['errors']} errors, {summary['additions']} additive changes; report -> {args.report}",
         file=sys.stderr,
     )
 
@@ -1098,8 +1205,14 @@ def main(argv: list[str] | None = None) -> int:
     failures = summary["drifted"] + summary["errors"] + summary["unavailable"] + summary["skipped_unexcused"]
     if failures:
         return 1
-    if summary["passed"] == 0 and summary["expected"] > 0:
-        print("error: not a single probe passed although probes were expected", file=sys.stderr)
+    if summary["attempted"] == 0:
+        # Counting PASSES let an all-excused run look clean (passed:0,
+        # expected:0). Counting ATTEMPTS cannot: a check that probed nothing
+        # proves nothing, so it is a failure with an explanation.
+        print(
+            "error: zero probes were attempted - a check run that probes nothing cannot be green; record goldens behind review and provide their credentials (every excused skip is still an unproven contract)",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
