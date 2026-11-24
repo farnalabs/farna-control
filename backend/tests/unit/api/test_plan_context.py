@@ -205,6 +205,37 @@ class TestGetPlanContextFallback:
                 settings=_make_settings(),
             )
 
+    @pytest.mark.asyncio
+    async def test_no_organisation_skips_org_lookup_and_resolves_without_org(self) -> None:
+        """A principal with no organisation must not look up a null org id.
+
+        ``_resolve_plan_context_for_org`` (FAR-2729) only loads the organisation
+        when an id is present; the no-org path still resolves a plan, passing
+        ``org=None``, instead of querying ``get_organisation(None)``.
+        """
+        session = self._make_session()
+        user = AuthenticatedPrincipal(
+            username="admin",
+            organisation_id=None,
+            account_id=_USER_ID,
+            org_role=None,
+        )
+        sentinel = CommunityTier()
+        with (
+            patch("farna.db.crud.organisation.get_organisation", new=AsyncMock()) as get_org,
+            patch("farna.core.feature_flags.resolve_plan_context", new=AsyncMock(return_value=sentinel)) as resolve,
+        ):
+            ctx = await get_plan_context(
+                current_user=user,
+                session=session,
+                settings=_make_settings(),
+            )
+
+        assert ctx is sentinel
+        get_org.assert_not_awaited()
+        resolve.assert_awaited_once()
+        assert resolve.await_args.kwargs["org"] is None
+
 
 @pytest.fixture
 async def engine():
