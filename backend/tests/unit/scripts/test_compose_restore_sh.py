@@ -196,7 +196,7 @@ def test_without_confirm_it_refuses_before_touching_anything(tmp_path: Path) -> 
 
     assert proc.returncode == 2
     assert "refusing to restore without --confirm" in proc.stderr
-    assert _invocations(tmp_path) == [], "a refused restore must not run any container"
+    assert not _invocations(tmp_path), "a refused restore must not run any container"
 
 
 def test_missing_snapshot_argument_is_a_usage_error(tmp_path: Path) -> None:
@@ -207,7 +207,7 @@ def test_missing_snapshot_argument_is_a_usage_error(tmp_path: Path) -> None:
 
     assert proc.returncode == 2
     assert "usage:" in proc.stderr
-    assert _invocations(tmp_path) == []
+    assert not _invocations(tmp_path)
 
 
 def test_a_failed_replay_prints_the_start_command_and_never_restarts(tmp_path: Path) -> None:

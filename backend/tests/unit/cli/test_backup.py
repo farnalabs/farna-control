@@ -2779,8 +2779,10 @@ class TestNativeRestoreRequiresAReachableExplicitTarget:
     def test_a_data_dir_restore_without_a_target_needs_no_guard(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from farna.cli import backup as backup_mod
 
-        # data_dir=None: nothing is stopped, so the guard is a no-op regardless.
-        monkeypatch.setattr(backup_mod, "_live_launcher_holder", lambda _d: MagicMock(pid=4242))
+        # data_dir=None: nothing is stopped, so the guard short-circuits before it
+        # ever probes for a live launcher — regardless of what the probe would find.
+        holder_lookup = MagicMock(return_value=MagicMock(pid=4242))
+        monkeypatch.setattr(backup_mod, "_live_launcher_holder", holder_lookup)
         options = backup_mod._RestoreOptions(
             backup_dir=tmp_path,
             db_url=None,
@@ -2793,6 +2795,7 @@ class TestNativeRestoreRequiresAReachableExplicitTarget:
             no_safety_dump=False,
         )
         backup_mod._require_reachable_target_for_native_restore(options)
+        assert holder_lookup.call_count == 0, "data_dir=None must short-circuit before probing for a live launcher"
 
     def test_live_holder_is_none_off_posix_or_when_the_pid_is_gone(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from farna.cli import backup as backup_mod
