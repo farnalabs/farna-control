@@ -16,12 +16,12 @@
       />
     </div>
 
-    <div v-else-if="profileLoading" data-testid="my-profile-profile-loading">
+    <BaseCard v-else-if="profileLoading" padding="lg" class="space-y-6" data-testid="my-profile-profile-loading">
       <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
       <div aria-busy="true">
         <CardSkeleton :lines="4" />
       </div>
-    </div>
+    </BaseCard>
 
     <BaseCard v-else padding="lg" class="space-y-6">
       <div class="flex items-center gap-4 pb-4 border-b border-border">
@@ -171,11 +171,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import ChangePasswordForm from '../components/shared/ChangePasswordForm.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import BaseCard from '../components/ui/BaseCard.vue'
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'

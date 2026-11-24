@@ -124,6 +124,34 @@ def test_compare_allows_an_unchanged_baseline():
     assert not raised
 
 
+def test_path_exists_at_rev_fails_closed_on_a_bad_rev(tmp_path):
+    repo = _make_repo(tmp_path)
+
+    with pytest.raises(mod.RatchetError, match="does not resolve"):
+        mod._path_exists_at_rev(repo, "does-not-exist-xyz", "base.txt")
+
+
+def test_without_new_file_entries_drops_only_files_absent_at_base(tmp_path):
+    repo = _make_repo(tmp_path)
+    _write_file(repo, "pre_existing.py", "clean\n")
+    _commit_all(repo, "add a file that has no brand allowance")
+
+    base = {"a.py": 1}
+    current = {"a.py": 1, "pre_existing.py": 2, "brand_new.py": 3}
+
+    result = mod._without_new_file_entries(repo, "HEAD", base, current)
+
+    assert result == {"a.py": 1, "pre_existing.py": 2}
+
+
+def test_without_new_file_entries_returns_current_when_nothing_was_added(tmp_path):
+    repo = _make_repo(tmp_path)
+    base = {"a.py": 1}
+    current = {"a.py": 2}
+
+    assert mod._without_new_file_entries(repo, "HEAD", base, current) == current
+
+
 # ---------------------------------------------------------------------------
 # Per-ratchet direction: loosening fails, tightening passes
 # ---------------------------------------------------------------------------
@@ -471,16 +499,34 @@ def test_end_to_end_raised_count_fails_naming_file_and_both_values(tmp_path):
     assert "3 > 1" in proc.stderr
 
 
-def test_end_to_end_added_entry_fails(tmp_path):
+def test_end_to_end_added_entry_for_an_existing_file_fails(tmp_path):
     repo = _make_repo(tmp_path)
+    # c.py exists at the base tip but had no brand allowance; granting one is a
+    # loosening because it gives an already-tracked file brand-copy immunity.
+    _write_file(repo, "c.py", "clean\n")
+    _commit_all(repo, "add c.py to the tree with no baseline entry")
     _write_baseline(repo, "a.py\t1\nb.py\t2\nc.py\t5\n")
-    _commit_all(repo, "add c.py")
+    _commit_all(repo, "grant c.py a brand allowance")
 
     proc = _run_counted(repo, "--base", "HEAD^")
 
     assert proc.returncode == 1, proc.stderr
     assert "ADDED" in proc.stderr
     assert "c.py" in proc.stderr
+
+
+def test_end_to_end_added_entry_for_a_new_file_passes(tmp_path):
+    repo = _make_repo(tmp_path)
+    # A genuinely new file (absent at the base tip) may be baselined at its real
+    # count: the brand gate requires exactly that for non-brand identifiers.
+    _write_file(repo, "c.py", "legacy\n")
+    _write_baseline(repo, "a.py\t1\nb.py\t2\nc.py\t1\n")
+    _commit_all(repo, "add a new file and baseline its occurrence")
+
+    proc = _run_counted(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 0, proc.stderr
+    assert "not loosened" in proc.stderr
 
 
 def test_end_to_end_lowered_count_passes(tmp_path):
@@ -593,6 +639,33 @@ def test_end_to_end_all_ratchets_unchanged_passes(tmp_path):
 
     assert proc.returncode == 0, proc.stderr
     assert "none of the 17 ratchets is loosened" in proc.stderr
+
+
+def test_end_to_end_all_ratchets_new_file_brand_entry_passes(tmp_path):
+    repo = _make_all_ratchets_repo(tmp_path)
+    _write_file(repo, "new_brand.py", "legacy\n")
+    _write_file(repo, BASELINE, "a.md\t1\nnew_brand.py\t1\n")
+    _commit_all(repo, "add a new file and baseline its occurrence")
+
+    proc = _run_script(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 0, proc.stderr
+    assert "none of the 17 ratchets is loosened" in proc.stderr
+
+
+def test_end_to_end_all_ratchets_existing_file_brand_entry_fails(tmp_path):
+    repo = _make_all_ratchets_repo(tmp_path)
+    _write_file(repo, "existing.py", "clean\n")
+    _commit_all(repo, "add existing.py to the tree with no baseline entry")
+    _write_file(repo, BASELINE, "a.md\t1\nexisting.py\t2\n")
+    _commit_all(repo, "grant existing.py a brand allowance")
+
+    proc = _run_script(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 1, proc.stderr
+    assert "[brand-consistency]" in proc.stderr
+    assert "ADDED" in proc.stderr
+    assert "existing.py" in proc.stderr
 
 
 def test_end_to_end_all_ratchets_flags_a_loosened_ratchet_by_name(tmp_path):

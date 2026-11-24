@@ -17,7 +17,7 @@ direction, because "looser" is not always "bigger":
 ===========================================  ==================================
 ratchet file                                 loosening means
 ===========================================  ==================================
-brand_consistency_baseline.txt               added entry or raised count
+brand_consistency_baseline.txt               added entry for an existing file, or raised count
 audit_coverage_baseline.txt                  added entry
 duplicate_test_body_baseline.txt             added entry
 duplicate_validation_predicate_baseline.txt  a new tolerated duplicate pair
@@ -38,6 +38,15 @@ sonar-project.properties coverage.exclusions an added pattern
 
 Tightening any of them passes: a removed entry, a lowered count, a raised
 coverage floor, a lowered vulture confidence, an added lint rule.
+
+New files are the one exception to "an added brand entry is a loosening". The
+brand gate tells a contributor to add a genuinely new file (a data-rewrite
+migration, or a module holding an internal identifier that is not brand copy)
+and its count to the baseline. Such an entry grants an allowance to a path that
+did not exist at the base revision, so there is nothing to loosen; the guard
+therefore ignores added entries whose file is absent at the base. An entry
+added for a file that already existed in the base tree is still a loosening and
+still fails.
 
 Excluded by nature: the frontend visual-regression baselines (PNG snapshots
 under ``frontend/tests/``). A snapshotted image has no useful value/set diff -
@@ -258,6 +267,42 @@ def read_baseline_at_rev(repo_root: Path, rev: str, relpath: str) -> str | None:
     if shown.returncode != 0:
         raise RatchetError(f"could not read {relpath!r} at base {rev!r}: {shown.stderr.strip()}")
     return shown.stdout
+
+
+def _path_exists_at_rev(repo_root: Path, rev: str, relpath: str) -> bool:
+    """True when *relpath* is a tracked file at *rev*; absent paths return False.
+
+    The revision itself is validated first, so a non-zero ``git cat-file`` can
+    only mean "path absent", never "bad base" (which must fail closed).
+    """
+    if not _rev_exists(repo_root, rev):
+        raise RatchetError(f"base revision {rev!r} does not resolve; refusing to pass with an unreadable base")
+    relpath = _validated_git_arg(relpath, "baseline entry path")
+    probe = _git(repo_root, "cat-file", "-e", f"{rev}:{relpath}")
+    return probe.returncode == 0
+
+
+def _without_new_file_entries(
+    repo_root: Path,
+    rev: str,
+    base: dict[str, int],
+    current: dict[str, int],
+) -> dict[str, int]:
+    """Drop baseline entries for files that did not exist at the base revision.
+
+    The brand gate's own failure message tells a contributor to add a genuinely
+    *new* file (one that carries a legacy value or an internal identifier that
+    is not brand copy) and its count to the baseline. Such an entry cannot
+    loosen an allowance that never existed, so the shrink-only ratchet must not
+    treat it as a loosening. An entry added for a file that DID exist at the
+    base revision is still a loosening: it grants brand-copy immunity to a file
+    that previously had none, which is exactly the hole FAR-2699 closed.
+    """
+    added = [path for path in current if path not in base]
+    if not added:
+        return current
+    present_at_base = {path for path in added if _path_exists_at_rev(repo_root, rev, path)}
+    return {path: count for path, count in current.items() if path in base or path in present_at_base}
 
 
 def compare(base: dict[str, int], current: dict[str, int]) -> tuple[list[str], list[tuple[str, int, int]]]:
@@ -755,15 +800,20 @@ class Ratchet:
     description: str
     parse: Callable[[str, str], Any]
     loosenings: Callable[[Any, Any], list[str]]
+    #: Counted baselines whose entries name tracked files: an entry for a file
+    #: that did not exist at the base revision is a legitimate new-file
+    #: baseline (see ``_without_new_file_entries``), never a loosening.
+    allow_new_file_entries: bool = False
 
 
 RATCHETS: tuple[Ratchet, ...] = (
     Ratchet(
         "brand-consistency",
         DEFAULT_BASELINE,
-        "per-file brand-copy occurrence counts (raise/add = looser)",
+        "per-file brand-copy occurrence counts (raise/add for an existing file = looser)",
         parse_baseline,
         _counted_loosenings,
+        allow_new_file_entries=True,
     ),
     Ratchet(
         "audit-coverage",
@@ -931,13 +981,14 @@ def _run_counted(repo_root: Path, baseline_rel: str, explicit_base: str | None) 
         print(f"ratchet-baseline guard: FAILED CLOSED - {exc}", file=sys.stderr)
         return 1
 
-    added, raised = compare(base, current)
+    comparison_current = _without_new_file_entries(repo_root, rev, base, current)
+    added, raised = compare(base, comparison_current)
     if added or raised:
         _print_failure(baseline_rel, rev, why, added, raised)
         return 1
 
     print(
-        f"ratchet-baseline guard: OK - {baseline_rel} is not loosened against {rev} ({why}); {len(current)} entr{'y' if len(current) == 1 else 'ies'} checked, none added or raised.",
+        f"ratchet-baseline guard: OK - {baseline_rel} is not loosened against {rev} ({why}); {len(comparison_current)} entr{'y' if len(comparison_current) == 1 else 'ies'} checked, none added or raised.",
         file=sys.stderr,
     )
     return 0
@@ -963,7 +1014,8 @@ def _run_all(repo_root: Path, explicit_base: str | None) -> int:
                 introduced.append(ratchet)
                 continue
             base = ratchet.parse(base_text, source=f"{ratchet.path}@{rev}")
-            findings = ratchet.loosenings(base, current)
+            comparison_current = _without_new_file_entries(repo_root, rev, base, current) if ratchet.allow_new_file_entries else current
+            findings = ratchet.loosenings(base, comparison_current)
         except RatchetError as exc:
             print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
             return 1
