@@ -110,28 +110,30 @@
         <div v-if="wizardState.draftSchema" class="rounded-lg border bg-card p-4">
           <h3 class="mb-3 text-sm font-semibold">{{ $t('views.OnboardingWizard.draft_label') }}: {{ wizardState.draftSchema.name }}</h3>
           <p v-if="wizardState.draftSchema.description" class="mb-3 text-xs text-muted-foreground">{{ wizardState.draftSchema.description }}</p>
-          <table v-if="wizardState.draftSchema.fields.length > 0" class="w-full text-sm">
-            <thead>
-              <tr class="border-b text-left text-muted-foreground">
-                <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_name') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_type') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_required') }}</th>
-                <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_description') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="field in wizardState.draftSchema.fields" :key="field.name" class="border-b last:border-0">
-                <td class="py-2 font-mono text-xs">{{ field.name }}</td>
-                <td class="py-2 font-mono text-xs text-muted-foreground">{{ field.type }}</td>
-                <td class="py-2">
-                  <span class="inline-block rounded px-1.5 py-0.5 text-xs font-medium" :class="field.required ? 'bg-primary/10 text-primary-text' : 'bg-muted text-muted-foreground'">
-                    {{ field.required ? $t('views.SchemaInferenceView.yes') : $t('views.SchemaInferenceView.no') }}
-                  </span>
-                </td>
-                <td class="py-2 text-xs text-muted-foreground">{{ field.description ?? '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-if="wizardState.draftSchema.fields.length > 0" class="table-wrapper">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b text-left text-muted-foreground">
+                  <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_name') }}</th>
+                  <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_type') }}</th>
+                  <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_required') }}</th>
+                  <th class="pb-2 font-medium">{{ $t('views.SchemaInferenceView.field_description') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="field in wizardState.draftSchema.fields" :key="field.name" class="border-b last:border-0">
+                  <td class="py-2 font-mono text-xs">{{ field.name }}</td>
+                  <td class="py-2 font-mono text-xs text-muted-foreground">{{ field.type }}</td>
+                  <td class="py-2">
+                    <span class="inline-block rounded px-1.5 py-0.5 text-xs font-medium" :class="field.required ? 'bg-primary/10 text-primary-text' : 'bg-muted text-muted-foreground'">
+                      {{ field.required ? $t('views.SchemaInferenceView.yes') : $t('views.SchemaInferenceView.no') }}
+                    </span>
+                  </td>
+                  <td class="py-2 text-xs text-muted-foreground">{{ field.description ?? '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="text-sm text-muted-foreground">{{ $t('views.SchemaInferenceView.no_fields_inferred') }}</p>
         </div>
       </div>
@@ -164,26 +166,28 @@
           </div>
           <div>
             <h3 class="mb-2 text-sm font-medium">{{ $t('views.OnboardingWizard.fields') }} <span class="text-muted-foreground">{{ $t('views.OnboardingWizard.fields_hint') }}</span></h3>
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b text-left text-muted-foreground">
-                  <th class="pb-2 font-medium">{{ $t('views.OnboardingWizard.name') }}</th>
-                  <th class="pb-2 font-medium">{{ $t('views.OnboardingWizard.type') }}</th>
-                  <th class="pb-2 font-medium">{{ $t('views.OnboardingWizard.required') }}</th>
-                  <th class="pb-2 font-medium">{{ $t('views.OnboardingWizard.description') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="field in wizardState.draftSchema.fields" :key="field.name" class="border-b last:border-0">
-                  <td class="py-2 font-mono text-xs">{{ field.name }}</td>
-                  <td class="py-2 font-mono text-xs text-muted-foreground">{{ field.type }}</td>
-                  <td class="py-2">
-                    <span class="inline-block rounded px-1.5 py-0.5 text-xs font-medium" :class="field.required ? 'bg-primary/10 text-primary-text' : 'bg-muted text-muted-foreground'">{{ field.required ? $t('views.SchemaInferenceView.yes') : $t('views.SchemaInferenceView.no') }}</span>
-                  </td>
-                  <td class="py-2 text-xs text-muted-foreground">{{ field.description ?? '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="table-wrapper">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b text-left text-muted-foreground">
+                    <th class="pb-2 font-medium">{{ $t('views.OnboardingWizard.name') }}</th>
+                    <th class="pb-2 font-medium">{{ $t('views.OnboardingWizard.type') }}</th>
+                    <th class="pb-2 font-medium">{{ $t('views.OnboardingWizard.required') }}</th>
+                    <th class="pb-2 font-medium">{{ $t('views.OnboardingWizard.description') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="field in wizardState.draftSchema.fields" :key="field.name" class="border-b last:border-0">
+                    <td class="py-2 font-mono text-xs">{{ field.name }}</td>
+                    <td class="py-2 font-mono text-xs text-muted-foreground">{{ field.type }}</td>
+                    <td class="py-2">
+                      <span class="inline-block rounded px-1.5 py-0.5 text-xs font-medium" :class="field.required ? 'bg-primary/10 text-primary-text' : 'bg-muted text-muted-foreground'">{{ field.required ? $t('views.SchemaInferenceView.yes') : $t('views.SchemaInferenceView.no') }}</span>
+                    </td>
+                    <td class="py-2 text-xs text-muted-foreground">{{ field.description ?? '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <div class="flex items-center gap-2">
           <Button :disabled="savingSchema" data-testid="onboarding-wizard-confirm-save-schema" @click="saveSchema">

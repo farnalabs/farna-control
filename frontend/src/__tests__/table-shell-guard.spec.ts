@@ -10,7 +10,8 @@
  * A table is considered canonical when:
  *  - it sits inside a `.table-wrapper`, OR
  *  - its column labels use the shared `.table-header` class, OR
- *  - it is one of the small, documented inline exceptions below.
+ *  - it is one of the documented inline exceptions (none remain as of
+ *    FAR-2732: every table now sits in the canonical shell).
  *
  * The allowlist must stay honest: an entry that no longer describes a real
  * exception fails this spec, so it cannot rot.
@@ -32,21 +33,14 @@ const SHELL_PRIMITIVES = new Set([
  * Genuinely unique inline tables that are not list tables. Each entry must
  * keep a raw `<table>` that uses neither `.table-wrapper` nor `.table-header`,
  * otherwise the guard fails as stale.
+ *
+ * Empty since FAR-2732: the last inline tables (snapshot lock holders, the diff
+ * grid, the formula parameter list, the two draft-schema previews and the
+ * token breakdown) moved onto the canonical shell. Keep the mechanism so a
+ * future, genuinely-unique inline table is documented here rather than
+ * weakening the guard.
  */
-const INLINE_TABLE_ALLOWLIST: Record<string, string> = {
-  'components/pipeline/SnapshotLockCard.vue':
-    'dense lock-holder list embedded in the snapshot card',
-  'views/AgentOutputDiffView.vue':
-    'line-level diff grid (monospace code view, not a data table)',
-  'views/CostComponentsView.vue':
-    'parameter reference list inside the formula disclosure',
-  'views/OnboardingWizard.vue':
-    'draft-schema field preview inside the wizard form',
-  'views/SchemaInferenceView.vue':
-    'draft-schema field preview inside the inference form',
-  'views/VariantBatchCompareView.vue':
-    'dense per-run token breakdown nested in a comparison card',
-}
+const INLINE_TABLE_ALLOWLIST: Record<string, string> = {}
 
 function walk(dir: string): string[] {
   const results: string[] = []
