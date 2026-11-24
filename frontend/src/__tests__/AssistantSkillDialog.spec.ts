@@ -138,6 +138,30 @@ describe('AssistantSkillDialog', () => {
     expect(vm.editingId).toBeNull()
   })
 
+  it('resets edit state only when the form dialog closes', async () => {
+    const wrapper = mountDialog()
+    const vm = wrapper.vm as any
+
+    vm.openEdit({ id: 'skill-1', name: 'X', description: null, triggers: null, body: '', active: true })
+    vm.saveError = 'boom'
+    await nextTick()
+    expect(vm.editingId).toBe('skill-1')
+    expect(vm.saveError).toBe('boom')
+
+    // Still-open transitions must not wipe the edit state or the save error.
+    vm.onFormOpenChange(true)
+    await nextTick()
+    expect(vm.editingId).toBe('skill-1')
+    expect(vm.saveError).toBe('boom')
+
+    // Dismissing the dialog (cancel/close) resets the edit state and error.
+    await wrapper.find('[data-testid="assistant-skills-form-cancel"]').trigger('click')
+    await nextTick()
+    expect(vm.dialogOpen).toBe(false)
+    expect(vm.editingId).toBeNull()
+    expect(vm.saveError).toBeNull()
+  })
+
   it('saves a new skill via POST', async () => {
     const wrapper = mountDialog()
     const vm = wrapper.vm as any
