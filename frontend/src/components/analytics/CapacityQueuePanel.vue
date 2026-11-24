@@ -185,9 +185,9 @@ import { computed, onMounted, watch } from "vue";
 import BaseCard from "../ui/BaseCard.vue";
 import { useI18n } from "vue-i18n";
 import CardHeader from "../ui/CardHeader.vue";
+import { DataTable, type Column, type DataTableRow } from "../ui/data-table";
 import StatCard from "../ui/StatCard.vue";
 import ErrorAlert from "../shared/ErrorAlert.vue";
-import { DataTable, type Column, type DataTableRow } from "../ui/data-table";
 import {
   formatCapacityDuration,
   useAnalyticsStore,
