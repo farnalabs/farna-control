@@ -2,7 +2,7 @@
   <div
     v-if="hasHeaderContent"
     class="card-header flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 mb-4"
-    :class="divider && 'border-b border-border pb-3'"
+    :class="[divider && 'border-b border-border pb-3', headerClass]"
     :data-testid="dataTestId"
   >
     <div class="flex min-w-0 flex-1 items-start gap-3">
@@ -40,6 +40,7 @@ const props = withDefaults(defineProps<{
   headingLevel?: 'h2' | 'h3' | 'h4'
   size?: 'md' | 'sm'
   divider?: boolean
+  headerClass?: string
   dataTestId?: string
 }>(), {
   headingLevel: 'h3',

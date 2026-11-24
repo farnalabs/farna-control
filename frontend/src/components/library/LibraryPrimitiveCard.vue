@@ -1,7 +1,7 @@
 <template>
-  <DataCard
+  <BaseCard
     padding="lg"
-    class="flex flex-col"
+    :class="'card-hover flex flex-col'"
     :data-testid="`library-item-${prim.id}`"
   >
     <div class="flex items-start justify-between mb-3">
@@ -85,11 +85,11 @@
         {{ $t('views.LibraryView.view_details') }}
       </button>
     </div>
-  </DataCard>
+  </BaseCard>
 </template>
 
 <script setup lang="ts">
-import DataCard from '../ui/DataCard.vue'
+import BaseCard from '../ui/BaseCard.vue'
 
 export interface LibraryPrimitive {
   id: string
