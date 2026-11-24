@@ -58,7 +58,10 @@
         v-if="skills.length === 0 && !showForm"
         class="flex items-center justify-center py-12"
       >
-        <p class="text-sm text-muted-foreground">{{ $t('components.assistant.AssistantSkillManager.no_skills_yet') }}</p>
+        <EmptyState
+          variant="bare"
+          :title="$t('components.assistant.AssistantSkillManager.no_skills_yet')"
+        />
       </div>
       <div v-for="skill in skills" :key="skill.id" class="assistant-skill-item p-3">
         <div class="flex items-start justify-between gap-2">
@@ -145,6 +148,7 @@ import { ref, onMounted } from "vue";
 import { api } from "@/lib/api/client";
 import { formatApiError } from "@/lib/api/formatError";
 import Button from 'primevue/button'
+import EmptyState from "@/components/shared/EmptyState.vue";
 import { useAssistantStore } from "@/composables/useAssistantStore";
 import type { UserSkill } from "@/types/assistant";
 

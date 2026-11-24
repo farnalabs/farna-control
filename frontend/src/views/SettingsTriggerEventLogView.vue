@@ -105,12 +105,11 @@
 
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadEvents" />
 
-    <div v-else-if="items.length === 0" class="rounded-lg border bg-card p-8 text-center">
-      <p class="text-lg font-medium">{{ $t('views.SettingsTriggerEventLogView.no_trigger_events_found') }}</p>
-      <p class="mt-1 text-sm text-muted-foreground">
-        {{ $t('views.SettingsTriggerEventLogView.try_adjusting_filters') }}
-      </p>
-    </div>
+    <EmptyState
+      v-else-if="items.length === 0"
+      :title="$t('views.SettingsTriggerEventLogView.no_trigger_events_found')"
+      :description="$t('views.SettingsTriggerEventLogView.try_adjusting_filters')"
+    />
 
     <template v-else>
       <!-- FAR-2226: the pipeline column makes the table wider than a narrow
@@ -223,6 +222,7 @@ import { useCursorPageStack } from '../composables/useCursorPageStack'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { shortId } from '../utils/format'
 import Button from 'primevue/button'
