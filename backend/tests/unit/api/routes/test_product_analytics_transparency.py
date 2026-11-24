@@ -38,7 +38,9 @@ from farna.api.dependencies import get_db_session
 from farna.api.routes import product_analytics_transparency as pat_module
 from farna.api.routes.product_analytics_transparency import (
     TransparencyResponse,
+    _coerce_failure_summary,
     _coerce_last_dump,
+    _consent_since_from_settings,
     _resolve_org,
 )
 from farna.api.routes.product_analytics_transparency import router as transparency_router
@@ -173,7 +175,7 @@ def _make_session(
 
     ``org_settings`` is the returned caller-org's ``settings_json``; ``_UNSET``
     means no org row is found (``scalar_one_or_none()`` -> ``None``). The second
-    result models the instance-aggregate read (``_instance_consent_level``),
+    result models the instance-aggregate read (``_instance_consent_posture``),
     built from ``instance_levels`` (one entry per active org). The endpoint only
     issues the second SELECT when the caller org is unresolved.
 
@@ -625,6 +627,32 @@ class TestInstanceConsentFallback:
         assert body["consent_level"] == LEVEL_ALL
         _restore_overrides()
 
+    def test_instance_fallback_uses_the_earliest_consent_timestamp(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``consent_since`` is the EARLIEST opt-in, so a just-added org cannot mask a failure.
+
+        The instance aggregate reports the oldest consenting ``level_changed_at``
+        (FAR-2740): with a recent org listed first and a long-standing one
+        second, the never-dumped grace window must use the long-standing one, so
+        the warning still fires. If the newest timestamp leaked through, the
+        recent org would suppress it.
+        """
+        recent = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        old = (datetime.now(UTC) - timedelta(days=10)).isoformat()
+        client = _client(
+            session=_make_session(
+                instance_levels=[
+                    {"product_analytics": {"level": LEVEL_ALL, "level_changed_at": recent}},
+                    {"product_analytics": {"level": LEVEL_ALL, "level_changed_at": old}},
+                ]
+            )
+        )
+        sources = _patch_sources(consent_values={INSTANCE_SWITCH_KEY: True}, monkeypatch=monkeypatch)
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["consent_level"] == LEVEL_ALL
+        assert body["warning"] == "never_reached_farnalabs"
+        _restore_overrides()
+
     def test_org_less_principal_falls_back_to_instance_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
         client = _client(
             principal=_NO_ORG_ADMIN,
@@ -742,6 +770,57 @@ class TestCoerceLastDump:
 
 
 # ---------------------------------------------------------------------------
+# _coerce_failure_summary (the recorded-failure coercion, FAR-2740)
+# ---------------------------------------------------------------------------
+
+
+class TestCoerceFailureSummary:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("status=500: boom", "status=500: boom"),  # a stored summary passes through
+            ("", None),  # an empty string means "cleared"
+            (12345, "12345"),  # any other non-None scalar is stringified
+            (None, None),  # a missing value yields None
+        ],
+    )
+    def test_coerces_stored_failure_summary(self, value: object, expected: object) -> None:
+        assert _coerce_failure_summary(value) == expected
+
+
+# ---------------------------------------------------------------------------
+# _consent_since_from_settings (the never-dumped grace-window input, FAR-2740)
+# ---------------------------------------------------------------------------
+
+
+class TestConsentSinceFromSettings:
+    def test_non_dict_settings_yield_none(self) -> None:
+        assert _consent_since_from_settings(None) is None
+        assert _consent_since_from_settings(["not", "a", "dict"]) is None
+
+    def test_missing_or_non_dict_block_yields_none(self) -> None:
+        assert _consent_since_from_settings({"product_analytics": "off"}) is None
+
+    def test_missing_or_empty_timestamp_yields_none(self) -> None:
+        assert _consent_since_from_settings({"product_analytics": {"level": LEVEL_ALL}}) is None
+        assert _consent_since_from_settings({"product_analytics": {"level_changed_at": ""}}) is None
+
+    def test_malformed_timestamp_yields_none(self) -> None:
+        """An unparseable ``level_changed_at`` must not raise — treat as unknown."""
+        assert _consent_since_from_settings({"product_analytics": {"level_changed_at": "not-a-date"}}) is None
+
+    def test_naive_timestamp_is_treated_as_utc(self) -> None:
+        """A stored timestamp without tzinfo is assumed UTC for age math."""
+        parsed = _consent_since_from_settings({"product_analytics": {"level_changed_at": "2026-08-15T12:00:00"}})
+        assert parsed is not None
+        assert parsed.tzinfo == UTC
+
+    def test_aware_timestamp_is_returned_as_is(self) -> None:
+        parsed = _consent_since_from_settings({"product_analytics": {"level_changed_at": "2026-08-15T12:00:00+00:00"}})
+        assert parsed == datetime(2026, 8, 15, 12, tzinfo=UTC)
+
+
+# ---------------------------------------------------------------------------
 # Stale-dump warning logic (the derived field)
 # ---------------------------------------------------------------------------
 
@@ -769,6 +848,9 @@ class TestStaleWarning:
     ) -> None:
         client = _client(session=_make_session({"product_analytics": {"level": consent_level}}))
         sources = _patch_sources(
+            # The stale warning now requires the instance switch ON as well as
+            # consent: turning analytics off must silence it (FAR-2740).
+            consent_values={INSTANCE_SWITCH_KEY: True},
             transparency_values={DUMP_WATERMARK_KEY: _stale_timestamp_ago(days_ago)},
             monkeypatch=monkeypatch,
         )
@@ -777,12 +859,69 @@ class TestStaleWarning:
         assert body["warning"] == expected_warning
         _restore_overrides()
 
-    def test_no_last_dump_never_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_last_dump_with_switch_off_never_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Switch OFF is the precondition for silence, not the absence of a dump.
+
+        With the master switch off the instance is deliberately sending
+        nothing, so a never-dumped instance must stay quiet. The switch-ON never
+        case is asserted by ``test_never_dumped_opted_in_instance_warns``.
+        """
         client = _client(session=_make_session(_ORG_ALL))
         sources = _patch_sources(monkeypatch=monkeypatch)
         with sources[0], sources[1]:
             body = _request(client)
+        assert body["instance_enabled"] is False
         assert body["last_successful_dump_at"] is None
+        assert body["warning"] is None
+        _restore_overrides()
+
+    def test_never_dumped_with_switch_on_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = _client(session=_make_session(_ORG_ALL))
+        sources = _patch_sources(
+            consent_values={INSTANCE_SWITCH_KEY: True},
+            monkeypatch=monkeypatch,
+        )
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["instance_enabled"] is True
+        assert body["warning"] == "never_reached_farnalabs"
+        _restore_overrides()
+
+    def test_never_dumped_recent_consent_is_inside_the_grace_window(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A freshly opted-in instance must not alarm before its first dump."""
+        recent = (datetime.now(UTC) - timedelta(hours=6)).isoformat()
+        client = _client(session=_make_session({"product_analytics": {"level": LEVEL_ALL, "level_changed_at": recent}}))
+        sources = _patch_sources(
+            consent_values={INSTANCE_SWITCH_KEY: True},
+            monkeypatch=monkeypatch,
+        )
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["last_successful_dump_at"] is None
+        assert body["warning"] is None
+        _restore_overrides()
+
+    def test_never_dumped_consent_older_than_the_threshold_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        old = (datetime.now(UTC) - timedelta(days=4)).isoformat()
+        client = _client(session=_make_session({"product_analytics": {"level": LEVEL_ALL, "level_changed_at": old}}))
+        sources = _patch_sources(
+            consent_values={INSTANCE_SWITCH_KEY: True},
+            monkeypatch=monkeypatch,
+        )
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["warning"] == "never_reached_farnalabs"
+        _restore_overrides()
+
+    def test_stale_warning_is_silenced_when_the_switch_is_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        client = _client(session=_make_session(_ORG_ALL))
+        sources = _patch_sources(
+            transparency_values={DUMP_WATERMARK_KEY: _stale_timestamp_ago(4)},
+            monkeypatch=monkeypatch,
+        )
+        with sources[0], sources[1]:
+            body = _request(client)
+        assert body["instance_enabled"] is False
         assert body["warning"] is None
         _restore_overrides()
 
@@ -791,6 +930,7 @@ class TestStaleWarning:
         naive = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=4)).isoformat()
         client = _client(session=_make_session(_ORG_ALL))
         sources = _patch_sources(
+            consent_values={INSTANCE_SWITCH_KEY: True},
             transparency_values={DUMP_WATERMARK_KEY: naive},
             monkeypatch=monkeypatch,
         )

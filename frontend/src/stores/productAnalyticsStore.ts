@@ -16,6 +16,10 @@ interface ConsentData {
 
 interface TransparencyData {
   last_successful_dump_at: string | null
+  //: ISO-8601 timestamp of the most recent failed dump attempt, or null.
+  last_failed_dump_at: string | null
+  //: Truncated failure summary (status + vendor error text, secret redacted).
+  last_dump_failure: string | null
   dump_count_total: number
   consent_level: string
   instance_enabled: boolean

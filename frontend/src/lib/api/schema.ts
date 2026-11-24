@@ -23848,6 +23848,10 @@ export interface components {
         TransparencyResponse: {
             /** Last Successful Dump At */
             last_successful_dump_at?: string | null;
+            /** Last Failed Dump At */
+            last_failed_dump_at?: string | null;
+            /** Last Dump Failure */
+            last_dump_failure?: string | null;
             /**
              * Dump Count Total
              * @default 0

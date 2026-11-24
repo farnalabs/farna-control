@@ -858,6 +858,8 @@ export default {
       "title": "Product Analytics",
       "subtitle": "Transparency into how product analytics data is collected and shared",
       "warning_not_reaching": "Analytics data is not reaching Farnalabs. Check your network or consent settings.",
+      "warning_never_reached": "This instance is opted in but has not completed a successful analytics dump yet. It will keep trying at its next daily dump window.",
+      "last_failed_dump": "Last failed dump: {when}",
       "delivery_status": "Delivery Status",
       "last_successful_dump": "Last Successful Dump",
       "total_dumps": "Total Dumps",
