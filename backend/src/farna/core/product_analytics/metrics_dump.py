@@ -40,7 +40,7 @@ from farna.core.product_analytics.constants import (
     DUMP_WATERMARK_KEY,
     coerce_dump_count,
 )
-from farna.core.product_analytics.vendor_client import VendorClient
+from farna.core.product_analytics.vendor_client import VendorClient, redact_instance_secret
 
 _log = logging.getLogger(__name__)
 
@@ -113,15 +113,15 @@ def _summarise_dump_failure(status_code: int | None, error: str | None, *, secre
     Deliberately narrow: only the HTTP status and the error text the vendor
     client already produced. The vendor's error text can echo the response body
     verbatim (``HTTP <code>: <body>``), so any occurrence of the instance secret
-    is redacted BEFORE the summary is truncated or persisted. The summary is
-    written to ``system_config``, logged, returned by the transparency API and
-    emailed to the operator, so a leak here would surface in four places
-    (FAR-2740).
+    is redacted BEFORE the summary is truncated or persisted — through the SAME
+    ``redact_instance_secret`` helper the vendor client uses, so the log site and
+    the persisted summary cannot drift apart. The summary is written to
+    ``system_config``, logged, returned by the transparency API and emailed to
+    the operator, so a leak here would surface in four places (FAR-2740).
     """
     code = "no_status" if status_code is None else str(status_code)
     detail = (error or "unknown error").strip() or "unknown error"
-    if secret:
-        detail = detail.replace(secret, "[redacted]")
+    detail = redact_instance_secret(detail, secret)
     return f"status={code}: {detail}"[:_MAX_FAILURE_SUMMARY_LEN]
 
 
@@ -457,9 +457,10 @@ async def _dump_date_range(
     succeeded, in order.
 
     ``on_failure`` (FAR-2740) is an optional sink invoked with
-    ``(status_code, error)`` on the failed POST. ``metrics_dump`` uses it to
-    persist the failure and alert the operator without this function having to
-    own durable state; direct callers (and its unit tests) may omit it.
+    ``(status_code, error)`` on the failed POST; the error it receives is
+    already secret-redacted. ``metrics_dump`` uses it to persist the failure and
+    alert the operator without this function having to own durable state; direct
+    callers (and its unit tests) may omit it.
     """
     client = VendorClient(endpoint_url, instance_secret)
     succeeded_dates: list[date] = []
@@ -483,12 +484,17 @@ async def _dump_date_range(
                     extra={"date": str(current_date), "org_count": len(eligible_orgs)},
                 )
             else:
+                # The vendor error text can echo the response body verbatim, so
+                # redact the instance secret BEFORE it reaches this warning log
+                # — or the failure sink — not only inside the persisted summary
+                # (FAR-2740).
+                safe_error = redact_instance_secret(error, instance_secret)
                 _log.warning(
                     "product_analytics.dump_failed",
-                    extra={"date": str(current_date), "status_code": status_code, "error": error},
+                    extra={"date": str(current_date), "status_code": status_code, "error": safe_error},
                 )
                 if on_failure is not None:
-                    on_failure(status_code, error)
+                    on_failure(status_code, safe_error)
                 break
 
             current_date += timedelta(days=1)

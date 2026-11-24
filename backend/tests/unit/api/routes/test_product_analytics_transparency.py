@@ -173,7 +173,7 @@ def _make_session(
 
     ``org_settings`` is the returned caller-org's ``settings_json``; ``_UNSET``
     means no org row is found (``scalar_one_or_none()`` -> ``None``). The second
-    result models the instance-aggregate read (``_instance_consent_level``),
+    result models the instance-aggregate read (``_instance_consent_posture``),
     built from ``instance_levels`` (one entry per active org). The endpoint only
     issues the second SELECT when the caller org is unresolved.
 
