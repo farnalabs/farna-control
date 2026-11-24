@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
+from typing import Any
 
 import httpx
 
@@ -26,28 +28,76 @@ RETRY_DELAYS = [1.0, 5.0, 30.0]
 REQUEST_TIMEOUT = 30.0
 
 
-def sign_outbound_batch(secret: str, payload: bytes, timestamp: float, sequence: int) -> str:
-    """Compute HMAC-SHA256 for the outbound vendor batch protocol.
+def _canonical_payload_bytes(payload: dict[str, Any]) -> bytes:
+    """Canonical JSON bytes for the payload sub-object.
 
-    Returns the hex digest string (no ``sha256=`` prefix).
-
-    Wire format (vendor batch protocol)
-    -----------------------------------
-    The message fed into HMAC-SHA256 is::
-
-        payload + f"{timestamp}:{sequence}"
-
-    This is the canonical signer for batches posted to the metrics vendor via
-    :meth:`VendorClient.post_batch`.  It is **NOT** interchangeable with the
-    rotation-request signer in
-    :mod:`farna.core.product_analytics.hmac_verify`: that module signs with a
-    ``|<timestamp:.6f>|<sequence>`` format under a fixed-precision cross-SDK
-    contract.  The two protocols intentionally use different wire formats — never
-    reuse this helper to sign or verify rotation requests, and never reuse the
-    hmac_verify helper for outbound batches.
+    The receiver verifies the HMAC over
+    ``canonical_json(payload, sort_keys=True, separators=(",", ":"))`` — the
+    payload **sub-object** only, never the whole request body.  This is the
+    sender's byte-for-byte mirror of that canonical form.
     """
-    message = payload + f"{timestamp}:{sequence}".encode()
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+
+
+def sign_outbound_batch(
+    secret: str,
+    payload: dict[str, Any],
+    timestamp: float,
+    sequence: int,
+) -> str:
+    """Compute the HMAC-SHA256 hex digest for an outbound vendor batch.
+
+    This mirrors the receiver's ``hmac_verify.compute_hmac`` exactly::
+
+        HMAC-SHA256(
+            key   = secret,
+            msg   = canonical_json(payload, sort_keys=True, separators=(",", ":"))
+                    + f"{timestamp}:{sequence}".encode(),
+        ).hexdigest()
+
+    ``payload`` is the aggregate payload **sub-object** that is placed at
+    ``body["payload"]`` — never the whole envelope.  Note the message format is
+    ``<canonical payload bytes><timestamp>:<sequence>`` with a plain float
+    rendering of ``timestamp`` (no ``%.6f`` precision); that is the receiver's
+    contract.
+
+    It is **NOT** interchangeable with the rotation-request signer in
+    :mod:`farna.core.product_analytics.hmac_verify`: that module signs with a
+    ``|<timestamp:.6f>|<sequence>`` format under a separate cross-SDK contract.
+    Never reuse this helper to sign or verify rotation requests, and never reuse
+    the ``hmac_verify`` helper for outbound batches.
+    """
+    message = _canonical_payload_bytes(payload) + f"{timestamp}:{sequence}".encode()
     return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+
+
+def build_batch_envelope(
+    payload: dict[str, Any],
+    timestamp: float,
+    sequence: int,
+    hmac_hex: str,
+) -> dict[str, Any]:
+    """Wrap the aggregate payload in the receiver's required ``BatchRequest``.
+
+    The envelope fields (``instance_id``, ``date`` and ``schema_version``) are
+    sourced from the aggregate payload, which ``metrics_dump._build_payload``
+    always populates.
+    """
+    instance_id = str(payload["instance_id"])
+    return {
+        "instance_id": instance_id,
+        # The batch is deliberately instance-level: one row aggregates every
+        # consenting org, so ``org_id`` carries the INSTANCE id. Do NOT switch
+        # this to per-org rows — that changes the privacy posture and is a
+        # product decision, not a bug fix.
+        "org_id": instance_id,
+        "date": str(payload["date"]),
+        "schema_version": int(payload["schema_version"]),
+        "sequence": int(sequence),
+        "payload": payload,
+        "timestamp": timestamp,
+        "hmac": hmac_hex,
+    }
 
 
 class VendorClient:
@@ -104,7 +154,7 @@ class VendorClient:
         client: httpx.AsyncClient,
         url: str,
         signature: str,
-        payload: bytes,
+        body: bytes,
         timestamp: float,
         sequence: int,
     ) -> httpx.Response:
@@ -113,13 +163,18 @@ class VendorClient:
         Transport/timeout errors propagate to the caller, which owns the
         failure message and backoff.  On success the caller inspects the
         returned response.
+
+        ``X-Farna-Secret`` is sent on EVERY attempt: the receiver requires it on
+        first contact to bootstrap a previously-unknown instance (TOFU), and
+        prefers it for verification thereafter.
         """
         return await asyncio.wait_for(
             client.post(
                 url,
-                content=payload,
+                content=body,
                 headers={
                     "Content-Type": "application/json",
+                    "X-Farna-Secret": self._instance_secret,
                     "X-Farna-Signature": signature,
                     "X-Farna-Timestamp": str(timestamp),
                     "X-Farna-Sequence": str(sequence),
@@ -149,9 +204,21 @@ class VendorClient:
         if resp.is_success:
             terminal: tuple[bool, int, str | None] = (True, response_code, None)
             return terminal, "", False
-        http_error = f"HTTP {response_code}: {resp.text[:200]}"
+        # Every non-2xx is logged at ERROR with the status and a truncated body.
+        # A 422's validation detail is exactly what makes a contract mismatch
+        # findable; the previous warning-only path hid it.
+        response_body = resp.text
+        _log.error(
+            "product_analytics.vendor_post_rejected",
+            extra={
+                "status_code": response_code,
+                "attempt": attempt,
+                "response_body": str(response_body)[:500],
+            },
+        )
+        http_error = f"HTTP {response_code}: {str(response_body)[:200]}"
         if response_code == 400:
-            terminal = (False, response_code, f"HTTP 400 (terminal): {resp.text[:200]}")
+            terminal = (False, response_code, f"HTTP 400 (terminal): {str(response_body)[:200]}")
             return terminal, "", False
         if response_code == 429:
             if attempt < MAX_ATTEMPTS:
@@ -161,15 +228,21 @@ class VendorClient:
 
     async def post_batch(
         self,
-        payload: bytes,
+        payload: dict[str, Any],
         timestamp: float,
         sequence: int,
     ) -> tuple[bool, int | None, str | None]:
         """POST a metrics batch to the vendor.
 
+        ``payload`` is the aggregate payload dict built by
+        ``metrics_dump._build_payload``; it is wrapped in the receiver's
+        ``BatchRequest`` envelope and signed over the payload sub-object.
+
         Returns ``(success, status_code, error_message)``.
         """
         signature = sign_outbound_batch(self._instance_secret, payload, timestamp, sequence)
+        envelope = build_batch_envelope(payload, timestamp, sequence, signature)
+        body = json.dumps(envelope, default=str, separators=(",", ":")).encode()
         url = f"{self._endpoint_url}/api/v1/batch"
 
         try:
@@ -183,7 +256,7 @@ class VendorClient:
         for attempt in range(1, MAX_ATTEMPTS + 1):
             retried_after_429 = False
             try:
-                resp = await self._post_once(client, url, signature, payload, timestamp, sequence)
+                resp = await self._post_once(client, url, signature, body, timestamp, sequence)
             except (TimeoutError, httpx.RequestError) as exc:
                 last_error = self._describe_error(exc)
                 response_code = None

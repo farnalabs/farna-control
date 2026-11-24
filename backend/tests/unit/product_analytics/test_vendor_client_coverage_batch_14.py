@@ -9,6 +9,16 @@ import pytest
 from farna.core.product_analytics.vendor_client import MAX_ATTEMPTS, VendorClient
 
 
+def _payload() -> dict:
+    """Minimal aggregate payload carrying the envelope fields the client reads."""
+    return {
+        "schema_version": 2,
+        "date": "2026-08-10",
+        "instance_id": "instance-123",
+        "errors": [],
+    }
+
+
 @pytest.mark.asyncio
 async def test_vendor_client_retries_429_and_honours_retry_after():
     client = VendorClient("https://vendor.example", "secret")
@@ -20,7 +30,7 @@ async def test_vendor_client_retries_429_and_honours_retry_after():
     client._http_client = AsyncMock(is_closed=False)
     client._http_client.post = AsyncMock(side_effect=responses)
     with patch("farna.core.product_analytics.vendor_client.asyncio.sleep", new_callable=AsyncMock) as sleep:
-        result = await client.post_batch(b"{}", 1.0, 2)
+        result = await client.post_batch(_payload(), 1.0, 2)
     assert result == (True, 200, None)
     assert sleep.await_args_list[0].args == (60.0,)
     assert client._http_client.post.await_count == MAX_ATTEMPTS
@@ -34,7 +44,7 @@ async def test_vendor_client_invalid_retry_after_falls_back_and_timeout_is_descr
     client._http_client = AsyncMock(is_closed=False)
     client._http_client.post = AsyncMock(side_effect=TimeoutError())
     with patch("farna.core.product_analytics.vendor_client.asyncio.sleep", new_callable=AsyncMock):
-        result = await client.post_batch(b"{}", 1.0, 2)
+        result = await client.post_batch(_payload(), 1.0, 2)
     assert result[0] is False
     assert result[2] == "Timeout after 30.0s"
     assert client._delay_for_429(response, 1) == 1.0
@@ -53,7 +63,7 @@ async def test_vendor_client_unexpected_exception_and_closed_client_recreation(m
     )
     replacement.post = AsyncMock(side_effect=RuntimeError("unexpected"))
     with patch("farna.core.product_analytics.vendor_client.asyncio.sleep", new_callable=AsyncMock):
-        success, code, error = await client.post_batch(b"{}", 1.0, 2)
+        success, code, error = await client.post_batch(_payload(), 1.0, 2)
     assert success is False
     assert code is None
     assert error == "Unexpected: unexpected"
@@ -65,10 +75,12 @@ async def test_vendor_client_sends_x_farna_headers_and_no_x_modulo_headers():
     client = VendorClient("https://vendor.example", "secret")
     client._http_client = AsyncMock(is_closed=False)
     client._http_client.post = AsyncMock(return_value=MagicMock(status_code=200, is_success=True, text="", headers={}))
-    result = await client.post_batch(b"{}", 1.0, 7)
+    result = await client.post_batch(_payload(), 1.0, 7)
     assert result == (True, 200, None)
     headers = client._http_client.post.await_args.kwargs["headers"]
-    assert {"X-Farna-Signature", "X-Farna-Timestamp", "X-Farna-Sequence"} <= set(headers)
+    assert {"X-Farna-Secret", "X-Farna-Signature", "X-Farna-Timestamp", "X-Farna-Sequence"} <= set(headers)
+    assert headers["X-Farna-Secret"] == "secret"
+    assert headers["Content-Type"] == "application/json"
     assert headers["X-Farna-Timestamp"] == "1.0"
     assert headers["X-Farna-Sequence"] == "7"
     legacy = [name for name in headers if name.lower().startswith("x-farna-control-")]

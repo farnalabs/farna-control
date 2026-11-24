@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import inspect
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
@@ -68,7 +69,7 @@ def _stub_purge_staging(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class TestSignOutboundBatch:
     def test_deterministic(self) -> None:
-        payload = b'{"test": true}'
+        payload = {"test": True}
         ts = 1700000000.0
         seq = 20260821
         secret = "test-secret-key-at-least-32-bytes!!"
@@ -78,7 +79,7 @@ class TestSignOutboundBatch:
         assert sig1 == sig2
 
     def test_different_secret_produces_different_sig(self) -> None:
-        payload = b'{"test": true}'
+        payload = {"test": True}
         ts = 1700000000.0
         seq = 20260821
 
@@ -91,16 +92,18 @@ class TestSignOutboundBatch:
         ts = 1700000000.0
         seq = 20260821
 
-        sig1 = sign_outbound_batch(secret, b'{"a":1}', ts, seq)
-        sig2 = sign_outbound_batch(secret, b'{"b":2}', ts, seq)
+        sig1 = sign_outbound_batch(secret, {"a": 1}, ts, seq)
+        sig2 = sign_outbound_batch(secret, {"b": 2}, ts, seq)
         assert sig1 != sig2
 
-    def test_matches_manual_hmac(self) -> None:
+    def test_matches_receiver_algorithm(self) -> None:
+        """The signer mirrors the receiver: canonical payload + ``ts:seq``."""
         secret = "my-secret"
-        payload = b"hello"
+        payload = {"z": 1, "a": {"nested": [1, 2]}, "m": "value"}
         ts = 100.0
-        seq = 1
-        message = payload + f"{ts}:{seq}".encode()
+        seq = 20260810
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        message = canonical + f"{ts}:{seq}".encode()
         expected = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
         assert sign_outbound_batch(secret, payload, ts, seq) == expected
 
@@ -632,6 +635,30 @@ class TestSystemSessionFactory:
 # --- Vendor client ---
 
 
+def _aggregate_payload(**overrides: object) -> dict:
+    """A minimal but complete aggregate payload as ``_build_payload`` emits it.
+
+    ``VendorClient.post_batch`` sources the envelope's ``instance_id``,
+    ``date`` and ``schema_version`` from this dict, so every field those
+    envelope keys read must be present.
+    """
+    payload: dict = {
+        "schema_version": 2,
+        "date": "2026-08-10",
+        "timestamp": "2026-08-10T00:00:00+00:00",
+        "instance_id": "instance-123",
+        "org_count": 1,
+        "entity_counts": {},
+        "run_stats": {},
+        "errors": [],
+        "event_counts": {},
+        "integration_inventory": {},
+        "instance_metadata": {},
+    }
+    payload.update(overrides)
+    return payload
+
+
 class TestVendorClient:
     @pytest.fixture(autouse=True)
     def _stub_pinned_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -651,7 +678,7 @@ class TestVendorClient:
         monkeypatch.setattr("farna.core.product_analytics.vendor_client.pinned_async_client", _reject)
         client = VendorClient("http://169.254.169.254", "test-secret")
 
-        success, code, error = await client.post_batch(b'{"test":1}', 100.0, 1)
+        success, code, error = await client.post_batch(_aggregate_payload(), 100.0, 1)
 
         assert success is False
         assert code is None
@@ -669,7 +696,7 @@ class TestVendorClient:
         client._http_client = mock_http
 
         with patch("farna.core.product_analytics.vendor_client.asyncio.sleep", new_callable=AsyncMock):
-            success, code, error = await client.post_batch(b'{"test":1}', 100.0, 1)
+            success, code, error = await client.post_batch(_aggregate_payload(), 100.0, 1)
 
         assert success is False
         assert code is None
@@ -692,7 +719,7 @@ class TestVendorClient:
         mock_http.is_closed = False
         client._http_client = mock_http
 
-        success, code, error = await client.post_batch(b'{"test":1}', 100.0, 1)
+        success, code, error = await client.post_batch(_aggregate_payload(), 100.0, 1)
         assert success is True
         assert code == 200
         assert error is None
@@ -713,7 +740,7 @@ class TestVendorClient:
         mock_http.is_closed = False
         client._http_client = mock_http
 
-        success, code, error = await client.post_batch(b'{"test":1}', 100.0, 1)
+        success, code, error = await client.post_batch(_aggregate_payload(), 100.0, 1)
         assert success is False
         assert code == 400
         assert "terminal" in error
@@ -739,7 +766,7 @@ class TestVendorClient:
         client._http_client = mock_http
 
         with patch("farna.core.product_analytics.vendor_client.asyncio.sleep", new_callable=AsyncMock):
-            success, code, _error = await client.post_batch(b'{"test":1}', 100.0, 1)
+            success, code, _error = await client.post_batch(_aggregate_payload(), 100.0, 1)
 
         assert success is True
         assert code == 200
@@ -762,13 +789,119 @@ class TestVendorClient:
         client._http_client = mock_http
 
         with patch("farna.core.product_analytics.vendor_client.asyncio.sleep", new_callable=AsyncMock):
-            success, code, _error = await client.post_batch(b'{"test":1}', 100.0, 1)
+            success, code, _error = await client.post_batch(_aggregate_payload(), 100.0, 1)
 
         assert success is False
         assert code == 500
         assert mock_http.post.call_count == MAX_ATTEMPTS
 
         await client.close()
+
+
+class TestBatchEnvelopeContract:
+    """The wire body must match the telemetry receiver's ``BatchRequest``.
+
+    These tests pin the exact contract the receiver enforces: the envelope
+    fields with their types, the HMAC over the canonical payload sub-object, the
+    secret header, and that a 422 is surfaced as a failure.
+    """
+
+    async def _capture_request(
+        self,
+        *,
+        secret: str = "test-secret",
+        response: object | None = None,
+        payload: dict | None = None,
+        timestamp: float = 100.0,
+        sequence: int = 20260810,
+    ) -> tuple[tuple[bool, int | None, str | None], bytes, dict, VendorClient]:
+        client = VendorClient("https://vendor.example.com", secret)
+        ok = response if response is not None else MagicMock(status_code=200, is_success=True, text="", headers={})
+        mock_http = AsyncMock(is_closed=False)
+        mock_http.post = AsyncMock(return_value=ok)
+        client._http_client = mock_http
+        with patch("farna.core.product_analytics.vendor_client.asyncio.sleep", new_callable=AsyncMock):
+            result = await client.post_batch(payload or _aggregate_payload(), timestamp, sequence)
+        body = mock_http.post.await_args.kwargs["content"]
+        headers = mock_http.post.await_args.kwargs["headers"]
+        return result, body, headers, client
+
+    @pytest.mark.asyncio
+    async def test_envelope_has_every_required_field_with_correct_type(self) -> None:
+        payload = _aggregate_payload()
+        result, raw_body, _headers, client = await self._capture_request(payload=payload, timestamp=100.0, sequence=20260810)
+        assert result == (True, 200, None)
+
+        body = json.loads(raw_body)
+        assert isinstance(body, dict)
+        assert body["instance_id"] == "instance-123"
+        assert isinstance(body["instance_id"], str)
+        # org_id is the INSTANCE id on purpose: the batch is instance-level.
+        assert body["org_id"] == "instance-123"
+        assert isinstance(body["org_id"], str)
+        assert body["date"] == "2026-08-10"
+        assert isinstance(body["date"], str)
+        assert body["schema_version"] == 2
+        assert isinstance(body["schema_version"], int)
+        assert body["sequence"] == 20260810
+        assert isinstance(body["sequence"], int)
+        assert body["payload"] == payload
+        assert isinstance(body["payload"], dict)
+        assert body["timestamp"] == 100.0
+        assert isinstance(body["timestamp"], float)
+        assert isinstance(body["hmac"], str)
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_hmac_matches_receiver_algorithm_independently(self) -> None:
+        """Recompute the HMAC the way the receiver does — no shared helper."""
+        secret = "receiver-side-secret"
+        result, raw_body, _headers, client = await self._capture_request(secret=secret, timestamp=1700000000.5, sequence=20260810)
+        assert result[0] is True
+
+        body = json.loads(raw_body)
+        canonical = json.dumps(body["payload"], sort_keys=True, separators=(",", ":")).encode()
+        message = canonical + f"{body['timestamp']}:{body['sequence']}".encode()
+        expected = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+        assert body["hmac"] == expected
+
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_secret_header_sent_on_every_request(self) -> None:
+        _result, _body, headers, client = await self._capture_request(secret="shh-secret")
+        assert headers["X-Farna-Secret"] == "shh-secret"
+        assert headers["Content-Type"] == "application/json"
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_422_is_reported_as_failure_not_success(self) -> None:
+        response = MagicMock(
+            status_code=422,
+            is_success=False,
+            text='{"detail":[{"loc":["body","org_id"],"msg":"field required"}]}',
+            headers={},
+        )
+        result, _body, _headers, client = await self._capture_request(response=response)
+        success, code, error = result
+        assert success is False
+        assert code == 422
+        assert error is not None
+        assert "422" in error
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_non_2xx_logged_at_error_with_status_and_truncated_body(self, caplog: pytest.LogCaptureFixture) -> None:
+        detail = "timestamp should be a valid number"
+        response = MagicMock(status_code=422, is_success=False, text=f'{{"detail":"{detail}"}}', headers={})
+        with caplog.at_level(logging.ERROR, logger="farna.core.product_analytics.vendor_client"):
+            await self._capture_request(response=response)
+
+        error_records = [record for record in caplog.records if record.levelno == logging.ERROR]
+        assert error_records
+        assert any(getattr(record, "status_code", None) == 422 for record in error_records)
+        assert any(detail in str(getattr(record, "response_body", "")) for record in error_records)
 
 
 # --- _check_instance_switch ---
@@ -1330,6 +1463,61 @@ class TestBuildPayload:
         assert payload["date"] == "2026-08-10"
         assert payload["instance_id"] == "test-instance-id"
         assert payload["org_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_error_stats_mapped_to_errors_list(self) -> None:
+        """``error_stats`` reaches the receiver under ``errors`` as ``{family, count}``.
+
+        The receiver only reads ``payload["errors"]``; a payload that still
+        carries ``error_stats`` would silently drop the whole error rollup.
+        """
+        factory = _FakeSessionFactory()
+        orgs = [{"id": "org-1", "level_changed_at": None}]
+        target_date = date(2026, 8, 10)
+
+        with (
+            patch(
+                "farna.core.product_analytics.metrics_dump._count_entities",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._aggregate_run_stats",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._aggregate_error_stats",
+                new_callable=AsyncMock,
+                return_value={"total": 8, "by_level": {"error": 5, "warning": 3}},
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._aggregate_staged_events",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._build_integration_inventory",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._get_or_create_instance_id",
+                new_callable=AsyncMock,
+                return_value="test-instance-id",
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._build_instance_metadata",
+                return_value={},
+            ),
+        ):
+            payload = await _build_payload(factory, orgs, target_date)
+
+        assert "error_stats" not in payload
+        assert payload["errors"] == [
+            {"family": "error", "count": 5},
+            {"family": "warning", "count": 3},
+        ]
 
 
 # --- _get_or_create_instance_id ---
