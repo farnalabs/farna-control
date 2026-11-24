@@ -2041,6 +2041,7 @@ jobs:
               echo "::error::from-zero check: machine count '${MACHINE_COUNT}' is not a number - refusing to deploy blind."
               exit 1
               ;;
+            *) : ;;
           esac
           if [ "$MACHINE_COUNT" -ne 0 ]; then
             echo "machines present (${MACHINE_COUNT}): skipping from-zero pre-create"
@@ -3487,6 +3488,7 @@ jobs:
               echo "::error::from-zero check: machine count '${MACHINE_COUNT}' is not a number - refusing to deploy blind."
               exit 1
               ;;
+            *) : ;;
           esac
           if [ "$MACHINE_COUNT" -ne 0 ]; then
             echo "machines present (${MACHINE_COUNT}): skipping from-zero pre-create"
