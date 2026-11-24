@@ -1432,7 +1432,7 @@ jobs:
           LAUNCH_RC=1
           while [ "$launch_attempt" -lt "$LAUNCH_ATTEMPTS" ]; do
             launch_attempt=$(( launch_attempt + 1 ))
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --env ALEMBIC_REHEARSAL=1 \
@@ -1441,6 +1441,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/prerehearse-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             if grep -qi 'failed to reach desired start state' \
@@ -1749,7 +1758,7 @@ jobs:
             # --detach means RC=0 iff creation succeeded, so a retried attempt
             # does not leak a second machine; the single destroy below is
             # sufficient to clean up the one machine this loop creates.
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app staging-farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --detach \
@@ -1757,6 +1766,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/premigrate-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             # FAR-486: even with --detach, flyctl can still exit non-zero with
@@ -2668,7 +2686,7 @@ jobs:
           LAUNCH_RC=1
           while [ "$launch_attempt" -lt "$LAUNCH_ATTEMPTS" ]; do
             launch_attempt=$(( launch_attempt + 1 ))
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --env ALEMBIC_REHEARSAL=1 \
@@ -2677,6 +2695,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/prerehearse-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             if grep -qi 'failed to reach desired start state' \
@@ -3024,7 +3051,7 @@ jobs:
             # --detach means RC=0 iff creation succeeded, so a retried attempt
             # does not leak a second machine; the single destroy below is
             # sufficient to clean up the one machine this loop creates.
-            RUN_OUTPUT="$(fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
+            RUN_OUTPUT="$(timeout 180 fly machine run "${PREMIGRATE_IMAGE_REF}" --app farna-control --restart=no \
               --entrypoint /bin/bash \
               --vm-size shared-cpu-1x --memory 1024 \
               --detach \
@@ -3032,6 +3059,15 @@ jobs:
             LAUNCH_RC=$?
             cat /tmp/premigrate-launch-err.txt >&2 || true
             if [ "$LAUNCH_RC" -eq 0 ]; then
+              break
+            fi
+            # A hung Fly control-plane call must never block the job for its
+            # full timeout (observed: deploy-production hung 3h on a silent
+            # `fly machine run --detach`). Bound each attempt; on timeout fail
+            # fast instead of retrying (the spawn may already have created a
+            # machine) - the destroy step below cleans up anything created.
+            if [ "$LAUNCH_RC" -eq 124 ]; then
+              echo "::error::fly machine run timed out after 180s (Fly control-plane hang) - failing fast instead of hanging the job"
               break
             fi
             # FAR-486: even with --detach, flyctl can still exit non-zero with
