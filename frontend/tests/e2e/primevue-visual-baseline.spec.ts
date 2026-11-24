@@ -15,9 +15,9 @@ import { join } from 'node:path'
  *
  * The capture is written to `PRIMEVUE_BASELINE_OUT` (default
  * `test-results/primevue-baseline`) so the same script can produce a v5
- * baseline and a v4 capture, which `scripts/compare-primevue-baseline.mjs`
- * then diffs. The artefacts are deliberately outside the assertion surface:
- * a drifted screenshot must never fail a normal test run — it must produce a
+ * baseline and a v4 capture, which `frontend/tests/visual-baseline/compare.mjs`
+ * then diffs. The artefacts are deliberately outside the assertion surface: a
+ * drifted screenshot must never fail a normal test run — it must produce a
  * diff a human reviews.
  *
  * Local-only: the mock API (`loginAsAdmin`) is deterministic, whereas a real
