@@ -1,7 +1,7 @@
 <template>
   <FeatureGate feature-name="webhook_trigger" show-disabled>
 
-    <div data-theme="agent" class="page-wide">
+    <div class="page-wide">
     <PageHeader :title="$t('views.SettingsTriggersView.title')" :subtitle="$t('views.SettingsTriggersView.subtitle')">
       <template #right>
          <Button v-if="isOrgOperator" data-testid="settings-triggers-create" class="border-primary/30 hover:border-primary/60" @click="openCreateDialog">

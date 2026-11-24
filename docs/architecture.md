@@ -7,7 +7,7 @@ Farna Control is a self-hosted Delivery Governance Platform: govern the software
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    Browser UI (Vue 3 SPA)                     │
-│  Standard Theme (light) │ Agent Theme (dark, v1)             │
+│  Single app theme: dark by default, light toggle available   │
 │  Pinia stores → Composables → Views → Components             │
 │  PrimeVue component library                             │
 └──────────────────────┬───────────────────────────────────────┘

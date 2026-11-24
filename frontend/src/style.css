@@ -458,8 +458,8 @@
      The `text-warning-text` utility is registered on this token in
      tailwind.config.cjs, so use `text-warning-text` - never `text-warning`,
      never `text-warning/80` (an 80% alpha of the same hue drops to ~3.4:1 and
-     fails AA) - for warning COLOURED TEXT. The dark and agent themes define
-     --warning-text as an exact copy of --warning, so they are unchanged. */
+     fails AA) - for warning COLOURED TEXT. The dark theme defines
+     --warning-text as an exact copy of --warning, so it is unchanged. */
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -493,7 +493,7 @@
      --warning-text / --destructive-text precedent. --primary is tuned as a
      FILL/accent hue; as TEXT on a bg-primary tint it only reaches 4.16-4.33:1
      in light mode, below the WCAG AA 4.5:1 floor. --primary-text keeps the hue
-     and is an exact copy of --primary in the dark/agent themes (already clear
+     and is an exact copy of --primary in the dark theme (already clear
      of AA), darkening only in light mode (measured there:
        white          5.87:1
        bg-primary/10  5.12:1
@@ -509,14 +509,13 @@
   --destructive-foreground: 210 28% 93%;
   /* Fill-safe counterpart of --destructive for text-bearing SOLID fills
      (badges, destructive buttons). --destructive is tuned as an accent hue, so
-     --destructive-foreground on it measures only 3.22:1 here (and 3.30:1 in the
-     agent theme) - below the WCAG AA 4.5:1 floor for normal-size text, which is
-     what the 10px notification unread badge is. --destructive-fill keeps the
-     hue and darkens the fill so the existing foreground clears AA, including
-     the common hover:bg-destructive-fill/90 state. Measured (normal / hover):
+     --destructive-foreground on it measures only 3.22:1 here - below the WCAG AA
+     4.5:1 floor for normal-size text, which is what the 10px notification unread
+     badge is. --destructive-fill keeps the hue and darkens the fill so the
+     existing foreground clears AA, including the common
+     hover:bg-destructive-fill/90 state. Measured (normal / hover):
        dark  #ce1212  4.78:1 / 5.57:1
-       light #cf1212  5.37:1 / 4.84:1
-       agent #df0c0c  5.01:1 / 5.88:1 */
+       light #cf1212  5.37:1 / 4.84:1 */
   --destructive-fill: 0 84% 44%;
    /* FAR-1913: text-safe counterpart of --destructive. --destructive is tuned as
       a FILL/accent hue, so destructive COLOURED TEXT on a bg-destructive tint
@@ -529,7 +528,7 @@
   --destructive-text: 0 84% 66%;
   --success: 142 71% 45%;
   /* FAR-1938: text-safe counterpart of --success. --success is a fill/accent
-     green: as TEXT it is only 2.30:1 on white in light mode. Dark/agent are an
+     green: as TEXT it is only 2.30:1 on white in light mode. Dark is an
      exact copy (already clear of AA); light darkens (measured there:
        white          5.42:1
        bg-success/10  4.97:1
@@ -540,8 +539,8 @@
   /* FAR-1607: text drawn ON a --warning fill (banner/badge backgrounds), which
      is mid-amber (~50% lightness) in every theme - so the on-fill ink is dark
      in every theme, unlike --warning-text (which is warning-coloured text on a
-     NEUTRAL background and is byte-identical to --warning in the dark/agent
-     themes, i.e. invisible on the fill). Mirrors the -foreground-on-fill
+     NEUTRAL background and is byte-identical to --warning in the dark
+     theme, i.e. invisible on the fill). Mirrors the -foreground-on-fill
      pattern of --primary-foreground / --destructive-foreground. */
   --warning-foreground: 222 29% 9%;
   --pending: 210 40% 60%;
@@ -568,19 +567,11 @@
    --foreground = ink-900, --secondary = ink-50, --muted = ink-50,
    --muted-foreground = ink-400, --border = ink-50, --input = ink-50
 
-   FAR-1938: `.light [data-theme="agent"]` makes the USER'S LIGHT CHOICE win
-   inside an agent-themed page. The agent block below is a dark palette; it was
-   designed against a dark background, so under `.light` it produced dark cards
-   on a white page whose inherited body ink stayed light-mode dark
-   (measured 1.12:1 on the triggers page) and agent-muted text on white
-   (2.52:1). Re-declaring the light palette here keeps the agent TYPOGRAPHY
-   (font-family from the agent block) and uses light colours — the same rule the
-   theme toggle already applies everywhere else. The one non-colour token it
-   changes is --focus-ring, re-declared below to the dark ring so the agent
-   focus indicator clears the 3:1 non-text contrast floor on a light surface.
-   Dark mode is unaffected (this selector requires `.light`). */
-.light,
-.light [data-theme="agent"] {
+   Applied by the sidebar light/dark toggle (SidebarFull.vue emits `toggle-theme`,
+   AppLayout.vue `toggleTheme`), which puts `.light` on <html> and removes
+   `.dark`; the `:root` palette above is the dark default. Every page inherits
+   the same palette - there is no page-level theme override. */
+.light {
   color-scheme: light;
   --background: 0 0% 100%;
   --foreground: 220 29% 6%;
@@ -622,8 +613,10 @@
   --border: 215 15% 85%;
   --input: 215 15% 85%;
   --ring: 170 95% 26%;
-  /* FAR-1938: the agent block sets a light teal focus ring; light mode needs
-     the dark ring for the same 3:1 non-text contrast reason as --primary-text. */
+  /* The PrimeVue token bridge maps --focus-ring onto --p-focus-ring-color
+     (lib/primevue-theme.ts). Light mode re-declares it to the dark teal ring so
+     the focus indicator clears the 3:1 non-text contrast floor on a light
+     surface - the same value as --ring / --primary in this block. */
   --focus-ring: 170 95% 26%;
   --accent-bright: 169 100% 50%;
   --dot-color: rgba(0, 0, 0, 0.04);
@@ -660,57 +653,11 @@
    own saturated fills with a matching on-fill ink and are deliberately not
    touched: only the neutral pair recycles the surface scale this override
    replaces.
-   Dark (`.dark`) and agent (`[data-theme="agent"]`) render the badge from our
-   dark muted pair (measured 10.42:1 / 9.79:1) and are unaffected because this
-   rule requires `.light`. */
+   Dark (`.dark`) renders the badge from our dark muted pair and is unaffected
+   because this rule requires `.light`. */
 html.light .p-badge-secondary {
   background-color: hsl(var(--muted));
   color: hsl(var(--muted-foreground));
-}
-
-[data-theme="agent"] {
-  --background: 222 30% 8%;
-  --foreground: 210 30% 96%;
-  --card: 222 28% 12%;
-  --card-foreground: 210 30% 96%;
-  --popover: 222 28% 12%;
-  --popover-foreground: 210 30% 96%;
-  --primary: 169 100% 55%;
-  --primary-foreground: 222 30% 8%;
-  /* FAR-1938: see --primary-text in :root - an exact copy of --primary here. */
-  --primary-text: 169 100% 55%;
-  --secondary: 222 25% 18%;
-  --secondary-foreground: 210 30% 96%;
-  --muted: 222 25% 18%;
-  --muted-foreground: 215 14% 65%;
-  --accent: 222 25% 18%;
-  --accent-foreground: 210 30% 96%;
-  --destructive: 0 90% 65%;
-  --destructive-foreground: 0 0% 100%;
-  /* Fill-safe destructive fill - see the measured ratios in :root. */
-  --destructive-fill: 0 90% 46%;
-  /* FAR-1913: see --destructive-text in :root - lightened to 68% so the agent
-     theme's wider card tint also clears AA (5.10:1 on the tint). */
-  --destructive-text: 0 90% 68%;
-  --success: 142 80% 50%;
-  /* FAR-1938: see --success-text in :root - an exact copy of --success here. */
-  --success-text: 142 80% 50%;
-  --warning: 38 95% 55%;
-  --warning-text: 38 95% 55%;
-  /* FAR-1607: see --warning-foreground in :root - dark ink on the mid-amber fill. */
-  --warning-foreground: 222 30% 8%;
-  --preview: 18 60% 55%;
-  --border: 222 20% 30%;
-  --input: 222 20% 30%;
-  --ring: 169 100% 55%;
-  --dot-color: rgba(255, 255, 255, 0.06);
-  --focus-ring: 169 100% 55%;
-  font-family: 'JetBrains Mono Variable', 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-}
-
-[data-theme="agent"] :where(:not(html)):focus-visible {
-  outline: 2px solid hsl(var(--focus-ring));
-  outline-offset: 2px;
 }
 
 body {
@@ -775,7 +722,7 @@ select option {
    LogoMark draws its hexagons in `currentColor` and only the diagonal line in
    the accent colour, so that one line is the whole theme-aware surface. The
    accent must be the brand accent for the surface it sits on: the neon accent
-   (#00FFD0) on dark/agent, the deep teal (#03816C) on light. Light mode reuses
+   (#00FFD0) on dark, the deep teal (#03816C) on light. Light mode reuses
    --primary, whose light value IS that deep teal; --accent-bright carries the
    neon value in both themes, so it is the dark default and light overrides it.
    Unlayered on purpose: a CSS declaration on the element beats the inherited
