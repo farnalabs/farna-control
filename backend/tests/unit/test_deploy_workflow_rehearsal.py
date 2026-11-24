@@ -41,7 +41,7 @@ _REHEARSAL_DESTROY_NAME = "Destroy pre-rehearsal machine"
 #: (job id, fly app, artifact suffix, fly-logs app flag)
 _LEGS = (
     ("deploy-staging", "staging-farna-control", "staging"),
-    ("deploy-production", "app-modulo", "prod"),
+    ("deploy-production", "farna-control", "prod"),
 )
 
 #: The shell-execution tests below carry ``pytest.mark.posix_only`` individually.

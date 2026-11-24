@@ -1,7 +1,7 @@
 # "Recover: Web Machine" - auto-recovery watchdog for the web (app process
 # group) machines.
 #
-# Covers BOTH web apps: app-modulo (prod) and staging-farna-control. Staging was added
+# Covers BOTH web apps: farna-control (prod) and staging-farna-control. Staging was added
 # 2026-09-29 (matrix). Its app machine wedged mid-@regression-run under the
 # real-stack journey load; with no app_liveness check and no watchdog coverage
 # every signing-in test failed (503s, then a full login cascade) and the Deploy
@@ -101,7 +101,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [app-modulo, staging-farna-control]
+        app: [farna-control, staging-farna-control]
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
