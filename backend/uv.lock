@@ -1211,7 +1211,7 @@ wheels = [
 
 [[package]]
 name = "farna-control"
-version = "0.3.329"
+version = "0.3.330"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
