@@ -107,9 +107,11 @@
               {{ p.configured ? $t('views.AdminAssistantView.configured') : $t('views.AdminAssistantView.not_set') }}
             </span>
           </div>
-          <div v-if="customProviderStatus.length === 0" class="py-4 text-center text-sm text-muted-foreground">
-            {{ $t('views.AdminAssistantView.no_custom_backends_configured') }}
-          </div>
+          <EmptyState
+            v-if="customProviderStatus.length === 0"
+            variant="bare"
+            :title="$t('views.AdminAssistantView.no_custom_backends_configured')"
+          />
           <div class="mt-3 text-xs text-muted-foreground">
             <router-link :to="{ name: 'admin-model-backends' }" class="underline hover:text-foreground">
               {{ $t('views.AdminAssistantView.manage_all_backends_in_model_backends') }}
@@ -333,9 +335,11 @@
             {{ $t('views.AdminAssistantView.add_skill') }}
           </Button>
         </template>
-        <div v-if="skills.length === 0" class="py-8 text-center">
-          <p class="text-sm text-muted-foreground">{{ $t('views.AdminAssistantView.no_skills_configured_yet') }}</p>
-        </div>
+        <EmptyState
+          v-if="skills.length === 0"
+          variant="bare"
+          :title="$t('views.AdminAssistantView.no_skills_configured_yet')"
+        />
         <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
@@ -517,6 +521,7 @@
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import { ref, reactive, computed, watch } from 'vue'
 import { Check, X, Pencil, Trash2 } from '@lucide/vue'
 import { api } from '../lib/api/client'

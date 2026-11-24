@@ -122,9 +122,11 @@
               </template>
             </ErrorAlert>
             <div v-else>
-              <div v-if="membersByTeam[team.id]?.length === 0" class="py-4 text-center text-sm text-muted-foreground">
-                {{ $t('views.SettingsTeamsView.no_members_yet') }}
-              </div>
+              <EmptyState
+                v-if="membersByTeam[team.id]?.length === 0"
+                variant="bare"
+                :title="$t('views.SettingsTeamsView.no_members_yet')"
+              />
               <div v-else class="table-wrapper">
                 <table class="w-full text-sm">
                 <thead>

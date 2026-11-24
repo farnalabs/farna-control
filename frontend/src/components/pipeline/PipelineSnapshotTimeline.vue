@@ -36,7 +36,11 @@
     </div>
 
     <template v-else>
-      <p v-if="snapshots.length === 0" class="text-sm text-muted-foreground">{{ $t('components.PipelineSnapshotTimeline.no_snapshots_yet') }}</p>
+      <EmptyState
+        v-if="snapshots.length === 0"
+        variant="bare"
+        :title="$t('components.PipelineSnapshotTimeline.no_snapshots_yet')"
+      />
 
       <template v-else>
         <!-- FAR-1817: PRIMARY rows are SUBSTANTIVE versions only
@@ -315,6 +319,7 @@ import { useI18n } from 'vue-i18n'
 import Select from '../shared/AppSelect.vue'
 import Button from 'primevue/button'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import EmptyState from '../shared/EmptyState.vue'
 import { formatDateShort } from '../../lib/formatDate'
 import { api } from '../../lib/api/client'
 import { formatApiError } from '../../lib/api/formatError'
