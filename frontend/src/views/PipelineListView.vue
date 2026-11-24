@@ -111,17 +111,20 @@
 
         <ErrorAlert v-else-if="error" :message="error" :on-retry="loadPipelines" class="mb-6" />
 
-        <div v-else-if="filteredPipelines.length === 0 && search" class="text-center py-16">
-          <p class="text-lg font-medium text-foreground">{{ $t('views.PipelineListView.no_pipelines_match_your_search') }}</p>
-          <p class="text-sm text-muted-foreground mt-1">{{ $t('views.PipelineListView.try_a_different_search_term') }}</p>
-        </div>
+        <EmptyState
+          v-else-if="filteredPipelines.length === 0 && search"
+          :title="$t('views.PipelineListView.no_pipelines_match_your_search')"
+          :description="$t('views.PipelineListView.try_a_different_search_term')"
+        />
 
-        <div v-else-if="allPipelines.length === 0 && !search" class="text-center py-16">
-          <FileStack :size="48" class="mx-auto mb-4 text-muted-foreground/40" aria-hidden="true" />
-          <p class="text-lg font-medium text-foreground">{{ $t('views.PipelineListView.no_pipelines_yet') }}</p>
-          <p class="text-sm text-muted-foreground mt-1 mb-6">
-            {{ $t('views.PipelineListView.empty_description') }}
-          </p>
+        <EmptyState
+          v-else-if="allPipelines.length === 0 && !search"
+          :title="$t('views.PipelineListView.no_pipelines_yet')"
+          :description="$t('views.PipelineListView.empty_description')"
+        >
+          <template #icon>
+            <FileStack :size="48" class="mx-auto mb-4 text-muted-foreground/40" aria-hidden="true" />
+          </template>
           <div class="flex items-center justify-center gap-3">
             <Button as="router-link" to="/library" data-testid="pipeline-list-new-pipeline">
               {{ $t('views.PipelineListView.new_pipeline') }}
@@ -130,7 +133,7 @@
               {{ $t('views.PipelineListView.browse_library') }}
             </Button>
           </div>
-        </div>
+        </EmptyState>
 
         <div v-else>
           <!-- Mobile folder filter — the FolderTree is hidden below md, so offer folder selection here -->
@@ -464,6 +467,7 @@ import FolderListError from '../components/pipelines/FolderListError.vue'
 import { useDataFetch } from '../composables/useDataFetch'
 import { FOCUSABLE_SELECTOR, trapTabInElement } from '../composables/useFocusTrap'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import { ChevronRight, Folder, FolderOpen, MoreVertical, FileStack } from '@lucide/vue'
 import { formatApiError, throwOnError } from '../lib/api/formatError'
 import { invalidFolderListMessage, isFolderList, type FolderItem } from '../lib/api/folders'

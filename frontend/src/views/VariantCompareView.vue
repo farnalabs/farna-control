@@ -336,12 +336,7 @@
         </div>
       </div>
 
-      <div
-        v-else
-        class="rounded-lg border bg-card p-8 text-center text-muted-foreground"
-      >
-        {{ $t('views.variantCompare.selectGroupFirst') }}
-      </div>
+      <EmptyState v-else :title="$t('views.variantCompare.selectGroupFirst')" />
         </template>
       </div>
       </template>
