@@ -550,6 +550,8 @@ LOAD.
 | `FARNA_CONTROL_MULTI_ORG_ENABLED` | No | `false` | Multi-organization mode. OFF (the single-org default for self-hosted, ADR 005) blocks org creation, rejects org-slug login and makes the login-context endpoint always report single-org. ON enables multi-org behavior and the org-slug login path. A multi-org deployment also refuses a globally scoped secrets backend (e.g. Vault) for credential references rather than risk a cross-org read |
 | `FARNA_CONTROL_SCHEMA_VALIDATOR_MODE` | No | `lenient` | Schema-validator strictness, one of `lenient` or `strict`; any other value resolves to `lenient`. Read directly from the environment as a **first-boot seed only**: once the effective setting exists in the DB (per-org `settings_json`, then the instance-wide `system_config` row) that value wins. See [`docs/configuration-precedence.md`](./configuration-precedence.md) |
 
+> Minting a licence key that carries `product_analytics_required`, and why it only sets a default an operator can override (including OFF), is documented in [`docs/operations/product-analytics-licensing.md`](./operations/product-analytics-licensing.md).
+
 ---
 
 ## Trigger Streak Detection
