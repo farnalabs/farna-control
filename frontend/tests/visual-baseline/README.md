@@ -59,38 +59,82 @@ snapshot is the **permanent** regression guard; the JSON signature it can emit
 | `v5/tokens.json` | union of every computed `--p-*` value across all captures (818 tokens; zero route-to-route conflicts) |
 | `v5/fingerprints.json` | per-capture component computed-style fingerprints |
 | `v5/dom.json` | per-component rendered-DOM signature (v5) |
+| `assemble.mjs` | builds the three aggregates above from a capture run |
 | `compare.mjs` | diffs two capture directories into a delta table |
 
 The capture spec writes **one `<slug>.json` + `<slug>.png` per capture** into
 `PRIMEVUE_BASELINE_OUT`; it does **not** write the aggregate files committed
-here. Those aggregates were assembled outside the repo from the per-capture
-output:
+here. `assemble.mjs` turns that per-run output into the aggregates:
 
-- `v5/tokens.json` — union of the computed `--p-*` values across the captures,
-  with a `conflicts` map.
-- `v5/fingerprints.json` — per-capture component fingerprints keyed by slug
-  (`{ url, viewport, components }`): a trimmed merge of the per-capture JSON in
-  which the `slug`/`path`/`title`/`tokens` fields are dropped and `url` is
-  reduced to path + query.
-- `v5/dom.json` — the rendered-DOM signatures emitted by
-  `primevue-component-dom.spec.ts` when `PRIMEVUE_DOM_OUT` is set.
+| Aggregate | Built from |
+| --- | --- |
+| `v5/fingerprints.json` | one entry per capture, `{ url, viewport, components }`. The capture's `slug`/`path`/`title`/`tokens` fields are dropped and `url` is reduced to path + query, because the origin is worktree-derived. |
+| `v5/tokens.json` | the union of each capture's computed `--p-*` values. Every capture must agree on the token **set** (and on each value) or the assembler fails — tokens are document-root values, so a disagreement means a broken capture. |
+| `v5/dom.json` | the `PRIMEVUE_DOM_OUT` signature file, after checking it parses and carries more than 15 signatures. |
 
-> **There is no assembler committed in this repo** that merges the per-capture
-> JSON into these aggregate files. The committed aggregates are a retained
-> capture and are **partly hand-maintained**: for example FAR-2716 hand-edited
-> one recorded `__class` value in `v5/fingerprints.json` when a class was removed
-> from the product, because the v5 reference cannot be re-captured from the
-> current (v4) tree. Do not hand-write values speculatively; only correct a value
-> that is provably wrong against the current product, and record why in the
-> commit message.
+## Assembling the aggregates
 
-**Outstanding:** regenerating these files requires temporarily reinstalling the
-PrimeVue 5.0.4 toolchain (`primevue` 5.0.4, `@primeuix/themes` 3.1.0,
-`@primeuix/styled` 1.2.0), re-running the capture and re-assembling the
-aggregates by hand. That cannot be done against the pinned PrimeVue 4.5.5, which
-produces the **v4 comparison side** rather than this v5 reference. A reproducible
-v5 re-capture (and a committed assembler) is outstanding; the installed-version
-re-capture is also outstanding and is not committed here.
+```sh
+cd frontend
+node tests/visual-baseline/assemble.mjs \
+  --captures test-results/primevue-baseline-v5 \
+  --dom      test-results/primevue-dom-v5.json \
+  --out      tests/visual-baseline/v5 \
+  --note     "Union of computed --p-* values across the captured routes on PrimeVue 5.0.4 / @primeuix/themes 3.1.0"
+```
+
+| Flag | Behaviour |
+| --- | --- |
+| `--captures <dir>` | directory of per-capture `<slug>.json` files (the PNGs are ignored) |
+| `--dom <dom.json>` | the `PRIMEVUE_DOM_OUT` signature file |
+| `--out <dir>` | directory the three aggregates are written to, or — with `--check` — compared against |
+| `--note <text>` | the `tokens.json` note. Omitted, the target file's note is preserved, falling back to a generic note for a fresh directory |
+| `--conflicts <json-file>` | replaces the `tokens.json` conflicts block. Omitted, the target file's block is preserved **verbatim** — see below |
+| `--check` | assembles in memory and compares **parsed content** (not bytes) with `--out`. Prints, per file, `OK` / `ADVISORY` / `DIFF` / `MISSING`; writes nothing; exits non-zero only when the content differs |
+
+The assembler is deterministic: capture slugs and token names are sorted, every
+fingerprint entry emits `url`, then `viewport` (`{ width, height }`), then
+`components`, and the files are 1-space-indented JSON with a trailing newline.
+Two consecutive runs over the same input are byte-identical.
+
+**`conflicts` is preserved, never recomputed.** The block was produced with the
+v5 toolchain (`@primeuix/styled` `toVariables()`), which is not installed here,
+so the assembler carries the target file's block forward unchanged (or takes
+`--conflicts`) rather than silently zeroing it. It is not derived from the
+captures.
+
+Verify the committed aggregates without writing anything:
+
+```sh
+node tests/visual-baseline/assemble.mjs \
+  --captures test-results/primevue-baseline-v5 \
+  --dom      test-results/primevue-dom-v5.json \
+  --out      tests/visual-baseline/v5 --check
+```
+
+`--check` compares parsed content, so object key order and indentation never
+make it fail: a byte difference with identical content prints one `ADVISORY`
+line for that file ("content matches, formatting/key order differs") and the
+exit stays 0. Only a content difference fails, and it is reported concretely —
+a missing slug, a changed value — not as a byte count.
+
+> **The committed v5 files are not assembler-normalised.** `v5/fingerprints.json`
+> and `v5/tokens.json` were assembled by hand before this script existed, in
+> capture order rather than sorted order, so `--check` prints the advisory for
+> them and still passes. Regenerating them with `assemble.mjs` normalises the
+> bytes and clears the advisory; until then, do not "fix" the formatting by hand.
+
+> **The v5 reference still cannot be re-captured from this tree.** The aggregates
+> are reproducible *given a v5 capture*, and regenerating one requires
+> temporarily reinstalling the PrimeVue 5.0.4 toolchain (`primevue` 5.0.4,
+> `@primeuix/themes` 3.1.0, `@primeuix/styled` 1.2.0) and re-running the capture
+> spec. That cannot be done against the pinned PrimeVue 4.5.5, which produces
+> the **v4 comparison side** rather than this v5 reference. Because the v5
+> toolchain cannot be reinstalled on demand, a value that is *provably* wrong
+> against the current product is still corrected by hand (FAR-2716 hand-edited
+> one recorded `__class` value in `v5/fingerprints.json` when a class was removed)
+> — record why in the commit message. Never hand-write a value speculatively.
+> The installed-version re-capture is also outstanding and is not committed here.
 
 PNG screenshots are **not** committed: they are ~1.8 MB per run and are
 reproducible from the spec. Capture them with:
