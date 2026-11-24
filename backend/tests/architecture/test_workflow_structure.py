@@ -1720,9 +1720,44 @@ def test_production_deploy_still_verifies_the_shipped_sha() -> None:
     for needle in ("steps.git.outputs.git-sha", "SHA MISMATCH", '"deployed_sha=$deployedSha"'):
         if needle not in run:
             violations.append(f"  the deployed-SHA check lost {needle!r}")
+    # FAR-2656: the SHA check must read the app this job deployed. Probing the
+    # custom domain would read the old app during the cutover window and could
+    # confirm the wrong release's SHA.
+    if "https://farna-control.fly.dev/api/v1/deployment" not in run:
+        violations.append("  the deployed-SHA check no longer reads https://farna-control.fly.dev/api/v1/deployment")
     if "exit 1" not in run:
         violations.append("  a SHA mismatch no longer fails the step")
     assert not violations, "the production SHA verification was weakened:\n" + "\n".join(violations)
+
+
+def test_production_post_deploy_gates_target_the_deployed_app_host() -> None:
+    """The post-deploy gates must exercise the app this job deployed (FAR-2656).
+
+    The production target moved to ``farna-control``, but the custom domain
+    (``control.farna.dev``) still serves the old app until the domain move. The
+    health gate and the ``@smoke`` run must therefore probe the app's own
+    ``farna-control.fly.dev`` host - reading through the domain would report a
+    false green for the old app while a broken new release ships. Pin the host
+    in each gate so a revert to ``control.farna.dev`` fails this suite.
+    """
+    app_host = "https://farna-control.fly.dev"
+    production_steps = (_deploy_jobs().get("deploy-production") or {}).get("steps") or []
+    violations: list[str] = []
+
+    verify = next(s for s in production_steps if isinstance(s, dict) and s.get("name") == "Post-deploy verify + auto-rollback (never leave prod down)")
+    verify_run = str(verify.get("run") or "")
+    if f'wait_healthy "{app_host}"' not in verify_run:
+        violations.append(f"  the post-deploy health gate no longer probes {app_host}")
+    if 'wait_healthy "https://control.farna.dev"' in verify_run:
+        violations.append("  the post-deploy health gate reads the custom domain instead of the deployed app")
+
+    smoke_steps = (_deploy_jobs().get("prod-smoke") or {}).get("steps") or []
+    smoke = next(s for s in smoke_steps if isinstance(s, dict) and str(s.get("name") or "").startswith("Run @smoke Playwright tests"))
+    smoke_env = smoke.get("env") or {}
+    if smoke_env.get("E2E_BASE_URL") != app_host:
+        violations.append(f"  the @smoke step E2E_BASE_URL is {smoke_env.get('E2E_BASE_URL')!r}, expected {app_host!r}")
+
+    assert not violations, "post-deploy gates do not target the deployed app host:\n" + "\n".join(violations)
 
 
 def test_production_drain_clears_only_after_all_post_deploy_gates() -> None:
