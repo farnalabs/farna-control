@@ -1903,3 +1903,77 @@ async def test_print_failure_never_skips_send_or_state_commit(
     persisted = json.loads(store.data[ha.STATE_KEY])
     assert persisted["notified"] == "healthy"
     assert "health_alerts.stamp_print_failed" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# send_operator_alert — the shared channel for a non-readiness alert (FAR-2740)
+# ---------------------------------------------------------------------------
+
+
+async def test_send_operator_alert_reuses_the_shared_sender_and_recipients() -> None:
+    settings = _make_settings()
+    sender = AsyncMock(return_value=True)
+
+    delivered = await ha.send_operator_alert(
+        subject="[Farna Control] dump failed",
+        body_html="<p>html</p>",
+        body_text="text",
+        settings=settings,
+        sender=sender,
+    )
+
+    assert delivered is True
+    sender.assert_awaited_once()
+    args = sender.await_args.args
+    assert args[0] is settings
+    assert args[1] == ["ops@example.com", "sre@example.com"]
+    assert args[2] == "[Farna Control] dump failed"
+
+
+async def test_send_operator_alert_quiet_when_channel_unconfigured() -> None:
+    settings = _make_settings(smtp_host="", alert_email_to="")
+    sender = AsyncMock(return_value=True)
+
+    delivered = await ha.send_operator_alert(
+        subject="s",
+        body_html="h",
+        body_text="t",
+        settings=settings,
+        sender=sender,
+    )
+
+    assert delivered is False
+    sender.assert_not_awaited()
+
+
+async def test_send_operator_alert_reports_a_failed_send() -> None:
+    settings = _make_settings()
+    sender = AsyncMock(return_value=False)
+
+    delivered = await ha.send_operator_alert(
+        subject="s",
+        body_html="h",
+        body_text="t",
+        settings=settings,
+        sender=sender,
+    )
+
+    assert delivered is False
+    sender.assert_awaited_once()
+
+
+async def test_send_operator_alert_respects_the_environment_allowlist() -> None:
+    settings = _make_settings(alert_environments="production")
+    sender = AsyncMock(return_value=True)
+
+    delivered = await ha.send_operator_alert(
+        subject="s",
+        body_html="h",
+        body_text="t",
+        settings=settings,
+        sender=sender,
+    )
+
+    # The default test environment is not "production", so it is excluded.
+    assert delivered is False
+    sender.assert_not_awaited()

@@ -57,6 +57,13 @@ SWITCH_SOURCE_DEFAULT: str = "default"
 # import-linter contract forbids.
 DUMP_WATERMARK_KEY: str = "product_analytics_last_dumped_date"
 DUMP_COUNT_KEY: str = "product_analytics_dump_count"
+#: ISO-8601 timestamp of the most recent FAILED dump attempt (FAR-2740). Written
+#: when a dump attempt finally fails and removed by the next fully successful
+#: attempt, so it always describes a failure that has not since been superseded.
+DUMP_LAST_FAILURE_AT_KEY: str = "product_analytics_last_dump_failure_at"
+#: Truncated human-readable summary of that failure (status code + message).
+#: NEVER carries the instance secret.
+DUMP_LAST_FAILURE_SUMMARY_KEY: str = "product_analytics_last_dump_failure_summary"
 
 
 def coerce_dump_count(value: Any) -> int:

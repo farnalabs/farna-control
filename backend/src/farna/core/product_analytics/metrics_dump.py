@@ -15,9 +15,11 @@ gate skips (instance switch off, no consenting orgs, persistent vendor failure).
 
 from __future__ import annotations
 
+import html
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -33,6 +35,8 @@ from farna.core.cost_controller.system_config import (
 from farna.core.product_analytics.consent import is_instance_analytics_enabled, is_org_consenting
 from farna.core.product_analytics.constants import (
     DUMP_COUNT_KEY,
+    DUMP_LAST_FAILURE_AT_KEY,
+    DUMP_LAST_FAILURE_SUMMARY_KEY,
     DUMP_WATERMARK_KEY,
     coerce_dump_count,
 )
@@ -61,6 +65,15 @@ _DUMP_WINDOW_MINUTES = 360  # 6 hours
 _DUMP_EXECUTION_WINDOW_MINUTES = 10  # each instance gets 10 min to complete
 _OFFSET_KEY = "product_analytics_dump_offset_minutes"
 
+#: Cap on the persisted/spoken failure summary (FAR-2740). A vendor error body
+#: can be long; the durable record and the operator email only need enough to
+#: identify the failure. Never includes the instance secret — only the status
+#: code and the error text the vendor client already returned.
+_MAX_FAILURE_SUMMARY_LEN = 500
+
+#: Type of the ``on_failure`` sink passed into ``_dump_date_range``.
+FailureSink = Callable[[int | None, str | None], None]
+
 
 def _parse_iso_date(value: str) -> date:
     """Parse an ISO date *or* datetime string to a ``date``.
@@ -87,6 +100,78 @@ async def _increment_dump_count(session: AsyncSession) -> None:
     await acquire_kv_lock(session, DUMP_COUNT_KEY)
     current = coerce_dump_count(await read_system_config(session, DUMP_COUNT_KEY))
     await write_system_config(session, DUMP_COUNT_KEY, current + 1)
+
+
+def _summarise_dump_failure(status_code: int | None, error: str | None) -> str:
+    """Build the durable/spoken failure summary — status code plus a truncated message.
+
+    Deliberately narrow: only the HTTP status and the error text the vendor
+    client already produced. The instance secret is never a parameter here, so
+    it cannot leak into the stored summary or the operator email (FAR-2740).
+    """
+    code = "no_status" if status_code is None else str(status_code)
+    detail = (error or "unknown error").strip() or "unknown error"
+    return f"status={code}: {detail}"[:_MAX_FAILURE_SUMMARY_LEN]
+
+
+async def _record_dump_failure(factory: Any, status_code: int | None, error: str | None) -> None:
+    """Persist the most recent dump failure so the transparency page can show it.
+
+    Writes the failure timestamp and a truncated summary under the keys declared
+    in :mod:`constants` (FAR-2740). The previous record is overwritten, so the
+    stored failure always describes the LATEST attempt; the next fully
+    successful dump removes it (:func:`_clear_dump_failure`).
+    """
+    summary = _summarise_dump_failure(status_code, error)
+    recorded_at = datetime.now(UTC).isoformat()
+    async with factory() as session, session.begin():
+        await write_system_config(session, DUMP_LAST_FAILURE_AT_KEY, recorded_at)
+        await write_system_config(session, DUMP_LAST_FAILURE_SUMMARY_KEY, summary)
+    _log.warning(
+        "product_analytics.dump_failure_recorded",
+        extra={"status_code": status_code, "summary": summary},
+    )
+
+
+async def _clear_dump_failure(factory: Any) -> None:
+    """Remove the stored failure record after a fully successful dump.
+
+    Deleting (rather than writing an empty value) keeps "present" meaning
+    "a real, un-superseded failure" — the transparency route renders an absent
+    key as ``None`` (FAR-2740).
+    """
+    from farna.db.crud.system_config import delete_config
+
+    async with factory() as session, session.begin():
+        await delete_config(session, DUMP_LAST_FAILURE_AT_KEY)
+        await delete_config(session, DUMP_LAST_FAILURE_SUMMARY_KEY)
+
+
+async def _raise_dump_failure_alert(settings: Any, status_code: int | None, error: str | None) -> None:
+    """Tell the operator about a failed dump through the shared alert channel.
+
+    Reuses ``core.health_alerts.send_operator_alert`` — the SAME SMTP config,
+    recipient parse and environment allowlist the readiness alert uses — rather
+    than growing a second notification system (FAR-2740). Imported lazily so the
+    dump's module graph does not pull ``redis``/``email_service`` in at import
+    time (the same import discipline the rest of this module follows).
+
+    Best-effort: the helper never raises for a send/config problem, so a mail
+    failure can never change the dump's watermark or retry behaviour. The
+    durable record from :func:`_record_dump_failure` is the source of truth.
+    """
+    from farna.core.health_alerts import send_operator_alert
+
+    summary = _summarise_dump_failure(status_code, error)
+    subject = "[Farna Control] Product analytics dump failed"
+    body_text = f"Farna Control could not deliver the product analytics batch to farnalabs.\n{summary}\nThe dump retries on its next scheduled tick; the last successful dump date is unchanged.\nSee the product analytics transparency page for details."
+    body_html = f"<html><body><h2>Farna Control: product analytics dump failed</h2><p>{html.escape(summary)}</p><p>The dump retries on its next scheduled tick; the last successful dump date is unchanged.</p><p>See the product analytics transparency page for details.</p></body></html>"
+    await send_operator_alert(
+        settings=settings,
+        subject=subject,
+        body_html=body_html,
+        body_text=body_text,
+    )
 
 
 async def _get_or_create_system_config(factory: Any, key: str, create: Any) -> str:
@@ -249,7 +334,16 @@ async def metrics_dump(_ctx: dict[str, Any]) -> dict[str, Any]:
         _log.warning("product_analytics.missing_vendor_config")
         return {"skipped": "missing_vendor_config", "staging_purged": staging_purged}
 
-    succeeded_dates = await _dump_date_range(factory, orgs, start_date, dump_date, endpoint_url, instance_secret)
+    failures: list[tuple[int | None, str | None]] = []
+    succeeded_dates = await _dump_date_range(
+        factory,
+        orgs,
+        start_date,
+        dump_date,
+        endpoint_url,
+        instance_secret,
+        on_failure=lambda status_code, error: failures.append((status_code, error)),
+    )
 
     # Advance watermark (design doc section 8).
     if succeeded_dates:
@@ -258,6 +352,17 @@ async def metrics_dump(_ctx: dict[str, Any]) -> dict[str, Any]:
             await acquire_kv_lock(session, DUMP_WATERMARK_KEY)
             await write_system_config(session, DUMP_WATERMARK_KEY, new_watermark.isoformat())
             await _increment_dump_count(session)
+
+    # Durable failure record + operator alert (FAR-2740). A failure record for
+    # an attempt that also delivered earlier days is kept: the attempt did NOT
+    # fully succeed, so the page must still show why it stopped. Only a fully
+    # successful pass clears the record.
+    if failures:
+        status_code, error = failures[-1]
+        await _record_dump_failure(factory, status_code, error)
+        await _raise_dump_failure_alert(settings, status_code, error)
+    elif succeeded_dates:
+        await _clear_dump_failure(factory)
 
     return {
         "dumped_dates": [str(d) for d in succeeded_dates],
@@ -301,12 +406,19 @@ async def _dump_date_range(
     dump_date: date,
     endpoint_url: str,
     instance_secret: str,
+    *,
+    on_failure: FailureSink | None = None,
 ) -> list[date]:
     """Build and POST one payload per day in ``[start_date, dump_date]``.
 
     Stops early (leaving later dates undumped) on the first failed POST so the
     watermark is not advanced past un-sent data.  Returns the dates whose POST
     succeeded, in order.
+
+    ``on_failure`` (FAR-2740) is an optional sink invoked with
+    ``(status_code, error)`` on the failed POST. ``metrics_dump`` uses it to
+    persist the failure and alert the operator without this function having to
+    own durable state; direct callers (and its unit tests) may omit it.
     """
     client = VendorClient(endpoint_url, instance_secret)
     succeeded_dates: list[date] = []
@@ -334,6 +446,8 @@ async def _dump_date_range(
                     "product_analytics.dump_failed",
                     extra={"date": str(current_date), "status_code": status_code, "error": error},
                 )
+                if on_failure is not None:
+                    on_failure(status_code, error)
                 break
 
             current_date += timedelta(days=1)

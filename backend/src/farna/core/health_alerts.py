@@ -728,6 +728,42 @@ async def _send_via_smtp(
         return False
 
 
+async def send_operator_alert(
+    *,
+    subject: str,
+    body_html: str,
+    body_text: str,
+    settings: Settings | None = None,
+    sender: EmailSender | None = None,
+) -> bool:
+    """Deliver an ad-hoc OPERATOR alert over the readiness email channel.
+
+    The single reuse point for a non-readiness alert (FAR-2740 wires the failed
+    product-analytics dump through it). It deliberately shares the SAME
+    configuration gate, recipient parse, environment allowlist and SMTP sender
+    as the readiness alert, so a second alert source never grows a second
+    notification system to configure. It does NOT touch the readiness dedup
+    state machine: an ad-hoc alert is not a readiness edge, and dedup there is
+    keyed on readiness state.
+
+    Returns ``True`` when the channel is configured AND the sender reports
+    success; ``False`` when alerting is disabled (channel unconfigured or this
+    environment excluded by ``ALERT_ENVIRONMENTS``) or the send failed. Never
+    raises for a send/config problem — the caller's own work must not be
+    aborted by a mail failure.
+    """
+    settings = settings or get_settings()
+    if not alerting_enabled_for_environment(settings):
+        _log_disabled_once(time.time(), environment_excluded=True)
+        return False
+    if not alerting_configured(settings):
+        _log_disabled_once(time.time())
+        return False
+    recipients = _recipients(settings)
+    send_fn = sender or _send_via_smtp
+    return bool(await send_fn(settings, recipients, subject, body_html, body_text))
+
+
 @dataclass
 class _AlertState:
     """The persisted notification state (Redis JSON document at STATE_KEY)."""

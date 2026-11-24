@@ -23,6 +23,8 @@ from farna.core.product_analytics.consent import (
 )
 from farna.core.product_analytics.constants import (
     DUMP_COUNT_KEY,
+    DUMP_LAST_FAILURE_AT_KEY,
+    DUMP_LAST_FAILURE_SUMMARY_KEY,
     DUMP_WATERMARK_KEY,
     INSTANCE_SWITCH_KEY,
     LEVEL_ALL,
@@ -48,6 +50,12 @@ router = APIRouter(
 
 class TransparencyResponse(BaseModel):
     last_successful_dump_at: str | None = None
+    #: ISO-8601 timestamp of the most recent FAILED dump attempt, or ``None``
+    #: when no un-superseded failure is recorded (FAR-2740).
+    last_failed_dump_at: str | None = None
+    #: Truncated summary of that failure — HTTP status plus the vendor's error
+    #: text, never the instance secret. ``None`` when no failure is recorded.
+    last_dump_failure: str | None = None
     dump_count_total: int = 0
     consent_level: str = LEVEL_OFF
     instance_enabled: bool = False
@@ -130,22 +138,53 @@ async def _instance_consent_level(session: AsyncSession) -> str:
     return LEVEL_OFF
 
 
-def _stale_dump_warning(last_dump_at: str | None, consent_level: str) -> str | None:
-    """The staleness warning when dumps stopped reaching farnalabs.
+def _coerce_failure_summary(value: Any) -> str | None:
+    """Normalise the stored failure summary into the response field.
 
-    Fires only when the last successful dump is older than
-    *_STALE_WARNING_DAYS* AND consent is ``all``. An unparseable timestamp
-    never warns (best-effort, fail-silent).
+    A stored string passes through (an empty string means "cleared" and yields
+    ``None``); any other non-None scalar is stringified; a missing value yields
+    ``None``.
     """
-    if not last_dump_at:
+    if isinstance(value, str):
+        return value or None
+    if value is not None:
+        return str(value)
+    return None
+
+
+def _stale_dump_warning(
+    last_dump_at: str | None,
+    consent_level: str,
+    *,
+    instance_enabled: bool = False,
+) -> str | None:
+    """The delivery warning when dumps are not reaching farnalabs.
+
+    Two distinct cases, distinguished in the value so an operator can tell them
+    apart (FAR-2740):
+
+    * ``never_reached_farnalabs`` — there has NEVER been a successful dump and
+      the instance switch is ON, so an opted-in instance is silently delivering
+      nothing. This is the state production was in when the dump never
+      completed, and it previously produced NO warning at all. With the switch
+      OFF the instance is deliberately sending nothing, so it stays quiet.
+    * ``not_reaching_farnalabs`` — a previous dump succeeded but the last
+      success is older than *_STALE_WARNING_DAYS*. Unchanged behaviour.
+
+    Both require consent ``all`` (the existing consent basis for this warning).
+    An unparseable timestamp never warns (best-effort, fail-silent).
+    """
+    if consent_level != LEVEL_ALL:
         return None
+    if not last_dump_at:
+        return "never_reached_farnalabs" if instance_enabled else None
     try:
         last_dt = datetime.fromisoformat(last_dump_at)
         now = datetime.now(UTC)
         if last_dt.tzinfo is None:
             last_dt = last_dt.replace(tzinfo=UTC)
         days_since = (now - last_dt).total_seconds() / 86400
-        if days_since > _STALE_WARNING_DAYS and consent_level == LEVEL_ALL:
+        if days_since > _STALE_WARNING_DAYS:
             return "not_reaching_farnalabs"
     except (ValueError, TypeError):
         pass
@@ -166,10 +205,14 @@ async def _build_transparency(
         consent.resolve_instance_analytics_switch, the SAME helper the dump gate
         uses. Precedence: explicit operator value (stored system_config, then
         FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED) -> licence-required default -> OFF.
-      * last_successful_dump_at / dump_count_total - the keys the metrics dump
-        actually writes (constants.DUMP_WATERMARK_KEY / DUMP_COUNT_KEY, which
-        live in the langgraph-free constants module so the API can import them
-        statically without violating the import-linter contract).
+      * last_successful_dump_at / dump_count_total / last_failed_dump_at /
+        last_dump_failure - the keys the metrics dump actually writes
+        (constants.DUMP_WATERMARK_KEY / DUMP_COUNT_KEY /
+        DUMP_LAST_FAILURE_AT_KEY / DUMP_LAST_FAILURE_SUMMARY_KEY, which live in
+        the langgraph-free constants module so the API can import them
+        statically without violating the import-linter contract). The failure
+        pair is written only on a failed attempt and removed by the next fully
+        successful one (FAR-2740).
       * consent_level - the caller's organisation real consent level
         (org.settings_json["product_analytics"]["level"], read through
         consent.org_consent_level) is the PREFERRED source. When the caller org
@@ -180,6 +223,8 @@ async def _build_transparency(
     switch = await resolve_instance_analytics_switch(session)
     last_dump_entry = await get_config(session, DUMP_WATERMARK_KEY)
     dump_count_entry = await get_config(session, DUMP_COUNT_KEY)
+    failure_at_entry = await get_config(session, DUMP_LAST_FAILURE_AT_KEY)
+    failure_summary_entry = await get_config(session, DUMP_LAST_FAILURE_SUMMARY_KEY)
     org = await _resolve_org(session, principal.organisation_id)
     if org is None:
         # Per-org is preferred, but an unresolvable caller org falls back
@@ -190,10 +235,14 @@ async def _build_transparency(
 
     last_dump_at = _coerce_last_dump(last_dump_entry.value if last_dump_entry else None)
     dump_count_total = coerce_dump_count(dump_count_entry.value if dump_count_entry else None)
-    warning = _stale_dump_warning(last_dump_at, consent_level)
+    last_failed_dump_at = _coerce_last_dump(failure_at_entry.value if failure_at_entry else None)
+    last_dump_failure = _coerce_failure_summary(failure_summary_entry.value if failure_summary_entry else None)
+    warning = _stale_dump_warning(last_dump_at, consent_level, instance_enabled=switch.enabled)
 
     return TransparencyResponse(
         last_successful_dump_at=last_dump_at,
+        last_failed_dump_at=last_failed_dump_at,
+        last_dump_failure=last_dump_failure,
         dump_count_total=dump_count_total,
         consent_level=consent_level,
         instance_enabled=switch.enabled,
