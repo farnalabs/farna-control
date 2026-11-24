@@ -166,9 +166,13 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
         view, and the first artifact's inner ``output``.
 
         A post-P1b stored ``outputs_json`` value is the PURE agent return
-        (``None`` or agent-authored business JSON) — scanned top-level only; the
-        marker requirement in the predicate keeps agent-authored JSON
-        collision-free.
+        (``None`` or agent-authored business JSON), so it IS scanned top-level
+        as a legacy-envelope fallback. Collision-freedom therefore comes from
+        the marker being NAMESPACED (``SYNTHETIC_FAILURE_MARKER`` /
+        ``LEGACY_SYNTHETIC_FAILURE_MARKERS``), never from a bare
+        ``synthetic_failure`` key: an agent-authored
+        ``{"status": "failed", "synthetic_failure": true}`` must not masquerade
+        as the runner's marker.
         """
         views: list[dict[str, Any]] = []
         if not isinstance(value, dict):
@@ -194,11 +198,21 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
         """FAR-510 — the marker-based downgrade predicate.
 
         Requires ``status == "failed"`` AND the runner's machine marker
-        (``MODULO_SYNTHETIC_FAILURE_MARKER``) True — never summary text — so an
+        (``SYNTHETIC_FAILURE_MARKER``) True — never summary text — so an
         agent-authored failure shape (honest exit-code failure, business JSON
         self-reporting failure) is never downgraded.
+
+        Dual-read: a stored row written before the rebrand carries only a
+        legacy marker key (``LEGACY_SYNTHETIC_FAILURE_MARKERS``), and a run can
+        outlive a rolling deploy, so the predicate treats the new and every
+        legacy key as the same terminal/synthetic signal until the drop
+        release.
         """
-        return view.get("status") == "failed" and view.get(_ref("MODULO_SYNTHETIC_FAILURE_MARKER")) is True
+        if view.get("status") != "failed":
+            return False
+        if view.get(_ref("SYNTHETIC_FAILURE_MARKER")) is True:
+            return True
+        return any(view.get(marker) is True for marker in _ref("LEGACY_SYNTHETIC_FAILURE_MARKERS"))
 
     def _downgrade_connector_failures(
         self,
@@ -248,12 +262,13 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
     ) -> tuple[str, str | None, str | None]:
         """FAR-510 — downgrade a masked sandbox-agent failure to an honest fail.
 
-        The sandbox_agent runner's synthetic failure paths (generic exception,
-        schema validation) do NOT raise — they RETURN a failure envelope
-        stamped with the ``MODULO_SYNTHETIC_FAILURE_MARKER`` machine marker.
-        Node completion is output-presence-based, so that node counts as
-        completed and the run would finalize ``complete`` — a failed dispatch
-        masked as success.
+        The sandbox_agent runner's generic-exception path does NOT raise — it
+        RETURNS a failure envelope stamped with the ``SYNTHETIC_FAILURE_MARKER``
+        machine marker. (The schema-validation path no longer returns such an
+        envelope: FAR-780 made it raise a retryable error instead.) Node
+        completion is output-presence-based, so that node counts as completed
+        and the run would finalize ``complete`` — a failed dispatch masked as
+        success.
 
         Only a ``complete`` final_status is inspected (failed/eval_failed/etc.
         are already honest). A match is a completed output on a node the
@@ -739,7 +754,7 @@ class FinalizeMixin(TelemetryMixin, _ExecutorHost):
         )
         # FAR-1690 A3 (run_teardown.RunTeardownSeal): the sealed terminal step —
         # revoke the run's per-run API key (FAR-296 Phase 3b), then destroy every
-        # workspace labelled modulo.run.id = run_id, then write one
+        # workspace labelled with the run id, then write one
         # run.teardown_sealed fact. Revoke-first, fail-closed. Failure-isolated
         # so a seal failure never crashes terminalization (the key's short-TTL
         # expiry in validate_api_key is the credential backstop; the

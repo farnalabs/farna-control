@@ -1,0 +1,11 @@
+{
+  "note": "Dependency versions the retained PrimeVue 5.0.4 reference was captured on (see README.md and DELTA.md). This records the v5 capture environment, which intentionally differs from the installed PrimeVue 4.5.5 line; it is not the installed dependency set. A capture against the pinned 4.5.5 produces the v4 comparison side, so this v5 reference cannot be regenerated from the current tree.",
+  "reference": {
+    "kind": "primevue-v5-downgrade-baseline",
+    "primevue_major": 5,
+    "intentionally_differs_from_installed": true
+  },
+  "primevue": "5.0.4",
+  "themes": "@primeuix/themes 3.1.0",
+  "styled": "@primeuix/styled 1.2.0"
+}

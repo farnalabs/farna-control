@@ -66,7 +66,7 @@ describe('LockedRouteView', () => {
       'Costs requires the Cost governance capability',
     )
     // The entitlement lock reuses FeatureGate rather than a second pattern.
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(true)
     // No "try again" link: a retry cannot help before an upgrade.
     expect(wrapper.find('[data-testid="locked-route-open"]').exists()).toBe(false)
     // But the caller is never stranded: the lock branch still offers the way
@@ -111,7 +111,7 @@ describe('LockedRouteView', () => {
     )
     const closed = wrapper.get('[data-testid="locked-route-closed"]')
     expect(closed.text()).toContain('needs a role change from your organisation administrator')
-    expect(wrapper.find('[data-testid="feature-gate"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="locked-route-dashboard"]').attributes('href')).toBe('/')
   })
 
@@ -130,7 +130,7 @@ describe('LockedRouteView', () => {
     expect(closed.text()).toContain('This page requires one of these roles: Operator, Admin.')
     expect(closed.text()).toContain('ask an organisation administrator to give you one of them')
     // A role lock never offers a plan upgrade: no purchase changes a role.
-    expect(wrapper.find('[data-testid="feature-gate"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-"]').exists()).toBe(false)
     // And it offers no "open the capability" link back into the route it just
     // refused — that link only exists once the licence covers it, and a link
     // into a denied route is the shape that could bounce the caller straight

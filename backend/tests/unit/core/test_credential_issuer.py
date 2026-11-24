@@ -5,7 +5,7 @@ Covers:
    vocabulary and the forbidden ``observed`` attestation kind.
 2. The credential never renders its secret in ``repr``.
 3. ``ModuloCredentialIssuer.issue_for_run`` — fail-open paths, the minted
-   ``modulo_minted``/``attested`` provenance, and account resolution.
+   ``self_minted``/``attested`` provenance, and account resolution.
 4. ``revoke_for_run`` / ``describe`` / ``default_credential_issuer``.
 """
 
@@ -17,7 +17,7 @@ import pytest
 
 from farna.core.credential_issuer import (
     ISSUANCE_PROVENANCE_BROKER_ISSUED,
-    ISSUANCE_PROVENANCE_MODULO_MINTED,
+    ISSUANCE_PROVENANCE_SELF_MINTED,
     IssuedRunCredential,
     ModuloCredentialIssuer,
     default_credential_issuer,
@@ -58,9 +58,9 @@ def _issued(**overrides: Any) -> IssuedRunCredential:
 
 
 class TestIssuedRunCredentialProvenance:
-    def test_defaults_to_modulo_minted_attested(self) -> None:
+    def test_defaults_to_self_minted_attested(self) -> None:
         cred = _issued()
-        assert cred.provenance == ISSUANCE_PROVENANCE_MODULO_MINTED
+        assert cred.provenance == ISSUANCE_PROVENANCE_SELF_MINTED
         assert cred.provenance_kind == "attested"
 
     def test_accepts_broker_issued_provenance(self) -> None:
@@ -132,7 +132,7 @@ class TestModuloCredentialIssuer:
         issued = await issuer.issue_for_run(session_factory=factory, org_id=_ORG_ID, run_id="not-a-uuid", node_id="n1", sandbox_timeout=300)
         assert issued is None
 
-    async def test_issue_success_stamps_modulo_minted(self) -> None:
+    async def test_issue_success_stamps_self_minted(self) -> None:
         session, factory = _session_factory()
         captured: dict[str, Any] = {}
 
@@ -149,9 +149,9 @@ class TestModuloCredentialIssuer:
 
         assert issued is not None
         assert issued.secret == _FAKE_KEY
-        assert issued.provenance == ISSUANCE_PROVENANCE_MODULO_MINTED
+        assert issued.provenance == ISSUANCE_PROVENANCE_SELF_MINTED
         assert issued.provenance_kind == "attested"
-        assert issued.issuer == "modulo"
+        assert issued.issuer == "farna_control"
         assert str(issued.run_id) == _RUN_ID
         assert issued.node_id == "n1"
         assert captured["account_id"] == _ACCOUNT_ID
@@ -203,11 +203,11 @@ class TestModuloCredentialIssuer:
 
     def test_describe_reports_provenance_without_secret(self) -> None:
         described = ModuloCredentialIssuer().describe()
-        assert described["issuer"] == "modulo"
-        assert described["provenance"] == ISSUANCE_PROVENANCE_MODULO_MINTED
+        assert described["issuer"] == "farna_control"
+        assert described["provenance"] == ISSUANCE_PROVENANCE_SELF_MINTED
         assert described["provenance_kind"] == "attested"
 
-    def test_default_issuer_is_modulo_minted(self) -> None:
+    def test_default_issuer_is_self_minted(self) -> None:
         issuer = default_credential_issuer()
-        assert issuer.name == "modulo"
-        assert issuer.provenance == ISSUANCE_PROVENANCE_MODULO_MINTED
+        assert issuer.name == "farna_control"
+        assert issuer.provenance == ISSUANCE_PROVENANCE_SELF_MINTED

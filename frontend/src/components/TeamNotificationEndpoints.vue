@@ -6,16 +6,17 @@
       />
     </div>
 
-    <div v-else-if="error" class="mb-3 text-sm text-destructive">
-      {{ error }}
-      <button type="button"
-        class="ml-2 underline"
-        data-testid="team-notif-retry"
-        @click="loadEndpoints"
-      >
-        Retry
-      </button>
-    </div>
+    <ErrorAlert v-else-if="error" class="mb-3" :message="error" :retryable="false">
+      <template #actions>
+        <button type="button"
+          class="underline"
+          data-testid="team-notif-retry"
+          @click="loadEndpoints"
+        >
+          Retry
+        </button>
+      </template>
+    </ErrorAlert>
 
     <template v-else>
       <div
@@ -339,6 +340,7 @@ import { ref, computed, onMounted } from "vue";
 import { api } from "../lib/api/client";
 import { useCurrentUser } from "../composables/useCurrentUser";
 import Button from 'primevue/button'
+import ErrorAlert from './shared/ErrorAlert.vue'
 import { formatApiError } from "../lib/api/formatError";
 import type { components } from "../lib/api/client";
 import { Pencil, Play, Trash2, Plus } from "@lucide/vue";

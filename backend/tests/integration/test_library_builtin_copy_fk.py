@@ -1,6 +1,6 @@
 """FAR-697 — copy_library_primitive FK regression against a real database.
 
-Built-in modulo/community primitives live only in the in-memory seed cache:
+Built-in primitives live only in the in-memory seed cache:
 they have no ``library_primitives`` row. The copy used to set
 ``forked_from`` to the source id anyway, and the FK on ``library_primitives.id``
 rejected the insert — the MCP ``copy_library_primitive`` tool returned a
@@ -16,7 +16,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from farna.core.library_service import copy_to_adapt, get_primitive
-from farna.core.library_service._seed_data import _MODULO_BY_SLUG
+from farna.core.library_service._seed_data import _BUILTIN_BY_SLUG
 from farna.db.rls import set_rls_org
 
 pytestmark = pytest.mark.integration
@@ -69,7 +69,7 @@ async def test_builtin_copy_succeeds_with_null_forked_from(
     """Copying an in-memory builtin (Simplest Workflow) must not FK-fail."""
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as session:
-        builtin = await get_primitive(session, org, _MODULO_BY_SLUG[("workflow", "simplest-workflow")].id)
+        builtin = await get_primitive(session, org, _BUILTIN_BY_SLUG[("workflow", "simplest-workflow")].id)
         assert builtin is not None
 
     async with factory() as session:

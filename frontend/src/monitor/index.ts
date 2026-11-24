@@ -1,5 +1,6 @@
 import type { MonitorConfig, MonitorBackend } from './types'
 import { withTimeout } from '../lib/asyncUtils'
+import { readRuntimeConfig } from '../config/runtime'
 import { BuiltinMonitorBackend } from './backends/builtin'
 import { DatadogRumMonitorBackend } from './backends/datadog-rum'
 import { GrafanaFaroMonitorBackend } from './backends/grafana-faro'
@@ -12,7 +13,9 @@ import { SentryMonitorBackend } from './backends/sentry'
 const MONITOR_BACKEND_INIT_TIMEOUT_MS = 5_000
 
 export function loadMonitorConfig(): MonitorConfig {
-  const runtime = (window as unknown as Record<string, unknown>).__MODULO_CONFIG__
+  // `readRuntimeConfig` also honours the pre-rebrand global a cached
+  // `runtime-config.js` still publishes (see its transitional note).
+  const runtime = readRuntimeConfig() as Record<string, unknown> | undefined
   const runtimeMonitor =
     runtime && typeof runtime === 'object' && 'monitor' in runtime
       ? (runtime as Record<string, unknown>).monitor as Partial<MonitorConfig> | undefined

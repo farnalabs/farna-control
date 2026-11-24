@@ -109,10 +109,14 @@
     </div>
 
     <!-- Create Folder Dialog -->
-    <Dialog v-model:visible="showCreateDialog" :modal="true" :dismissable-mask="true" :style="{ width: '28rem' }">
-      <template #header>
-        <div class="text-lg font-semibold">{{ labels.newFolder }}</div>
-      </template>
+    <FormDialog
+      v-model:open="showCreateDialog"
+      :title="labels.newFolder"
+      :confirm-text="$t('common.save')"
+      :confirm-disabled="!newFolderName.trim()"
+      :loading="creating"
+      @confirm="handleCreate"
+    >
       <div class="space-y-4">
         <div>
           <label for="folder-tree-new-name" class="mb-1 block text-sm font-medium">{{ labels.folderName }}</label>
@@ -141,19 +145,17 @@
         <!-- retry = click Save again; no separate loader -->
         <ErrorAlert v-if="createError" :message="createError" :retryable="false" :compact="true" />
       </div>
-      <template #footer>
-        <div class="flex gap-2 justify-end">
-          <Button severity="secondary" outlined @click="showCreateDialog = false">{{ $t('common.cancel') }}</Button>
-          <Button :disabled="!newFolderName.trim() || creating" :loading="creating" @click="handleCreate">{{ $t('common.save') }}</Button>
-        </div>
-      </template>
-    </Dialog>
+    </FormDialog>
 
     <!-- Rename Folder Dialog -->
-    <Dialog v-model:visible="showRenameDialog" :modal="true" :dismissable-mask="true" :style="{ width: '28rem' }">
-      <template #header>
-        <div class="text-lg font-semibold">{{ labels.renameFolder }}</div>
-      </template>
+    <FormDialog
+      v-model:open="showRenameDialog"
+      :title="labels.renameFolder"
+      :confirm-text="$t('common.save')"
+      :confirm-disabled="!renameFolderName.trim()"
+      :loading="renaming"
+      @confirm="handleRename"
+    >
       <div class="space-y-4">
         <div>
           <label for="folder-tree-rename-name" class="mb-1 block text-sm font-medium">{{ labels.folderName }}</label>
@@ -162,29 +164,22 @@
         <!-- retry = click Save again; no separate loader -->
         <ErrorAlert v-if="renameError" :message="renameError" :retryable="false" :compact="true" />
       </div>
-      <template #footer>
-        <div class="flex gap-2 justify-end">
-          <Button severity="secondary" outlined @click="showRenameDialog = false">{{ $t('common.cancel') }}</Button>
-          <Button :disabled="!renameFolderName.trim() || renaming" :loading="renaming" @click="handleRename">{{ $t('common.save') }}</Button>
-        </div>
-      </template>
-    </Dialog>
+    </FormDialog>
 
     <!-- Delete Confirmation Dialog -->
-    <Dialog v-model:visible="showDeleteConfirm" :modal="true" :dismissable-mask="true" :style="{ width: '28rem' }">
-      <template #header>
-        <div class="text-lg font-semibold text-destructive">{{ labels.deleteFolder }}</div>
-      </template>
-      <p class="text-sm text-muted-foreground">{{ deleteConfirmMessage }}</p>
+    <FormDialog
+      v-model:open="showDeleteConfirm"
+      :title="labels.deleteFolder"
+      :description="deleteConfirmMessage"
+      confirm-severity="danger"
+      :confirm-text="$t('common.delete')"
+      :confirm-disabled="deleting"
+      :loading="deleting"
+      @confirm="handleDelete"
+    >
       <!-- retry = click Delete again; no separate loader -->
       <ErrorAlert v-if="deleteError" :message="deleteError" :retryable="false" :compact="true" />
-      <template #footer>
-        <div class="flex gap-2 justify-end">
-          <Button severity="secondary" outlined @click="showDeleteConfirm = false">{{ $t('common.cancel') }}</Button>
-          <Button severity="danger" :disabled="deleting" :loading="deleting" @click="handleDelete">{{ $t('common.delete') }}</Button>
-        </div>
-      </template>
-    </Dialog>
+    </FormDialog>
   </div>
 </template>
 
@@ -194,10 +189,9 @@ import { useI18n } from 'vue-i18n'
 import { useApi } from '@/composables/useApi'
 import { formatApiError } from '../../lib/api/formatError'
 import { invalidFolderListMessage, isFolderList, type FolderItem } from '../../lib/api/folders'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Select from '../shared/AppSelect.vue'
+import FormDialog from '../shared/FormDialog.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import FolderListError from './FolderListError.vue'
 

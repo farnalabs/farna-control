@@ -37,7 +37,7 @@ _LIBRARY_PRIMITIVES_ID = "library_primitives.id"
 class LibraryPrimitive(SoftDeleteMixin, OrgScoped):
     __tablename__ = "library_primitives"
     __table_args__ = (
-        CheckConstraint("source IN ('local', 'registry', 'modulo', 'community')", name="ck_library_primitives_source"),
+        CheckConstraint("source IN ('local', 'registry', 'farna_control', 'community')", name="ck_library_primitives_source"),
         CheckConstraint(
             "primitive_type IN ('schema', 'workflow', 'agent', 'integration', 'test_fixture', 'pipeline_template', 'composite', 'lifecycle_map', 'library_collection')",
             name="ck_library_primitives_type",
@@ -58,7 +58,7 @@ class LibraryPrimitive(SoftDeleteMixin, OrgScoped):
             "(source = 'local' AND source_url IS NULL AND checksum IS NULL "
             "AND ed25519_signature IS NULL AND verified IS NULL "
             "AND download_count IS NULL AND average_rating IS NULL AND review_count IS NULL) "
-            "OR (source = 'modulo' AND source_url IS NULL AND checksum IS NULL "
+            "OR (source = 'farna_control' AND source_url IS NULL AND checksum IS NULL "
             "AND ed25519_signature IS NULL AND verified IS NULL "
             "AND download_count IS NULL AND average_rating IS NULL AND review_count IS NULL) "
             "OR (source = 'community' AND source_url IS NULL AND checksum IS NULL "

@@ -825,6 +825,43 @@ describe('RunsListView', () => {
     wrapper.unmount()
   })
 
+  it('keeps the pagination live region mounted across the loading swap (FAR-2751)', async () => {
+    mockResponses['/api/v1/runs'] = listWith(manyRuns.slice(0, 20), { next_cursor: 'cursor-1', has_more: true, total: 35 })
+    const wrapper = mountView()
+    await flushPromises()
+    await nextTick()
+
+    const status = wrapper.get('[data-testid="runs-list-page-label"]')
+    expect(status.text()).toBe('Page 1')
+    const statusElement = status.element
+
+    // Hold the next page's response so the loading swap is observable.
+    let resolveNext: ((value: unknown) => void) | undefined
+    const getMock = api.GET as any
+    getMock.mockImplementationOnce(() => new Promise((resolve) => { resolveNext = resolve }))
+
+    await wrapper.get('[data-testid="runs-list-next-page"]').trigger('click')
+    await nextTick()
+
+    // The skeleton has replaced the table, but the live region is the SAME node
+    // whose text changed — the change a screen reader announces.
+    expect(wrapper.find('[data-testid="runs-list-loading"]').exists()).toBe(true)
+    const duringLoad = wrapper.get('[data-testid="runs-list-page-label"]')
+    expect(duringLoad.element).toBe(statusElement)
+    expect(duringLoad.text()).toBe('Page 2')
+    expect(duringLoad.attributes('aria-live')).toBe('polite')
+
+    resolveNext?.({ data: listWith(manyRuns.slice(5, 25), { next_cursor: 'cursor-2', has_more: true, total: 35 }), error: undefined })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="runs-list-loading"]').exists()).toBe(false)
+    const afterLoad = wrapper.get('[data-testid="runs-list-page-label"]')
+    expect(afterLoad.element).toBe(statusElement)
+    expect(afterLoad.text()).toBe('Page 2')
+    wrapper.unmount()
+  })
+
   it('walks forward via cursors and pops the stack for prev back to the first page', async () => {
     mockResponses['/api/v1/runs'] = listWith(manyRuns.slice(0, 20), { next_cursor: 'cursor-1', has_more: true, total: 35 })
     const wrapper = mountView()
@@ -843,7 +880,9 @@ describe('RunsListView', () => {
 
     // Page 2 is loaded; the response to the next click must be page 3 (last).
     mockResponses['/api/v1/runs'] = listWith(manyRuns.slice(10, 30), { next_cursor: null, has_more: false, total: 35 })
-    await nextBtn.trigger('click')
+    // The footer persists across the loading swap (FAR-2751), so the same
+    // control stays live for the next page.
+    await wrapper.find('[data-testid="runs-list-next-page"]').trigger('click')
     await flushPromises()
     await nextTick()
     expect(api.GET).toHaveBeenLastCalledWith('/api/v1/runs', expect.objectContaining({
@@ -858,7 +897,8 @@ describe('RunsListView', () => {
       params: { query: expect.objectContaining({ cursor: 'cursor-1' }) },
     }))
 
-    await prevBtn.trigger('click')
+    // Prev back to the first page on the same persistent control.
+    await wrapper.find('[data-testid="runs-list-prev-page"]').trigger('click')
     await flushPromises()
     await nextTick()
     const lastCall = (api.GET as any).mock.calls.at(-1)

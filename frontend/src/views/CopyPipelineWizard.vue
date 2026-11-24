@@ -15,7 +15,7 @@
           <div
             class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors"
             :class="step === i + 1 ? 'bg-primary text-primary-foreground' : step > i + 1 ? 'bg-success/20 text-success-text' : 'bg-muted text-muted-foreground'"
-            data-testid="copy-wizard-step-indicator"
+            :data-testid="`copy-wizard-step-indicator-${i}`"
           >
             <Check v-if="step > i + 1" :size="14" aria-hidden="true" />
             <span v-else>{{ i + 1 }}</span>
@@ -30,10 +30,12 @@
       <ErrorAlert v-else-if="error" :message="error" :on-retry="retry" class="mb-6" />
 
       <template v-else-if="step === 1">
-        <div class="card p-6">
-          <h2 class="text-lg font-medium text-foreground mb-1">{{ $t('views.CopyPipelineWizard.select_source_pipeline') }}</h2>
-          <p class="text-sm text-muted-foreground mb-4">{{ $t('views.CopyPipelineWizard.choose_the_pipeline_you_want_to_copy_and_adapt') }}</p>
-
+        <DataCard
+          :title="$t('views.CopyPipelineWizard.select_source_pipeline')"
+          :description="$t('views.CopyPipelineWizard.choose_the_pipeline_you_want_to_copy_and_adapt')"
+          heading-level="h2"
+          padding="lg"
+        >
           <FilterBar class="mb-4"
             :search="{ placeholder: $t('views.CopyPipelineWizard.search_pipelines_by_name') }"
             :search-value="searchQuery"
@@ -48,18 +50,18 @@
               class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors"
               :class="visibilityFilter === f.value ? 'bg-primary text-primary-foreground border-primary' : 'border-input text-muted-foreground hover:bg-accent'"
               @click="visibilityFilter = f.value"
-              data-testid="copy-wizard-visibility-filter"
+              :data-testid="`copy-wizard-visibility-filter-${f.value}`"
             >
               {{ f.label }}
             </button>
           </div>
 
-          <div v-if="!searchQuery && visibilityFilter === 'all' && pipelines.length === 0" class="card p-8 text-center">
-            <p class="text-lg font-medium">{{ $t('views.CopyPipelineWizard.no_pipelines_available') }}</p>
-            <p class="mt-1 text-sm text-muted-foreground">
-              {{ $t('views.CopyPipelineWizard.create_one_from_the_library_first') }}
-            </p>
-          </div>
+          <EmptyState
+            v-if="!searchQuery && visibilityFilter === 'all' && pipelines.length === 0"
+            variant="bare"
+            :title="$t('views.CopyPipelineWizard.no_pipelines_available')"
+            :description="$t('views.CopyPipelineWizard.create_one_from_the_library_first')"
+          />
 
           <div v-else-if="filteredPipelines.length === 0" class="py-12 text-center text-sm text-muted-foreground">
             {{ $t('views.CopyPipelineWizard.no_pipelines_match_your_search') }}
@@ -92,7 +94,7 @@
               </p>
             </button>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex justify-end mt-6">
           <Button :disabled="!selectedPipeline" class="px-6 py-2.5" @click="step = 2" data-testid="copy-wizard-next-step1">
@@ -102,9 +104,12 @@
       </template>
 
       <template v-else-if="step === 2">
-        <div class="card p-6 mb-6">
-          <h2 class="text-lg font-medium text-foreground mb-4">{{ $t('views.CopyPipelineWizard.copy_configuration') }}</h2>
-
+        <DataCard
+          :title="$t('views.CopyPipelineWizard.copy_configuration')"
+          heading-level="h2"
+          padding="lg"
+          class="mb-6"
+        >
           <div class="space-y-4">
             <div>
               <label for="copypipelinewizard-field-6" class="block text-sm font-medium text-foreground mb-1">{{ $t('views.CopyPipelineWizard.new_pipeline_name') }}</label>
@@ -185,7 +190,7 @@
               </label>
             </div>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex items-center justify-between">
           <button
@@ -203,9 +208,12 @@
       </template>
 
       <template v-else-if="step === 3">
-        <div class="card p-6 mb-6">
-          <h2 class="text-lg font-medium text-foreground mb-4">{{ $t('views.CopyPipelineWizard.review_copy') }}</h2>
-
+        <DataCard
+          :title="$t('views.CopyPipelineWizard.review_copy')"
+          heading-level="h2"
+          padding="lg"
+          class="mb-6"
+        >
           <div class="space-y-4">
             <div class="bg-muted rounded-lg p-4">
               <h3 class="text-sm font-medium text-foreground mb-2">{{ $t('views.CopyPipelineWizard.source_pipeline') }}</h3>
@@ -257,7 +265,7 @@
               </p>
             </div>
           </div>
-        </div>
+        </DataCard>
 
         <div class="flex items-center justify-between">
           <button
@@ -275,7 +283,7 @@
       </template>
 
       <template v-else-if="step === 4">
-        <div class="card p-6">
+        <BaseCard padding="lg">
           <div v-if="progressStep === 'preparing'" class="text-center py-8">
             <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
             <p class="text-sm text-muted-foreground">{{ $t('views.CopyPipelineWizard.preparing_copy') }}</p>
@@ -339,7 +347,7 @@
               </button>
             </div>
           </div>
-        </div>
+        </BaseCard>
       </template>
     </section>
   </div>
@@ -351,11 +359,14 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Check, ChevronRight, X, XCircle } from '@lucide/vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import Button from 'primevue/button'
 import { useDataFetch } from '../composables/useDataFetch'
 import BackLink from '../components/BackLink.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'
 import type { OwnershipValue } from '../components/OwnershipPicker.vue'

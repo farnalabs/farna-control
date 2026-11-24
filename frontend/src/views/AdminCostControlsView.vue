@@ -19,19 +19,19 @@
             <div v-else-if="costsError" class="text-sm text-destructive">{{ costsError }}</div>
              <div v-else class="space-y-4">
                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                 <MetricCard
+                 <StatCard
                    :label="$t('views.AdminCostBreakdownView.total_spend')"
                    :value="formatMoney(totalSpend, settings.currency)"
                    color="muted"
                    data-testid="cc-total-spend"
                  />
-                 <MetricCard
+                 <StatCard
                    :label="$t('views.AdminCostControlsView.budget')"
                    :value="formatMoney(settings.budget, settings.currency)"
                    color="muted"
                    data-testid="cc-budget"
                  />
-                 <MetricCard
+                 <StatCard
                    :label="$t('views.AdminCostControlsView.remaining')"
                    :value="formatMoney(remainingBudget, settings.currency)"
                    :color="remainingColor"
@@ -63,7 +63,7 @@
            heading-level="h2"
          >
            <template #default>
-            <EmptyState v-if="teams.length === 0" :title="$t('views.AdminCostControlsView.no_teams_found')" />
+            <EmptyState v-if="teams.length === 0" variant="bare" :title="$t('views.AdminCostControlsView.no_teams_found')" />
             <DataTable
               v-else
               :columns="[
@@ -251,7 +251,7 @@ import { usePlanStore } from '../stores/planStore'
 import FeatureGate from '../components/FeatureGate.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import MetricCard from '../components/ui/MetricCard.vue'
+import StatCard from '../components/ui/StatCard.vue'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import { DataTable } from '../components/ui/data-table'

@@ -407,7 +407,12 @@ describe('SettingsSsoView — toggle provider', () => {
     await nextTick()
 
     const toggle = wrapper.find('[data-testid="settings-sso-toggle"]')
+    // The shared primitive's contract: a native button exposing the switch role,
+    // its checked state and an accessible name.
+    expect(toggle.element.tagName).toBe('BUTTON')
+    expect(toggle.attributes('role')).toBe('switch')
     expect(toggle.attributes('aria-checked')).toBe('true')
+    expect(toggle.attributes('aria-label')).toBe('Toggle provider')
     await toggle.trigger('click')
     await nextTick()
 
@@ -417,20 +422,25 @@ describe('SettingsSsoView — toggle provider', () => {
     expect(opts.params.path.provider_id).toBe('sso-1')
   })
 
-  it('toggles from the keyboard (Enter and Space) without opening the edit form', async () => {
+  it('is a native button switch (keyboard-operable) whose activation never opens the edit form', async () => {
     ;(api.PUT as Mock).mockResolvedValue({ data: provider({ enabled: false }), error: undefined })
     const wrapper = mountView()
     await nextTick()
 
     const toggle = wrapper.find('[data-testid="settings-sso-toggle"]')
-    await toggle.trigger('keydown.enter')
-    await nextTick()
-    await toggle.trigger('keydown.space')
+    // A native <button> receives Enter/Space activation from the browser, so
+    // the switch needs no keydown handlers of its own to be keyboard-operable.
+    expect(toggle.element.tagName).toBe('BUTTON')
+    expect(toggle.attributes('type')).toBe('button')
+    expect(toggle.attributes('role')).toBe('switch')
+    expect(toggle.attributes('aria-checked')).toBe('true')
+
+    await toggle.trigger('click')
     await nextTick()
 
-    expect(api.PUT).toHaveBeenCalledTimes(2)
-    // The row is no longer a keyboard-controlled button; the switch's own
-    // handlers stop the row's mouse-click convenience from opening edit.
+    expect(api.PUT).toHaveBeenCalledTimes(1)
+    // Activating the switch does its own action and never opens the row's edit
+    // form through the card's click convenience.
     expect(wrapper.find('#ssoproviderform-field-9').exists()).toBe(false)
   })
 

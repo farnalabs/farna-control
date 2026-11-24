@@ -248,7 +248,7 @@ describe('useApi 401 refresh flow', () => {
   })
 
   it('calls exitToLogin (not redirectToLogin) when refresh fails with auto-login config set', async () => {
-    window.__MODULO_CONFIG__ = { autoLogin: { username: 'demo', password: 'demo' } }
+    window.__FARNA_CONFIG__ = { autoLogin: { username: 'demo', password: 'demo' } }
     fetchMock.mockResolvedValue(jsonResponse(401, { detail: 'token expired' }))
     mockedAttemptTokenRefresh.mockResolvedValue(false)
 

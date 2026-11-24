@@ -41,7 +41,9 @@
     </template>
     <template v-else>
       <!-- Configured Providers -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         :title="$t('views.AdminAssistantView.configured_providers')"
         :description="$t('views.AdminAssistantView.api_keys_configured_for_each_llm_provider_assistant_will_use_thes')"
         data-testid="assistant-providers"
@@ -72,9 +74,11 @@
         <div class="mt-3 text-xs text-muted-foreground">
           <router-link :to="{ name: 'admin-model-backends' }" class="underline hover:text-foreground" v-tooltip.top="tooltipAddEditRemoveApiKeys">{{ $t('views.AdminAssistantView.manage_model_backends') }}</router-link>
         </div>
-      </SectionCard>
+      </DataCard>
       <!-- Custom Backends -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         :title="$t('views.AdminAssistantView.custom_backends')"
         :description="$t('views.AdminAssistantView.custom_backends_description')"
         data-testid="assistant-custom-backends"
@@ -103,18 +107,22 @@
               {{ p.configured ? $t('views.AdminAssistantView.configured') : $t('views.AdminAssistantView.not_set') }}
             </span>
           </div>
-          <div v-if="customProviderStatus.length === 0" class="py-4 text-center text-sm text-muted-foreground">
-            {{ $t('views.AdminAssistantView.no_custom_backends_configured') }}
-          </div>
+          <EmptyState
+            v-if="customProviderStatus.length === 0"
+            variant="bare"
+            :title="$t('views.AdminAssistantView.no_custom_backends_configured')"
+          />
           <div class="mt-3 text-xs text-muted-foreground">
             <router-link :to="{ name: 'admin-model-backends' }" class="underline hover:text-foreground">
               {{ $t('views.AdminAssistantView.manage_all_backends_in_model_backends') }}
             </router-link>
           </div>
         </div>
-      </SectionCard>
+      </DataCard>
       <!-- Access List -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         :title="$t('views.AdminAssistantView.access_list')"
         :description="$t('views.AdminAssistantView.control_who_can_use_assistant_within_the_organisation')"
       >
@@ -169,7 +177,7 @@
                   </label>
             </div>
           </div>
-          <div v-if="accessError" class="text-sm text-destructive">{{ accessError }}</div>
+          <ErrorAlert v-if="accessError" compact :message="accessError" :retryable="false" />
           <Button
                   :disabled="accessSaving"
                   data-testid="assistant-access-save"
@@ -178,9 +186,11 @@
                   {{ accessSaving ? $t('views.AdminAssistantView.saving') : $t('views.AdminAssistantView.save_access_list') }}
                 </Button>
         </div>
-      </SectionCard>
+      </DataCard>
       <!-- Default Model Configuration -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         :title="$t('views.AdminAssistantView.default_model_configuration')"
         :description="$t('views.AdminAssistantView.set_the_default_model_and_allowed_providers_for_assistant')"
       >
@@ -248,7 +258,7 @@
               data-testid="assistant-allowed-models"
             />
           </div>
-            <div v-if="modelError" class="text-sm text-destructive">{{ modelError }}</div>
+            <ErrorAlert v-if="modelError" compact :message="modelError" :retryable="false" />
             <Button
                   :disabled="modelSaving"
                   data-testid="assistant-model-save"
@@ -257,9 +267,11 @@
                   {{ modelSaving ? $t('views.AdminAssistantView.saving') : $t('views.AdminAssistantView.save_model_config') }}
                 </Button>
         </div>
-      </SectionCard>
+      </DataCard>
       <!-- System Prompt -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         :title="$t('views.AdminAssistantView.system_prompt')"
         :description="$t('views.AdminAssistantView.base_system_prompt_that_guides_assistants_behaviour')"
       >
@@ -274,7 +286,7 @@
               data-testid="assistant-system-prompt"
             />
           </div>
-            <div v-if="promptError" class="text-sm text-destructive">{{ promptError }}</div>
+            <ErrorAlert v-if="promptError" compact :message="promptError" :retryable="false" />
             <Button
                   :disabled="promptSaving"
                   data-testid="assistant-prompt-save"
@@ -283,9 +295,11 @@
                   {{ promptSaving ? $t('views.AdminAssistantView.saving') : $t('views.AdminAssistantView.save_system_prompt') }}
                 </Button>
         </div>
-      </SectionCard>
+      </DataCard>
       <!-- Additional Guidance -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         :title="$t('views.AdminAssistantView.additional_guidance')"
         :description="$t('views.AdminAssistantView.extra_instructions_to_append_to_the_system_prompt')"
       >
@@ -300,7 +314,7 @@
               data-testid="assistant-guidance"
             />
           </div>
-            <div v-if="guidanceError" class="text-sm text-destructive">{{ guidanceError }}</div>
+            <ErrorAlert v-if="guidanceError" compact :message="guidanceError" :retryable="false" />
             <Button
                   :disabled="guidanceSaving"
                   data-testid="assistant-guidance-save"
@@ -309,10 +323,10 @@
                   {{ guidanceSaving ? $t('views.AdminAssistantView.saving') : $t('views.AdminAssistantView.save_guidance') }}
                 </Button>
         </div>
-      </SectionCard>
+      </DataCard>
       <!-- Skills Manager -->
-      <SectionCard :title="$t('views.AdminAssistantView.skills')" :description="$t('views.AdminAssistantView.organisationlevel_skills_that_assistant_can_use')" data-testid="assistant-skills">
-        <template #header>
+      <DataCard variant="bordered" heading-level="h2" :title="$t('views.AdminAssistantView.skills')" :description="$t('views.AdminAssistantView.organisationlevel_skills_that_assistant_can_use')" data-testid="assistant-skills">
+        <template #headerActions>
           <Button
             class="border border-primary/30"
             data-testid="assistant-skills-add"
@@ -321,9 +335,11 @@
             {{ $t('views.AdminAssistantView.add_skill') }}
           </Button>
         </template>
-        <div v-if="skills.length === 0" class="py-8 text-center">
-          <p class="text-sm text-muted-foreground">{{ $t('views.AdminAssistantView.no_skills_configured_yet') }}</p>
-        </div>
+        <EmptyState
+          v-if="skills.length === 0"
+          variant="bare"
+          :title="$t('views.AdminAssistantView.no_skills_configured_yet')"
+        />
         <div v-else class="table-wrapper">
           <table class="w-full text-left text-sm">
             <thead>
@@ -362,7 +378,7 @@
                     class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors disabled:opacity-50"
                     :class="skill.active ? 'bg-success/10 text-success-text' : 'bg-muted text-muted-foreground'"
                     :disabled="skillToggling[skill.id]"
-                    data-testid="assistant-skill-toggle"
+                    :data-testid="`assistant-skill-toggle-${skill.id}`"
                     :aria-pressed="skill.active"
                     @click="toggleSkillActive(skill)"
                   >
@@ -379,7 +395,7 @@
                       class="rounded p-1 text-muted-foreground hover:bg-accent"
                       :aria-label="$t('views.AdminAssistantView.edit_skill')"
                       :title="$t('views.AdminAssistantView.edit_skill')"
-                      data-testid="assistant-skill-edit"
+                      :data-testid="`assistant-skill-edit-${skill.id}`"
                       @click="skillDialogRef?.openEdit(skill)"
                     >
                       <Pencil class="h-4 w-4" />
@@ -388,7 +404,7 @@
                       class="rounded p-1 text-destructive hover:bg-destructive/10"
                       :aria-label="$t('views.AdminAssistantView.delete_skill')"
                       :title="$t('components.assistant.AssistantSkillDialog.delete_skill')"
-                      data-testid="assistant-skill-delete"
+                      :data-testid="`assistant-skill-delete-${skill.id}`"
                       @click="skillDialogRef?.openDelete(skill)"
                     >
                       <Trash2 class="h-4 w-4" />
@@ -399,8 +415,8 @@
             </tbody>
           </table>
         </div>
-        <div v-if="skillError" class="px-3 pt-2 text-sm text-destructive">{{ skillError }}</div>
-      </SectionCard>
+        <ErrorAlert v-if="skillError" compact class="mx-3 mt-2" :message="skillError" :retryable="false" />
+      </DataCard>
       <AssistantSkillDialog
         ref="skillDialogRef"
         :create-description="$t('views.AdminAssistantView.create_skill_description')"
@@ -408,7 +424,9 @@
         @saved="loadSkills"
       />
       <!-- Knowledge Sources -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         :title="$t('views.AdminAssistantView.knowledge_sources')"
         :description="$t('views.AdminAssistantView.control_what_assistant_knows')"
       >
@@ -452,10 +470,12 @@
             </tbody>
           </table>
         </div>
-        <div v-if="contextError" class="mt-2 text-sm text-destructive">{{ contextError }}</div>
-      </SectionCard>
+        <ErrorAlert v-if="contextError" compact class="mt-2" :message="contextError" :retryable="false" />
+      </DataCard>
       <!-- Skills as Knowledge Sources -->
-      <SectionCard
+      <DataCard
+        variant="bordered"
+        heading-level="h2"
         v-if="skills.length > 0"
         :title="$t('views.AdminAssistantView.skills_as_knowledge')"
         :description="$t('views.AdminAssistantView.control_what_assistant_knows')"
@@ -492,14 +512,16 @@
             </tbody>
           </table>
         </div>
-      </SectionCard>
+      </DataCard>
     </template>
   </div>
   </FeatureGate>
 </template>
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
-import SectionCard from '../components/shared/SectionCard.vue'
+import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import DataCard from '../components/ui/DataCard.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
 import { ref, reactive, computed, watch } from 'vue'
 import { Check, X, Pencil, Trash2 } from '@lucide/vue'
 import { api } from '../lib/api/client'

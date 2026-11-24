@@ -6,6 +6,9 @@ Bundles:
 - docker-compose.yml (identical copy for direct `docker compose up -d`)
 - .env.example (working evaluation environment configuration)
 - quickstart.md (getting started instructions)
+- init-env.sh (generates the required secrets)
+- compose-restore.sh (verified snapshot restore; leaves the stack stopped)
+- compose-rollback.sh (starts the previous release, overriding the pinned image)
 - SHA256SUMS (checksums over the packaged files)
 
 Produces:
@@ -27,6 +30,8 @@ import yaml
 _GIT_SHA_PATTERN = re.compile(r"^[\da-fA-F]{7,40}$", re.ASCII)
 _SEMVER_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(-[a-zA-Z\d.]+)?$", re.ASCII)
 _COMPOSE_FILENAME = "docker-compose.prod.yml"
+_COMPOSE_RESTORE_FILENAME = "compose-restore.sh"
+_COMPOSE_ROLLBACK_FILENAME = "compose-rollback.sh"
 
 
 def validate_release_tag(tag: str) -> str:
@@ -159,6 +164,54 @@ Once that returns 200, open [http://localhost](http://localhost).
 - Stop: `docker compose down`
 - Stop and delete all data: `docker compose down -v`
 
+## Upgrades and recovery
+
+This bundle's `docker-compose.prod.yml` pins the image to *this* release, so
+`docker compose up -d` always starts the version in this directory's bundle.
+`TAG` is not a way to upgrade: it selects no image, and only labels
+`FARNA_CONTROL_VERSION`, the name of the snapshot directory.
+
+To upgrade, download the next release's bundle and extract it over this
+directory (it ships `.env.example`, never your `.env`, so your secrets are
+kept), then start it from there:
+
+```bash
+docker compose up -d
+```
+
+The farna-control container is recreated on the new release's image and its
+pending migrations run at start. BEFORE they run, and only when a migration is
+pending, the container takes a verified `pg_dump` snapshot of the database into
+the `snapshot_data` volume (mounted at
+`/backups`) and prints its path. Retention keeps the two newest verified
+snapshots, the snapshot the upgrade just wrote, and the newest snapshot that
+records the database's current schema revision (the recovery point). A snapshot
+from an older schema is pruned once it is neither of the two newest nor that
+current-schema recovery point.
+
+If the new release fails after migrating, restore the snapshot and then start
+the previous release:
+
+```bash
+./compose-restore.sh --confirm /backups/<snapshot-printed-by-the-upgrade>
+./compose-rollback.sh <previous-version>
+```
+
+`compose-rollback.sh` starts the previous release through a one-off compose
+override for the version you name, leaving this bundle's pinned
+`docker-compose.prod.yml` and its checksum untouched.
+
+`compose-restore.sh` requires the explicit `--confirm` argument. It then
+verifies the snapshot's manifest and checksums in a one-off container, refuses
+a corrupt, missing or foreign dump and a target database that is not the one
+the snapshot came from, restores the database, and leaves everything stopped
+so you choose when to start. It never restarts the stack for you, and it
+prints the start command even when the restore fails.
+
+A snapshot on the same host as the database is not a backup:
+`docker compose down -v` deletes both. Copy snapshots off the host, and use
+`farna-control backup` (or `scripts/backup.py`) for off-host retention.
+
 ## Integrity Verification
 
 Every shipped file is listed in `SHA256SUMS`:
@@ -261,6 +314,13 @@ def _find_repo_root() -> Path:
     return Path.cwd()
 
 
+def _require_repo_file(path: Path, *, kind: str) -> Path:
+    """Return `path` if it is an existing file, else raise FileNotFoundError."""
+    if not path.is_file():
+        raise FileNotFoundError(f"{kind} not found: {path}")
+    return path
+
+
 def build_compose_release(
     *,
     version: str,
@@ -317,6 +377,22 @@ def build_compose_release(
     # Generate quickstart instructions
     quickstart_content = generate_quickstart_md(clean_version, valid_tag)
 
+    # FAR-2667: the documented recovery command ships WITH the artifact, so a
+    # failed upgrade never depends on the operator reconstructing a
+    # `docker compose run` invocation from documentation.
+    restore_helper = _require_repo_file(
+        repo_root / "scripts" / _COMPOSE_RESTORE_FILENAME,
+        kind="Compose restore helper",
+    )
+
+    # FAR-2667: and the way BACK to the previous image ships too. The packaged
+    # compose pins a literal image tag, so `TAG=` cannot move it; the helper is
+    # the only instruction that actually starts the previous release.
+    rollback_helper = _require_repo_file(
+        repo_root / "scripts" / _COMPOSE_ROLLBACK_FILENAME,
+        kind="Compose rollback helper",
+    )
+
     # Prepare file bytes map for tarball
     files_to_pack: dict[str, bytes] = {
         _COMPOSE_FILENAME: compose_transformed.encode("utf-8"),
@@ -324,10 +400,12 @@ def build_compose_release(
         ".env.example": env_content.encode("utf-8"),
         "quickstart.md": quickstart_content.encode("utf-8"),
         "init-env.sh": _INIT_ENV_SH.encode("utf-8"),
+        _COMPOSE_RESTORE_FILENAME: restore_helper.read_bytes(),
+        _COMPOSE_ROLLBACK_FILENAME: rollback_helper.read_bytes(),
     }
-    # `init-env.sh` is meant to be executed by the operator, so it ships 0755;
+    # These are meant to be executed by the operator, so they ship 0755;
     # everything else is read-only data.
-    executable = frozenset({"init-env.sh"})
+    executable = frozenset({"init-env.sh", _COMPOSE_RESTORE_FILENAME, _COMPOSE_ROLLBACK_FILENAME})
 
     # Compute SHA256SUMS over the files
     sums_lines: list[str] = []

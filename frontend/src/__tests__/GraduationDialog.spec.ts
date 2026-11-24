@@ -33,11 +33,6 @@ function mountDialog(props: Partial<InstanceType<typeof GraduationDialog>['$prop
           props: ['visible', 'modal', 'dismissableMask'],
           emits: ['update:visible'],
         },
-        Button: {
-          template: '<button :disabled="disabled" data-testid="button" @click="$emit(\'click\', $event)"><slot /></button>',
-          props: ['severity', 'outlined', 'disabled'],
-          emits: ['click'],
-        },
         Select: {
           template: '<select :data-testid="\'select-\' + (ariaLabel || \'default\')" @change="$emit(\'update:modelValue\', $event.target.value)"><option v-for="opt in options" :key="opt.value" :value="opt.value">{{ opt.label }}</option></select>',
           props: ['options', 'modelValue', 'placeholder', 'ariaLabel'],
@@ -97,7 +92,7 @@ describe('GraduationDialog template', () => {
   it('renders the cancel button', async () => {
     const wrapper = mountDialog()
     await flushPromises()
-    const buttons = wrapper.findAll('[data-testid="button"]')
+    const buttons = wrapper.findAll('button')
     const cancelBtn = buttons.find(b => b.text() === 'Cancel')
     expect(cancelBtn).toBeDefined()
   })
@@ -105,7 +100,7 @@ describe('GraduationDialog template', () => {
   it('renders the graduate button', async () => {
     const wrapper = mountDialog()
     await flushPromises()
-    const buttons = wrapper.findAll('[data-testid="button"]')
+    const buttons = wrapper.findAll('button')
     const gradBtn = buttons.find(b => b.text() === 'Graduate Stage')
     expect(gradBtn).toBeDefined()
   })
@@ -298,7 +293,7 @@ describe('GraduationDialog close', () => {
     const wrapper = mountDialog()
     await flushPromises()
 
-    const buttons = wrapper.findAll('[data-testid="button"]')
+    const buttons = wrapper.findAll('button')
     const cancelBtn = buttons.find(b => b.text() === 'Cancel')!
     await cancelBtn.trigger('click')
     await flushPromises()
@@ -339,7 +334,7 @@ describe('GraduationDialog button states', () => {
     const wrapper = mountDialog()
     await flushPromises()
 
-    const buttons = wrapper.findAll('[data-testid="button"]')
+    const buttons = wrapper.findAll('button')
     const gradBtn = buttons.find(b => b.text().includes('Graduate'))!
     expect(gradBtn.attributes('disabled')).toBeDefined()
   })
@@ -352,7 +347,7 @@ describe('GraduationDialog button states', () => {
     vm.selectedPipelineId = 'pipe-1'
     await flushPromises()
 
-    const buttons = wrapper.findAll('[data-testid="button"]')
+    const buttons = wrapper.findAll('button')
     const gradBtn = buttons.find(b => b.text().includes('Graduate'))!
     expect(gradBtn.attributes('disabled')).toBeUndefined()
   })
@@ -365,7 +360,7 @@ describe('GraduationDialog button states', () => {
     vm.graduating = true
     await flushPromises()
 
-    const buttons = wrapper.findAll('[data-testid="button"]')
+    const buttons = wrapper.findAll('button')
     const gradBtn = buttons.find(b => b.text().includes('Graduating'))!
     expect(gradBtn).toBeDefined()
   })

@@ -167,7 +167,7 @@ def assert_no_ambient_service_urls(
     if ambient_file:
         origins.append(", ".join(ambient_file) + f" in the env file {env_file}")
     raise AmbientEnvironmentError(
-        "MODULO first boot refused: ambient " + "; ".join(origins) + ". A native single-install first boot must "
+        "Farna Control first boot refused: ambient " + "; ".join(origins) + ". A native single-install first boot must "
         "not inherit service endpoints from the surrounding shell — they would "
         "silently redirect the bundled services to a foreign endpoint. Unset "
         "the variable(s) (or remove them from the env file) and start again, "

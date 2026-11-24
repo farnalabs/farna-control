@@ -23,6 +23,7 @@ from farna.launcher import entry as entry_module
 from farna.launcher import env_contract
 from farna.launcher import upgrade as upgrade_module
 from farna.launcher.platform import binary_name
+from tests.helpers.env_prefixes import retired_env_name
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -1321,7 +1322,7 @@ def test_macos_bundle_build_gate_fails_on_an_env_name_drift(tmp_path: Path) -> N
     """FAR-2554 mutation: the pre-rebrand export name must fail the build."""
     script = _bundle_build_script()
     shipped = _launcher_c_source(script)
-    stale = "MOD" + "ULO" + "_BUNDLED_BIN_DIR"
+    stale = retired_env_name("BUNDLED_BIN_DIR")
     drifted = shipped.replace(
         f'setenv("{entry_module.BUNDLED_BIN_DIR_ENV}"',
         f'setenv("{stale}"',
@@ -1456,7 +1457,7 @@ def test_macos_bundle_spa_env_gate_passes_for_the_shipped_producer_contract(tmp_
 def test_macos_bundle_spa_env_gate_fails_on_a_pre_rebrand_export_name(tmp_path: Path) -> None:
     """FAR-2563 mutation: reverting the export to a pre-rebrand name must fail the build."""
     shipped = _launcher_c_source(_bundle_build_script())
-    stale = "MOD" + "ULO" + "_SERVE_SPA"
+    stale = retired_env_name("SERVE_SPA")
     drifted = shipped.replace(
         f'setenv("{env_contract.SERVE_SPA_ENV}", "1", 1)',
         f'setenv("{stale}", "1", 1)',

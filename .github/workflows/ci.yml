@@ -651,6 +651,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # FAR-2699: the shrink-only-baseline guard compares the baseline
+          # against a base revision. A pull_request checkout is the PR merge
+          # commit and its first parent is the base branch tip, but only full
+          # history makes that parent (and a push event's `before` SHA)
+          # resolvable.
+          fetch-depth: 0
           persist-credentials: false
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
         # `!= 'false'` (not `== 'true'`) is deliberate: it is the fail-open
@@ -677,6 +683,24 @@ jobs:
         # --disable-warnings keeps the gate firing while suppressing the
         # benign summary.
         run: uv run --no-build --no-sync pytest tests/architecture/ -q --tb=short --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings -n auto
+      - name: Fail on a loosened shrink-only baseline
+        if: needs.changes.outputs.backend_heavy != 'false'
+        # FAR-2699: tests/architecture/test_brand_consistency.py only compares
+        # the working tree against the baseline it is handed, so an agent that
+        # raises a count AND the drift together still passes - the ratchet is
+        # silently loosened for good (the Branch Fixer did exactly this). This
+        # compares the baseline against the base revision: an ADDED entry or a
+        # RAISED count fails; a removed entry or a lowered count passes. It
+        # fails closed when the base cannot be read rather than silently
+        # passing. scripts/run_check_ratchet_baseline.py documents the base
+        # resolution order.
+        working-directory: .
+        shell: bash
+        env:
+          # Push events: the previous main tip, so a raise buried mid-push is
+          # caught (HEAD^ alone would compare only the tip's parent).
+          RATCHET_BASE_REV: ${{ github.event.before }}
+        run: uv run --no-build --project backend --no-sync python scripts/run_check_ratchet_baseline.py
       - name: Run connector contract tests
         if: needs.changes.outputs.backend_heavy != 'false'
         # The connector contract suite drives each connector (filesystem,

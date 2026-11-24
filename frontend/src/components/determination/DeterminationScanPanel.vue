@@ -1,12 +1,17 @@
 <template>
-  <section class="card p-4 space-y-4" data-testid="determination-scan">
-    <header class="flex flex-wrap items-baseline justify-between gap-2">
-      <h2 class="text-lg font-semibold">{{ $t('views.DeterminationView.scan_title') }}</h2>
-      <span v-if="scan" class="text-sm text-muted-foreground" data-testid="determination-scan-summary">
+  <DataCard
+    as="section"
+    data-testid="determination-scan"
+    :title="$t('views.DeterminationView.scan_title')"
+    heading-level="h2"
+  >
+    <template v-if="scan" #headerActions>
+      <span class="text-sm text-muted-foreground" data-testid="determination-scan-summary">
         {{ scan.summary }}
       </span>
-    </header>
+    </template>
 
+    <div class="space-y-4">
     <div
       v-if="loading"
       class="flex items-center gap-3 text-sm text-muted-foreground"
@@ -34,35 +39,24 @@
         <p v-if="scan.samples.length === 0" class="text-sm text-muted-foreground" data-testid="determination-samples-empty">
           {{ $t('views.DeterminationView.samples_empty') }}
         </p>
-        <div v-else class="table-wrapper">
-          <table class="w-full text-left text-sm">
-            <thead>
-              <tr>
-                <th class="table-header">{{ $t('views.DeterminationView.sample_type') }}</th>
-                <th class="table-header">{{ $t('views.DeterminationView.sample_resource') }}</th>
-                <th class="table-header">{{ $t('views.DeterminationView.sample_count') }}</th>
-                <th class="table-header">{{ $t('views.DeterminationView.sample_connector') }}</th>
-                <th class="table-header">{{ $t('views.DeterminationView.sample_error') }}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr
-                v-for="sample in scan.samples"
-                :key="`${sample.connector_id}-${sample.resource}`"
-                data-testid="determination-sample-row"
-              >
-                <td class="table-cell">{{ sample.connector_type }}</td>
-                <td class="table-cell">{{ sample.resource }}</td>
-                <td class="table-cell tabular-nums">{{ sample.sample_count }}</td>
-                <td class="table-cell font-mono text-xs break-all">{{ sample.connector_id }}</td>
-                <td class="table-cell">
-                  <span v-if="sample.error" class="text-destructive-text">{{ sample.error }}</span>
-                  <span v-else class="text-muted-foreground">{{ $t('views.DeterminationView.sample_no_error') }}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          v-else
+          :columns="sampleColumns"
+          :rows="sampleRows"
+          :row-clickable="false"
+          row-testid="determination-sample-row"
+        >
+          <template #cell-sample_count="{ value }">
+            <span class="tabular-nums">{{ value }}</span>
+          </template>
+          <template #cell-connector_id="{ value }">
+            <span class="font-mono text-xs break-all">{{ value }}</span>
+          </template>
+          <template #cell-error="{ value }">
+            <span v-if="value" class="text-destructive-text">{{ value }}</span>
+            <span v-else class="text-muted-foreground">{{ $t('views.DeterminationView.sample_no_error') }}</span>
+          </template>
+        </DataTable>
       </section>
 
       <section class="space-y-2" data-testid="determination-findings">
@@ -99,16 +93,21 @@
         </ul>
       </section>
     </template>
-  </section>
+    </div>
+  </DataCard>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
+import DataCard from '../ui/DataCard.vue'
+import { DataTable, type Column, type DataTableRow } from '../ui/data-table'
 import { confidenceBadgeClass } from './confidencePresentation'
 import type { DeterminationScanResponse } from '../../composables/useDetermination'
 
-defineProps<{
+const props = defineProps<{
   scan: DeterminationScanResponse | null
   loading: boolean
   error: string | null
@@ -119,4 +118,32 @@ const emit = defineEmits<{ (event: 'retry'): void }>()
 function onRetry(): void {
   emit('retry')
 }
+
+// Read-only sample table (FAR-2728): DataTable owns the shell, the header row
+// and the rows. The row testid is preserved through `row-testid`, and the three
+// cells whose content is styled beyond plain text (tabular count, monospace
+// connector id, error/no-error span) are cell slots.
+const { t } = useI18n()
+
+const sampleColumns: Column[] = [
+  { key: 'connector_type', label: t('views.DeterminationView.sample_type') },
+  { key: 'resource', label: t('views.DeterminationView.sample_resource') },
+  { key: 'sample_count', label: t('views.DeterminationView.sample_count') },
+  { key: 'connector_id', label: t('views.DeterminationView.sample_connector') },
+  { key: 'error', label: t('views.DeterminationView.sample_error') },
+]
+
+// The table renders only inside the `v-else` where `scan` is non-null.
+const sampleRows = computed<DataTableRow[]>(() =>
+  props.scan!.samples.map((sample) => ({
+    // The source row key is the connector/resource pair, so the DataTable row
+    // key stays stable rather than falling back to the index.
+    id: `${sample.connector_id}-${sample.resource}`,
+    connector_type: sample.connector_type,
+    resource: sample.resource,
+    sample_count: sample.sample_count,
+    connector_id: sample.connector_id,
+    error: sample.error,
+  })),
+)
 </script>

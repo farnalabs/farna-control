@@ -115,8 +115,8 @@
         </div>
 
         <div v-if="expandedRunIds.size > 0" class="space-y-4">
-          <h3 class="text-base font-semibold">{{ $t('views.variantBatch.detailTitle') }}</h3>
-          <div v-for="run in rankedRuns.filter(r => expandedRunIds.has(r.run_id))" :key="run.run_id" class="rounded-lg border bg-card p-4" :data-testid="`variant-batch-detail-${run.run_id}`">
+          <CardHeader :title="$t('views.variantBatch.detailTitle')" />
+          <BaseCard v-for="run in rankedRuns.filter(r => expandedRunIds.has(r.run_id))" :key="run.run_id" padding="md" :data-testid="`variant-batch-detail-${run.run_id}`">
             <div class="mb-2 flex items-center justify-between">
               <span class="font-mono text-xs font-semibold">{{ run.variant_name }}</span>
               <a :href="`/runs/${run.run_id}`" class="text-xs text-primary-text hover:underline" :data-testid="`variant-batch-run-link-${run.run_id}`">
@@ -139,41 +139,43 @@
             </div>
             <div v-if="tokenRows(run).length > 0" class="mb-3" data-testid="variant-batch-token-breakdown">
               <div class="mb-1 text-xs font-medium text-muted-foreground">{{ $t('views.variantBatch.tokensByNode') }}</div>
-              <table class="w-full text-left text-xs">
-                <thead>
-                  <tr class="border-b text-muted-foreground">
-                    <th class="py-1 pr-3 font-medium">{{ $t('views.variantBatch.node') }}</th>
-                    <th class="py-1 pr-3 text-right font-medium tabular-nums">{{ $t('views.variantBatch.inputTokens') }}</th>
-                    <th class="py-1 pr-3 text-right font-medium tabular-nums">{{ $t('views.variantBatch.outputTokens') }}</th>
-                    <th class="py-1 pr-3 text-right font-medium tabular-nums">{{ $t('views.variantBatch.totalTokens') }}</th>
-                    <th v-if="showCostColumn(run)" class="py-1 text-right font-medium tabular-nums">{{ $t('views.variantBatch.cost') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in tokenRows(run)" :key="row.node" class="border-b last:border-b-0">
-                    <td class="py-1 pr-3 font-mono text-[11px]">{{ row.node }}</td>
-                    <td class="py-1 pr-3 text-right tabular-nums">{{ row.input_tokens ?? '—' }}</td>
-                    <td class="py-1 pr-3 text-right tabular-nums">{{ row.output_tokens ?? '—' }}</td>
-                    <td class="py-1 pr-3 text-right font-medium tabular-nums">{{ row.total_tokens ?? '—' }}</td>
-                    <td v-if="showCostColumn(run)" class="py-1 text-right tabular-nums">{{ row.cost_usd !== null ? formatMoney(Number(row.cost_usd), currencyCode, 6) : '—' }}</td>
-                  </tr>
-                </tbody>
-                <tfoot v-if="run.total_tokens !== null">
-                  <tr class="border-t font-medium">
-                    <td class="py-1 pr-3">{{ $t('views.variantBatch.total') }}</td>
-                    <td class="py-1 pr-3" />
-                    <td class="py-1 pr-3" />
-                    <td class="py-1 pr-3 text-right tabular-nums">{{ run.total_tokens }}</td>
-                    <td v-if="showCostColumn(run)" class="py-1 text-right tabular-nums">{{ run.total_cost_usd != null ? formatMoney(Number(run.total_cost_usd), currencyCode, 6) : '—' }}</td>
-                  </tr>
-                </tfoot>
-              </table>
+              <div class="table-wrapper">
+                <table class="w-full text-left text-xs">
+                  <thead>
+                    <tr class="border-b text-muted-foreground">
+                      <th class="py-1 pr-3 font-medium">{{ $t('views.variantBatch.node') }}</th>
+                      <th class="py-1 pr-3 text-right font-medium tabular-nums">{{ $t('views.variantBatch.inputTokens') }}</th>
+                      <th class="py-1 pr-3 text-right font-medium tabular-nums">{{ $t('views.variantBatch.outputTokens') }}</th>
+                      <th class="py-1 pr-3 text-right font-medium tabular-nums">{{ $t('views.variantBatch.totalTokens') }}</th>
+                      <th v-if="showCostColumn(run)" class="py-1 text-right font-medium tabular-nums">{{ $t('views.variantBatch.cost') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in tokenRows(run)" :key="row.node" class="border-b last:border-b-0">
+                      <td class="py-1 pr-3 font-mono text-[11px]">{{ row.node }}</td>
+                      <td class="py-1 pr-3 text-right tabular-nums">{{ row.input_tokens ?? '—' }}</td>
+                      <td class="py-1 pr-3 text-right tabular-nums">{{ row.output_tokens ?? '—' }}</td>
+                      <td class="py-1 pr-3 text-right font-medium tabular-nums">{{ row.total_tokens ?? '—' }}</td>
+                      <td v-if="showCostColumn(run)" class="py-1 text-right tabular-nums">{{ row.cost_usd !== null ? formatMoney(Number(row.cost_usd), currencyCode, 6) : '—' }}</td>
+                    </tr>
+                  </tbody>
+                  <tfoot v-if="run.total_tokens !== null">
+                    <tr class="border-t font-medium">
+                      <td class="py-1 pr-3">{{ $t('views.variantBatch.total') }}</td>
+                      <td class="py-1 pr-3" />
+                      <td class="py-1 pr-3" />
+                      <td class="py-1 pr-3 text-right tabular-nums">{{ run.total_tokens }}</td>
+                      <td v-if="showCostColumn(run)" class="py-1 text-right tabular-nums">{{ run.total_cost_usd != null ? formatMoney(Number(run.total_cost_usd), currencyCode, 6) : '—' }}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
             <div v-if="run.node_outputs" class="overflow-auto rounded border">
               <JsonViewer :data="run.node_outputs" :show-toolbar="false" :max-height="'16rem'" />
             </div>
             <div v-else class="text-xs text-muted-foreground">{{ $t('views.variantBatch.noOutput') }}</div>
-          </div>
+          </BaseCard>
         </div>
       </div>
 
@@ -185,18 +187,17 @@
     </template>
 
   <div class="page-wide mt-8 border-t pt-6">
-    <div class="mb-3 flex items-center justify-between">
-      <h2 class="text-base font-semibold">{{ $t('views.variantBatch.myComparisons') }}</h2>
-      <router-link to="/variants/compare" class="text-sm text-primary-text hover:underline" data-testid="variant-batch-new-comparison">
-        {{ $t('views.variantBatch.createComparison') }}
-      </router-link>
-    </div>
+    <CardHeader :title="$t('views.variantBatch.myComparisons')" heading-level="h2">
+      <template #actions>
+        <router-link to="/variants/compare" class="text-sm text-primary-text hover:underline" data-testid="variant-batch-new-comparison">
+          {{ $t('views.variantBatch.createComparison') }}
+        </router-link>
+      </template>
+    </CardHeader>
     <LoadingSpinner v-if="comparisonsLoading" />
     <ErrorAlert v-else-if="comparisonsError" :message="comparisonsError" :on-retry="loadComparisons" />
     <template v-else>
-      <div v-if="comparisons.length === 0" class="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
-        {{ $t('views.variantBatch.noComparisons') }}
-      </div>
+      <EmptyState v-if="comparisons.length === 0" :title="$t('views.variantBatch.noComparisons')" />
       <div v-else class="table-wrapper">
         <table class="w-full text-left text-sm">
           <thead>
@@ -251,6 +252,8 @@ import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import Button from 'primevue/button'
 import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import { formatMoney } from '../lib/money'
 import { useOrgCurrency } from '../composables/useOrgCurrency'
 import {

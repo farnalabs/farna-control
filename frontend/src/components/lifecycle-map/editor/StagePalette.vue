@@ -30,7 +30,7 @@ import type { StageType } from '../../../types/lifecycleMap'
 
 const paletteItems = [
   {
-    type: 'modulo' as StageType,
+    type: 'farna_control' as StageType,
     label: 'Farna Control',
     description: 'Managed by a Farna Control pipeline',
     icon: CogIcon,

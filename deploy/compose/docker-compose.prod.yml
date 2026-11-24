@@ -184,6 +184,17 @@ services:
       # with DB_CAPACITY_BYTES. Use those two to override with an explicit size,
       # or DB_CAPACITY_SOURCE=disabled to turn detection off entirely.
       DB_CAPACITY_PATH: ${DB_CAPACITY_PATH:-/var/lib/farna/db-volume}
+      # FARNA_CONTROL_SNAPSHOT_DIR: where the entrypoint's pre-upgrade
+      # snapshot goes (FAR-2667). It MUST be the /backups named volume
+      # (snapshot_data) declared below and never the postgres_data volume: the
+      # volume survives image replacement and `compose down` (but not
+      # `compose down -v`), does not double the volume the capacity monitor
+      # watches, and is reachable while Postgres is stopped - which is when a
+      # restore runs.
+      FARNA_CONTROL_SNAPSHOT_DIR: /backups
+      # FARNA_CONTROL_VERSION: recorded in the snapshot directory name so an
+      # operator can tell which release a recovery point precedes.
+      FARNA_CONTROL_VERSION: ${TAG}
     depends_on:
       postgres:
         condition: service_healthy
@@ -200,6 +211,19 @@ services:
       # (capacity "none", stop inert) rather than erroring - detection never
       # blocks a run by accident.
       - postgres_data:/var/lib/farna/db-volume:ro
+      # Pre-upgrade snapshots (FAR-2667). Deliberately OUTSIDE postgres_data:
+      # the snapshot must outlive the database it protects, and it must be
+      # readable with Postgres stopped.
+      #
+      # A NAMED volume, not a host bind mount: Docker creates a missing bind
+      # directory root:root 0755, and the image runs as the unprivileged
+      # www-data user — the entrypoint's mkdir then fails with EACCES and every
+      # boot aborts. A named volume is initialised from the image's /backups
+      # directory (created and chowned to www-data in the Dockerfile), so the
+      # mount is writable by construction. It survives image replacement and
+      # `compose down`; only `compose down -v` deletes it, which also deletes
+      # the database — so snapshots are NOT a substitute for an off-host backup.
+      - snapshot_data:/backups
     restart: unless-stopped
 
   # Health watchdog (Gatus) - same image and config as the root
@@ -248,3 +272,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  # Pre-upgrade snapshot volume (FAR-2667). Image-initialised so /backups is
+  # owned by the container user; see the application service's volume comment.
+  snapshot_data:

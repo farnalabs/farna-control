@@ -176,7 +176,12 @@ _INTERNAL_SYSTEM_MAP_PERMISSION = SYSTEM_MAPS_ACCESS_PERMISSION
 # be resolved with the org's ``feature_overrides`` applied. Plain
 # ``require_feature`` only reads the tier/licence default, which is always OFF
 # for this flag, so an admin enabling it in the UI would still get 402 here.
-_require_system_maps_feature = require_org_feature("system_maps")
+# FAR-2730: the override is read for the JWT principal the internal authoring
+# router authenticates — every route on it carries a JWT-only
+# ``require_permission`` and ``get_plan_context`` resolves through
+# ``get_current_user``, so the any-credential default would imply an ``mk_``
+# capability no route on this router can deliver.
+_require_system_maps_feature = require_org_feature("system_maps", principal_dependency=get_current_tenant_user)
 _require_system_maps_read_feature = require_feature("system_maps_read")
 
 _log = logging.getLogger(__name__)
@@ -2074,12 +2079,13 @@ def _fingerprint(draft: Any) -> str:
 def _stage_type(node: dict[str, Any]) -> str:
     """Map a discovery node to an honest lifecycle-map stage type.
 
-    Trigger nodes are ``pipeline`` graph nodes but carry no Modulo pipeline of
-    their own, so ``manual`` describes them accurately; connectors and folders
-    are external systems and stay ``placeholder`` (never published as Modulo).
+    Trigger nodes are ``pipeline`` graph nodes but carry no Farna Control
+    pipeline of their own, so ``manual`` describes them accurately; connectors
+    and folders are external systems and stay ``placeholder`` (never published
+    as Farna Control).
     """
     if node["node_type"] == "pipeline":
-        return "manual" if node["config_json"].get("source_kind") == "trigger" else "modulo"
+        return "manual" if node["config_json"].get("source_kind") == "trigger" else "farna_control"
     return "placeholder"
 
 

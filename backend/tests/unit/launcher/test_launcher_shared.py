@@ -221,21 +221,38 @@ def _upgrade_dump_seam(data_dir: Path, *, recorded_heads: list[str] | None = Non
     """The ENFORCED pre-upgrade dump seam (a verified, non-empty snapshot)."""
     import json as json_module
 
-    from farna.launcher.upgrade import PreUpgradeSnapshot
+    from farna.launcher.upgrade import SnapshotRef
 
-    def _dump(data_dir, *, bin_dir=None):
+    heads = recorded_heads or ["3ab2c1d"]
+    payload = b"-- the enforced dump\n-- PostgreSQL database dump complete\n"
+
+    def _dump(
+        data_dir,
+        *,
+        bin_dir=None,
+        output_dir=None,
+        release=None,
+        target_heads=None,
+        target_bundle=None,
+    ):
+        # target_heads / target_bundle are part of the production seam
+        # (pre_upgrade_dump decides "pending" against the TARGET release). This
+        # fake always returns a snapshot, so it accepts and ignores them; a
+        # fake that omits them TypeErrors the whole flow on POSIX-only tests.
         snapshot_dir = data_dir / "pre-upgrade-dump-fake-1"
         snapshot_dir.mkdir()
-        (snapshot_dir / "database.sql").write_bytes(b"-- the enforced dump\n")
-        (snapshot_dir / "manifest.json").write_text(json_module.dumps({"dump_bytes": 19}), encoding="utf-8")
+        (snapshot_dir / "database.sql").write_bytes(payload)
+        (snapshot_dir / "manifest.json").write_text(json_module.dumps({"dump_bytes": len(payload)}), encoding="utf-8")
         (snapshot_dir / "backup-info.json").write_text(
-            json_module.dumps({"schema_versions": recorded_heads or ["3ab2c1d"], "dump_bytes": 19}),
+            json_module.dumps({"schema_versions": heads, "dump_bytes": len(payload)}),
             encoding="utf-8",
         )
-        return PreUpgradeSnapshot(
+        return SnapshotRef(
             directory=snapshot_dir,
             dump_path=snapshot_dir / "database.sql",
-            bytes=19,
+            checksum="0" * 64,
+            bytes=len(payload),
+            schema_heads=list(heads),
             created_at="fake-dump-epoch",
         )
 

@@ -46,14 +46,13 @@
     <!-- Failure, success and no-op are three MUTUALLY EXCLUSIVE outcomes of
          this page's OWN dismiss-all attempt — the error ref is local (never
          shared store state, QA FAR-1926) and only ever set here. -->
-    <p
+    <ErrorAlert
       v-if="dismissAllError"
       data-testid="notifications-dismiss-all-error"
-      role="alert"
-      class="text-sm text-destructive"
-    >
-      {{ dismissAllError }}
-    </p>
+      compact
+      :message="dismissAllError"
+      :retryable="false"
+    />
     <output
       v-else-if="dismissedAll"
       data-testid="notifications-dismiss-all-success"
@@ -112,26 +111,16 @@
         <p class="text-sm text-muted-foreground">
           {{ $t('views.NotificationsPage.showing_x_of_y_notifications', { count: notifications.length, total }) }}
         </p>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            data-testid="notifications-prev-page"
-            class="rounded-md border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
-            :disabled="page <= 1"
-            @click="prevPage"
-          >
-            {{ $t('common.previous') }}
-          </button>
-          <button
-            type="button"
-            data-testid="notifications-next-page"
-            class="rounded-md border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
-            :disabled="page * pageSize >= total"
-            @click="nextPage"
-          >
-            {{ $t('common.next') }}
-          </button>
-        </div>
+        <Pagination
+          :has-prev="page > 1"
+          :has-next="page * pageSize < total"
+          :prev-label="$t('common.previous')"
+          :next-label="$t('common.next')"
+          prev-testid="notifications-prev-page"
+          next-testid="notifications-next-page"
+          @prev="prevPage"
+          @next="nextPage"
+        />
       </div>
     </template>
   </div>
@@ -147,6 +136,7 @@ import { useNotificationsStore } from "../stores/notifications";
 import NotificationCard from "../components/NotificationCard.vue";
 import PageHeader from '../components/shared/PageHeader.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
+import Pagination from '../components/shared/Pagination.vue'
 import SkeletonBlock from "../components/shared/SkeletonBlock.vue";
 import ErrorAlert from "../components/shared/ErrorAlert.vue";
 import EmptyState from "../components/shared/EmptyState.vue";

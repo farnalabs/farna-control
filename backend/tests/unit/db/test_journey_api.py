@@ -137,7 +137,7 @@ async def _seed_stage(
         stage_id=stage_id,
         stage_name="Review",
         position=position,
-        stage_type="modulo",
+        stage_type="farna_control",
         pipeline_id=pipeline_id,
     )
     session.add(stage)

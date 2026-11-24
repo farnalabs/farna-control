@@ -106,16 +106,31 @@
                 </tbody>
               </table>
             </div>
-
-            <div v-if="total > pageSize" class="flex items-center justify-between mt-4 px-4 pb-4" data-testid="system-maps-pagination">
-              <span class="text-sm text-muted-foreground">{{ $t('views.SystemMapsView.page_of', { page: page, total: Math.ceil(total / pageSize) }) }}</span>
-              <div class="flex gap-1">
-                <button type="button" class="rounded border px-2 py-1 text-sm" :disabled="page <= 1" @click="loadMaps(page - 1)" :data-testid="`system-maps-prev`">{{ $t('common.previous') }}</button>
-                <button type="button" class="rounded border px-2 py-1 text-sm" :disabled="page >= Math.ceil(total / pageSize)" @click="loadMaps(page + 1)" :data-testid="`system-maps-next`">{{ $t('common.next') }}</button>
-              </div>
-            </div>
           </template>
         </template>
+
+        <!-- FAR-2751: keep the footer OUTSIDE the loading swap above, so the
+             Pagination `page X of Y` polite live region survives a page load.
+             Re-mounting the region with the new text already present is not
+             announced; a text change inside a persistent node is. The controls
+             are disabled during the fetch instead of disappearing with it. -->
+        <div
+          v-if="!error && !unavailable && maps.length > 0 && total > pageSize"
+          class="flex items-center justify-end mt-4 px-4 pb-4"
+          data-testid="system-maps-pagination"
+        >
+          <Pagination
+            :has-prev="page > 1 && !loading"
+            :has-next="page < Math.ceil(total / pageSize) && !loading"
+            :page-label="$t('views.SystemMapsView.page_of', { page: page, total: Math.ceil(total / pageSize) })"
+            :prev-label="$t('common.previous')"
+            :next-label="$t('common.next')"
+            prev-testid="system-maps-prev"
+            next-testid="system-maps-next"
+            @prev="loadMaps(page - 1)"
+            @next="loadMaps(page + 1)"
+          />
+        </div>
       </main>
     </div>
 
@@ -162,6 +177,7 @@ import { useSystemMapsStore } from '../stores/systemMaps'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import Pagination from '../components/shared/Pagination.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import Dialog from 'primevue/dialog'

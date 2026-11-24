@@ -68,11 +68,7 @@
       {{ errorMessage }}
     </div>
 
-    <div
-      v-if="holders.length > 0"
-      class="mt-1 overflow-x-auto"
-      data-testid="pipeline-editor-snapshot-lock-holders"
-    >
+    <div v-if="holders.length > 0" class="table-wrapper mt-1" data-testid="pipeline-editor-snapshot-lock-holders">
       <table class="w-full text-xs">
         <caption class="sr-only">
           {{ $t('views.PipelineEditorView.snapshot_lock_holders_caption') }}

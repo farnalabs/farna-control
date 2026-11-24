@@ -81,7 +81,7 @@ _log = logging.getLogger(__name__)
 # instead of the installed app's first boot; the Windows launcher and the Linux
 # bundle wrapper are held to the same name by unit tests, not by their builds.
 # FAR-2554: the launchers kept
-# exporting the pre-rebrand ``MODULO_BUNDLED_BIN_DIR`` after the resolver was
+# exporting the pre-rebrand bin-dir name after the resolver was
 # renamed, so the env value was ignored and the boot fell through to the
 # ``<sys.prefix>/bundled/bin`` default that no bundle produces.
 BUNDLED_BIN_DIR_ENV = "FARNA_CONTROL_BUNDLED_BIN_DIR"
@@ -638,15 +638,22 @@ def _compose_and_pin_config(data_dir: Path, launcher_state: Any, secrets: Any) -
     The SAQ children receive these through their environment, which outranks
     the pinned dotenv; returning the raw derivation instead handed the workers
     a different SECRET_KEY/FERNET_KEY from the API whenever install.sh had
-    persisted its own keys (FAR-2581).
+    persisted its own keys (FAR-2581). The resolved product-analytics settings
+    are additionally exported to ``os.environ`` (FAR-2747): the API's ON-switch
+    consumer and the SAQ children read the process environment, not the dotenv.
     """
-    from farna.launcher.config_source import compose_config, resolve_pinned_runtime_keys, write_pinned_env_file
+    from farna.launcher.config_source import compose_config, export_analytics_env, resolve_pinned_runtime_keys, write_pinned_env_file
     from farna.settings import pin_env_file, set_first_boot_guard
 
     config_path = write_pinned_env_file(data_dir, launcher_state, secrets)
     pin_env_file(str(config_path))
     set_first_boot_guard(env_safety.make_first_boot_guard(data_dir, env_file=config_path))
-    return resolve_pinned_runtime_keys(compose_config(launcher_state, secrets), config_path)
+    composed = resolve_pinned_runtime_keys(compose_config(launcher_state, secrets), config_path)
+    # The API (in-process) reads the ON switch from os.environ, and the SAQ
+    # workers are separate processes that inherit this environment rather than
+    # the pinned dotenv - so export the resolved analytics settings (FAR-2747).
+    export_analytics_env(composed)
+    return composed
 
 
 def _prepare_database_env(composed: dict[str, str]) -> None:

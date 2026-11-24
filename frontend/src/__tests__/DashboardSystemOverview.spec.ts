@@ -626,7 +626,7 @@ describe('DashboardSystemOverview', () => {
     expect(localStorage.getItem('dashboard-system-overview-collapsed:v2')).toBe('true')
   })
 
-  it('renders through the shared SectionCard without a live region', () => {
+  it('renders through the shared DataCard without a live region', () => {
     const { wrapper } = mountOverview()
 
     const card = wrapper.get('[data-testid="dashboard-system-overview"]')

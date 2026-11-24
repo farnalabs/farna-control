@@ -41,6 +41,10 @@
 #      written to a versioned snapshot dir inside the data dir, verified
 #      non-empty. ANY dump failure aborts the whole installer — no binary
 #      swap happens without a verified snapshot.
+#      The dump is taken ONLY when a migration is actually pending against
+#      the NEW bundle (the helper makes that decision, with --target-bundle
+#      naming the new bundle): a re-run that installs nothing new is not an
+#      upgrade and must not rotate the recovery points.
 #      The dump needs the bundled Postgres REACHABLE, so run the installer
 #      FIRST (while the launcher is running), then:
 #   2. The installer REFUSES to perform the versioned-dir/current-symlink
@@ -147,6 +151,16 @@ FORCE=0
 FROM_FILE=""
 FROM_BUNDLE=""
 SKIP_BACKUP=0
+# Product-analytics opt-in (FAR-2741). The prompt is shown ONCE, during
+# first-run setup, on an interactive terminal; it defaults to OFF and never
+# blocks an unattended install. Declining writes nothing at all, so "no
+# telemetry by default" stays true on every install.
+NO_TELEMETRY_PROMPT=0
+PRODUCT_ANALYTICS_ENDPOINT_URL="https://telemetry.farna.dev"
+# Set to a non-empty multi-line string ONLY when the three settings should be
+# persisted in config.env (an accepted opt-in, or values carried over from an
+# earlier run). An empty value means "write none of them".
+product_analytics_block=""
 
 die() {
   printf 'ERROR: %b\n' "$*" >&2
@@ -179,6 +193,10 @@ Options:
                            bundled stack is stopped (the swap needs it stopped,
                            and a stopped stack cannot be dumped). The installer
                            prints the snapshot path it left behind.
+  --no-telemetry-prompt    Do not ask the first-run product-analytics question;
+                           take the default (OFF). Use this for scripted or
+                           unattended installs. The prompt is also skipped
+                           automatically when stdin is not a terminal.
   --help                   Show this help.
 
 Environment overrides:
@@ -640,6 +658,8 @@ refuse_when_locked() {
 # non-empty verification in the helper itself. ANY failure aborts here and
 # nothing version-specific is laid out. The snapshot path is the helper's
 # final stdout line (the installer reports it; the operator aborts with it).
+# An EMPTY stdout with exit 0 means the helper's pending check found nothing to
+# migrate — reported, never treated as a missing path.
 run_pre_upgrade_dump() {
   local old_root="${INSTALL_ROOT}/current"
   local py="${old_root}/runtime/bin/python3"
@@ -648,7 +668,7 @@ run_pre_upgrade_dump() {
   # Only the current package name exists: the pre-rebrand backend/src/modulo
   # tree was renamed to backend/src/farna, so a bundle with the old module
   # cannot be run by a helper whose env contract predates the rename. The old
-  # helper reads MODULO_BUNDLED_BIN_DIR; this installer sets only
+  # helper reads the pre-rebrand bundled-bin-dir name; this installer sets only
   # FARNA_CONTROL_BUNDLED_BIN_DIR. Fail with the actionable message instead of
   # invoking a helper whose env contract no longer exists.
   if [[ -f "${old_root}/backend/src/farna/launcher/upgrade.py" ]]; then
@@ -660,13 +680,43 @@ run_pre_upgrade_dump() {
   fi
   [[ -x "${py}" ]] || die "cannot run the pre-upgrade pg_dump: no bundled runtime at ${py} (no prior native install to upgrade — remove the populated data dir or ignore)"
   info "Pre-upgrade pg_dump (enforced by FAR-672) — the bundled stack must be running..."
+  # The helper runs from the OLD installation, so if it understands
+  # --target-bundle it can compare the live database against the NEW bundle and
+  # take a snapshot only when the new bundle actually migrates. An OLDER helper
+  # (origin/main and every released bundle up to the one that added the flag)
+  # uses argparse with only --data-dir/--bin-dir: handing it --target-bundle
+  # exits 2 "unrecognized arguments" and the FIRST native upgrade aborts before
+  # any swap. Probe the installed helper first and fall back to a plain
+  # --data-dir dump (which always dumps — a recovery point before an upgrade is
+  # never wrong, just occasionally redundant).
+  local -a dump_args=(--data-dir "${DATA_DIR}")
+  # Both the capability probe and the dump run need the helper to find the
+  # bundled pg_dump. Set the value once here (the value test lifts this line
+  # verbatim) and export it so neither invocation repeats the assignment.
+  local FARNA_CONTROL_BUNDLED_BIN_DIR
+  FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin"
+  export FARNA_CONTROL_BUNDLED_BIN_DIR
+  if PYTHONPATH="${old_root}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
+      "${py}" -m "${module}" --help 2>/dev/null | grep -q -- "--target-bundle"; then
+    dump_args+=(--target-bundle "${bundle_dir}")
+  else
+    info "WARNING: the installed upgrade helper predates --target-bundle; taking a plain --data-dir dump (it cannot detect whether the new bundle migrates, so a snapshot is always taken)."
+  fi
   if snapshot_path="$(PYTHONPATH="${old_root}/backend/src${PYTHONPATH:+:${PYTHONPATH}}" \
-      FARNA_CONTROL_BUNDLED_BIN_DIR="${old_root}/pg/bin" \
-      "${py}" -m "${module}" --data-dir "${DATA_DIR}")"; then
+      "${py}" -m "${module}" "${dump_args[@]}")"; then
     :
   else
     rc=$?
     die "pre-upgrade pg_dump FAILED (exit ${rc}) — upgrade ABORTED, no binary swap was made. The installer aborted BEFORE installing anything; fix the dump failure and re-run. If a verified snapshot ALREADY exists in ${DATA_DIR} and the bundled stack is stopped (a stopped stack cannot be dumped), re-run with --skip-backup:\n  bash farna-control-install.sh --skip-backup"
+  fi
+  if [[ -z "${snapshot_path}" ]]; then
+    # The helper's own pending check decided no migration is owed: the database
+    # already records the new bundle's schema, so an installer re-run must NOT
+    # churn (and rotate) the recovery points.
+    info "No migration is pending against the new bundle — no pre-upgrade snapshot was taken."
+    UPGRADE_SNAPSHOT_PATH=""
+    UPGRADE_SNAPSHOT_NOT_NEEDED=1
+    return 0
   fi
   [[ -d "${snapshot_path}" ]] || die "pre-upgrade pg_dump succeeded but the snapshot path is missing: '${snapshot_path}'"
   UPGRADE_SNAPSHOT_PATH="${snapshot_path}"
@@ -735,6 +785,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_BACKUP=1
       shift
       ;;
+    --no-telemetry-prompt)
+      NO_TELEMETRY_PROMPT=1
+      shift
+      ;;
     --help | -h)
       usage
       exit 0
@@ -765,7 +819,7 @@ if [[ -n "${FROM_BUNDLE}" ]]; then
   VERSION_NUM="${BASH_REMATCH[1]}"
   RELEASE_TAG="(offline: extracted bundle)"
   tarball_name="farna-control-${VERSION_NUM}-${OS}-${ARCH}.tar.gz"
-  bundle_dir="$(CDPATH= cd -- "${FROM_BUNDLE}" && pwd)"
+  bundle_dir="$(CDPATH='' cd -- "${FROM_BUNDLE}" && pwd)"
 elif [[ -n "${FROM_FILE}" ]]; then
   [[ -f "${FROM_FILE}" ]] || die "--from-file: no such file: ${FROM_FILE}"
   tarball_name="$(basename "${FROM_FILE}")"
@@ -989,7 +1043,7 @@ PYEOF
 
 
 if [[ -n "${FROM_BUNDLE}" ]]; then
-  bundle_parent="$(CDPATH= cd -- "${FROM_BUNDLE}/.." && pwd)"
+  bundle_parent="$(CDPATH='' cd -- "${FROM_BUNDLE}/.." && pwd)"
   adjacent_tarball="${bundle_parent}/${tarball_name}"
   manifest_file="${bundle_parent}/RELEASE_MANIFEST.json"
   signature_file="${manifest_file}.sig"
@@ -1087,6 +1141,7 @@ newest_pre_upgrade_snapshot() {
 
 stage "pre-upgrade backup"
 UPGRADE_SNAPSHOT_PATH=""
+UPGRADE_SNAPSHOT_NOT_NEEDED=0
 if [[ -f "${DATA_DIR}/state.json" ]]; then
   if [[ -f "${INSTALL_ROOT}/current/runtime/bin/python3" ]]; then
     if [[ "${SKIP_BACKUP}" -eq 1 ]]; then
@@ -1110,10 +1165,126 @@ if [[ -f "${DATA_DIR}/state.json" ]]; then
   refuse_when_locked
   if [[ -n "${UPGRADE_SNAPSHOT_PATH}" ]]; then
     info "Upgrade snapshot requirement satisfied (snapshot: ${UPGRADE_SNAPSHOT_PATH})"
+  elif [[ "${UPGRADE_SNAPSHOT_NOT_NEEDED}" -eq 1 ]]; then
+    info "Upgrade snapshot requirement satisfied (no migration is pending against the new bundle)"
   else
     info "Upgrade snapshot requirement satisfied (--skip-backup run; the existing snapshot in ${DATA_DIR} must be verified by the operator)"
   fi
 fi
+
+configure_product_analytics_optin() {
+  # configure_product_analytics_optin <config_path> <existing_contents>
+  #
+  # Decides what (if anything) to persist for product analytics and sets the
+  # global `product_analytics_block` to the zero-or-more config.env lines.
+  #
+  # Rules (FAR-2741):
+  #   * Ask ONCE, during first-run setup, default OFF. An existing config.env
+  #     means setup already happened, so a re-run/upgrade never asks again.
+  #   * The operator environment always wins for each name it supplies, so a
+  #     copy of an environment value is never persisted. The persisted lines for
+  #     the names it does NOT supply are still carried over.
+  #   * ACCEPT writes all three (endpoint, a freshly generated instance secret,
+  #     and the ON switch). DECLINE writes NOTHING - absence is the off state,
+  #     so `..._ENABLED=false` is deliberately not written either.
+  #   * Non-interactive (stdin not a TTY) or --no-telemetry-prompt takes the
+  #     default silently and never blocks an unattended install.
+  #   * Existing analytics lines are carried over verbatim so a re-run of this
+  #     installer cannot silently turn analytics off (or rotate the secret).
+  local config_path="$1" existing="$2"
+  local endpoint secret enabled answer instance_secret carry key line
+  product_analytics_block=""
+
+  endpoint="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=//p' | head -n 1)"
+  secret="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=//p' | head -n 1)"
+  enabled="$(printf '%s\n' "${existing}" | sed -n 's/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=//p' | head -n 1)"
+
+  if [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL:-}" \
+     || -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET:-}" \
+     || -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED:-}" ]]; then
+    # Never persist a copy of an environment value, but DO carry over the
+    # persisted lines for the names the environment did not supply.
+    # ensure_runtime_keys rewrites config.env from `product_analytics_block`
+    # after stripping these three lines, so returning here with an empty block
+    # would silently delete a persisted endpoint/secret/switch on a partial
+    # env override and the next boot could rotate the secret or leave
+    # analytics off (FAR-2741 review).
+    carry=""
+    while IFS= read -r line; do
+      key="${line%%=*}"
+      case "${key}" in
+        FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL)
+          [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL:-}" ]] && continue ;;
+        FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET)
+          [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET:-}" ]] && continue ;;
+        FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED)
+          [[ -n "${FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED:-}" ]] && continue ;;
+        *)
+          :
+          ;;
+      esac
+      carry="${carry}${line}"$'\n'
+    done < <(printf '%s\n' "${existing}" \
+      | sed -n '/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=/p; /^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=/p; /^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=/p')
+    product_analytics_block="${carry%$'\n'}"
+    info "product analytics: configured through the environment; keeping the persisted settings it did not override"
+    return 0
+  fi
+
+  if [[ -n "${endpoint}" || -n "${secret}" || -n "${enabled}" ]] || [[ -e "${config_path}" ]]; then
+    # Already answered (or this is an upgrade): keep whatever is there.
+    product_analytics_block="$(printf '%s\n' "${existing}" \
+      | sed -n '/^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=/p; /^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=/p; /^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=/p')"
+    if [[ -n "${product_analytics_block}" ]]; then
+      info "product analytics: keeping the existing opt-in settings"
+    fi
+    return 0
+  fi
+
+  if [[ "${NO_TELEMETRY_PROMPT}" -eq 1 ]]; then
+    info "product analytics: off (--no-telemetry-prompt; the default)"
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    info "product analytics: off (non-interactive install; the default)"
+    return 0
+  fi
+
+  info ""
+  info "Farna Control can send anonymous product analytics to Farnalabs."
+  info "It is OFF unless you choose to turn it on now. You can turn it off"
+  info "later in the app (Administration, Product analytics); turning it on"
+  info "after declining requires updating the instance configuration."
+  info ""
+  info "If you turn it on, once a day this instance sends aggregate counts only:"
+  info "  - how many organisations, pipelines, agents, schemas, teams, model"
+  info "    backends, connector instances and triggers exist"
+  info "  - run statistics (counts, durations and outcomes)"
+  info "  - counts of error families"
+  info "  - an inventory of which provider and connector types are in use"
+  info "No prompts, pipeline outputs, credentials or customer content are sent."
+  info "It goes to Farnalabs' telemetry service at ${PRODUCT_ANALYTICS_ENDPOINT_URL}."
+  info ""
+  answer=""
+  printf 'Send anonymous aggregate product analytics? [y/N] '
+  read -r answer || answer=""
+  case "${answer}" in
+    [Yy] | [Yy][Ee][Ss]) ;;
+    *)
+      info "product analytics: off (the default)"
+      return 0
+      ;;
+  esac
+
+  instance_secret=""
+  if command -v openssl >/dev/null 2>&1; then
+    instance_secret="$(openssl rand -hex 32)" || instance_secret=""
+  fi
+  [[ -n "${instance_secret}" ]] || die "could not generate the product-analytics instance secret with openssl (at least 32 random bytes are required)"
+  printf -v product_analytics_block 'FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=%s\nFARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=%s\nFARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true' \
+    "${PRODUCT_ANALYTICS_ENDPOINT_URL}" "${instance_secret}"
+  info "product analytics: on (you can change this later in the app)"
+}
 
 ensure_runtime_keys() {
   # Persist the application keys before the first launcher start. Values from
@@ -1146,17 +1317,26 @@ ensure_runtime_keys() {
   [[ -n "${fernet_key}" ]] || fernet_key="$(openssl rand -base64 32 | tr -d '\n')" || die "could not generate FERNET_KEY with openssl"
   [[ -n "${secret_key}" && -n "${fernet_key}" ]] || die "openssl generated an empty native runtime key"
 
+  configure_product_analytics_optin "${config_path}" "${existing}"
+
   temp_path="${config_path}.tmp.$$"
   umask 077
   {
     if [[ -n "${existing}" ]]; then
-      printf '%s\n' "${existing}" | sed '/^SECRET_KEY=/d; /^FERNET_KEY=/d'
+      printf '%s\n' "${existing}" \
+        | sed '/^SECRET_KEY=/d; /^FERNET_KEY=/d; /^FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=/d; /^FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET=/d; /^FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=/d'
     fi
     printf 'SECRET_KEY=%s\n' "${secret_key}"
     printf 'FERNET_KEY=%s\n' "${fernet_key}"
+    if [[ -n "${product_analytics_block}" ]]; then
+      printf '%s\n' "${product_analytics_block}"
+    fi
   } > "${temp_path}" || die "could not write native runtime configuration"
   chmod 600 -- "${temp_path}" || die "could not secure native runtime configuration"
   mv -f -- "${temp_path}" "${config_path}" || die "could not install native runtime configuration"
+  if [[ -n "${product_analytics_block}" ]]; then
+    info "  product analytics settings: ${config_path} (mode 600, never commit this file)"
+  fi
 }
 
 # --- lay out the versioned install + `current` symlink ----------------------

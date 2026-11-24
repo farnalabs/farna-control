@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from farna.core.library_service import (
-    _MODULO_PRIMITIVES,
+    _BUILTIN_PRIMITIVES,
     CONTRIBUTION_DRAFT,
     CONTRIBUTION_PUBLISHED,
     CONTRIBUTION_REVIEW_QUEUE,
@@ -18,6 +18,9 @@ from farna.core.library_service import (
     submit_contribution_for_review,
     submit_contribution_version,
 )
+
+#: Every in-code built-in primitive of type ``test_fixture`` (exactly one is seeded).
+_BUILTIN_TEST_FIXTURES = [p for p in _BUILTIN_PRIMITIVES if p.primitive_type == "test_fixture"]
 
 
 def _mock_session() -> MagicMock:
@@ -444,7 +447,7 @@ class TestCommunityFixturePrimitive:
     """Built-in community primitives include one test_fixture."""
 
     def test_example_test_fixture_exists_in_community(self):
-        fixtures = [p for p in _MODULO_PRIMITIVES if p.primitive_type == "test_fixture"]
+        fixtures = _BUILTIN_TEST_FIXTURES
         assert len(fixtures) == 1
         fixture = fixtures[0]
         assert fixture.name == "Example Test Fixture"
@@ -452,7 +455,7 @@ class TestCommunityFixturePrimitive:
         assert fixture.contribution_status == "published"
 
     def test_example_fixture_has_fixture_map(self):
-        fixtures = [p for p in _MODULO_PRIMITIVES if p.primitive_type == "test_fixture"]
+        fixtures = _BUILTIN_TEST_FIXTURES
         content = fixtures[0].content_json
         assert "fixture_map" in content
         assert len(content["fixture_map"]) == 2
@@ -650,7 +653,7 @@ class TestListContributionVersions:
         """A built-in served from memory is not a contribution version seed."""
         session = _mock_session()
         org_id = uuid.uuid4()
-        builtin = _MODULO_PRIMITIVES[0]
+        builtin = _BUILTIN_PRIMITIVES[0]
 
         with (
             patch("farna.core.library_service.set_rls_org", new_callable=AsyncMock),

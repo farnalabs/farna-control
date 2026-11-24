@@ -1096,6 +1096,9 @@ describe('PipelineListView', () => {
     const scrollRegion = wrapper.find('[aria-describedby="pipeline-list-table-scroll-instructions"]')
     expect(scrollRegion.exists()).toBe(true)
     expect(scrollRegion.attributes('tabindex')).toBe('0')
+    // The shared CardTable primitive owns the scroll region, so the table shell
+    // class must sit on THAT focusable container, not on a wrapper above it.
+    expect(scrollRegion.classes()).toContain('table-wrapper')
     expect(wrapper.find('#pipeline-list-table-scroll-instructions').exists()).toBe(true)
     wrapper.unmount()
   })

@@ -227,12 +227,12 @@ async def graduate_stage(
     pipeline_id: str | None,
     updated_by: uuid.UUID | None = None,
 ) -> LifecycleMap | None:
-    """Mark a journey/map-stage as graduated and link it to a Modulo pipeline.
+    """Mark a journey/map-stage as graduated and link it to a Farna Control pipeline.
 
     v1: records the graduation on the active version (sets ``graduated``,
-    flips the stage ``type`` to ``modulo`` and links ``pipeline_id``). Full
-    reclassification + history semantics are deferred to a later slice. The
-    row is locked (``FOR UPDATE``) so the version increment is atomic.
+    flips the stage ``type`` to ``farna_control`` and links ``pipeline_id``).
+    Full reclassification + history semantics are deferred to a later slice.
+    The row is locked (``FOR UPDATE``) so the version increment is atomic.
     """
     lifecycle_map = await get_lifecycle_map_for_update(session, lifecycle_map_id)
     if lifecycle_map is None:
@@ -245,7 +245,7 @@ async def graduate_stage(
     if target is None:
         raise LifecycleMapContentError(f"stage {stage_id!r} not found in this map")
     target["graduated"] = True
-    target["type"] = "modulo"
+    target["type"] = "farna_control"
     target["pipeline_id"] = pipeline_id or None
     lifecycle_map.content_json = normalize_content(content)
     lifecycle_map.version += 1

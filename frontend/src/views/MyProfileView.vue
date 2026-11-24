@@ -16,22 +16,14 @@
       />
     </div>
 
-    <div v-else-if="profileLoading" class="card p-6 space-y-6" data-testid="my-profile-profile-loading">
+    <BaseCard v-else-if="profileLoading" padding="lg" class="space-y-6" data-testid="my-profile-profile-loading">
       <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
-      <div class="space-y-4" aria-busy="true">
-        <div class="flex items-center gap-4 pb-4 border-b border-border">
-          <SkeletonBlock height-class="h-14 w-14 rounded-full" />
-          <div class="space-y-2">
-            <SkeletonBlock height-class="h-5 w-40" />
-            <SkeletonBlock height-class="h-4 w-56" />
-            <SkeletonBlock height-class="h-4 w-16" />
-          </div>
-        </div>
-        <SkeletonBlock height-class="h-4 w-48" />
+      <div aria-busy="true">
+        <CardSkeleton :lines="4" />
       </div>
-    </div>
+    </BaseCard>
 
-    <div v-else class="card p-6 space-y-6">
+    <BaseCard v-else padding="lg" class="space-y-6">
       <div class="flex items-center gap-4 pb-4 border-b border-border">
         <div class="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-primary-foreground" aria-hidden="true">
           {{ userInitial }}
@@ -46,11 +38,10 @@
       <div class="text-sm text-muted-foreground">
         {{ $t('views.MyProfileView.member_since', { date: formatMemberSince(profile.created_at) }) }}
       </div>
-    </div>
+    </BaseCard>
 
     <FeatureGate feature-name="team_rbac" show-disabled>
-      <div class="card p-6">
-        <h2 class="text-base font-semibold mb-4">{{ $t('views.MyProfileView.my_teams') }}</h2>
+      <DataCard padding="lg" :title="$t('views.MyProfileView.my_teams')" heading-level="h2">
         <div v-if="myTeamsLoading" data-testid="my-profile-my-teams-loading">
           <!-- Live region carries only the status text; the skeleton blocks are
                layout, not phrasing content, so they are siblings. -->
@@ -74,17 +65,21 @@
           :title="$t('views.MyProfileView.not_a_member_of_any_team')"
         />
         <div v-else class="space-y-2">
-          <div v-for="team in myTeams" :key="team.team_id" class="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2" data-testid="my-profile-my-team">
+          <div v-for="team in myTeams" :key="team.team_id" class="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2" :data-testid="`my-profile-my-team-${team.team_id}`">
             <span class="font-medium">{{ team.team_name }}</span>
             <span class="inline-flex items-center rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary-text">{{ teamRoleLabel(team.role) }}</span>
           </div>
         </div>
-      </div>
+      </DataCard>
     </FeatureGate>
 
-    <div class="card p-6" data-testid="my-profile-hitl-email-section">
-      <h2 class="text-base font-semibold mb-1">{{ $t('views.MyProfileView.hitl_email_alerts') }}</h2>
-      <p class="text-sm text-muted-foreground mb-4">{{ $t('views.MyProfileView.hitl_email_alerts_description') }}</p>
+    <DataCard
+      padding="lg"
+      data-testid="my-profile-hitl-email-section"
+      :title="$t('views.MyProfileView.hitl_email_alerts')"
+      :description="$t('views.MyProfileView.hitl_email_alerts_description')"
+      heading-level="h2"
+    >
 
       <div v-if="hitlPrefsLoading" data-testid="my-profile-hitl-email-loading">
         <output class="sr-only" aria-live="polite">{{ $t('common.loading') }}</output>
@@ -150,25 +145,24 @@
           </div>
         </div>
 
-        <p
+        <ErrorAlert
           v-if="hitlSaveError"
-          role="alert"
-          aria-live="assertive"
-          class="text-sm text-destructive"
           data-testid="my-profile-hitl-email-error"
-        >{{ hitlSaveError }}</p>
+          compact
+          :message="hitlSaveError"
+          :retryable="false"
+        />
         <p v-if="hitlSaveSuccess" class="text-sm text-success-text" aria-live="polite" data-testid="my-profile-hitl-email-success">{{ $t('views.MyProfileView.hitl_email_saved') }}</p>
 
         <Button type="button" :disabled="hitlSaving" class="border border-primary/30 w-full sm:w-auto" data-testid="my-profile-hitl-email-save" @click="saveHitlEmailPrefs">
           {{ hitlSaving ? $t('common.saving') : $t('common.save') }}
         </Button>
       </div>
-    </div>
+    </DataCard>
 
-    <div class="card p-6">
-      <h2 class="text-base font-semibold mb-4">{{ $t('views.MyProfileView.change_password') }}</h2>
+    <DataCard padding="lg" :title="$t('views.MyProfileView.change_password')" heading-level="h2">
       <ChangePasswordForm />
-    </div>
+    </DataCard>
   </div>
 </template>
 
@@ -177,9 +171,12 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import ChangePasswordForm from '../components/shared/ChangePasswordForm.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import DataCard from '../components/ui/DataCard.vue'
+import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import Button from 'primevue/button'

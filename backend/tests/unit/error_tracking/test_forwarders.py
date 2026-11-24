@@ -88,6 +88,8 @@ class TestSentryErrorForwarder:
         # Pins the API-fallback path: the pinned client's POST was actually
         # awaited (the result alone could come from the SDK path).
         mock_client.return_value.__aenter__.return_value.post.assert_awaited_once()
+        sent_headers = instance.post.await_args.kwargs["headers"]
+        assert sent_headers["User-Agent"] == "Farna-Control-Error-Forwarder/1.0"
 
     @pytest.mark.parametrize(
         ("dsn", "expected_authorization"),
@@ -406,6 +408,7 @@ class TestRollbarErrorForwarder:
         call_kwargs = instance.post.call_args[1]
         assert call_kwargs["json"]["access_token"] == "rb-token"
         assert call_kwargs["json"]["data"]["environment"] == "staging"
+        assert call_kwargs["headers"]["User-Agent"] == "Farna-Control-Error-Forwarder/1.0"
 
     async def test_failure_returns_false(self) -> None:
         fwd = RollbarErrorForwarder()

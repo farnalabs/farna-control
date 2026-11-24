@@ -12,7 +12,7 @@ type Wrapper = ReturnType<typeof mount>
 // the svg + tooltip), not the component root — the root also contains the
 // y-axis label column, which must not affect pointer/tooltip math.
 function plotElement(wrapper: Wrapper): Element {
-  return wrapper.get('[data-testid="sparkline-plot"]').element
+  return wrapper.get('[data-testid^="sparkline-plot-"]').element
 }
 
 async function movePointer(wrapper: Wrapper, clientX: number, clientY: number) {
@@ -72,7 +72,7 @@ describe('Sparkline', () => {
     expect(wrapper.find('text').exists()).toBe(false)
     // The old dashed placeholder line inside the svg is gone too.
     expect(wrapper.findAll('line')).toHaveLength(0)
-    const empty = wrapper.get('[data-testid="sparkline-no-data"]')
+    const empty = wrapper.get('[data-testid^="sparkline-no-data-"]')
     expect(empty.text()).toContain('No data')
     // Plain HTML element, not an SVG element and not nested inside one.
     expect(empty.element.tagName).toBe('DIV')
@@ -83,7 +83,7 @@ describe('Sparkline', () => {
     const wrapper = mount(Sparkline, { props: { data: [3] } })
     expect(wrapper.find('polyline').exists()).toBe(false)
     expect(wrapper.find('svg').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sparkline-no-data"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="sparkline-no-data-"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('No data')
   })
 
@@ -98,7 +98,7 @@ describe('Sparkline', () => {
 
   it('exposes the localized no-data string to assistive tech when empty', () => {
     const wrapper = mount(Sparkline, { props: { data: [] } })
-    const empty = wrapper.get('[data-testid="sparkline-no-data"]')
+    const empty = wrapper.get('[data-testid^="sparkline-no-data-"]')
     expect(empty.attributes('role')).toBe('img')
     expect(empty.attributes('aria-label')).toBe('No data')
   })
@@ -107,9 +107,9 @@ describe('Sparkline', () => {
     const wrapper = mount(Sparkline, {
       props: { data: [1, 2, 3], labels: ['Mon', 'Tue', 'Wed'], unit: 'runs', width: 200 },
     })
-    expect(wrapper.find('[data-testid="sparkline-tooltip"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="sparkline-tooltip-"]').exists()).toBe(false)
     await movePointer(wrapper, 199, 10)
-    const tooltip = wrapper.find('[data-testid="sparkline-tooltip"]')
+    const tooltip = wrapper.find('[data-testid^="sparkline-tooltip-"]')
     expect(tooltip.exists()).toBe(true)
     expect(tooltip.text()).toContain('Wed')
     expect(tooltip.text()).toContain('3 runs')
@@ -120,16 +120,16 @@ describe('Sparkline', () => {
       props: { data: [12.5, 15.2], unit: '$', width: 200 },
     })
     await movePointer(wrapper, 199, 10)
-    const tooltip = wrapper.find('[data-testid="sparkline-tooltip"]')
+    const tooltip = wrapper.find('[data-testid^="sparkline-tooltip-"]')
     expect(tooltip.text()).toContain('$15.2')
   })
 
   it('hides the tooltip on pointerleave', async () => {
     const wrapper = mount(Sparkline, { props: { data: [1, 2, 3], labels: ['a', 'b', 'c'] } })
     await movePointer(wrapper, 199, 10)
-    expect(wrapper.find('[data-testid="sparkline-tooltip"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="sparkline-tooltip-"]').exists()).toBe(true)
     await leavePointer(wrapper)
-    expect(wrapper.find('[data-testid="sparkline-tooltip"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="sparkline-tooltip-"]').exists()).toBe(false)
   })
 
   it('renders y-axis labels when showYAxis is enabled and omits them otherwise', () => {
@@ -307,15 +307,15 @@ describe('Sparkline', () => {
     // sibling flex item), so pointer math inside the plot always uses plain
     // width/padding regardless of showYAxis — no adjustment needed.
     await movePointer(wrapper, 2, 10)
-    expect(wrapper.find('[data-testid="sparkline-tooltip"]').text()).toContain('day0')
+    expect(wrapper.find('[data-testid^="sparkline-tooltip-"]').text()).toContain('day0')
     await movePointer(wrapper, 198, 10)
-    expect(wrapper.find('[data-testid="sparkline-tooltip"]').text()).toContain('day29')
+    expect(wrapper.find('[data-testid^="sparkline-tooltip-"]').text()).toContain('day29')
   })
 
   it('does not show a tooltip when there is no data', async () => {
     const wrapper = mount(Sparkline, { props: { data: [] } })
     await movePointer(wrapper, 100, 10)
-    expect(wrapper.find('[data-testid="sparkline-tooltip"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="sparkline-tooltip-"]').exists()).toBe(false)
   })
 
   it('zero mode maps null values to 0 at the chart floor', () => {
@@ -337,8 +337,8 @@ describe('Sparkline', () => {
       props: { data: [80, null, 100, null], missingData: 'carry-forward' },
     })
     expect(wrapper.findAll('polyline')).toHaveLength(0)
-    expect(wrapper.find('[data-testid="sparkline-endpoint"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sparkline-no-data"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="sparkline-endpoint-"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="sparkline-no-data-"]').exists()).toBe(false)
   })
 
   it('does not turn sparse observations into a flat full-width line', () => {
@@ -347,7 +347,7 @@ describe('Sparkline', () => {
     })
     expect(wrapper.findAll('polyline')).toHaveLength(0)
     expect(wrapper.findAll('polygon')).toHaveLength(0)
-    expect(wrapper.find('[data-testid="sparkline-endpoint"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="sparkline-endpoint-"]').exists()).toBe(true)
   })
 
   it('keeps leading and trailing null positions while drawing contiguous observations', () => {
@@ -370,11 +370,11 @@ describe('Sparkline', () => {
       },
     })
     await movePointer(wrapper, 2, 10)
-    let tooltip = wrapper.find('[data-testid="sparkline-tooltip"]')
+    let tooltip = wrapper.find('[data-testid^="sparkline-tooltip-"]')
     expect(tooltip.text()).toContain('d2')
     expect(tooltip.text()).toContain('80')
     await movePointer(wrapper, 198, 10)
-    tooltip = wrapper.find('[data-testid="sparkline-tooltip"]')
+    tooltip = wrapper.find('[data-testid^="sparkline-tooltip-"]')
     expect(tooltip.text()).toContain('d3')
     expect(tooltip.text()).toContain('100')
   })
@@ -385,16 +385,16 @@ describe('Sparkline', () => {
     })
     expect(wrapper.find('polyline').exists()).toBe(false)
     expect(wrapper.find('svg').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sparkline-no-data"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="sparkline-no-data-"]').exists()).toBe(true)
   })
 
   it('renders a uniform scaling-independent endpoint dot', () => {
     const wrapper = mount(Sparkline, { props: { data: [1, 4, 2, 8] } })
-    const dot = wrapper.find('[data-testid="sparkline-endpoint"]')
+    const dot = wrapper.find('[data-testid^="sparkline-endpoint-"]')
     expect(dot.exists()).toBe(true)
     // A <circle> would be squashed into a flat dash by the non-uniform svg
     // scale; the dot must be a zero-length path with a round, non-scaling stroke.
-    expect(wrapper.find('circle[data-testid="sparkline-endpoint"]').exists()).toBe(false)
+    expect(wrapper.find('circle[data-testid^="sparkline-endpoint-"]').exists()).toBe(false)
     expect(dot.element.tagName.toLowerCase()).toBe('path')
     expect(dot.attributes('vector-effect')).toBe('non-scaling-stroke')
     expect(dot.attributes('stroke-linecap')).toBe('round')

@@ -123,7 +123,7 @@ jobs:
           set -o pipefail
 
           DEPLOY_WORKFLOW="deploy.yml"
-          PROD_APP="app-modulo"
+          PROD_APP="farna-control"
           PROD_URL="https://control.farna.dev"
           # The watchdog's own escalation floor (FAR-910/FAR-954): it stops
           # re-dispatching after this many consecutive failed deploys. It is
@@ -270,7 +270,7 @@ jobs:
             : > /tmp/prod-status.json
           fi
 
-          # Extract the deploy SHA (registry.fly.io/app-modulo:deploy-<12-char-sha>).
+          # Extract the deploy SHA (registry.fly.io/farna-control:deploy-<12-char-sha>).
           #
           # PRIMARY: fly status Machines filtered to STARTED machines in the
           # serving "app" process group (group extraction is deploy.yml's

@@ -41,7 +41,7 @@ test.describe('Admin Spend Limits', { tag: "@regression" }, () => {
       await expect(orgLimitInput).toHaveValue('100', { timeout: 15000 })
     } else {
       await expect(
-        orgLimitInput.or(page.getByTestId('feature-gate-disabled'))
+        orgLimitInput.or(page.locator('[data-testid^="feature-gate-disabled-"]'))
       ).toBeVisible({ timeout: 15000 })
     }
   })
@@ -67,7 +67,7 @@ test.describe('Admin Cost Controls', { tag: "@regression" }, () => {
       await expect(page.getByTestId('cc-budget')).toContainText('1,000', { timeout: 15000 })
     } else {
       await expect(
-        page.getByTestId('cc-total-spend').or(page.getByTestId('feature-gate-disabled'))
+        page.getByTestId('cc-total-spend').or(page.locator('[data-testid^="feature-gate-disabled-"]'))
       ).toBeVisible({ timeout: 15000 })
     }
   })
@@ -86,7 +86,7 @@ test.describe('Admin Cost Controls', { tag: "@regression" }, () => {
 
     // Settle the page first: a rendered card OR the gate-disabled notice means
     // the plan/feature state resolved.
-    const gatedOut = page.getByTestId('feature-gate-disabled')
+    const gatedOut = page.locator('[data-testid^="feature-gate-disabled-"]')
     await expect(
       page.getByTestId('cc-total-spend').or(gatedOut)
     ).toBeVisible({ timeout: 15000 })

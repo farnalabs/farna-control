@@ -15,8 +15,13 @@
       <ErrorAlert v-else-if="error" :message="error" :on-retry="loadProviders" />
 
       <template v-else>
-        <div v-if="formMode === 'add'" class="card max-w-3xl p-6">
-          <h2 class="mb-4 text-base font-semibold">{{ $t('views.SettingsSsoView.new_sso_provider') }}</h2>
+        <DataCard
+          v-if="formMode === 'add'"
+          padding="lg"
+          class="max-w-3xl"
+          :title="$t('views.SettingsSsoView.new_sso_provider')"
+          heading-level="h2"
+        >
           <SsoProviderForm
             :data="formData"
             :saving="saving"
@@ -29,20 +34,20 @@
             @submit="createProvider"
             @cancel="closeForm"
           />
-        </div>
+        </DataCard>
 
-        <div v-if="providers.length === 0" class="card p-8 text-center">
-          <p class="text-lg font-medium">{{ $t('views.SettingsSsoView.no_providers_title') }}</p>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {{ $t('views.SettingsSsoView.no_providers_description') }}
-          </p>
-        </div>
+        <EmptyState
+          v-if="providers.length === 0"
+          :title="$t('views.SettingsSsoView.no_providers_title')"
+          :description="$t('views.SettingsSsoView.no_providers_description')"
+        />
 
         <div class="space-y-3">
-          <div
+          <BaseCard
             v-for="provider in providers"
             :key="provider.id"
-            class="card cursor-pointer transition-colors hover:bg-accent/30"
+            pressable
+            padding="none"
             data-testid="settings-sso-provider-row"
             @click="openEditForm(provider)"
             @keydown.enter.self="openEditForm(provider)"
@@ -102,28 +107,14 @@
                   </svg>
                 </button>
                 <TableActions class="whitespace-nowrap" :actions="ssoActions(provider)" />
-                <span tabindex="0"
-                  class="relative inline-flex shrink-0 cursor-pointer items-center"
+                <ToggleSwitch
+                  :checked="provider.enabled"
+                  :label="$t('views.SettingsSsoView.toggle_provider')"
+                  :disabled="togglingId === provider.id"
+                  :toggling="togglingId === provider.id"
                   data-testid="settings-sso-toggle"
-                  :aria-label="$t('views.SettingsSsoView.toggle_provider')"
-                  role="switch"
-                  :aria-checked="provider.enabled"
-                  :class="{ 'opacity-50 pointer-events-none': togglingId === provider.id }"
-                  @click.stop.prevent="toggleProvider(provider)"
-                  @keydown.enter.stop.prevent="toggleProvider(provider)"
-                  @keydown.space.stop.prevent="toggleProvider(provider)"
-                >
-                  <div
-                    class="h-6 w-11 rounded-full transition-colors"
-                    :class="provider.enabled ? 'bg-primary' : 'bg-input'"
-                  >
-                    <div
-                      class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
-                      :class="provider.enabled ? 'translate-x-[1.375rem]' : 'translate-x-0.5'"
-                      style="margin-top: 2px;"
-                    />
-                  </div>
-                </span>
+                  @toggle="toggleProvider(provider)"
+                />
               </div>
             </div>
 
@@ -179,7 +170,7 @@
                 />
               </div>
             </div>
-          </div>
+          </BaseCard>
         </div>
       </template>
     </div>
@@ -195,7 +186,11 @@ import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
 import SsoProviderForm, { type SsoPresetInfo, type SsoFormState } from '../components/SsoProviderForm.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import EmptyState from '../components/shared/EmptyState.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FeatureGate from '../components/FeatureGate.vue'

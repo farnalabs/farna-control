@@ -86,7 +86,7 @@ test.describe('Real-stack journeys: eval definition lifecycle', { tag: '@regress
       // Observable effect: the editor confirms the creation and its list
       // re-renders the persisted definition.
       await expect(page.getByText(/Eval created\./i)).toBeVisible({ timeout: 30_000 })
-      const evalCard = page.locator('.rounded-lg.bg-card').filter({ hasText: evalName }).first()
+      const evalCard = page.locator('.card-base').filter({ hasText: evalName }).first()
       await expect(evalCard).toBeVisible({ timeout: 30_000 })
       // The card carries the persisted_TYPE badge from the backend shape
       // (a regex definition, not anything the user typed in).

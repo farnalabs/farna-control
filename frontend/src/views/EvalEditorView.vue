@@ -683,23 +683,14 @@
 
                   <!-- Operator enable/disable toggle (CO-5) -->
                   <div v-if="policyGate.exists" class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      role="switch"
-                      :aria-checked="policyGate.enabled"
-                      :aria-label="$t('views.EvalEditorView.policyGate.toggleAriaLabel')"
-                      data-testid="policy-gate-toggle"
-                      class="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors"
-                      :class="policyGate.enabled ? 'bg-primary' : 'bg-input'"
+                    <ToggleSwitch
+                      :checked="policyGate.enabled"
+                      :label="$t('views.EvalEditorView.policyGate.toggleAriaLabel')"
                       :disabled="gateToggleBusy"
-                      @click="requestToggleGate"
-                    >
-                      <span
-                        class="pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
-                        :class="policyGate.enabled ? 'translate-x-4' : 'translate-x-0.5'"
-                        aria-hidden="true"
-                      />
-                    </button>
+                      :toggling="gateToggleBusy"
+                      data-testid="policy-gate-toggle"
+                      @toggle="requestToggleGate"
+                    />
                     <span class="text-xs text-muted-foreground">
                       {{ policyGate.enabled
                         ? $t('views.EvalEditorView.policyGate.enabledDescription')
@@ -863,9 +854,13 @@
           </DataCard>
         </div>
 
-        <div class="lg:col-span-2">
-          <h2 class="mb-4 text-base font-semibold">{{ $t('views.EvalEditorView.existing_evals') }}</h2>
-
+        <DataCard
+          :title="$t('views.EvalEditorView.existing_evals')"
+          heading-level="h2"
+          variant="bordered"
+          padding="md"
+          class="lg:col-span-2"
+        >
           <ErrorAlert v-if="evalsError" :message="evalsError" :on-retry="loadEvals" compact class="mb-2" />
 
           <div v-if="!selectedPipelineId" class="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -885,10 +880,12 @@
           />
 
           <div v-else class="space-y-2">
-            <div
+            <BaseCard
               v-for="ev in evals"
               :key="ev.id"
-              class="rounded-lg border bg-card p-4 shadow-sm"
+              variant="bordered"
+              padding="md"
+              elevation="sm"
             >
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0 flex-1">
@@ -961,9 +958,9 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </BaseCard>
           </div>
-        </div>
+        </DataCard>
       </div>
     </template>
   </div>
@@ -984,10 +981,12 @@ import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
 import EmptyState from '../components/shared/EmptyState.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import { usePlanStore } from '../stores/planStore'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import Button from 'primevue/button'
 import Select from '../components/shared/AppSelect.vue'
 import { Pencil, Trash2 } from '@lucide/vue'

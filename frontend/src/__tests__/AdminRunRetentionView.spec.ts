@@ -100,9 +100,15 @@ describe('AdminRunRetentionView', () => {
 
   it('shows candidate summary from the API', async () => {
     const wrapper = await mountView()
-    expect(wrapper.find('[data-testid="admin-run-retention-total-runs"]').text()).toBe('3')
-    expect(wrapper.find('[data-testid="admin-run-retention-total-bytes"]').text()).toBe('50 MB')
-    expect(wrapper.find('[data-testid="admin-run-retention-terminal-runs"]').text()).toBe('2')
+    const totalRuns = wrapper.find('[data-testid="admin-run-retention-total-runs"]')
+    expect(totalRuns.text()).toContain('Matching runs')
+    expect(totalRuns.text()).toContain('3')
+    const totalBytes = wrapper.find('[data-testid="admin-run-retention-total-bytes"]')
+    expect(totalBytes.text()).toContain('Estimated reclaimable')
+    expect(totalBytes.text()).toContain('50 MB')
+    const terminalRuns = wrapper.find('[data-testid="admin-run-retention-terminal-runs"]')
+    expect(terminalRuns.text()).toContain('Terminal (purge-able)')
+    expect(terminalRuns.text()).toContain('2')
   })
 
   it('lists candidates with pipeline names resolved', async () => {
@@ -590,7 +596,7 @@ describe('AdminRunRetentionView', () => {
     const wrapper = await mountView()
     // The "Terminal (purge-able)" card shows the uncapped server total (640),
     // not the 500-length page the table is rendering.
-    expect(wrapper.find('[data-testid="admin-run-retention-terminal-runs"]').text()).toBe('640')
+    expect(wrapper.find('[data-testid="admin-run-retention-terminal-runs"]').text()).toContain('640')
 
     await wrapper.find('[data-testid="admin-run-retention-purge"]').trigger('click')
     await flushPromises()

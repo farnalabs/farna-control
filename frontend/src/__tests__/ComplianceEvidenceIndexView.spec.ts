@@ -127,8 +127,11 @@ describe('ComplianceEvidenceIndexView', () => {
       expect(region.attributes('role')).toBe('region')
 
       const labelledBy = region.attributes('aria-labelledby')
-      expect(labelledBy).toBeTruthy()
-      expect(wrapper.find(`#${labelledBy}`).exists()).toBe(true)
+      const ariaLabel = region.attributes('aria-label')
+      expect(labelledBy || ariaLabel).toBeTruthy()
+      if (labelledBy) {
+        expect(wrapper.find(`#${labelledBy}`).exists()).toBe(true)
+      }
     }
   })
 

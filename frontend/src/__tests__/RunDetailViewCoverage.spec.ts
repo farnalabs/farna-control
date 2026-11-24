@@ -325,7 +325,7 @@ describe('RunDetailView coverage — script logic branches', () => {
     const ioRow = wrapper.find('[data-testid="run-detail-io-row"]')
     expect(ioRow.exists()).toBe(true)
     expect(wrapper.find('[data-testid="run-detail-no-output"]').exists()).toBe(true)
-    expect(ioRow.findAll('[data-testid="json-viewer"]').length).toBe(1)
+    expect(ioRow.findAll('.json-viewer').length).toBe(1)
   })
 
   // ── resolveNodeIO: explicit input key ───────────────────────────
@@ -334,7 +334,7 @@ describe('RunDetailView coverage — script logic branches', () => {
       outputs_json: { n1: { input: { node_q: 'from_node' }, output: 'ok' } },
       input_payload: { q: 'from_run' },
     })
-    const viewers = wrapper.find('[data-testid="run-detail-io-row"]').findAll('[data-testid="json-viewer"]')
+    const viewers = wrapper.find('[data-testid="run-detail-io-row"]').findAll('.json-viewer')
     expect(viewers[0].text()).toContain('from_node')
     expect(viewers[0].text()).not.toContain('from_run')
   })
@@ -345,7 +345,7 @@ describe('RunDetailView coverage — script logic branches', () => {
       outputs_json: { n1: ['item1', 'item2'] },
       input_payload: { q: 'hi' },
     })
-    const viewers = wrapper.find('[data-testid="run-detail-io-row"]').findAll('[data-testid="json-viewer"]')
+    const viewers = wrapper.find('[data-testid="run-detail-io-row"]').findAll('.json-viewer')
     expect(viewers.length).toBe(2)
     expect(viewers[1].text()).toContain('item1')
   })

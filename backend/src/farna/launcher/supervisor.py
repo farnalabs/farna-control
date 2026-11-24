@@ -124,6 +124,11 @@ DEGRADED_FILENAME = "degraded.json"
 UPGRADE_MARKER_FILENAME = "upgrade.json"
 DEGRADED_SCHEMA_VERSION = 1
 POSTMASTER_PIDFILE = "postmaster.pid"
+# The pid of the postmaster a `restore --data-dir` WINDOW started (see
+# cli/backup.py::_bundled_cluster_for_restore). That postmaster is deliberately
+# in its own session, so nothing supervises it; if the restore is SIGKILLed the
+# file is the only handle a later start/restore has on the stray process.
+RESTORE_WINDOW_PIDFILE = "restore-window-postmaster.pid"
 LAUNCHER_LOG_FILENAME = "launcher.log"
 # Per-boot 0600 Redis config files (requirepass lives INSIDE the file so the
 # password never appears on the world-readable /proc cmdline). Written fresh
@@ -167,6 +172,7 @@ __all__ = [
     "DEGRADED_SCHEMA_VERSION",
     "GATE_SUPERVISOR_PRE_TEARDOWN",
     "REDIS_CONF_PREFIX",
+    "RESTORE_WINDOW_PIDFILE",
     "ROTATE_DEFAULT_KEEP",
     "ROTATE_DEFAULT_MAX_BYTES",
     "RUNTIME_FILENAME",
@@ -183,19 +189,23 @@ __all__ = [
     "child_shim_argv",
     "child_shim_main",
     "clear_degraded_record",
+    "clear_restore_window_pidfile",
     "collect_status",
     "knobs_from_env",
+    "live_restore_window_pid",
     "log_paths",
     "read_degraded_reason",
     "read_degraded_record",
     "read_log_tail",
     "read_proc_starttime",
+    "read_restore_window_pidfile",
     "read_runtime_manifest",
     "read_upgrade_marker",
     "reconcile_orphans",
     "request_stop",
     "rotate_log",
     "write_degraded_record",
+    "write_restore_window_pidfile",
     "write_runtime_manifest",
 ]
 
@@ -1864,22 +1874,107 @@ def reconcile_orphans(pgdata: Path, *, tolerance_seconds: float = 5.0) -> str | 
 
     Returns a short description of what was done (for logs); raises
     :class:`LauncherError` when a LIVE postgres still holds the pidfile —
-    that instance must be stopped by its owner, never raced.
+    that instance must be stopped by its owner, never raced. When that live
+    postmaster is the one a ``restore --data-dir`` window started (recorded in
+    :data:`RESTORE_WINDOW_PIDFILE`), the refusal names it by pid: nothing
+    supervises that process, so its pid is the only handle on it.
     """
     pidfile = pgdata / POSTMASTER_PIDFILE
     action: str | None = None
     if pidfile.exists():
         stale = _postmaster_is_stale(pidfile, tolerance_seconds=tolerance_seconds)
         if stale is not True:
+            window_pid = live_restore_window_pid(pgdata.parent)
+            if window_pid is not None:
+                raise LauncherError(_restore_window_refusal(pidfile, window_pid, pgdata.parent))
             raise LauncherError(f"Refusing to start: {pidfile} belongs to a live postgres process. Stop that postgres first; the launcher never races another postmaster.")
         pidfile.unlink(missing_ok=True)
         action = "removed_stale_postmaster_pid"
         _log.warning("supervisor.stale_postmaster_pid_removed path=%s", pidfile)
+    # A record naming a postmaster that is gone (SIGKILL, crash recovery, or a
+    # pid now reused by an unrelated process) is debris: drop it, so a later
+    # start never reports a process that no longer exists.
+    if live_restore_window_pid(pgdata.parent) is None:
+        clear_restore_window_pidfile(pgdata.parent)
     if pgdata.parent.exists():
         _sweep_stale_tmp_dirs(pgdata.parent)
         _sweep_stale_redis_confs(pgdata.parent)
         action = action or "swept_debris"
     return action
+
+
+def restore_window_pidfile(data_dir: Path) -> Path:
+    """Where the restore window records the postmaster it started."""
+    return data_dir / RESTORE_WINDOW_PIDFILE
+
+
+def write_restore_window_pidfile(data_dir: Path, pid: int) -> Path:
+    """Record the pid of the postmaster a ``restore --data-dir`` window started.
+
+    That postmaster runs in its own session for up to the whole dump-and-replay
+    window (minutes), so nothing supervises it. SIGTERM/SIGINT/SIGHUP are
+    handled by the window, but SIGKILL (a timeout, the OOM killer, a service
+    manager) cannot be: it leaves the postmaster holding ``pgdata`` and the
+    port. This file is how a LATER start or restore names that process by pid
+    instead of failing on a stale ``postmaster.pid`` or a bound port.
+
+    Credential-free by construction (one decimal pid), mode 0600.
+    """
+    path = restore_window_pidfile(data_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{int(pid)}\n", encoding="ascii")
+    with contextlib.suppress(OSError):
+        path.chmod(0o600)
+    return path
+
+
+def read_restore_window_pidfile(data_dir: Path) -> int | None:
+    """The recorded window-postmaster pid, or None (absent/unreadable)."""
+    try:
+        text = restore_window_pidfile(data_dir).read_text(encoding="ascii")
+    except (OSError, ValueError):
+        return None
+    for line in text.splitlines():
+        if line.strip():
+            try:
+                return int(line.strip())
+            except ValueError:
+                return None
+    return None
+
+
+def clear_restore_window_pidfile(data_dir: Path) -> None:
+    """Drop the record. Idempotent and never raises."""
+    with contextlib.suppress(OSError):
+        restore_window_pidfile(data_dir).unlink(missing_ok=True)
+
+
+def live_restore_window_pid(data_dir: Path) -> int | None:
+    """The pid of a restore-window postmaster that is STILL running, or None.
+
+    A recorded pid that is gone — or that has been reused by a process provably
+    not postgres — is stale: answer None so the caller drops the record instead
+    of blaming an innocent process. An UNKNOWABLE identity (no process backend,
+    no permission) is still reported: a live pid is the only handle there is,
+    and the caller's message asks the operator to check it.
+    """
+    pid = read_restore_window_pidfile(data_dir)
+    if pid is None or not _pid_alive(pid):
+        return None
+    if _is_postgres_process(pid) is False:
+        return None
+    return pid
+
+
+def _restore_window_refusal(pidfile: Path, window_pid: int, data_dir: Path) -> str:
+    """Refusal text naming the stray postmaster a killed restore left behind."""
+    return (
+        f"Refusing to start: {pidfile} belongs to a live postgres process, and it is the PostgreSQL that an "
+        f"interrupted `farna-control restore` left running (PID {window_pid}, recorded in "
+        f"{restore_window_pidfile(data_dir)}). Nothing supervises it, so it still holds its data directory and "
+        f"its port. Stop it with `kill -INT {window_pid}` (PostgreSQL's fast shutdown, which is immediate when "
+        f"no client is connected), then re-run this command."
+    )
 
 
 def _sweep_stale_redis_confs(parent: Path) -> None:

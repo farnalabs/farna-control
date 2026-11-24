@@ -423,7 +423,7 @@ describe('AdminOrgSettingsView', () => {
 
     // The team gate must genuinely be in its DISABLED state here, otherwise
     // this test would silently run in the enabled state and prove nothing.
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(true)
 
     const input = wrapper.find('[data-testid="org-hitl-review-window-value"]')
     const save = wrapper.find('[data-testid="org-hitl-review-window-save"]')
@@ -435,11 +435,11 @@ describe('AdminOrgSettingsView', () => {
     expect(input.element.closest('.pointer-events-none')).toBeNull()
     expect(save.element.closest('.pointer-events-none')).toBeNull()
     expect(
-      wrapper.find('[data-testid="feature-gate-disabled"] [data-testid="org-hitl-review-window-value"]').exists(),
+      wrapper.find('[data-testid^="feature-gate-disabled-"] [data-testid="org-hitl-review-window-value"]').exists(),
     ).toBe(false)
 
     // Other administrative sections remain gated behind the disabled overlay.
-    const disabled = wrapper.find('[data-testid="feature-gate-disabled"]')
+    const disabled = wrapper.find('[data-testid^="feature-gate-disabled-"]')
     expect(disabled.text()).not.toContain('Delete Organization')
 
     // Interactive end to end: type, save, and the API is called with the
@@ -460,7 +460,7 @@ describe('AdminOrgSettingsView', () => {
 
     // The gate must genuinely be in its DISABLED state, otherwise the
     // placement assertion below would silently prove nothing.
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(true)
 
     const toggle = wrapper.find('[data-testid="org-feature-flag-toggle-webhook_notification_log"]')
     expect(toggle.exists()).toBe(true)
@@ -469,7 +469,7 @@ describe('AdminOrgSettingsView', () => {
     // subtree - that is exactly the "card moved inside the overlay" failure.
     expect(toggle.element.closest('.pointer-events-none')).toBeNull()
     expect(
-      wrapper.find('[data-testid="feature-gate-disabled"] [data-testid="org-feature-flag-toggle-webhook_notification_log"]').exists(),
+      wrapper.find('[data-testid^="feature-gate-disabled-"] [data-testid="org-feature-flag-toggle-webhook_notification_log"]').exists(),
     ).toBe(false)
 
     // Interactive end to end: the toggle still issues its PUT.

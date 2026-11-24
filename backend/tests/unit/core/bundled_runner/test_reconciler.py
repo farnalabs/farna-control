@@ -255,8 +255,11 @@ async def test_log_only_max_lifetime_is_logged_not_destroyed(monkeypatch: pytest
 
 
 async def test_docker_source_filters_on_deployment_identity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The container listing rides the modulo.machine.id label so two
-    deployments sharing one engine never destroy each other's workspaces."""
+    """The container listing rides the machine-id label so two
+    deployments sharing one engine never destroy each other's workspaces.
+
+    FAR-2693: the listing is issued once per machine-id spelling (current,
+    then legacy) so a container created before the rename is still found."""
     monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
     client = MagicMock()
     client.containers.list = AsyncMock(return_value=[])
@@ -268,11 +271,65 @@ async def test_docker_source_filters_on_deployment_identity(monkeypatch: pytest.
     listed = await source.list_labelled_workspaces()
 
     assert listed == []
-    filters = client.containers.list.await_args.kwargs["filters"]
-    assert filters["label"] == [
-        "modulo.machine.id=deployment-a",
-        "modulo.run.id",
+    selectors = [call.kwargs["filters"]["label"] for call in client.containers.list.await_args_list]
+    assert selectors == [
+        [f"{runner_reconciler._MACHINE_LABEL}=deployment-a"],
+        [f"{runner_reconciler._LEGACY_CONTAINER_MACHINE_LABEL}=deployment-a"],
     ]
+
+
+async def test_docker_source_reads_a_container_carrying_only_the_legacy_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A container created before the rename carries only the legacy labels;
+    the sweep must still find it (otherwise it is a permanent leak) with its
+    run id and age intact."""
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
+    legacy = SimpleNamespace(
+        Id="legacy-container",
+        Labels={
+            runner_reconciler._LEGACY_CONTAINER_RUN_ID_LABEL: "run-legacy",
+            runner_reconciler._LEGACY_CONTAINER_MACHINE_LABEL: "deployment-a",
+            runner_reconciler._LEGACY_CONTAINER_CREATED_AT_LABEL: "1",
+        },
+    )
+    client = MagicMock()
+    client.containers.list = AsyncMock(return_value=[legacy])
+    source = runner_reconciler._DockerWorkspaceSource("tcp://docker-socket-proxy:2375")
+    source._client = client
+
+    entries = await source.list_labelled_workspaces()
+
+    # Returned by both listings, listed once.
+    assert [entry.id for entry in entries] == ["legacy-container"]
+    assert entries[0].run_id == "run-legacy"
+    assert entries[0].created_age_s > 0
+
+
+async def test_docker_source_reads_a_container_carrying_only_the_current_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The current-label path must work on its own: a container stamped only
+    with the current keys is found by the current-key listing."""
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
+    current = SimpleNamespace(
+        Id="current-container",
+        Labels={
+            runner_reconciler._RUN_ID_LABEL: "run-current",
+            runner_reconciler._MACHINE_LABEL: "deployment-a",
+            runner_reconciler._CREATED_AT_LABEL: "1",
+        },
+    )
+    client = MagicMock()
+    client.containers.list = AsyncMock(return_value=[current])
+    source = runner_reconciler._DockerWorkspaceSource("tcp://docker-socket-proxy:2375")
+    source._client = client
+
+    entries = await source.list_labelled_workspaces()
+
+    assert [entry.id for entry in entries] == ["current-container"]
+    assert entries[0].run_id == "run-current"
+    assert entries[0].created_age_s > 0
 
 
 async def test_docker_source_parses_labels_into_ages() -> None:
@@ -296,6 +353,76 @@ async def test_docker_source_parses_labels_into_ages() -> None:
     assert entries[0].run_id == "run-77"
     assert entries[0].id == "abc123"
     assert entries[0].created_age_s > 0
+
+
+async def test_docker_source_reads_labels_from_the_inspect_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real aiodocker containers expose the inspect payload in ``_container``
+    (no public ``Labels`` attribute); the source reads the run id and age from
+    ``_container["Labels"]``."""
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
+    real = SimpleNamespace(
+        Id="inspect-container",
+        _container={
+            "Labels": {
+                runner_reconciler._RUN_ID_LABEL: "run-inspect",
+                runner_reconciler._MACHINE_LABEL: "deployment-a",
+                runner_reconciler._CREATED_AT_LABEL: "1",
+            }
+        },
+    )
+    client = MagicMock()
+    client.containers.list = AsyncMock(return_value=[real])
+    source = runner_reconciler._DockerWorkspaceSource("tcp://docker-socket-proxy:2375")
+    source._client = client
+
+    entries = await source.list_labelled_workspaces()
+
+    assert [entry.id for entry in entries] == ["inspect-container"]
+    assert entries[0].run_id == "run-inspect"
+    assert entries[0].created_age_s > 0
+
+
+async def test_docker_source_falls_back_to_attribute_labels_when_inspect_payload_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the inspect payload carries no Labels, the source falls back to the
+    object's own ``Labels`` attribute (a partial-inspect / test-double shape)."""
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
+    partial = SimpleNamespace(
+        Id="partial-container",
+        _container={},
+        Labels={
+            runner_reconciler._RUN_ID_LABEL: "run-fallback",
+            runner_reconciler._CREATED_AT_LABEL: "1",
+        },
+    )
+    client = MagicMock()
+    client.containers.list = AsyncMock(return_value=[partial])
+    source = runner_reconciler._DockerWorkspaceSource("tcp://docker-socket-proxy:2375")
+    source._client = client
+
+    entries = await source.list_labelled_workspaces()
+
+    assert [entry.id for entry in entries] == ["partial-container"]
+    assert entries[0].run_id == "run-fallback"
+
+
+async def test_docker_source_skips_a_container_without_a_run_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A labelled container with no run id (either spelling) is skipped: the
+    sweep has no active run to cross-reference it against."""
+    monkeypatch.setenv("FARNA_CONTROL_RUNNER_MACHINE_ID", "deployment-a")
+    no_run = SimpleNamespace(
+        Id="no-run-container",
+        Labels={runner_reconciler._MACHINE_LABEL: "deployment-a"},
+    )
+    client = MagicMock()
+    client.containers.list = AsyncMock(return_value=[no_run])
+    source = runner_reconciler._DockerWorkspaceSource("tcp://docker-socket-proxy:2375")
+    source._client = client
+
+    entries = await source.list_labelled_workspaces()
+
+    assert entries == []
 
 
 def test_docker_source_rejects_remote_endpoint_without_tls(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -584,6 +711,33 @@ async def test_kubernetes_source_maps_pods_and_skips_those_without_a_run_id() ->
     assert [entry.id for entry in listed] == ["modulo-ws-aaa"]
     assert listed[0].run_id == "run-1"
     assert listed[0].created_age_s == 42.0
+
+
+async def test_kubernetes_source_reads_the_legacy_run_id_and_the_current_one() -> None:
+    """FAR-2693: the pod run-id read accepts the current key and falls back to
+    the legacy one, so a pod created before the rename is still a reclaim
+    candidate — and a current-key pod is too."""
+    source = runner_reconciler._KubernetesWorkspaceSource()
+    provider = MagicMock()
+    provider.list_workspace_pods = AsyncMock(
+        return_value=[
+            WorkspacePodRef(
+                ref="modulo-ws-legacy",
+                labels={runner_reconciler._LEGACY_CONTAINER_RUN_ID_LABEL: "run-legacy"},
+                created_age_s=30.0,
+            ),
+            WorkspacePodRef(
+                ref="modulo-ws-current",
+                labels={runner_reconciler._RUN_ID_LABEL: "run-current"},
+                created_age_s=20.0,
+            ),
+        ]
+    )
+    source._provider = provider
+
+    listed = await source.list_labelled_workspaces()
+
+    assert [entry.run_id for entry in listed] == ["run-legacy", "run-current"]
 
 
 async def test_kubernetes_source_destroys_by_pod_name_and_closes_the_provider() -> None:

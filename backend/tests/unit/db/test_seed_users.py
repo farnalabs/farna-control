@@ -460,7 +460,7 @@ async def test_first_tenant_organisation_excludes_sentinel_orgs() -> None:
     """FAR-2581: the orphan + registry sentinel orgs are never a user's org."""
     from sqlalchemy.dialects import postgresql
 
-    from farna.db.models.organisation import MODULO_REGISTRY_ORG_ID, SYSTEM_ORG_ID
+    from farna.db.models.organisation import REGISTRY_ORG_ID, SYSTEM_ORG_ID
     from farna.db.seed import first_tenant_organisation
 
     captured: list[Any] = []
@@ -474,7 +474,7 @@ async def test_first_tenant_organisation_excludes_sentinel_orgs() -> None:
     assert await first_tenant_organisation(session) is None
     sql = str(captured[0].compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
     assert str(SYSTEM_ORG_ID) in sql
-    assert str(MODULO_REGISTRY_ORG_ID) in sql
+    assert str(REGISTRY_ORG_ID) in sql
     assert "NOT IN" in sql
     assert "deleted_at IS NULL" in sql
     # A suspended/archived tenant is never "the" tenant for a new admin; the

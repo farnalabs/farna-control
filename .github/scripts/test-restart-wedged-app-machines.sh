@@ -20,7 +20,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="${SCRIPT_DIR}/restart-wedged-app-machines.sh"
-APP="staging-modulo"
+APP="staging-farna-control"
 WEDGED_MACHINE_ID="84e90ea2239e68"
 WORKER_MACHINE_ID="8d9e11be931148"
 APP_LIVENESS_CHECK="app_liveness"

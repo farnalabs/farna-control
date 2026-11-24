@@ -87,6 +87,22 @@ describe('CopyPipelineWizard', () => {
     expect(wrapper.text()).toContain('Dev Pipeline')
   })
 
+  it('shows the empty state when no pipelines are available', async () => {
+    mockGet.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 100 })
+    router.push('/pipelines/copy')
+    await router.isReady()
+    const wrapper = mount(CopyPipelineWizard, {
+      global: {
+        plugins: [router],
+        stubs: { OwnershipPicker: true },
+      },
+    })
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('No pipelines available')
+  })
+
   it('filters pipelines by search query', async () => {
     router.push('/pipelines/copy')
     await router.isReady()

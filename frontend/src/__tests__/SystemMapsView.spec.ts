@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createI18n } from 'vue-i18n'
 
 const mockGet = vi.hoisted(() => vi.fn())
@@ -181,6 +182,41 @@ describe('SystemMapsView', () => {
     await wrapper.get('[data-testid="system-maps-prev"]').trigger('click')
     await flushPromises()
     expect(mockGet).toHaveBeenLastCalledWith('/api/v1/system-maps', { params: { query: { page: 1, page_size: 20 } } })
+  })
+
+  it('keeps the pagination live region mounted across the loading swap (FAR-2751)', async () => {
+    let resolvePage2: ((value: unknown) => void) | undefined
+    mockGet.mockImplementation((path: string, init?: { params?: { query?: { page?: number } } }) => {
+      if (path === '/api/v1/admin/feature-flags') return Promise.resolve(flagsResponse())
+      const page = init?.params?.query?.page ?? 1
+      if (page === 2) return new Promise((resolve) => { resolvePage2 = resolve })
+      return Promise.resolve(listResponse([map()], 45, 1))
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const status = wrapper.get('[data-testid="pagination-status"]')
+    expect(status.text()).toBe('Page 1 of 3')
+    const statusElement = status.element
+
+    await wrapper.get('[data-testid="system-maps-next"]').trigger('click')
+    await nextTick()
+
+    // The skeleton has replaced the table, but the live region is the SAME node.
+    expect(wrapper.find('[data-testid="system-maps-loading"]').exists()).toBe(true)
+    const duringLoad = wrapper.get('[data-testid="pagination-status"]')
+    expect(duringLoad.element).toBe(statusElement)
+    expect(duringLoad.attributes('aria-live')).toBe('polite')
+
+    resolvePage2?.(listResponse([map({ id: 'map-2' })], 45, 2))
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="system-maps-loading"]').exists()).toBe(false)
+    const afterLoad = wrapper.get('[data-testid="pagination-status"]')
+    expect(afterLoad.element).toBe(statusElement)
+    expect(afterLoad.text()).toBe('Page 2 of 3')
   })
 
   it('shows a skeleton while loading', async () => {

@@ -1132,6 +1132,24 @@ elements:
       - testid: dashboard-title
         type: element
         dynamic_testid: false
+      - testid: dashboard-stats-card-pipelines
+        type: element
+        dynamic_testid: false
+      - testid: dashboard-stats-card-total-runs
+        type: element
+        dynamic_testid: false
+      - testid: dashboard-stats-card-running
+        type: element
+        dynamic_testid: false
+      - testid: dashboard-stats-card-awaiting-human
+        type: element
+        dynamic_testid: false
+      - testid: dashboard-stats-card-failed
+        type: element
+        dynamic_testid: false
+      - testid: dashboard-stats-card-idle
+        type: element
+        dynamic_testid: false
       - testid: dashboard-eval-rate
         type: link
         dynamic_testid: false
@@ -1139,9 +1157,6 @@ elements:
         type: link
         dynamic_testid: false
       - testid: dashboard-token-spend-empty
-        type: element
-        dynamic_testid: false
-      - testid: dashboard-stats-card
         type: element
         dynamic_testid: false
       - testid: dashboard-run-activity
@@ -1199,18 +1214,6 @@ elements:
         type: element
         dynamic_testid: false
       - testid: panel-dismiss-all-nothing
-        type: element
-        dynamic_testid: false
-      - testid: sparkline
-        type: element
-        dynamic_testid: false
-      - testid: sparkline-endpoint
-        type: element
-        dynamic_testid: false
-      - testid: sparkline-plot
-        type: element
-        dynamic_testid: false
-      - testid: sparkline-tooltip
         type: element
         dynamic_testid: false
       - testid: stat-no-baseline
@@ -1476,18 +1479,6 @@ elements:
       - testid: governance-levels
         type: element
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -1617,38 +1608,8 @@ elements:
       - testid: admin-audit-system-next
         type: button
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
-        dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
-        type: button
         dynamic_testid: false
     /admin/connectors:
       - testid: page-header-right
@@ -1715,18 +1676,6 @@ elements:
         type: element
         dynamic_testid: false
       - testid: connectors-preview-summary
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
         type: element
         dynamic_testid: false
       - testid: lock-icon
@@ -1826,18 +1775,6 @@ elements:
       - testid: cost-anomalies-list
         type: element
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -1890,18 +1827,6 @@ elements:
       - testid: cost-components-loading
         type: element
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -1945,18 +1870,6 @@ elements:
       - testid: cc-budget-input
         type: input
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -1991,18 +1904,6 @@ elements:
       - testid: admin-spend-limits-costs-empty
         type: element
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -2026,18 +1927,6 @@ elements:
         type: element
         dynamic_testid: false
     /admin/errors:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -2139,36 +2028,6 @@ elements:
         type: button
         dynamic_testid: false
       - testid: error-alert-retry
-        type: button
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
         type: button
         dynamic_testid: false
       - testid: lock-icon
@@ -2326,18 +2185,6 @@ elements:
       - testid: admin-model-backends-delete-confirm
         type: button
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -2366,18 +2213,6 @@ elements:
         type: element
         dynamic_testid: false
     /admin/my-profile:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -2389,9 +2224,6 @@ elements:
         dynamic_testid: false
       - testid: my-profile-my-teams-retry
         type: button
-        dynamic_testid: false
-      - testid: my-profile-my-team
-        type: element
         dynamic_testid: false
       - testid: change-password-current
         type: input
@@ -2450,18 +2282,6 @@ elements:
         dynamic_testid: false
       - testid: admin-node-categories-delete-cancel
         type: button
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
         dynamic_testid: false
       - testid: lock-icon
         type: element
@@ -2551,18 +2371,6 @@ elements:
       - testid: admin-notification-log-events-retry
         type: button
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -2595,18 +2403,6 @@ elements:
         type: element
         dynamic_testid: false
     /admin/org:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -2801,18 +2597,6 @@ elements:
       - testid: admin-plugins-expand
         type: button
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -2851,18 +2635,6 @@ elements:
         type: element
         dynamic_testid: false
     /admin/assistant:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -2939,15 +2711,6 @@ elements:
         dynamic_testid: false
       - testid: assistant-skills
         type: element
-        dynamic_testid: false
-      - testid: assistant-skill-toggle
-        type: button
-        dynamic_testid: false
-      - testid: assistant-skill-edit
-        type: button
-        dynamic_testid: false
-      - testid: assistant-skill-delete
-        type: button
         dynamic_testid: false
     /admin/run-retention:
       - testid: admin-run-retention-refresh
@@ -3034,18 +2797,6 @@ elements:
       - testid: db-capacity-housekeeping-link
         type: link
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -3055,18 +2806,6 @@ elements:
         dynamic_testid: false
       - testid: admin-sandbox-concurrency-limit
         type: input
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
         dynamic_testid: false
       - testid: lock-icon
         type: element
@@ -3090,18 +2829,6 @@ elements:
         type: element
         dynamic_testid: false
     /settings/monitoring:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -3192,18 +2919,6 @@ elements:
         dynamic_testid: false
       - testid: admin-invitations-confirm-revoke
         type: button
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
         dynamic_testid: false
       - testid: lock-icon
         type: element
@@ -4168,18 +3883,6 @@ elements:
       - testid: envprofile-list-tier-badge
         type: element
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -4349,18 +4052,6 @@ elements:
         dynamic_testid: false
       - testid: evals-list-next-page
         type: button
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
         dynamic_testid: false
       - testid: lock-icon
         type: element
@@ -4582,18 +4273,6 @@ elements:
       - testid: dirty-confirm-stay
         type: button
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -4601,18 +4280,6 @@ elements:
         type: element
         dynamic_testid: false
     /evals/proposals:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -4687,24 +4354,6 @@ elements:
         type: button
         dynamic_testid: false
       - testid: feedback-inbox-dismiss
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
         type: button
         dynamic_testid: false
     /library:
@@ -5892,9 +5541,6 @@ elements:
         type: button
         dynamic_testid: false
     /pipelines/copy:
-      - testid: copy-wizard-visibility-filter
-        type: button
-        dynamic_testid: false
       - testid: copy-wizard-pipeline-option
         type: button
         dynamic_testid: false
@@ -5942,9 +5588,6 @@ elements:
         dynamic_testid: false
       - testid: copy-wizard-pipeline-name
         type: input
-        dynamic_testid: false
-      - testid: copy-wizard-step-indicator
-        type: element
         dynamic_testid: false
       - testid: filter-bar-search
         type: input
@@ -6366,24 +6009,6 @@ elements:
       - testid: error-alert-retry
         type: button
         dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
-        type: button
-        dynamic_testid: false
       - testid: run-detail-deadline-triage
         type: element
         dynamic_testid: false
@@ -6423,24 +6048,6 @@ elements:
         dynamic_testid: false
       - testid: diff-raw-outputs-toggle
         type: element
-        dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
-        type: button
         dynamic_testid: false
     /schemas:
       - testid: schema-list-folder-error
@@ -6499,18 +6106,6 @@ elements:
         dynamic_testid: false
     /schemas/editor/:id:
       - testid: page-header-right
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
         type: element
         dynamic_testid: false
       - testid: lock-icon
@@ -6610,24 +6205,6 @@ elements:
       - testid: schema-inference-discard
         type: button
         dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
-        type: button
-        dynamic_testid: false
     /settings/guardrails:
       - testid: page-header-right
         type: element
@@ -6693,38 +6270,8 @@ elements:
       - testid: admin-system-config-refresh
         type: button
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
-        dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
-        type: button
         dynamic_testid: false
     /settings/notifications:
       - testid: settings-notifications-loading
@@ -6749,18 +6296,6 @@ elements:
         type: element
         dynamic_testid: false
     /settings/email:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -6794,18 +6329,6 @@ elements:
         dynamic_testid: false
       - testid: error-alert-retry
         type: button
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
         dynamic_testid: false
       - testid: lock-icon
         type: element
@@ -7059,18 +6582,6 @@ elements:
         type: button
         dynamic_testid: false
     /settings/mcp:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -7225,18 +6736,6 @@ elements:
         type: select
         dynamic_testid: false
     /settings/observability:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -7301,18 +6800,6 @@ elements:
       - testid: rate-limits-title
         type: element
         dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -7360,18 +6847,6 @@ elements:
         type: input
         dynamic_testid: false
     /settings/runtime-config:
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
-        type: element
-        dynamic_testid: false
       - testid: lock-icon
         type: element
         dynamic_testid: false
@@ -7392,18 +6867,6 @@ elements:
         dynamic_testid: false
     /settings/sso:
       - testid: page-header-right
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
         type: element
         dynamic_testid: false
       - testid: lock-icon
@@ -7472,38 +6935,8 @@ elements:
       - testid: sso-domain-error
         type: element
         dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
-        type: button
-        dynamic_testid: false
     /settings/teams:
       - testid: page-header-right
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
         type: element
         dynamic_testid: false
       - testid: lock-icon
@@ -7622,18 +7055,6 @@ elements:
         type: element
         dynamic_testid: false
       - testid: page-header-right
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-disabled
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-lock
-        type: element
-        dynamic_testid: false
-      - testid: feature-gate-title
         type: element
         dynamic_testid: false
       - testid: lock-icon
@@ -7830,24 +7251,6 @@ elements:
       - testid: variant-builder-create-snapshot
         type: button
         dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
-        type: button
-        dynamic_testid: false
     /variants/compare/:batchId:
       - testid: variant-batch-status
         type: element
@@ -7875,24 +7278,6 @@ elements:
         dynamic_testid: false
       - testid: variant-batch-new-comparison
         type: element
-        dynamic_testid: false
-      - testid: json-viewer
-        type: element
-        dynamic_testid: false
-      - testid: json-viewer-collapse-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-copy
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-expand-all
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-collapse
-        type: button
-        dynamic_testid: false
-      - testid: json-viewer-string-expand
-        type: button
         dynamic_testid: false
 features:
     feat-auth:
@@ -8420,7 +7805,7 @@ features:
             - "[x] Break-glass hardening: create/update/delete are denied for break-glass-minted principals (deny_break_glass_mint), and at dispatch time endpoints owned by denied/inactive/deprecated break-glass accounts are re-checked and skipped fail-closed with per-endpoint isolation — a DB blip resolving owners is treated as denied and counted by the modulo_notifier_break_glass_owner_read_failures_total metric (test_break_glass_webhook_deny.py)"
 
             # Dispatch / retry / dead-letter (modulo.core.notifier)
-            - "[x] A dispatched event POSTs a single {event, timestamp, payload} JSON body per subscribed endpoint with Content-Type application/json, X-Farna-Control-Signature sha256=<HMAC-SHA256 over the body> (empty string when the endpoint has no secret, or when the stored secret cannot be decrypted), X-Farna-Control-Timestamp and User-Agent Modulo-Notifier/1.0"
+            - "[x] A dispatched event POSTs a single {event, timestamp, payload} JSON body per subscribed endpoint with Content-Type application/json, X-Farna-Control-Signature sha256=<HMAC-SHA256 over the body> (empty string when the endpoint has no secret, or when the stored secret cannot be decrypted), X-Farna-Control-Timestamp and User-Agent Farna-Control-Notifier/1.0"
             - "[x] Delivery retries up to MAX_ATTEMPTS=4 (1 initial + 3 retries) on non-2xx or transport errors with exponential delays [1s, 5s, 30s], and a 429 honours Retry-After capped at 60s, falling back to the default backoff for invalid/missing values"
             - "[x] A delivery that exhausts its retries is dead-lettered: the endpoint's consecutive_dead_letter_count increments and the endpoint auto-disables (auto_disabled + disabled_at) at MAX_DEAD_LETTERS=10; a successful delivery resets the counter (only when non-zero); the bookkeeping survives DB errors and re-raises CancelledError"
             - "[x] Every attempt is written to the delivery log (status delivered/dead_lettered, attempt_count, response_code, last_error, run_id), and the payload is retained ONLY when the caller opts in and is then Fernet-encrypted at rest — never stored plaintext"
