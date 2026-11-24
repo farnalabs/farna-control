@@ -26,9 +26,7 @@
              <p>{{ discovery.eval_gate_passed === true ? $t('views.SystemMapDetailView.eval_passed') : $t('views.SystemMapDetailView.eval_blocked', { verdict: discovery.eval_gate_verdict }) }}</p>
              <p v-if="discovery.eval_gate_passed !== true" class="mt-1">{{ $t('views.SystemMapDetailView.deterministic_fallback_note') }}</p>
            </div>
-           <div v-if="discovery.ai_assisted && !discovery.eval_gate_passed" class="mt-3 rounded border border-destructive bg-destructive/10 p-3 text-sm text-destructive" aria-live="assertive" data-testid="system-map-discovery-eval-blocked">
-             {{ $t('views.SystemMapDetailView.ai_suggestions_blocked') }}
-           </div>
+           <ErrorAlert v-if="discovery.ai_assisted && !discovery.eval_gate_passed" compact class="mt-3" :message="$t('views.SystemMapDetailView.ai_suggestions_blocked')" :retryable="false" data-testid="system-map-discovery-eval-blocked" />
           </section>
           <section class="rounded-lg border bg-muted/30 p-3">
             <h3 class="text-sm font-medium">{{ $t('views.SystemMapDetailView.sources_inspected') }}</h3>
@@ -99,6 +97,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import ErrorAlert from '../shared/ErrorAlert.vue'
 import type { DiscoveryReport, DiscoverySelection } from '../../stores/systemMaps'
 
 const props = defineProps<{ discovery: DiscoveryReport | null; dataTestId?: string; backendNames?: Record<string, string>; evalIdentity?: string }>()

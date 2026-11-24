@@ -86,17 +86,24 @@
         <p v-if="facetDegraded" class="mt-1 text-xs text-warning-text" data-testid="risk-assessment-facet-degraded-note">
           {{ $t('views.RiskAssessmentView.facet_degraded_note') }}
         </p>
-        <div v-if="pipelinesError" class="mt-1 flex items-center gap-2 text-xs text-destructive-text" data-testid="risk-assessment-pipelines-error">
+        <ErrorAlert
+          v-if="pipelinesError"
+          compact
+          class="mt-1"
+          data-testid="risk-assessment-pipelines-error"
+        >
           <span data-testid="risk-assessment-pipelines-error-message">{{ pipelinesError }}</span>
-          <button
-            type="button"
-            class="underline"
-            data-testid="risk-assessment-pipelines-retry"
-            @click="retryPipelines"
-          >
-            {{ $t('components.ErrorAlert.retry') }}
-          </button>
-        </div>
+          <template #actions>
+            <button
+              type="button"
+              class="underline"
+              data-testid="risk-assessment-pipelines-retry"
+              @click="retryPipelines"
+            >
+              {{ $t('components.ErrorAlert.retry') }}
+            </button>
+          </template>
+        </ErrorAlert>
       </div>
     </div>
 
@@ -127,6 +134,7 @@ import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import AppSelect from '../shared/AppSelect.vue'
+import ErrorAlert from '../shared/ErrorAlert.vue'
 import DataCard from '../ui/DataCard.vue'
 import {
   RISK_ACTIONS,

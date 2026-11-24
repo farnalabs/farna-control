@@ -45,14 +45,14 @@
             </Button>
           </template>
         </PageHeader>
-        <p
+        <ErrorAlert
           v-if="exportError"
-          role="alert"
-          class="mt-2 text-sm text-destructive"
           data-testid="lifecycle-map-export-error"
-        >
-          {{ exportError }}
-        </p>
+          compact
+          class="mt-2"
+          :message="exportError"
+          :retryable="false"
+        />
       </div>
     </header>
 
@@ -346,9 +346,7 @@
       :loading="deleting"
       @confirm="handleDeleteConfirm"
     >
-      <p v-if="deleteError" role="alert" class="mt-3 text-sm text-destructive" data-testid="lifecycle-map-delete-error">
-        {{ deleteError }}
-      </p>
+      <ErrorAlert v-if="deleteError" data-testid="lifecycle-map-delete-error" compact class="mt-3" :message="deleteError" :retryable="false" />
     </FormDialog>
   </div>
 </template>

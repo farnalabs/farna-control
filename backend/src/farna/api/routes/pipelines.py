@@ -3327,8 +3327,16 @@ async def create_pipeline_endpoint(
 async def get_pipeline_endpoint(
     pipeline_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    principal: TenantPrincipal = require_permission(_CODE_PIPELINE_LIST),
-    _: TenantPrincipal = require_team_membership_or_admin(resolve_pipeline_team_scope),
+    # any_credential (FAR-2726): the pipeline RECORD is read by the same mk_
+    # org API-key consumers that already read the GRAPH (declarative apply's
+    # hash/verify, drift checks). Before this the graph route accepted an mk_
+    # key but the record route 401'd, inverting the sensitivity boundary.
+    # Both gates MUST be the any-credential flavour together: the team gate
+    # resolves its own principal, so pairing the any-credential permission with
+    # the JWT-only team gate (or vice versa) would 401 the mk_ request - the
+    # same pairing rule the graph route's comment records.
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_PIPELINE_LIST),
+    _: TenantPrincipal = require_team_membership_or_admin_any_credential(resolve_pipeline_team_scope),
 ) -> PipelineResponse:
     try:
         async with session.begin():

@@ -34,6 +34,7 @@ test_test_suite_quality.py EXCLUDED_PACKAGES an added package
 .trivyignore                                 an added entry
 .semgrepignore                               an added entry
 sonar-project.properties coverage.exclusions an added pattern
+read_credential_jwt_only_allowlist.txt       an added route, or a changed kind
 ===========================================  ==================================
 
 Tightening any of them passes: a removed entry, a lowered count, a raised
@@ -61,6 +62,26 @@ to a group, or merging two groups all create a new pair and fail; shrinking a
 group (or untangling a member) only removes pairs and passes. The message /
 constant value in an entry is deliberately not part of the comparison - the
 ratchet measures the extent of tolerated duplication, not its wording.
+
+The read-credential allowlist (``read_credential_jwt_only_allowlist.txt``,
+FAR-2727) is compared PER ENTRY, keyed by ``(method, path)`` - not per count. A
+count-only ratchet would let one route be swapped for another (remove A, add B)
+while the frozen total held, which is exactly the loosening that matters: an
+added route tolerates a read that does not accept an ``mk_`` key. The entry's
+``kind`` (``jwt_only`` or ``shared_secret``) describes which non-``mk_``
+credential the route trusts, so a KIND change on an existing route is reported
+as a loosening and needs a human decision: both kinds reject ``mk_`` keys, so
+neither direction is a tightening, and the "moved to ``jwt_only``" case is the
+one this guard exists to make visible. The freeform ``reason`` is documentation,
+not identity, so rewording it passes. The file header freezes the counts it was
+created with; the parser asserts ``jwt_only`` and ``shared_secret`` each equal
+the parsed entries of that kind (and so their sum equals the entry count) and
+that ``read routes total`` equals ``jwt_only + shared_secret + any_credential +
+public/exempt``. ``jwt_only`` and ``shared_secret`` are therefore pinned to the
+parsed entries: they cannot be edited on their own or alongside an added entry.
+``any_credential`` and ``public/exempt`` are human-recorded (only the four-way
+sum constrains them), so raising those two together with ``read routes total``
+still parses - they are a review invariant, not a derived count.
 
 Base revision
 -------------
@@ -144,6 +165,9 @@ _PARENT_REV = "HEAD^"
 _ARCH = "backend/tests/architecture"
 
 _PYPROJECT_TOML = "backend/pyproject.toml"
+
+#: The shrink-only read-credential allowlist introduced by FAR-2727.
+_READ_CREDENTIAL_ALLOWLIST = "backend/tests/unit/api/read_credential_jwt_only_allowlist.txt"
 
 _MISSING = object()
 
@@ -694,6 +718,81 @@ def _parse_sonar_coverage_exclusions(text: str, source: str) -> frozenset[str]:
     return found
 
 
+_READ_CREDENTIAL_KINDS = frozenset({"jwt_only", "shared_secret"})
+
+#: Fields the read-credential allowlist header freezes. Each appears once.
+_READ_CREDENTIAL_COUNT_FIELDS = (
+    "read routes total",
+    "jwt_only",
+    "shared_secret",
+    "any_credential",
+    "public/exempt",
+)
+
+
+@dataclass(frozen=True)
+class ReadCredentialAllowlist:
+    """Parsed read-credential allowlist: ``(method, path) -> kind`` and header counts."""
+
+    entries: dict[tuple[str, str], str]
+    counts: dict[str, int]
+
+
+def _read_credential_header_counts(text: str, source: str) -> dict[str, int]:
+    """The frozen counts from the ``#`` header block, exactly one of each."""
+    header = "\n".join(line for line in text.splitlines() if line.lstrip().startswith("#"))
+    counts: dict[str, int] = {}
+    for field in _READ_CREDENTIAL_COUNT_FIELDS:
+        matches = re.findall(rf"{re.escape(field)}:\s*(\d+)", header)
+        if len(matches) != 1:
+            raise RatchetError(f"{source}: frozen header needs exactly one '{field}: <int>', found {len(matches)}")
+        counts[field] = int(matches[0])
+    return counts
+
+
+def _assert_read_credential_counts(text: str, source: str, entries: dict[tuple[str, str], str]) -> dict[str, int]:
+    """Tie the header's frozen counts to the parsed entries (fail closed on drift)."""
+    counts = _read_credential_header_counts(text, source)
+    actual = {kind: sum(1 for entry_kind in entries.values() if entry_kind == kind) for kind in _READ_CREDENTIAL_KINDS}
+    for kind in sorted(_READ_CREDENTIAL_KINDS):
+        if actual[kind] != counts[kind]:
+            raise RatchetError(f"{source}: frozen header says {counts[kind]} {kind} entries, but the file declares {actual[kind]}")
+    four_way = counts["jwt_only"] + counts["shared_secret"] + counts["any_credential"] + counts["public/exempt"]
+    if four_way != counts["read routes total"]:
+        raise RatchetError(f"{source}: frozen header is inconsistent: read routes total {counts['read routes total']} != {four_way} (jwt_only + shared_secret + any_credential + public/exempt)")
+    return counts
+
+
+def _parse_read_credential_allowlist(text: str, source: str) -> ReadCredentialAllowlist:
+    """Parse ``kind<TAB>METHOD<TAB>path<TAB>reason`` lines plus the frozen counts.
+
+    One entry per route, keyed ``(method, path)``. The frozen header counts are
+    asserted against the entries here, so a number edited on its own (or to keep
+    pace with an added entry) cannot diverge from the file silently.
+    """
+    entries: dict[tuple[str, str], str] = {}
+    for lineno, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = [field.strip() for field in raw.split("\t")]
+        if len(fields) != 4:
+            raise RatchetError(f"{source}:{lineno}: expected 4 tab-separated fields, got {len(fields)}: {raw!r}")
+        kind, method, path, reason = fields
+        if kind not in _READ_CREDENTIAL_KINDS:
+            raise RatchetError(f"{source}:{lineno}: unknown credential kind {kind!r} (expected one of {sorted(_READ_CREDENTIAL_KINDS)}): {raw!r}")
+        if not method or not path:
+            raise RatchetError(f"{source}:{lineno}: entry needs a non-empty method and path: {raw!r}")
+        if not reason:
+            raise RatchetError(f"{source}:{lineno}: entry needs a reason: {raw!r}")
+        key = (method, path)
+        if key in entries:
+            raise RatchetError(f"{source}:{lineno}: duplicate allowlist entry for {method} {path}")
+        entries[key] = kind
+    counts = _assert_read_credential_counts(text, source, entries)
+    return ReadCredentialAllowlist(entries=entries, counts=counts)
+
+
 # ---------------------------------------------------------------------------
 # Loosening comparisons (direction is explicit in the function name)
 # ---------------------------------------------------------------------------
@@ -706,6 +805,17 @@ def _counted_loosenings(base: Any, current: Any) -> list[str]:
 
 def _added_set_loosenings(base: Any, current: Any) -> list[str]:
     return [f"ADDED {entry}" for entry in sorted(current - base)]
+
+
+def _read_credential_loosenings(base: ReadCredentialAllowlist, current: ReadCredentialAllowlist) -> list[str]:
+    """An added route, or a changed kind on an existing route, is a loosening.
+
+    The reason text is deliberately not compared: it is documentation, not the
+    allowance. A removed route is a tightening and passes.
+    """
+    findings = [f"ADDED {current.entries[key]} {key[0]} {key[1]}: route not in the base allowlist (a new non-mk_ read is a loosening)" for key in sorted(current.entries.keys() - base.entries.keys())]
+    findings.extend(f"CHANGED {key[0]} {key[1]}: kind {base.entries[key]} -> {current.entries[key]} (a credential-surface change needs a human decision)" for key in sorted(base.entries.keys() & current.entries.keys()) if current.entries[key] != base.entries[key])
+    return findings
 
 
 def _lowered_floor_loosenings(base: dict[str, float], current: dict[str, float]) -> list[str]:
@@ -926,6 +1036,13 @@ RATCHETS: tuple[Ratchet, ...] = (
         "sonar coverage exclusions (add = looser)",
         _parse_sonar_coverage_exclusions,
         _added_set_loosenings,
+    ),
+    Ratchet(
+        "read-credential-allowlist",
+        _READ_CREDENTIAL_ALLOWLIST,
+        "read routes exempt from mk_ capability (added route or changed kind = looser)",
+        _parse_read_credential_allowlist,
+        _read_credential_loosenings,
     ),
 )
 

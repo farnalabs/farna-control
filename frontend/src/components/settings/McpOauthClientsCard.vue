@@ -44,11 +44,13 @@
 
         <div
           v-else-if="clients.length === 0"
-          class="py-8 text-center text-sm text-muted-foreground"
           data-testid="settings-mcp-oauth-empty"
           aria-live="polite"
         >
-          {{ $t('views.SettingsMcpView.no_oauth_clients_registered_yet') }}
+          <EmptyState
+            variant="bare"
+            :title="$t('views.SettingsMcpView.no_oauth_clients_registered_yet')"
+          />
         </div>
 
         <DataTable
@@ -336,6 +338,7 @@ import Button from 'primevue/button'
 import DataCard from '../ui/DataCard.vue'
 import { DataTable, type Column, type DataTableRow } from '../ui/data-table'
 import Dialog from 'primevue/dialog'
+import EmptyState from '../shared/EmptyState.vue'
 import FormDialog from '../shared/FormDialog.vue'
 import { formatDateShort } from '../../lib/formatDate'
 import { useSecretReveal } from '../../composables/useSecretReveal'

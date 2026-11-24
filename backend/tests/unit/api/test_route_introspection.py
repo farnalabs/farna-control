@@ -16,6 +16,13 @@ ADR 047 model gates them differently:
   public/pre-auth allowlist. Before FAR-1969 every read route was outside the
   guard entirely, so an added read route with no authorisation at all could not
   be caught — precisely the FAR-1955 surface class.
+* **Read credential kinds** (FAR-2727) — for every authenticated read route the
+  guard derives *which credential can pass* it (JWT-only, any ``mk_`` key, or
+  the SCIM shared secret) from the applied dependency set, and requires every
+  non-``mk_`` read to be declared in the shrink-only
+  ``read_credential_jwt_only_allowlist.txt`` with a reason. The pre-FAR-2727
+  guard only asserted that *a* gate existed, so an accidentally JWT-only read
+  stayed green forever — FAR-2681/2682/2726 were each found by a human instead.
 * **Dependency-site coverage** — a permission tag is honoured wherever it is
   declared: endpoint signature, route decorator, router-level
   ``dependencies=[...]``, or nested inside another dependency
@@ -27,6 +34,15 @@ key (a valid-but-wrong key such as ``runner.status`` resolving to the viewer
 can itself encode the typo and would read as complete; behavioural boundary
 tests are the mechanism (FAR-1964 design verdict). This guard asserts presence
 and resolvability of a gate, not its role.
+
+The mutating-route guard stays separate from the read credential-kind guard
+(FAR-2727 decision). It asserts that a gate *exists* (a permission tag, or a
+documented exempt channel) because a mutating route being JWT-only is the safe
+default and widening one is a privilege decision already pinned by
+``test_run_trigger_status_use_any_credential``. A read route is where an ``mk_``
+key is normally expected, so reads additionally assert *which* credential can
+pass. Both use the same principal/credential vocabulary from
+``route_introspection`` — the split is in the invariant, not in the machinery.
 
 The ADR's intent (v9, "Phase-1 sweep" + "Strict introspection test"):
 - bidirectional map: every guarded route is tagged or exempt; nothing is both
@@ -41,16 +57,23 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 
 from farna.api.main import app
 from tests.unit.api.route_introspection import (
+    CREDENTIAL_ANY,
+    CREDENTIAL_JWT_ONLY,
+    PRINCIPAL_DEPENDENCIES,
+    find_read_credential_violations,
     get_all_apiroutes,
     get_applied_dependency_names,
+    get_credential_kind,
     get_mutating_routes,
     get_permission_tag,
     get_read_routes,
     get_resolved_min_role,
+    load_read_credential_allowlist,
+    read_credential_guidance,
 )
 
 # ---------------------------------------------------------------------------
@@ -189,15 +212,11 @@ EXEMPT: dict[tuple[str, str], str] = {
 # an org-role tag. Optional (`*_optional`) variants are deliberately ABSENT: an
 # optional principal does not gate the route. Add a name here only when the
 # dependency genuinely requires a valid principal.
+#
+# Imported from ``route_introspection`` (not defined here): the credential-kind
+# guard (FAR-2727) splits the same set by credential, so a second literal would
+# be able to drift.
 # ---------------------------------------------------------------------------
-PRINCIPAL_DEPENDENCIES: frozenset[str] = frozenset(
-    {
-        "get_current_user",
-        "get_current_tenant_user",
-        "get_current_tenant_user_or_api_key",
-        "get_scim_principal",
-    }
-)
 
 # ---------------------------------------------------------------------------
 # Read-route public/pre-auth allowlist: GET routes that intentionally carry NO
@@ -349,6 +368,139 @@ def test_read_exempt_allowlist_entries_exist() -> None:
     read_keys = {key for route in get_read_routes(app) for key in _route_keys(route)}
     missing = [k for k in READ_EXEMPT if k not in read_keys]
     assert not missing, "Read-exempt entries that are not GET routes:\n" + "\n".join(str(m) for m in missing)
+
+
+# ---------------------------------------------------------------------------
+# FAR-2727: read-route credential kinds.
+#
+# The tests above assert that a read route HAS an authorisation gate. They do
+# not say WHICH credential can pass it, so a read that only accepts a user JWT
+# (and rejects an `mk_` org API key) is green by default — the hole a human
+# noticed three times (FAR-2681, FAR-2682, FAR-2726). These tests derive the
+# credential kind of every read route from the dependency set FastAPI actually
+# resolves and require every non-`mk_` read to be declared, with a reason, in
+# `read_credential_jwt_only_allowlist.txt`.
+#
+# That file is a SHRINK-ONLY RATCHET. Adding an entry for a new read is the
+# escape hatch this test offers, but it is not the default: widen the route.
+# The test alone cannot distinguish a new entry for a genuinely-new route from
+# a loosening of the baseline; the FAR-2699 shrink-only-baseline guard
+# (scripts/run_check_ratchet_baseline.py) can be extended to cover the file so
+# an ADDED entry fails CI against the base revision.
+# ---------------------------------------------------------------------------
+def test_read_route_credential_kinds_are_declared() -> None:
+    """Every authenticated read route declares whether an `mk_` key can pass it."""
+    reads = get_read_routes(app)
+    declared = load_read_credential_allowlist()
+    kinds = Counter(get_credential_kind(route) for route in reads)
+
+    # Non-vacuity: if the derivation silently stopped seeing dependencies, every
+    # read would classify as `none` and this guard would pass without checking
+    # anything. The read-authorisation test would fail too, but fail loudly here.
+    assert kinds[CREDENTIAL_ANY] > 0, f"no any-credential read routes derived — the credential-kind derivation is broken: {dict(kinds)}"
+    assert kinds[CREDENTIAL_JWT_ONLY] > 0, f"no JWT-only read routes derived — the credential-kind derivation is broken: {dict(kinds)}"
+
+    violations = find_read_credential_violations(reads, declared)
+    assert not violations, "Read routes whose credential kind is not declared correctly:\n\n" + "\n".join(violations) + "\n\n" + read_credential_guidance()
+
+
+def test_read_credential_allowlist_entries_are_live_and_jwt_only() -> None:
+    """No stale read-credential entry, and no entry that now accepts an `mk_` key.
+
+    The main guard reports these too; this test pins the ratchet's other
+    direction on its own so it is obvious which invariant broke: an entry must
+    name a live read route that is still non-`mk_`-capable. A deliberately
+    JWT-only read that is widened therefore fails until its entry is removed —
+    which is the review signal FAR-2681/2682/2726 lacked.
+    """
+    reads = get_read_routes(app)
+    declared = load_read_credential_allowlist()
+    live = {(method, path): get_credential_kind(route) for route in reads for method, path in _route_keys(route)}
+
+    stale = [f"{method} {path} (declared {kind})" for (method, path), (kind, _reason) in declared.items() if live.get((method, path)) is None]
+    widened = [f"{method} {path} (declared {declared_kind}, now {live[(method, path)]})" for (method, path), (declared_kind, _reason) in declared.items() if live.get((method, path)) is not None and live[(method, path)] != declared_kind]
+
+    assert not stale, "Read-credential entries that no longer name a read route — remove them:\n" + "\n".join(stale)
+    assert not widened, "Read routes declared non-`mk_`-capable that now derive a different credential kind — the credential surface changed (widened to `mk_`, re-gated, or made public). Remove the entry and justify the change in the PR:\n" + "\n".join(widened)
+
+
+def test_read_credential_allowlist_is_disjoint_from_read_exempt() -> None:
+    """A route cannot be both public/pre-auth and a declared authenticated read."""
+    overlap = sorted(set(load_read_credential_allowlist()) & set(READ_EXEMPT))
+    assert not overlap, "Read routes that are both on the public READ_EXEMPT list and the read-credential allowlist:\n" + "\n".join(f"{m} {p}" for m, p in overlap)
+
+
+def _scratch_app(*, accepts_api_key: bool) -> FastAPI:
+    """A minimal app with one scratch read route of the chosen credential kind."""
+    from farna.api.dependencies import require_permission, require_permission_any_credential
+    from farna.auth.dependencies import TenantPrincipal
+
+    factory = require_permission_any_credential if accepts_api_key else require_permission
+    fixture = FastAPI()
+
+    @fixture.get("/scratch/read")
+    async def scratch_read(principal: TenantPrincipal = factory("pipeline.list")) -> dict[str, str]:
+        return {"principal": repr(principal)}
+
+    return fixture
+
+
+def test_read_credential_guard_flags_a_new_jwt_only_read() -> None:
+    """Prove-the-fix: a new JWT-only read fails BY NAME; widening it passes.
+
+    Uses a scratch app rather than a real route so the mechanism is exercised
+    without ever editing a route module. The three cases are exactly the
+    author's three options: undeclared (fail), widen (pass), declare (pass).
+    """
+    jwt_only = get_read_routes(_scratch_app(accepts_api_key=False))
+    undeclared = find_read_credential_violations(jwt_only, {})
+    assert len(undeclared) == 1, f"expected exactly one violation for the scratch JWT-only read, got {undeclared}"
+    assert "GET /scratch/read" in undeclared[0], f"the violation must name the route, got: {undeclared[0]}"
+    assert "does NOT accept an `mk_` org API key" in undeclared[0], f"the violation must state the credential gap, got: {undeclared[0]}"
+
+    declared = {("GET", "/scratch/read"): (CREDENTIAL_JWT_ONLY, "scratch: deliberately JWT-only")}
+    assert not find_read_credential_violations(jwt_only, declared), "a justified declaration must pass"
+
+    widened = get_read_routes(_scratch_app(accepts_api_key=True))
+    assert not find_read_credential_violations(widened, {}), "widening the route to accept an `mk_` key must pass"
+    contradiction = find_read_credential_violations(widened, declared)
+    assert len(contradiction) == 1, f"a widened route must contradict its JWT-only declaration, got {contradiction}"
+    assert "now accepts an `mk_` org API key" in contradiction[0], f"the contradiction must say the route was widened, got: {contradiction[0]}"
+
+
+def test_read_credential_kind_reads_a_jwt_gate_hidden_outside_the_signature() -> None:
+    """A JWT-requiring dependency anywhere on the route makes it JWT-only.
+
+    The any-credential variant can be present *and* a JWT be mandatory — e.g.
+    ``GET /api/v1/pipelines/{pipeline_id}`` combines ``require_permission`` with
+    a team gate. FastAPI resolves every dependency, so an `mk_` key is rejected;
+    classifying by the any-credential dependency alone would call it
+    mk_-capable. This pins the precedence in the derivation.
+    """
+    from fastapi import APIRouter
+
+    from farna.api.dependencies import require_permission_any_credential
+    from farna.auth.dependencies import TenantPrincipal, get_current_user
+
+    fixture = FastAPI()
+    router = APIRouter(dependencies=[Depends(get_current_user)])
+
+    @router.get("/mixed")
+    async def mixed_read(principal: TenantPrincipal = require_permission_any_credential("pipeline.list")) -> dict[str, str]:
+        return {"principal": repr(principal)}
+
+    fixture.include_router(router)
+    (route,) = get_read_routes(fixture)
+    assert get_credential_kind(route) == CREDENTIAL_JWT_ONLY, "a JWT-requiring dependency must win over the any-credential gate"
+
+    plain = FastAPI()
+
+    @plain.get("/plain")
+    async def plain_read(principal: TenantPrincipal = require_permission_any_credential("pipeline.list")) -> dict[str, str]:
+        return {"principal": repr(principal)}
+
+    (plain_route,) = get_read_routes(plain)
+    assert get_credential_kind(plain_route) == CREDENTIAL_ANY, "an any-credential gate with no JWT dependency must classify as any-credential"
 
 
 def test_route_level_permission_gates_are_visible() -> None:
