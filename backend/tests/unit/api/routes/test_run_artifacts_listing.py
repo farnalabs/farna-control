@@ -123,6 +123,21 @@ def _result(rows: list | None = None) -> MagicMock:
     return r
 
 
+def _run_result() -> MagicMock:
+    """The org-scoped run load that precedes the artifact read (ADR 070 §4).
+
+    The run is team-owned but the principal is an org-wide operator, so the
+    shared per-run clamp allows it without a further query.
+    """
+    run = MagicMock()
+    run.id = _RUN_ID
+    run.pipeline_id = uuid.uuid4()
+    run.owner_team_id = uuid.uuid4()
+    result = _result()
+    result.scalar_one_or_none.return_value = run
+    return result
+
+
 def _override_deps(session: AsyncMock) -> None:
     """Wire up FastAPI dependency overrides for a test."""
     app.dependency_overrides[get_db_session] = lambda: session
@@ -194,7 +209,7 @@ class TestArtifactListingHappy:
         )
 
         session = _make_session()
-        _queue_execute(session, [_result(rows=[row_a, row_b])])
+        _queue_execute(session, [_run_result(), _result(rows=[row_a, row_b])])
         _override_deps(session)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get(
@@ -232,7 +247,7 @@ class TestArtifactListingHappy:
             for n in [*range(11), "__final__"]
         ]
         session = _make_session()
-        _queue_execute(session, [_result(rows=rows)])
+        _queue_execute(session, [_run_result(), _result(rows=rows)])
         _override_deps(session)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get(
@@ -267,7 +282,7 @@ class TestArtifactListingHappy:
             _row("run:abc:node:sandbox_1:fallback"),
         ]
         session = _make_session()
-        _queue_execute(session, [_result(rows=rows)])
+        _queue_execute(session, [_run_result(), _result(rows=rows)])
         _override_deps(session)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get(
@@ -285,7 +300,7 @@ class TestArtifactListingHappy:
             artifacts=None,
         )
         session = _make_session()
-        _queue_execute(session, [_result(rows=[row])])
+        _queue_execute(session, [_run_result(), _result(rows=[row])])
         _override_deps(session)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get(
@@ -315,7 +330,7 @@ class TestArtifactListingHappy:
             ],
         )
         session = _make_session()
-        _queue_execute(session, [_result(rows=[row_none, row_has])])
+        _queue_execute(session, [_run_result(), _result(rows=[row_none, row_has])])
         _override_deps(session)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get(
@@ -335,7 +350,7 @@ class TestArtifactListingErrors:
     def test_404_when_node_not_found(self) -> None:
         """No rows for (run, node) -> 404."""
         session = _make_session()
-        _queue_execute(session, [_result(rows=[])])
+        _queue_execute(session, [_run_result(), _result(rows=[])])
         _override_deps(session)
         client = TestClient(app, raise_server_exceptions=False)
         resp = client.get(

@@ -49,6 +49,7 @@ from farna.api.middleware.sensitive_mask import (
     mask_sensitive_value,
 )
 from farna.api.routes.pipelines import _masked_snapshot_graph
+from farna.api.run_scope import load_run_in_scope, run_visible_to_principal
 from farna.api.team_scope import resolve_trigger_run_team_scope
 from farna.auth.dependencies import get_current_tenant_user, get_current_tenant_user_or_api_key
 from farna.auth.jwt import TenantPrincipal
@@ -248,6 +249,22 @@ def _run_detail_statement(principal: TenantPrincipal, run_id: uuid.UUID) -> Sele
     return select(Run).options(selectinload(Run.pipeline)).where(Run.id == run_id, Run.organisation_id == principal.organisation_id)
 
 
+async def _load_run_in_scope(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    run_id: uuid.UUID,
+) -> Run | None:
+    """``get_run`` + the shared per-run team clamp (ADR 070 §4).
+
+    A run outside the principal's boundary answers ``None`` exactly like a
+    missing one, so every sibling's "run is None → 404" path is the refusal.
+    The two clauses live once in :mod:`farna.api.run_scope`; this wrapper only
+    feeds that loader this module's ``get_run`` binding (the seam the detail
+    readers are tested through).
+    """
+    return await load_run_in_scope(session, principal, run_id, fetch=get_run)
+
+
 async def _do_get_run(
     factory: async_sessionmaker[AsyncSession],
     principal: TenantPrincipal,
@@ -258,6 +275,12 @@ async def _do_get_run(
         await set_rls_user_context(session, principal.account_id, principal.org_role)
         run = (await session.execute(_run_detail_statement(principal, run_id))).scalar_one_or_none()
         if run is None:
+            raise RunNotFoundError(run_id)
+        # ADR 070 §4: ``runs`` has no team RLS policy of its own, so the
+        # per-run read applies the shared two-clause clamp (team-bound
+        # credential, viewer membership). A refusal is NOT FOUND — the run's
+        # existence is never confirmed outside its boundary.
+        if not await run_visible_to_principal(session, principal, run):
             raise RunNotFoundError(run_id)
         return run
 
@@ -288,6 +311,10 @@ async def _do_get_run_with_gate(
         # schema-enforcement readers of `_do_get_run` do not pay for it.
         run = (await session.execute(_run_detail_statement(principal, run_id).options(selectinload(Run.snapshot).load_only(PipelineSnapshot.snapshot_version)))).scalar_one_or_none()
         if run is None:
+            raise RunNotFoundError(run_id)
+        # ADR 070 §4: same shared per-run clamp as ``_do_get_run`` — the detail
+        # read must answer NOT FOUND across a team boundary, never the row.
+        if not await run_visible_to_principal(session, principal, run):
             raise RunNotFoundError(run_id)
         return run, await _run_gate_fired(session, run)
 
@@ -1980,7 +2007,7 @@ async def trigger_rerun(
         async with session.begin():
             await set_rls_org(session, org_id)
             await set_rls_user_context(session, principal.account_id, principal.org_role)
-            source_run = await get_run(session, run_id, organisation_id=org_id)
+            source_run = await _load_run_in_scope(session, principal, run_id)
             if source_run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             run = await _create_rerun_run(session, principal, source_run)
@@ -2560,7 +2587,7 @@ async def get_run_io_endpoint(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            run = await _load_run_in_scope(session, principal, run_id)
             snapshot = await _load_snapshot_for_run(session, run)
             # FAR-583 read-switch: reassemble the blobs INSIDE the transaction
             # (one batched repo query + the legacy fallback SELECT).
@@ -2644,7 +2671,7 @@ async def get_run_work_item_enrichment(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             refs = run.work_item_refs
@@ -2705,7 +2732,7 @@ async def export_run_fixture(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             snapshot = await _load_snapshot_for_run(session, run)
@@ -2816,7 +2843,7 @@ async def get_run_workspace_events(
             # instead of answering with an (empty) event list, and pin the
             # audit-event query to the caller's organisation explicitly rather
             # than relying on RLS alone.
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
 
@@ -2912,7 +2939,7 @@ async def _do_get_run_logs(
     """
     from farna.db.models.audit_event import AuditEvent
 
-    run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+    run = await _load_run_in_scope(session, principal, run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
     event_rows = (
@@ -3051,7 +3078,7 @@ async def get_run_node_output(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            run = await _load_run_in_scope(session, principal, run_id)
             # FAR-583 read-switch: reassemble the blobs INSIDE the transaction
             # (one batched repo query + the legacy fallback SELECT).
             blobs = None if run is None else await read_run_blobs(session, run_id=run_id, organisation_id=principal.organisation_id)
@@ -3182,7 +3209,7 @@ async def list_run_attempts(
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
             await set_rls_user_context(session, principal.account_id, principal.org_role)
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             attempts = await db_list_attempts(session, run_id, org_id=principal.organisation_id)
@@ -4277,7 +4304,7 @@ async def reveal_node_prompt(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            run = await _load_run_in_scope(session, principal, run_id)
 
             if run is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
@@ -4413,8 +4440,8 @@ async def diff_node_output(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run_a = await get_run(session, req.run_id_a, organisation_id=principal.organisation_id)
-            run_b = await get_run(session, req.run_id_b, organisation_id=principal.organisation_id)
+            run_a = await _load_run_in_scope(session, principal, req.run_id_a)
+            run_b = await _load_run_in_scope(session, principal, req.run_id_b)
             # FAR-583 read-switch: reassemble BOTH runs' blobs INSIDE the
             # transaction (one batched repo query per run + the legacy
             # fallback SELECT); the response body is built after the tx closes.
@@ -4520,6 +4547,11 @@ async def list_run_artifacts(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
+            # The artifact rows carry org RLS only, so the per-run team clamp is
+            # applied on the run load before any pointer is read.
+            run = await _load_run_in_scope(session, principal, run_id)
+            if run is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             rows = (
                 (
                     await session.execute(
@@ -4772,6 +4804,17 @@ async def get_run_artifact(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_MSG_ARTIFACT_NOT_CONFIGURED,
         ) from None
+
+    async with session.begin():
+        await set_rls_org(session, principal.organisation_id)
+        # ADR 070 §4: the side-car pointers are keyed by run id only, so the
+        # run must clear the per-run team clamp before any attempt row is read.
+        run = await _load_run_in_scope(session, principal, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_MSG_ARTIFACT_STREAM_NOT_FOUND,
+        )
 
     row = await _load_attempt_row(session, principal, run_id, node_id, attempt_key)
     base_attempt_key = _strip_full_attempt_suffix(attempt_key)
