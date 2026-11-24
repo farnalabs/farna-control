@@ -112,7 +112,7 @@
             type="button"
             :disabled="Boolean(actioning) || (isChoiceGate && !selectedOption)"
             data-testid="hitl-gate-save-approve"
-            class="flex-1 rounded-lg bg-success px-4 py-2 text-sm font-medium text-white hover:bg-success/90 disabled:opacity-50"
+            class="flex-1 rounded-lg bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:bg-success/90 disabled:opacity-50"
             @click="modifyAndApprove"
           >
             {{ actioning === 'modify-approve' ? $t('hitl.gate.save_and_approving') : $t('hitl.gate.save_and_approve') }}
@@ -216,7 +216,7 @@
           type="button"
           :disabled="Boolean(actioning) || (isChoiceGate && !selectedOption)"
           data-testid="hitl-gate-approve"
-          class="flex-1 rounded-lg bg-success px-4 py-2 text-sm font-medium text-white hover:bg-success/90 disabled:opacity-50"
+          class="flex-1 rounded-lg bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:bg-success/90 disabled:opacity-50"
           @click="approveGate"
         >
           {{ actioning === 'approve' ? $t('hitl.gate.approving') : $t('hitl.gate.approve') }}

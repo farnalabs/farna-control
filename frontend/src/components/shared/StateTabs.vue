@@ -155,15 +155,23 @@ const listClass = computed(() =>
 
 const enabledTabs = computed(() => props.tabs.filter((tab) => !tab.disabled))
 
-const activeTabId = computed(() => {
-  const match = props.tabs.find((tab) => tab.id === props.modelValue)
-  return match ? match.id : null
-})
-
-/** When nothing matches `modelValue`, the first enabled tab keeps the list tabbable. */
-const fallbackTabbableId = computed(() =>
-  activeTabId.value === null ? (enabledTabs.value[0]?.id ?? null) : null,
+const activeTab = computed(
+  () => props.tabs.find((tab) => tab.id === props.modelValue) ?? null,
 )
+
+const activeTabId = computed(() => activeTab.value?.id ?? null)
+
+/**
+ * The single tab stop for the roving pattern: the active tab when it is
+ * enabled, otherwise the first enabled tab. A selected-but-disabled tab still
+ * keeps `aria-selected`, but must not own the tab stop - a disabled button is
+ * not focusable, so leaving it at `tabindex=0` makes the whole list unreachable
+ * by keyboard.
+ */
+const tabbableTabId = computed(() => {
+  if (activeTab.value && !activeTab.value.disabled) return activeTab.value.id
+  return enabledTabs.value[0]?.id ?? null
+})
 
 const ownedTabIds = computed(() =>
   props.tabs.map((tab) => domId(tab)).filter(Boolean).join(' '),
@@ -181,8 +189,7 @@ function isActive(tab: StateTab): boolean {
 }
 
 function tabindexFor(tab: StateTab, index: number): 0 | -1 {
-  if (isActive(tab)) return 0
-  if (fallbackTabbableId.value !== null) return tab.id === fallbackTabbableId.value ? 0 : -1
+  if (tabbableTabId.value !== null) return tab.id === tabbableTabId.value ? 0 : -1
   // A tab list with every tab disabled still exposes one tabbable entry point.
   return index === 0 ? 0 : -1
 }

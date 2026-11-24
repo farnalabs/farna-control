@@ -166,6 +166,41 @@ describe('StateTabs', () => {
     wrapper.unmount()
   })
 
+  it('moves the tab stop to the first enabled tab when the selected tab is disabled', () => {
+    const wrapper = mountTabs({ modelValue: 'beta', testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha' },
+      { id: 'beta', label: 'Beta', disabled: true },
+      { id: 'gamma', label: 'Gamma' },
+    ])
+
+    // The disabled tab stays selected but must not own the tab stop.
+    expect(tab(wrapper, 'example-beta').attributes('aria-selected')).toBe('true')
+    expect(tab(wrapper, 'example-beta').attributes('tabindex')).toBe('-1')
+    expect(tab(wrapper, 'example-alpha').attributes('tabindex')).toBe('0')
+    expect(tab(wrapper, 'example-gamma').attributes('tabindex')).toBe('-1')
+    wrapper.unmount()
+  })
+
+  it('keeps a single tab stop on the active tab, not the first tab', () => {
+    const wrapper = mountTabs({ modelValue: 'beta', testidPrefix: 'example' })
+
+    expect(tab(wrapper, 'example-alpha').attributes('tabindex')).toBe('-1')
+    expect(tab(wrapper, 'example-beta').attributes('tabindex')).toBe('0')
+    expect(tab(wrapper, 'example-gamma').attributes('tabindex')).toBe('-1')
+    wrapper.unmount()
+  })
+
+  it('still exposes one entry point when every tab is disabled', () => {
+    const wrapper = mountTabs({ modelValue: 'alpha', testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha', disabled: true },
+      { id: 'beta', label: 'Beta', disabled: true },
+    ])
+
+    expect(tab(wrapper, 'example-alpha').attributes('tabindex')).toBe('0')
+    expect(tab(wrapper, 'example-beta').attributes('tabindex')).toBe('-1')
+    wrapper.unmount()
+  })
+
   it('uses Up/Down and a vertical orientation when orientation is vertical', async () => {
     const wrapper = mountTabs({ orientation: 'vertical', testidPrefix: 'example' })
 

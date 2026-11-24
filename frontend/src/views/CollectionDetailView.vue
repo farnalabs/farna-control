@@ -221,7 +221,7 @@
                       entry.status === 'configured+bound'
                         ? 'bg-success'
                         : entry.status === 'configured'
-                          ? 'bg-yellow-500'
+                          ? 'bg-warning'
                           : 'bg-destructive'
                     "
                   />

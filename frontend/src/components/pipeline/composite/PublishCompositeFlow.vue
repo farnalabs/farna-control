@@ -151,7 +151,7 @@ function closeDialog() {
               step === s.num
                 ? 'bg-indigo-600 text-white'
                 : step > s.num
-                  ? 'bg-success text-white'
+                  ? 'bg-success text-success-foreground'
                   : 'bg-muted text-muted-foreground'
             "
           >
@@ -288,7 +288,7 @@ function closeDialog() {
           class="flex items-center gap-3 rounded-lg border border-success/30 bg-success/10 p-4"
         >
           <span
-            class="flex h-8 w-8 items-center justify-center rounded-full bg-success text-lg font-bold text-white"
+            class="flex h-8 w-8 items-center justify-center rounded-full bg-success text-lg font-bold text-success-foreground"
             >✓</span
           >
           <div>
