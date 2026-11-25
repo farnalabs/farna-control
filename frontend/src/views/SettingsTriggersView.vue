@@ -10,19 +10,21 @@
       </template>
     </PageHeader>
 
-    <div
+    <Notice
       v-if="orgTriggersPaused"
-      data-testid="settings-triggers-paused-banner"
-      aria-live="polite"
+      variant="warning"
+      live="polite"
+      :icon="false"
       :aria-label="$t('views.SettingsTriggersView.paused_banner_title')"
-      class="mb-4 block rounded-lg border border-warning/40 bg-warning/10 p-4"
+      class="mb-4"
+      data-testid="settings-triggers-paused-banner"
     >
       <p class="text-sm font-medium">{{ $t('views.SettingsTriggersView.paused_banner_title') }}</p>
       <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.SettingsTriggersView.paused_banner_body') }}</p>
       <p v-if="orgPausedAt" class="mt-1 text-xs text-muted-foreground">
         {{ $t('views.SettingsTriggersView.paused_at_label', { at: formatTimestamp(orgPausedAt) }) }}
       </p>
-    </div>
+    </Notice>
 
     <DataCard
       v-if="isOrgAdmin"
@@ -581,6 +583,7 @@ import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import DataCard from '../components/ui/DataCard.vue'

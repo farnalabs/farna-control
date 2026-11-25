@@ -50,7 +50,7 @@ bdd:
   - backend/tests/bdd/features/error_tracking/error_ingestion.feature
   - backend/tests/bdd/features/error_tracking/error_notifications.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Observability
@@ -86,9 +86,11 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       `api/middleware/rate_limiter.py`,
       `core/error_tracking.ErrorIngestionService`,
       `unit/error_tracking/test_error_ingestion.py`)
+      <!-- behaviour: observability-01 | tests: backend/tests/bdd/features/error_tracking/error_ingestion.feature, backend/tests/unit/error_tracking/test_error_ingestion.py -->
 - [x] Error dashboard: list groups, filter by status, view group detail, resolve a
       group, and 404 on a missing group (`error_dashboard.feature`,
       `routes/errors.py` + `db/crud/error_tracking.py`)
+      <!-- behaviour: observability-02 | tests: backend/tests/bdd/features/error_tracking/error_dashboard.feature -->
 - [x] Error reads and error mutations are separate permissions (FAR-2373 /
       FAR-2374): every tenant read route requires `errors.resolve`, which viewers
       hold, while acknowledging, resolving, archiving and reassigning a group
@@ -98,6 +100,7 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       `aria-describedby` help line plus the shared tooltip affordance
       (`api/routes/errors.py`, `AdminErrorDetailView.vue`,
       `__tests__/AdminErrorDetailView.spec.ts`)
+      <!-- behaviour: observability-03 | tests: none -->
 - [x] Scheduler-starvation detection (FAR-604):
       `GET /api/v1/errors/scheduler-starvation` surfaces pipelines whose
       unstarted pending runs (`status='pending'`, `started_at IS NULL`) carry a
@@ -113,6 +116,7 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       fetch fails (`routes/errors.py`, `db/crud/error_tracking.py`,
       `unit/error_tracking/test_error_dashboard.py`, `AdminErrorsView.vue`,
       `__tests__/AdminErrorsView.spec.ts`)
+      <!-- behaviour: observability-04 | tests: backend/tests/unit/error_tracking/test_error_dashboard.py -->
 - [x] Two-partition read boundary (FAR-1547): error rows live in two partitions
       that never leak into each other. Every tenant read route is pinned to
       `principal.organisation_id`, so instance-level / unattributed rows (the
@@ -133,6 +137,7 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       `unit/error_tracking/test_error_instance_scope.py`,
       `__tests__/AdminErrorsView.spec.ts` / `AdminErrorDetailView.spec.ts`;
       also recorded in the manifest `feat-observability` registry)
+      <!-- behaviour: observability-05 | tests: backend/tests/unit/error_tracking/test_error_instance_scope.py -->
 - [x] Alerting + notification rules: a critical error fires an alert, a cooldown
       prevents alert storms, a condition window counts only recent events (with a
       lifetime-count fallback at window 0), and notification rules are
@@ -151,6 +156,7 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       and no operator-facing surface reads the rules, so there is no operator
       need that would justify a separate read key. Operators run pipelines and
       receive the alerts; they do not own where those alerts are delivered.
+      <!-- behaviour: observability-06 | tests: backend/tests/bdd/features/error_tracking/error_notifications.feature -->
 - _Error forwarders behavior detail removed for the MVP cut (see the pointer above)._
 - [x] The forwarder and notification-rule LIST reads are admin-gated, not just
       their writes: `GET /api/v1/errors/forwarders` requires
@@ -159,6 +165,7 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       so a member who may not manage delivery cannot enumerate the forwarder
       configuration, the rule set, or each rule's `webhook_url` (FAR-2683;
       `test_error_forwarder_config.py`, `test_error_notification_rules_route.py`)
+      <!-- behaviour: observability-07 | tests: backend/tests/unit/api/test_error_forwarder_config.py, backend/tests/unit/api/test_error_notification_rules_route.py -->
 - [x] OTLP observability export: `GET/PUT /api/v1/settings/observability`
       reads/updates the OTel endpoint + export interval (and the LangSmith key),
       serves stale cache on DB outage (degraded response, never hangs), masks
@@ -168,15 +175,18 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       settings, falling back to the last cache or defaults on a DB timeout /
       outage rather than failing (`metrics.feature`,
       `unit/api/test_observability_routes.py`)
+      <!-- behaviour: observability-08 | tests: backend/tests/bdd/features/observability/metrics.feature, backend/tests/unit/api/test_observability_routes.py -->
 - _Browser monitoring config behavior detail removed for the MVP cut (see the pointer above)._
 - [x] Frontend views behind the shipped routes render the settings and the admin
       error dashboard/detail surfaces (`SettingsObservabilityView.vue`,
       `AdminErrorsView.vue`, `AdminErrorDetailView.vue`)
+      <!-- behaviour: observability-09 | tests: none -->
 - [x] Active-run observability contract: run detail exposes `trigger_actor`,
       `heartbeat_at`, `capacity`, `work_item_refs` and `child_runs`, and the run
       event stream exposes `node_started` / `node_completed` / `node_failed`
       lifecycle events (`active_run_observability.feature`, `routes/runs.py` on
       `GET /api/v1/runs/{id}` / `GET /api/v1/runs/{id}/events`)
+      <!-- behaviour: observability-10 | tests: backend/tests/bdd/features/observability/active_run_observability.feature -->
 - [x] OTel *trace* span capture is BDD-exercised against the REAL
       `LangGraphOtelBridge` seams network-free and DB-free
       (`otel_traces.feature`): chain spans carry the org/pipeline
@@ -186,6 +196,7 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       parent/child wiring), connector callbacks stamp no credential fields in
       span attributes, and a telemetry-disabled provider (no span processor)
       exports no spans at all
+      <!-- behaviour: observability-11 | tests: backend/tests/bdd/features/observability/otel_traces.feature -->
 - [x] HTTP errors carry route-specific RFC 9457 problem types (FAR-1545): the
       wire `type` becomes `urn:problem:modulo:<code>` for route error codes that
       name a genuinely distinct problem (`invalid_token`, `token_mismatch`,
@@ -200,6 +211,7 @@ re-enabling. See FAR-547 (error forwarders) and FAR-543 (browser monitoring)._
       (`backend/src/farna/api/models/problem.py`,
       `backend/tests/unit/api/models/test_problem.py`,
       `frontend/src/lib/api/formatError.ts`)
+      <!-- behaviour: observability-12 | tests: backend/tests/unit/api/models/test_problem.py -->
 
 ## Known Gaps
 

@@ -12,15 +12,18 @@
          (deleted, or never visible to this org): the page falls back to the
          all-pipelines state instead of rendering an empty editor, and says so
          so the fallback is never mistaken for a broken link. -->
-    <p
+    <Notice
       v-if="pipelineLinkNotice"
-      class="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm"
+      variant="warning"
+      live="polite"
       role="status"
-      aria-live="polite"
+      :icon="false"
+      padding="none"
+      class="mb-4 px-3 py-2 text-sm"
       data-testid="eval-editor-pipeline-link-notice"
     >
       {{ $t('views.EvalEditorView.pipeline_link_notice') }}
-    </p>
+    </Notice>
 
     <LoadingSpinner v-if="loading" />
 
@@ -120,7 +123,7 @@
                 </div>
 
                 <template v-if="isTyped">
-                  <div v-if="legacyMode" class="mt-3 rounded border border-warning/40 bg-warning/10 p-3 text-xs" data-testid="eval-editor-legacy-notice">
+                  <Notice v-if="legacyMode" variant="warning" :icon="false" padding="sm" radius="sm" class="mt-3 text-xs" data-testid="eval-editor-legacy-notice">
                     <p class="font-medium">{{ $t('views.EvalEditorView.judging.legacyNoticeTitle') }}</p>
                     <p class="mt-1 text-muted-foreground">{{ $t('views.EvalEditorView.judging.legacyNoticeBody') }}</p>
                     <pre class="mt-2 max-h-40 overflow-auto rounded bg-background p-2 font-mono text-[11px]">{{ legacyConfigJson }}</pre>
@@ -132,7 +135,7 @@
                     >
                       {{ $t('views.EvalEditorView.judging.migrateLegacy') }}
                     </button>
-                  </div>
+                  </Notice>
 
                   <div v-else class="mt-3 space-y-3" data-testid="eval-editor-config">
                     <div>
@@ -974,6 +977,7 @@ import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useDataFetch } from '../composables/useDataFetch'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import { shortId } from '../utils/format'
 import { formatApiError } from '../lib/api/formatError'
 import { useProductAnalytics } from '../composables/useProductAnalytics'

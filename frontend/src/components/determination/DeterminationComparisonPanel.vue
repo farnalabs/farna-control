@@ -7,12 +7,15 @@
     heading-level="h2"
   >
     <div class="space-y-5">
-    <p
-      class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
+    <Notice
+      variant="warning"
+      :icon="false"
+      padding="sm"
+      class="text-sm"
       data-testid="determination-comparison-not-activated"
     >
       {{ $t('views.DeterminationView.comparison_not_activated') }}
-    </p>
+    </Notice>
 
     <section class="rounded-lg border p-3 space-y-2" data-testid="determination-comparison-baseline">
       <h3 class="text-sm font-medium">{{ $t('views.DeterminationView.comparison_baseline_title') }}</h3>
@@ -147,13 +150,16 @@
         </article>
       </section>
 
-      <p
+      <Notice
         v-if="isEmpty"
-        class="rounded-lg border border-success/40 bg-success/5 p-3 text-sm"
+        variant="success"
+        :icon="false"
+        padding="sm"
+        class="text-sm"
         data-testid="determination-comparison-identical"
       >
         {{ $t('views.DeterminationView.comparison_identical') }}
-      </p>
+      </Notice>
 
       <template v-else>
         <section class="space-y-2" data-testid="determination-comparison-behaviour">
@@ -416,6 +422,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
+import Notice from '../shared/Notice.vue'
 import DataCard from '../ui/DataCard.vue'
 import DeterminationComparisonProvenance from './DeterminationComparisonProvenance.vue'
 import { confidenceBadgeClass } from './confidencePresentation'

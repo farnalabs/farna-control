@@ -35,7 +35,7 @@ bdd:
   - backend/tests/bdd/steps/test_pipelines.py
 depends-on:
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Pipeline Snapshot Versioning
@@ -50,15 +50,22 @@ annotate, delete, rollback, diff) is the data layer under
 
 - [x] Snapshots are created from the live graph and ordered by version descending
       with total count
+      <!-- behaviour: snapshot-versioning-01 | tests: none -->
 - [x] Diff between two snapshots returns added / removed / modified nodes and
       edges with per-field changes (including connector bindings, environment
       bindings, and HITL gate config), and an empty diff when identical
+      <!-- behaviour: snapshot-versioning-02 | tests: none -->
 - [x] Diff for a missing snapshot resolves to `None` (caller surfaces 404)
+      <!-- behaviour: snapshot-versioning-03 | tests: none -->
 - [x] Tag / annotate a snapshot via PATCH
+      <!-- behaviour: snapshot-versioning-04 | tests: none -->
 - [x] Delete refuses the latest snapshot of a pipeline
+      <!-- behaviour: snapshot-versioning-05 | tests: none -->
 - [x] Backward compatibility for pre-versioning snapshot records
+      <!-- behaviour: snapshot-versioning-06 | tests: none -->
 - [x] Versioning CRUD is the back-end of the `snapshots` endpoints under
       `/api/v1/pipelines`
+      <!-- behaviour: snapshot-versioning-07 | tests: none -->
 - [x] An explicit pipeline graph save records the save as an immutable live-edit
       version (FAR-1810): every explicit-save path (`PUT /{pipeline_id}/graph`,
       `PATCH /{pipeline_id}` carrying `graph_json`, the node-targeted
@@ -72,6 +79,7 @@ annotate, delete, rollback, diff) is the data layer under
       (`backend/src/farna/db/crud/pipeline.py::replace_pipeline_graph` +
       `_record_edit_snapshot_if_needed`,
       `backend/src/farna/db/crud/pipeline_snapshot.py::create_snapshot_edit`)
+      <!-- behaviour: snapshot-versioning-08 | tests: none -->
 - [x] The editor opens a saved version READ-ONLY from `?snapshot=<uuid>` (the
       canonical deep link) or `?version=<n>` (an alias resolved against the
       version-descending snapshot list; `snapshot` wins when both are present),
@@ -83,6 +91,7 @@ annotate, delete, rollback, diff) is the data layer under
       `frontend/src/components/pipeline/PipelineSnapshotCompare.vue`,
       `frontend/src/__tests__/PipelineEditorHistoricVersion.spec.ts`,
       `frontend/src/__tests__/PipelineEditorCompare.spec.ts`)
+      <!-- behaviour: snapshot-versioning-09 | tests: none -->
 - [x] Run surfaces link to the version the run executed (FAR-1813): the runs
       list row and the run detail render the pipeline name as
       `/pipelines/{pipeline_id}/editor?snapshot={snapshot_id}`, built ONLY from
@@ -92,6 +101,7 @@ annotate, delete, rollback, diff) is the data layer under
       (`frontend/src/components/runs/RunPipelineVersionLink.vue`,
       `backend/src/farna/api/routes/runs.py`,
       `frontend/src/__tests__/RunPipelineVersionLink.spec.ts`)
+      <!-- behaviour: snapshot-versioning-10 | tests: none -->
 - [x] Snapshot save, list, get, diff and rollback are Community-tier: the
       `pipeline_diff_rollback` plan gate is RETIRED (FAR-1819): the
       `require_feature` guard is gone from the routes and the key is removed
@@ -100,12 +110,14 @@ annotate, delete, rollback, diff) is the data layer under
       `feature_flag_catalog` row so no admin surface advertises a flag that
       gates nothing (`backend/tests/unit/api/test_pipeline_snapshot_gating.py`,
       `backend/src/farna/db/migrations/versions/0350_baseline_schema.py`)
+      <!-- behaviour: snapshot-versioning-11 | tests: backend/tests/unit/api/test_pipeline_snapshot_gating.py -->
 - [x] Snapshots carry FAR-402 P6 live-edit history + release-channel tagging:
       `version_kind` (`edit` vs `run`), `created_kind` (`initial`/`edit`/
       `rollback`/`run`), `draft` auto-saves, and `channel` (`none`/`stable`/
       `canary`); the save-edit endpoint rejects an invalid channel with 422
       (`backend/src/farna/core/release_channels.py`,
       `backend/tests/unit/api/test_pipeline_snapshot_gating.py`)
+      <!-- behaviour: snapshot-versioning-12 | tests: backend/tests/unit/api/test_pipeline_snapshot_gating.py -->
 - [x] A trigger bound to a routable channel (`stable`/`canary` in its
       `config_json.release_channel`) resolves to the LATEST non-draft snapshot
       created under that channel (`resolve_snapshot_for_channel`, newest
@@ -116,6 +128,7 @@ annotate, delete, rollback, diff) is the data layer under
       `backend/src/farna/core/trigger_engine/__init__.py::resolve_snapshot_id_for_trigger`,
       `backend/tests/unit/db/crud/test_snapshot_versioning_far402.py::TestResolveSnapshotForChannel`,
       `::TestResolveSnapshotIdForTrigger`)
+      <!-- behaviour: snapshot-versioning-13 | tests: backend/tests/unit/db/crud/test_snapshot_versioning_far402.py -->
 
 ## Known Gaps
 

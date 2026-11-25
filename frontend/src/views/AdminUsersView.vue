@@ -192,9 +192,16 @@
       </div>
     </DataCard>
 
-    <div v-if="flashMessage" :class="['rounded-lg border px-4 py-3 text-sm', flashMessage.type === 'success' ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text']">
+    <Notice
+      v-if="flashMessage"
+      :variant="flashMessage.type === 'success' ? 'success' : 'danger'"
+      :icon="false"
+      padding="none"
+      live="polite"
+      class="px-4 py-3 text-sm"
+    >
       {{ flashMessage.text }}
-    </div>
+    </Notice>
 
     <FormDialog
       :open="showCreate"
@@ -374,6 +381,7 @@ import { useDataFetch } from '../composables/useDataFetch'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import Button from 'primevue/button'
 import EmptyState from '../components/shared/EmptyState.vue'
 import FormDialog from '../components/shared/FormDialog.vue'

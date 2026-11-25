@@ -49,7 +49,7 @@ replaces a marker with a job output silently disarms the signal – the guard su
 | `dast.yml` | Baseline DAST scan | Never fails on findings **by design** | ZAP report artifact | Summary | Enforcement is deploy.yml's `dast-gate` | Legitimate (documented report-only) |
 | `deploy-staleness-check.yml` | Prod staleness + consecutive-failure escalation | Every source unreadable → `healthy` empty, verdict step skipped | **Added:** UNKNOWN-tick marker step | **Added:** NOT MEASURED summary | Its own next tick (transition email state vector) | **Masking – fixed** |
 | `deploy-watchdog.yml` | Fly-level self-heal / re-dispatch | Same UNKNOWN verdict shape | **Added:** UNKNOWN-tick marker step; explicit verdicts elsewhere | **Added:** NOT MEASURED summary | Its own next tick | **Masking – fixed** |
-| `deploy.yml` | Staging + prod deploy | Throttle / already-in-progress → success, nothing shipped | `deployed` output + `NO DEPLOY` markers (FAR-2152 / PR #2405) | Yes (a `NO DEPLOY` marker in the summary) | deploy-staleness-check, deploy-watchdog, weekly report | **Masking – fixed in #2405 (not redone)** |
+| `deploy.yml` | Staging + prod deploy | Throttle / already-in-progress → success, nothing shipped | `deployed` output + `NO DEPLOY` markers (FAR-2152 / PR #2405) | Yes — the throttled banner names the specific reason, **when the last real deploy was**, and **how far production's deployed SHA is behind `origin/main`**; the step log leads with a one-line verdict and a `::warning::` annotation carries the same headline | deploy-staleness-check, deploy-watchdog, weekly report | **Masking – fixed in #2405; legibility extended (FAR-954)** |
 | `determination-eval.yml` | Score determination fixtures | None | Fails loud | Log | Operator | Legitimate |
 | `duplicate-delivery-guard.yml` | Warn on duplicate open PR titles | Guard not on the base commit yet (self-bootstrap) | `::warning::`, documented as expected | Log | PR checks | Legitimate (short-lived self-bootstrap) |
 | `fast-lane-post-merge-audit.yml` | Audit that fast-lane merges got a review | No fast-lane merges in the window | Step log | Log | Operator | Legitimate no-op |
@@ -92,6 +92,19 @@ Notes:
   (FAR-2152). This sweep did not redo them; it added only the *UNKNOWN-tick*
   state-vector marker, which is a different defect (a tick that measured
   nothing, not a deploy that was throttled).
+* **`deploy.yml` throttled banner (FAR-954 legibility follow-up):** the
+  `deploy-throttle-status` job now renders "this run deployed nothing, why,
+  when the last real deploy was, and how far production's SHA is behind
+  `origin/main`". The last-deploy timestamp is the same anchor the throttle
+  uses (the last run whose production deploy **job** succeeded), passed through
+  as an output; the production SHA is read read-only from
+  `control.farna.dev/api/v1/deployment` and the gap from the GitHub
+  commits/compare API. The throttle decision and its 3h interval are unchanged,
+  and the run still concludes SUCCESS (throttling is intentional) — so the
+  distinction is visible in the summary, the `::warning::` annotation and the
+  status job's display name, never in the run conclusion. (No deploy *hold*
+  gate exists today — the SAQ_HOLD gate was retired 2026-08-05 — so the
+  summary's `hold` case is defensive for a reintroduced gate; nothing sets it.)
 * **`pr-review.yml` / `fast-lane-post-merge.yml` / `k8s-conformance.yml`**
   were the ticket's strongest candidates and each was *verified*, not assumed:
   their no-ops are covered by a consumer that measures the artifact (the review

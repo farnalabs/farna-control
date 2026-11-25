@@ -1564,6 +1564,30 @@ def test_deploy_throttle_emits_deployed_in_lockstep_with_should_deploy() -> None
     assert not violations, "deploy.yml throttle does not emit deployed in lockstep:\n" + "\n".join(violations)
 
 
+def test_deploy_throttle_declares_and_emits_last_deploy_on_every_branch() -> None:
+    """Every throttle branch must publish the ``last_deploy`` observation.
+
+    FAR-954 hoisted the anchor observation so the status summary can say WHEN the
+    last real deploy was without re-deriving it. force_deploy is the documented
+    exception (it reports last_deploy unknown) but still emits the key, so the
+    summary never fabricates a value. Pin the job output and one emission per
+    should_deploy branch, so a future edit cannot drop the pass-through or a
+    single branch silently.
+    """
+    outputs = (_deploy_jobs().get("deploy-throttle") or {}).get("outputs") or {}
+    violations: list[str] = []
+    if str(outputs.get("last_deploy") or "") != "${{ steps.check.outputs.last_deploy }}":
+        violations.append(f"  deploy-throttle.outputs.last_deploy is {outputs.get('last_deploy')!r}")
+    script = _throttle_script()
+    should_writes = script.count('echo "should_deploy=')
+    last_writes = script.count('echo "last_deploy=${LAST}"')
+    if should_writes == 0:
+        violations.append("  the throttle step no longer writes should_deploy at all")
+    if last_writes != should_writes:
+        violations.append(f"  {should_writes} should_deploy write(s) but {last_writes} last_deploy write(s) - a branch dropped the observation")
+    assert not violations, "deploy.yml throttle does not emit last_deploy on every branch:\n" + "\n".join(violations)
+
+
 def test_production_deploy_is_unreachable_with_deployed_false() -> None:
     """`deploy-production` must be hard-gated on `deployed == 'true'`.
 

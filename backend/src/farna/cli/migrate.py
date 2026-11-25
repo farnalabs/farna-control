@@ -107,11 +107,18 @@ def _resolve_admin_auth(token: str | None) -> str | None:
 
 
 async def _verify_admin_access(session: Any, org_id: uuid.UUID, admin_user_id: str) -> None:
+    from farna.db.rls import set_rls_org
+
     if admin_user_id == "__admin_secret__":
         return
     account = await get_account_by_id(session, uuid.UUID(admin_user_id))
     if account is None:
         raise click.ClickException("Admin account not found in database")
+    # Bind the target org before the membership read: this CLI runs as the
+    # non-BYPASSRLS app role with no request context, and ``org_memberships`` no
+    # longer carries a fail-open NULL arm (ADR 070 §2, migration 0367). Without
+    # the binding the lookup returns None and a real admin is wrongly refused.
+    await set_rls_org(session, org_id)
     membership = await get_membership_by_account_and_org(session, account.id, org_id)
     if membership is None:
         raise click.ClickException("Admin account does not belong to the target organisation")

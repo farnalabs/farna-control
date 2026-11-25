@@ -1,0 +1,500 @@
+{
+  "schema_version": 1,
+  "_provenance": "Initial contract shapes are hand-authored from each provider's documented/consumed response contract (the keys our connectors actually read). Re-record live with `--mode record` behind an explicit review before enabling a provider's credential in CI. Goldens store shape only (key names + value types), never response values, so no secret or customer data can reach this file.",
+  "goldens": {
+    "asana/users_me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "data": {
+            "type": "object",
+            "keys": {
+              "gid": {"type": "string"},
+              "resource_type": {"type": "string"},
+              "name": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "bitbucket/user": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "type": {"type": "string"},
+          "username": {"type": "string"},
+          "display_name": {"type": "string"}
+        }
+      }
+    },
+    "buildkite/user": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "email": {"type": "string"}
+        }
+      }
+    },
+    "circleci/me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "id": {"type": "string"},
+          "login": {"type": "string"}
+        }
+      }
+    },
+    "codeclimate/user": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "data": {"type": "object"}
+        }
+      }
+    },
+    "datadog/validate": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "valid": {"type": "boolean"}
+        }
+      }
+    },
+    "discord/users_me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "id": {"type": "string"},
+          "username": {"type": "string"},
+          "discriminator": {"type": "string"},
+          "global_name": {"type": "string"}
+        }
+      }
+    },
+    "dropbox_paper/get_current_account": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "account_id": {"type": "string"},
+          "name": {
+            "type": "object",
+            "keys": {
+              "given_name": {"type": "string"},
+              "surname": {"type": "string"},
+              "display_name": {"type": "string"}
+            }
+          },
+          "email": {"type": "string"}
+        }
+      }
+    },
+    "github/rate_limit": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "resources": {"type": "object"},
+          "rate": {"type": "object"}
+        }
+      }
+    },
+    "gitlab/user": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "id": {"type": "integer"},
+          "username": {"type": "string"},
+          "name": {"type": "string"},
+          "state": {"type": "string"}
+        }
+      }
+    },
+    "linear/viewer": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 3,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "data": {
+            "type": "object",
+            "keys": {
+              "viewer": {
+                "type": "object",
+                "keys": {
+                  "id": {"type": "string"},
+                  "name": {"type": "string"},
+                  "email": {"type": "string"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "microsoft_teams/me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "displayName": {"type": "string"},
+          "id": {"type": "string"},
+          "userPrincipalName": {"type": "string"}
+        }
+      }
+    },
+    "monday/me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 3,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "data": {
+            "type": "object",
+            "keys": {
+              "me": {
+                "type": "object",
+                "keys": {
+                  "id": {"type": "string"},
+                  "name": {"type": "string"},
+                  "email": {"type": "string"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "notion/users_me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "object": {"type": "string"},
+          "id": {"type": "string"},
+          "type": {"type": "string"}
+        }
+      }
+    },
+    "npm/whoami": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "username": {"type": "string"}
+        }
+      }
+    },
+    "opsgenie/users_me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "data": {
+            "type": "object",
+            "keys": {
+              "id": {"type": "string"},
+              "username": {"type": "string"},
+              "fullName": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "pagerduty/users_me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "user": {
+            "type": "object",
+            "keys": {
+              "id": {"type": "string"},
+              "name": {"type": "string"},
+              "email": {"type": "string"},
+              "type": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "pypi/project_json": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 2,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "info": {
+            "type": "object",
+            "keys": {
+              "name": {"type": "string"},
+              "version": {"type": "string"}
+            }
+          },
+          "last_serial": {"type": "integer"},
+          "urls": {"type": "array"}
+        }
+      }
+    },
+    "sentry/users_me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "email": {"type": "string"}
+        }
+      }
+    },
+    "shortcut/member": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "mention_name": {"type": "string"}
+        }
+      }
+    },
+    "slack/auth_test": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "ok": {"type": "boolean"},
+          "url": {"type": "string"},
+          "team": {"type": "string"},
+          "user": {"type": "string"},
+          "team_id": {"type": "string"},
+          "user_id": {"type": "string"}
+        }
+      }
+    },
+    "snyk/user_me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "id": {"type": "string"},
+          "username": {"type": "string"},
+          "email": {"type": "string"}
+        }
+      }
+    },
+    "sonarqube/authentication_validate": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "valid": {"type": "boolean"}
+        }
+      }
+    },
+    "trello/members_me": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "id": {"type": "string"},
+          "username": {"type": "string"},
+          "fullName": {"type": "string"}
+        }
+      }
+    },
+    "anthropic/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "data": {"type": "array"},
+          "has_more": {"type": "boolean"}
+        }
+      }
+    },
+    "cohere/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "models": {"type": "array"}
+        }
+      }
+    },
+    "deepseek/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "object": {"type": "string"},
+          "data": {"type": "array"}
+        }
+      }
+    },
+    "fireworks/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "object": {"type": "string"},
+          "data": {"type": "array"}
+        }
+      }
+    },
+    "gemini/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "models": {"type": "array"}
+        }
+      }
+    },
+    "grok/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "object": {"type": "string"},
+          "data": {"type": "array"}
+        }
+      }
+    },
+    "groq/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "object": {"type": "string"},
+          "data": {"type": "array"}
+        }
+      }
+    },
+    "mistral/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "object": {"type": "string"},
+          "data": {"type": "array"}
+        }
+      }
+    },
+    "openai/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "object": {"type": "string"},
+          "data": {"type": "array"}
+        }
+      }
+    },
+    "openrouter/auth_key": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "data": {"type": "object"}
+        }
+      }
+    },
+    "qwen/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "object",
+        "keys": {
+          "object": {"type": "string"},
+          "data": {"type": "array"}
+        }
+      }
+    },
+    "togetherai/models": {
+      "recorded_at": null,
+      "success_status_class": "2xx",
+      "max_depth": 1,
+      "shape": {
+        "type": "array",
+        "items": {"type": "object"}
+      }
+    }
+  }
+}

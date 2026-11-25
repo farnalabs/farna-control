@@ -216,12 +216,20 @@ as a workflow artifact and fails closed when no previous release exists. The
 matrix is:
 
 1. clean install with the old immutable image tag;
-2. upgrade to the new immutable image tag and readiness check;
+2. upgrade to the new immutable image tag and readiness check, asserting the
+   new release's verified pre-upgrade snapshot and that the database revision
+   moved forward;
 3. intentionally failed upgrade by replacing the app with an invalid
    `SECRET_KEY`, asserting readiness is no longer HTTP 200 and retaining the
    app logs;
-4. rollback to the old immutable image tag; and
-5. rollback verification with readiness and app logs.
+4. the previous image started on the forward-migrated database, which the
+   startup guard refuses with exit 78 and one `REFUSED:` line naming the
+   database revision, the running version and the documented restore command;
+5. restore the verified pre-upgrade snapshot with the shipped
+   `compose-restore.sh`; and
+6. start the previous release with `compose-rollback.sh` and verify readiness,
+   the reverted database revisions, and that the row written before the upgrade
+   is still present.
 
 The failed-upgrade leg is deliberately a real container replacement, not a
 mocked command. A run is not evidence unless the evidence directory contains
@@ -335,13 +343,16 @@ database backwards (`alembic downgrade`) is not supported; the snapshot is the
 way back. The pre-restore safety dump of the database you are replacing is
 written into the same snapshot volume, next to the snapshot.
 
-**The RC matrix does not rehearse this yet.** `scripts/verify_compose_upgrade_rollback.py`
-currently re-points the image tag for its rollback leg; it never restores the
-pre-upgrade snapshot, so a green matrix is NOT evidence that the restore above
-works. FAR-2674 owns teaching the harness that leg (restore the snapshot, then
-start the previous image, and assert the data came back rather than assuming the
-old image can boot on a newer database). Until it lands, rehearse the restore on
-a disposable host by hand and record the evidence.
+**The RC matrix now asserts this leg (FAR-2674).**
+`scripts/verify_compose_upgrade_rollback.py` runs the documented recovery end to
+end: it verifies the new release's pre-upgrade snapshot, stops the app on the
+forward-migrated database, asserts the previous image is refused by the startup
+guard (exit 78 and the one `REFUSED:` line), restores the snapshot with the
+shipped `compose-restore.sh`, and starts the previous release with
+`compose-rollback.sh` on the restored database with the row written before the
+upgrade still present. The green path through that restore is still gated on
+FAR-2763, so a green matrix is evidence the leg is asserted and exercised, not
+that the restore has yet completed successfully against a real published pair.
 
 ### Fly.io
 

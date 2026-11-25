@@ -18,7 +18,7 @@ unit-tests:
   - backend/tests/integration/test_runner_capacity_gate.py
 bdd: []
 depends-on: [feat-container-deployment, feat-runs, feat-core-runtime-provider-core]
-status: covered
+status: partial
 ---
 
 # Deployment Drain
@@ -42,6 +42,7 @@ manifest `features:` registry.
       principal, and a request carrying no `Authorization` header answers
       `200` (`api/routes/deployment.py`;
       `test_deployment_endpoint.py::TestDeploymentInfo::test_unauthenticated_reachable_returns_200`).
+      <!-- behaviour: deployment-drain-01 | tests: backend/tests/unit/api/test_deployment_endpoint.py, backend/tests/unit/api/test_deployment_endpoint.py::test_unauthenticated_reachable_returns_200 -->
 - [x] The readout returns `version`, `uptime_seconds`, `started_at` (tz-aware
       ISO-8601 UTC), `python_version`, `environment` (defaulting to
       `development`), `git_sha`, `git_commit_timestamp`, `build_timestamp`,
@@ -51,12 +52,14 @@ manifest `features:` registry.
       `test_environment_defaults_to_development`,
       `test_build_metadata_falls_back_to_empty`,
       `test_started_at_is_valid_iso_datetime`).
+      <!-- behaviour: deployment-drain-02 | tests: backend/tests/unit/api/test_deployment_endpoint.py::test_response_has_required_fields, backend/tests/unit/api/test_deployment_endpoint.py::test_environment_defaults_to_development, backend/tests/unit/api/test_deployment_endpoint.py::test_build_metadata_falls_back_to_empty, backend/tests/unit/api/test_deployment_endpoint.py::test_started_at_is_valid_iso_datetime -->
 - [x] The response is public-safe by construction: it omits `hostname` and
       `ci_job_url` and the deployment source repository's free text
       (`git_branch`, `git_commit_message`), because a self-hosted operator may
       build from a private fork and no consumer reads them (FAR-1975).
       `test_sensitive_fields_absent`, `test_source_repo_free_text_absent`,
       `test_no_tenant_or_credential_fields`.
+      <!-- behaviour: deployment-drain-03 | tests: backend/tests/unit/api/test_deployment_endpoint.py::test_sensitive_fields_absent, backend/tests/unit/api/test_deployment_endpoint.py::test_source_repo_free_text_absent, backend/tests/unit/api/test_deployment_endpoint.py::test_no_tenant_or_credential_fields -->
 - [x] `active_sandbox_runs` is the instance-wide deploy-drain population: every
       `running` run with a live `sandbox_dispatch_state` marker, excluding
       `cleared_at_hitl` tombstones and carrying no tenant filter. It is the same
@@ -66,6 +69,7 @@ manifest `features:` registry.
       `test_active_sandbox_runs_is_reported`,
       `test_active_sandbox_query_excludes_non_running_runs`;
       `test_runner_capacity_gate.py` F6).
+      <!-- behaviour: deployment-drain-04 | tests: backend/tests/integration/test_runner_capacity_gate.py, backend/tests/unit/api/test_deployment_endpoint.py::test_active_sandbox_runs_is_reported, backend/tests/unit/api/test_deployment_endpoint.py::test_active_sandbox_query_excludes_non_running_runs -->
 - [x] `POST /api/v1/deployment/drain?active=<bool>` is guarded by a bearer
       credential compared in constant time (`hmac.compare_digest`) against
       `FARNA_CONTROL_DEPLOY_DRAIN_TOKEN`. The route answers `503` when the
@@ -75,6 +79,7 @@ manifest `features:` registry.
       `test_missing_or_invalid_token_is_rejected`,
       `test_unconfigured_token_is_rejected`,
       `test_valid_token_persists_value_and_audits`).
+      <!-- behaviour: deployment-drain-05 | tests: backend/tests/unit/api/test_deployment_endpoint.py::test_missing_or_invalid_token_is_rejected, backend/tests/unit/api/test_deployment_endpoint.py::test_unconfigured_token_is_rejected, backend/tests/unit/api/test_deployment_endpoint.py::test_valid_token_persists_value_and_audits -->
 - [x] A toggle takes the transaction-scoped Postgres advisory lock
       `deployment_drain`, writes the `system_config` key `deployment_drain` to
       `{active, updated_at, source: "deploy-workflow"}` and appends the system
@@ -83,6 +88,7 @@ manifest `features:` registry.
       `test_set_drain_writes_config_and_audit`). The lock is a no-op off
       Postgres, which is why the sqlite-backed tests exercise the write without
       it.
+      <!-- behaviour: deployment-drain-06 | tests: backend/tests/unit/api/test_deployment_endpoint.py::test_set_drain_writes_config_and_audit -->
 - [x] Run admission enforces the flag. `create_run` calls
       `_enforce_deployment_drain_gate` after the org-deleted, capacity and
       pipeline-state gates; the gate acquires the SAME advisory lock BEFORE
@@ -90,6 +96,7 @@ manifest `features:` registry.
       admission decision and the run insert. Only an exact `active is True`
       refuses anything (`db/crud/run.py`;
       `test_journey_create_run.py::TestDeploymentDrainAdmission`).
+      <!-- behaviour: deployment-drain-07 | tests: backend/tests/unit/db/test_journey_create_run.py -->
 - [x] The drain blocks new sandbox pipelines, not every run: it raises
       `TriggersPausedError` only when the run's frozen snapshot graph contains a
       top-level `sandbox_agent` node, and admits non-sandbox graphs during an
@@ -97,9 +104,11 @@ manifest `features:` registry.
       sandbox sub-node of a composite appears at the top level and is found
       (`_graph_contains_sandbox_agent`; `test_active_drain_refuses_sandbox_graph`,
       `test_active_drain_admits_non_sandbox_graph`).
+      <!-- behaviour: deployment-drain-08 | tests: backend/tests/unit/db/test_journey_create_run.py::test_active_drain_refuses_sandbox_graph, backend/tests/unit/db/test_journey_create_run.py::test_active_drain_admits_non_sandbox_graph -->
 - [x] The admission read fails CLOSED: a `SQLAlchemyError` reading the drain
       flag propagates rather than silently admitting a sandbox run while a
       drain may be active (`test_drain_flag_read_failure_propagates`).
+      <!-- behaviour: deployment-drain-09 | tests: backend/tests/unit/db/test_journey_create_run.py::test_drain_flag_read_failure_propagates -->
 - [x] The refusal is mapped to a typed outcome by the origins that catch it:
       the cron, polling and agent-signal fire jobs return a typed
       `{status: skipped}` result (`core/cron_helpers.py`,
@@ -110,12 +119,14 @@ manifest `features:` registry.
       a generic `except Exception` arm (or generic tool error arm) that converts
       the refusal to `500`/`server_error` before `handle_db_errors`'
       `TriggersPausedError` arm can see it (see Known Gaps).
+      <!-- behaviour: deployment-drain-10 | tests: none -->
 - [x] The production deploy composes the control: it enters the drain before
       pre-deploy migrations, waits for `active_sandbox_runs` to converge, and
       clears the drain after the deploy; a genuine control failure refuses the
       deploy, while the first bootstrap deploy (no token or no live route)
       degrades to the legacy active-run wait gate with a loud warning
       (`.github/workflows/deploy.yml`).
+      <!-- behaviour: deployment-drain-11 | tests: none -->
 
 ## Known Gaps
 

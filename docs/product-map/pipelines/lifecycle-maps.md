@@ -26,7 +26,7 @@ bdd:
   - backend/tests/bdd/features/lifecycle_maps/journeys.feature
 depends-on:
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Lifecycle Maps
@@ -56,38 +56,47 @@ through, with edges representing transitions between stages.
       `tests/unit/api/test_lifecycle_maps_routes.py::test_operator_is_denied_when_developer_mode_is_off`,
       `tests/unit/api/test_global_search.py`,
       `tests/unit/api/test_library_routes.py`)
+      <!-- behaviour: lifecycle-maps-01 | tests: backend/tests/unit/api/test_lifecycle_maps_routes.py::test_operator_is_denied_when_developer_mode_is_off, backend/tests/unit/api/test_global_search.py, backend/tests/unit/api/test_library_routes.py -->
 - [x] Lifecycle map CRUD: create, list, get, update, soft-delete, restore with
       name deduplication and org-scoped RLS
       (`backend/src/farna/api/routes/lifecycle_maps.py`,
       `backend/tests/bdd/features/lifecycle_maps/crud.feature`)
+      <!-- behaviour: lifecycle-maps-02 | tests: backend/tests/bdd/features/lifecycle_maps/crud.feature -->
 - [x] Version management: content save bumps version, metadata-only updates do
       not; sequential saves produce unique increasing versions; FOR UPDATE row
       locking prevents concurrent-save conflicts
       (`backend/tests/bdd/features/lifecycle_maps/versioning.feature`,
       `backend/tests/unit/core/test_lifecycle_map_versions.py`,
       `backend/tests/integration/test_lifecycle_map_concurrency.py`)
+      <!-- behaviour: lifecycle-maps-03 | tests: backend/tests/bdd/features/lifecycle_maps/versioning.feature, backend/tests/unit/core/test_lifecycle_map_versions.py, backend/tests/integration/test_lifecycle_map_concurrency.py -->
 - [x] Content validation rejects duplicate stage/edge IDs, dangling edges,
       cycles, and invalid stage types
       (`backend/tests/unit/core/test_lifecycle_map_versions.py`)
+      <!-- behaviour: lifecycle-maps-04 | tests: backend/tests/unit/core/test_lifecycle_map_versions.py -->
 - [x] Import/export supports v1/v2 envelope formats with version history replay
       and library primitive contribution
       (`backend/tests/bdd/features/lifecycle_maps/library.feature`,
       `backend/tests/unit/core/test_lifecycle_map_import_export.py`,
       `backend/tests/integration/test_lifecycle_map_import_export.py`)
+      <!-- behaviour: lifecycle-maps-05 | tests: backend/tests/bdd/features/lifecycle_maps/library.feature, backend/tests/unit/core/test_lifecycle_map_import_export.py, backend/tests/integration/test_lifecycle_map_import_export.py -->
 - [x] Stage graduation advances work items through stages with audit logging
       (`backend/tests/bdd/features/lifecycle_maps/graduation.feature`)
+      <!-- behaviour: lifecycle-maps-06 | tests: backend/tests/bdd/features/lifecycle_maps/graduation.feature -->
 - [x] Journey tracking with keyset pagination (cursor-based) for unattributed
       journeys, stage grouping, journey-detail run history, and self-report
       endpoint
       (`backend/tests/bdd/features/lifecycle_maps/journeys.feature`,
       `backend/tests/unit/api/test_lifecycle_maps_routes.py`)
+      <!-- behaviour: lifecycle-maps-07 | tests: backend/tests/bdd/features/lifecycle_maps/journeys.feature, backend/tests/unit/api/test_lifecycle_maps_routes.py -->
 - [x] Canonical work-item ref canonicalization (GitHub, Linear, JIRA) with
       deterministic uuid5 derivation ensures same ref forms collapse to same
       journey row (`backend/tests/unit/db/test_lifecycle_refs.py`)
+      <!-- behaviour: lifecycle-maps-08 | tests: backend/tests/unit/db/test_lifecycle_refs.py -->
 - [x] Frontend visual editor with auto-layout (Sugiyama-style layered graph),
       version selection, import/export dialog, and journey detail views
       (`frontend/src/stores/lifecycleMaps.ts`,
       `frontend/src/__tests__/lifecycleMapLayout.spec.ts`)
+      <!-- behaviour: lifecycle-maps-09 | tests: none -->
 - [x] Journey display on the map detail view is double-gated (FAR-654 +
       FAR-742): the journey cards on stage nodes, the Unattributed journeys
       section, load-more pagination and the journey detail panel render only
@@ -101,6 +110,7 @@ through, with edges representing transitions between stages.
       stages/edges render normally
       (`frontend/src/views/lifecycle-map/LifecycleMapView.vue`,
       `frontend/src/__tests__/LifecycleMapView.spec.ts`)
+      <!-- behaviour: lifecycle-maps-10 | tests: none -->
 
 ## Known Gaps
 

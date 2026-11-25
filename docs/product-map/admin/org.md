@@ -24,7 +24,7 @@ bdd:
   - backend/tests/bdd/features/organisation/org_deletion.feature
 depends-on:
   - feat-teams
-status: covered
+status: partial
 ---
 
 # Organization Settings
@@ -37,15 +37,19 @@ kill-switch, authorization enforcement).
 
 - [x] `GET /api/v1/org/settings` returns the org's display currency for any
       authenticated org member (`backend/src/farna/api/routes/org_settings.py`)
+      <!-- behaviour: org-01 | tests: none -->
 - [x] `GET /api/v1/org/settings/guardrails/kill-switch` returns the kill-switch
       state (read-only for non-admins)
+      <!-- behaviour: org-02 | tests: none -->
 - [x] Admin endpoints handle org CRUD, license management, trigger pause/unpause,
       guardrails kill-switch toggle, and authorization enforcement flag
       (`backend/src/farna/api/routes/admin_orgs.py`,
       `backend/tests/unit/api/test_admin_orgs.py`)
+      <!-- behaviour: org-03 | tests: backend/tests/unit/api/test_admin_orgs.py -->
 - [x] Org-wide trigger pause is admin-only with audit logging; toggling to the
       current state is an idempotent no-op
       (`backend/tests/bdd/features/triggers/pause.feature`)
+      <!-- behaviour: org-04 | tests: backend/tests/bdd/features/triggers/pause.feature -->
 - [x] Org feature-flag overrides are governance-audited: every set/clear/toggle
       of an org `feature_overrides` entry appends a tamper-evident audit event
       to the org chain (`feature_flag_override_set` / `feature_flag_override_cleared`,
@@ -54,6 +58,7 @@ kill-switch, authorization enforcement).
       the already-committed override
       (`backend/src/farna/api/routes/admin_feature_flags.py`,
       `backend/tests/unit/api/test_admin_feature_flags.py`)
+      <!-- behaviour: org-05 | tests: backend/tests/unit/api/test_admin_feature_flags.py -->
 - [x] Retired internal flags stay off the customer-facing catalog:
       `RETIRED_INTERNAL_FLAGS` (`lifecycle_map_journeys`) is filtered from
       plan/customer-facing flag responses. Since FAR-2595 `system_maps` is NOT
@@ -65,6 +70,7 @@ kill-switch, authorization enforcement).
       `backend/src/farna/api/routes/admin_feature_flags.py`,
       `backend/tests/unit/api/test_admin_feature_flags.py`,
       `backend/tests/unit/core/test_feature_flag_registry.py`)
+      <!-- behaviour: org-06 | tests: backend/tests/unit/api/test_admin_feature_flags.py, backend/tests/unit/core/test_feature_flag_registry.py -->
 - [x] Org admins govern their own organization's low-sensitivity community
       feature flags through `GET`/`PUT`/`DELETE
       /api/v1/admin/org/feature-flags[/{flag_name}]` without the instance-wide
@@ -81,11 +87,13 @@ kill-switch, authorization enforcement).
       `backend/tests/unit/api/test_admin_org_feature_flags.py`,
       `frontend/src/views/AdminOrgSettingsView.vue`,
       `frontend/src/__tests__/AdminOrgSettingsView.spec.ts`)
+      <!-- behaviour: org-07 | tests: backend/tests/unit/api/test_admin_org_feature_flags.py -->
 - [x] Frontend renders org settings at `/admin/org` with export, product-analytics
       and organization-feature-flag controls
       (`frontend/src/manifest.yaml` testids). The page intentionally has no
       self-service organization-delete action: active-org deletion is refused by
       every self-service API route (403, FAR-2225)
+      <!-- behaviour: org-08 | tests: none -->
 - [x] Self-service org profile (`GET`/`PUT /api/v1/admin/org` in
       `api/routes/admin.py`): admins read and rename the org (slug immutable -
       `test_update_org_ignores_slug_changes`) and regenerate the org API key
@@ -94,15 +102,19 @@ kill-switch, authorization enforcement).
       `POST /org/deletion-request`, and `POST /org/deletion-confirm` are explicit
       403 refusals, before any deletion DB work; system admins must use the
       cross-organization route in `admin_orgs.py`
+      <!-- behaviour: org-09 | tests: backend/tests/unit/api/test_admin.py -->
 - [x] Member invites into the org are BDD-executed against
       `POST /api/v1/admin/orgs/{org_id}/users` (`system_admin_users.feature`:
       duplicate-membership 409, cross-tenant local-account 409, invalid role /
       weak password 422, missing org 404)
+      <!-- behaviour: org-10 | tests: backend/tests/bdd/features/system_admin/system_admin_users.feature -->
 - [x] API-key revocation and the non-admin 403 (admin-only minting) are
       BDD-executed (`auth/api_keys.feature`: create 201, non-admin 403, revoke,
       active-key-only listing, invalid-key rejection)
+      <!-- behaviour: org-11 | tests: backend/tests/bdd/features/auth/api_keys.feature -->
 - [x] Viewer access denial is BDD-executed at the org-context boundary
       (`viewmodel/viewmodel_current.feature`: a viewer org role is refused)
+      <!-- behaviour: org-12 | tests: backend/tests/bdd/features/viewmodel/viewmodel_current.feature -->
 
 ## Known Gaps
 

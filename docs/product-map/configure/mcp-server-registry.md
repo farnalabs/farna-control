@@ -44,6 +44,7 @@ S2 (tool-definition pinning).
       and `DELETE /{server_id}` soft-deletes and returns 204
       (`api/routes/mcp_servers.py`, `db/crud/mcp_server.py`;
       `test_far1692_registry_routes.py`).
+      <!-- behaviour: mcp-server-registry-01 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py -->
 - [x] The create shape is constrained: `name` 1..255, `transport` one of
       `stdio` / `sse` / `http` / `websocket`, `endpoint` and `command` <= 2000,
       `declared_scopes` a list of strings, optional `credentials`, and
@@ -52,6 +53,7 @@ S2 (tool-definition pinning).
       approval-status / visibility vocabulary plus `owner_team_id NOT NULL`
       whenever `visibility = 'team'` (`db/models/mcp_server.py`,
       `0350_baseline_schema.py`).
+      <!-- behaviour: mcp-server-registry-02 | tests: none -->
 - [x] A supplied credential is encrypted at rest with Fernet through the shared
       `encrypt_stored_secret` helper and is never returned: the response carries
       only `has_credentials`. A partial update that omits `credentials` leaves
@@ -59,11 +61,13 @@ S2 (tool-definition pinning).
       (`api/routes/mcp_servers.py`, `auth/secret_storage.py`;
       `test_far1692_registry_routes.py::test_create_mcp_server_success_with_credentials`,
       `::test_update_mcp_server_with_credentials`).
+      <!-- behaviour: mcp-server-registry-03 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py::test_create_mcp_server_success_with_credentials -->
 - [x] Access is permission-floored per verb: `mcp_server.list` (viewer floor)
       for list and read, `mcp_server.create` / `.update` / `.delete` (operator
       floor) for inventory mutations, and `mcp_server.approve` (operator floor)
       for approving a tool set (`auth/permissions.py`;
       `test_far1692_registry_routes.py`).
+      <!-- behaviour: mcp-server-registry-04 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py -->
 - [x] Reads and writes are org-scoped twice: the route sets the RLS org and
       user context, and every CRUD query carries an explicit
       `organisation_id` predicate, so a cross-org read answers 404 instead of
@@ -73,14 +77,17 @@ S2 (tool-definition pinning).
       completeness only and is not wired into these routes
       (`db/crud/mcp_server.py`, `0351_baseline_rls.py`, `api/team_scope.py`;
       `test_external_agent_mcp_server_crud.py`, `test_rls_isolation.py`).
+      <!-- behaviour: mcp-server-registry-05 | tests: backend/tests/unit/db/test_external_agent_mcp_server_crud.py, backend/tests/integration/test_rls_isolation.py -->
 - [x] Team assignment is validated at the write: create refuses an
       `owner_team_id` the caller cannot reach, and a visibility or owner-team
       change goes through the shared update-transition guard
       (`api/team_scope.py`; `test_far1692_registry_routes.py`).
+      <!-- behaviour: mcp-server-registry-06 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py -->
 - [x] Create, update and delete emit `mcp_server_created` /
       `mcp_server_updated` / `mcp_server_deleted` audit events through the
       shared `audited()` dependency on the `mcp_server` resource
       (`api/routes/mcp_servers.py`; `test_far1692_registry_routes.py`).
+      <!-- behaviour: mcp-server-registry-07 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py -->
 - [x] The tool-definition hash is canonical and idempotent: it folds each tool
       to its identity projection (`name`, `title`, `description`,
       `inputSchema`, accepting the `input_schema` alias), sorts the projection
@@ -88,6 +95,7 @@ S2 (tool-definition pinning).
       SHA-256s the canonical JSON. A tool without a non-empty string `name`, or
       a non-mapping entry, raises `ToolPinningError` and is never persisted
       (`core/mcp/tool_pinning.py`; `test_mcp_tool_pinning.py`).
+      <!-- behaviour: mcp-server-registry-08 | tests: backend/tests/unit/core/test_mcp_tool_pinning.py -->
 - [x] `POST /{server_id}/observe-tools` records the observed set (capped at
       1000 tool definitions, oversized list 422), stores
       `tools_json`/`tools_hash`/`last_observed_at`, recomputes the hash and
@@ -97,6 +105,7 @@ S2 (tool-definition pinning).
       `test_far1692_registry_routes.py::test_observe_tools_success`,
       `::test_observe_tools_malformed_tools`,
       `::test_observe_tools_rejects_oversized_tool_list`).
+      <!-- behaviour: mcp-server-registry-09 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py::test_observe_tools_success -->
 - [x] The drift decision is fail-safe and honest: with no recorded
       `approved_hash` the status stays `unapproved` (a defensive
       `approved`/`approved-stale` without a hash resets to `unapproved`); a
@@ -110,6 +119,7 @@ S2 (tool-definition pinning).
       `::test_changed_hash_is_drift`,
       `::test_return_to_approved_hash_clears_stale`,
       `::test_blocked_server_is_never_downgraded`).
+      <!-- behaviour: mcp-server-registry-10 | tests: backend/tests/unit/core/test_mcp_tool_pinning.py::test_unapproved_observation_stays_unapproved -->
 - [x] A NEW drift (a previously-approved set changed, and the status was not
       already `approved-stale`) appends an `mcp_server_tools_drifted` audit
       event carrying the previous/observed/approved hashes and raises one
@@ -122,6 +132,7 @@ S2 (tool-definition pinning).
       `::test_second_observation_while_stale_does_not_re_alert`,
       `::test_drift_audit_failure_is_swallowed`,
       `::test_drift_notification_failure_is_swallowed`).
+      <!-- behaviour: mcp-server-registry-11 | tests: backend/tests/unit/core/test_mcp_tool_pinning.py::test_observation_of_changed_tools_marks_stale_and_alerts -->
 - [x] `POST /{server_id}/approve-tools` pins the CURRENT observed set: it is
       422 when nothing has been observed yet, otherwise it computes the hash
       over the stored `tools_json` and stamps `approval_status=approved`,
@@ -130,23 +141,28 @@ S2 (tool-definition pinning).
       (`api/routes/mcp_servers.py`; `test_far1692_registry_routes.py::test_approve_tools_success`,
       `::test_approve_tools_no_observed_tools`,
       `::test_approve_tools_malformed_tools`).
+      <!-- behaviour: mcp-server-registry-12 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py::test_approve_tools_success -->
 - [x] The read model exposes the full pin state: `tools_json`, `tools_hash`,
       `approval_status`, `approved_by` / `approved_at` / `approved_hash`,
       `last_observed_at`, `owner_account_id` and `has_credentials` (never the
       credential value) (`api/routes/mcp_servers.py`).
+      <!-- behaviour: mcp-server-registry-13 | tests: none -->
 - [x] Error handling is typed and never leaks internals: `ToolPinningError` is
       422, a missing table (`ProgrammingError`) is 501, a constraint violation
       (`IntegrityError`) is 409, any other database failure is 503, a missing
       row is 404, and an unexpected error is 500 with a generic message
       (`api/routes/mcp_servers.py`; `test_far1692_registry_routes.py`).
+      <!-- behaviour: mcp-server-registry-14 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py -->
 - [ ] The `blocked` approval status is part of the vocabulary and is honoured
       by the decision logic (a blocked server is never downgraded), but no route
       sets it, so there is no shipped block/unblock action
       (`db/models/mcp_server.py`, `api/routes/mcp_servers.py`).
+      <!-- behaviour: mcp-server-registry-15 | tests: none -->
 - [ ] Tool sets are recorded only when a caller POSTs `observe-tools`. There is
       no poller or ingestion leg that discovers a server's live tool set on its
       own, so a server that changes without a caller observing it produces no
       drift signal.
+      <!-- behaviour: mcp-server-registry-16 | tests: none -->
 
 ## Known Gaps
 

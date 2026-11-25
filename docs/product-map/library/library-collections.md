@@ -21,7 +21,7 @@ depends-on:
   - feat-library
   - feat-pipelines
   - feat-schemas
-status: covered
+status: partial
 ---
 
 # Library Collections
@@ -40,6 +40,7 @@ gated behind the `library_collection` feature flag.
       (schemas, agents, pipelines), and writes a `CollectionInstall` provenance
       record with `status=installed`
       (`core/library_service/install.py`, `test_library_collection_lifecycle.py`)
+      <!-- behaviour: library-collections-01 | tests: backend/tests/integration/test_library_collection_lifecycle.py -->
 - [x] Uninstall deletes unmodified entities (matching `collection_install_id`) and
       detaches provenance from modified entities (already-cleared
       `collection_install_id`); the `CollectionInstall` record itself is
@@ -48,22 +49,27 @@ gated behind the `library_collection` feature flag.
       so a reinstall of the same collection is permitted afterwards (the
       uniqueness is a partial unique index on `(organisation_id, collection_id)`
       `WHERE deleted_at IS NULL`) (`core/library_service/uninstall.py`)
+      <!-- behaviour: library-collections-02 | tests: none -->
 - [x] Re-install of the same version is idempotent: missing entities are
       re-added via `materialize_import` without duplicating existing ones
       (`test_library_collection_lifecycle.py`)
+      <!-- behaviour: library-collections-03 | tests: backend/tests/integration/test_library_collection_lifecycle.py -->
 - [x] `compute_runnable` is a pure read-time check: `True` when every
       `connector_checklist` entry is `configured+bound` and the org has at least
       one active model backend, `False` otherwise
       (`core/library_service/runnability.py`)
+      <!-- behaviour: library-collections-04 | tests: none -->
 - [x] Registry-sourced collections restrict agent
       tool/connector access until an operator explicitly grants access via
       `grant_collection_agents` (sets `agents_granted=True`, idempotent);
       non-registry (`source=local`) collections skip the gate and agents are
       immediately usable (`core/library_service/grant.py`)
+      <!-- behaviour: library-collections-05 | tests: none -->
 - [x] Each unique `connector_type_id` referenced by any agent in the collection
       gets a `connector_checklist` entry with `status=pending`; the runnability
       check verifies all entries are `configured+bound`
       (`core/library_service/install.py`)
+      <!-- behaviour: library-collections-06 | tests: none -->
 - [x] The install/uninstall/grant REST contract (`/api/v1/libraries/collections`):
       installing a published collection returns 201 with an `installed` install
       record + runnability verdict, a non-published collection is 400, an
@@ -73,6 +79,7 @@ gated behind the `library_collection` feature flag.
       installs (200, idempotent when already granted), 400 for local installs,
       404 for unknown installs (`library_collections.feature`,
       `steps/test_library_collections.py`)
+      <!-- behaviour: library-collections-07 | tests: backend/tests/bdd/features/library/library_collections.feature, backend/tests/bdd/steps/test_library_collections.py -->
 - [x] The authoring REST contract has executing BDD coverage too: creating a
       collection returns 201 with `status=draft` and echoes the manifest pins,
       a duplicate slug is 409; updating a draft replaces its pins (200) while
@@ -81,6 +88,7 @@ gated behind the `library_collection` feature flag.
       pins / more than the 25-pin cap / an unknown pinned primitive are all
       422, and publishing a non-draft collection is 400
       (`library_collections.feature`, `steps/test_library_collections.py`)
+      <!-- behaviour: library-collections-08 | tests: backend/tests/bdd/features/library/library_collections.feature, backend/tests/bdd/steps/test_library_collections.py -->
 - [x] Collection authors cut a new version via
       `POST /api/v1/libraries/collections/{id}/versions` (FAR-759): a 201
       draft copying the published row's pins through `version_group_id` (the
@@ -91,6 +99,7 @@ gated behind the `library_collection` feature flag.
       `notify_importers_of_update`
       (`api/routes/library.py` `create_collection_version_endpoint`,
       `core/library_service/__init__.py` `notify_importers_of_update`)
+      <!-- behaviour: library-collections-09 | tests: none -->
 - [x] Installed orgs preview and apply the upgrade (FAR-759, operator-initiated
       only - no auto-updates): `GET .../installs/{install_id}/update` reports
       `update_available` plus the current/available versions and the per-entity
@@ -112,12 +121,14 @@ gated behind the `library_collection` feature flag.
       `detect_collection_update` / `upgrade_collection`,
       `test_collection_upgrade.py`, `test_collection_upgrade_service.py`,
       `test_install_snapshot.py`)
+      <!-- behaviour: library-collections-10 | tests: backend/tests/unit/library_service/test_collection_upgrade.py, backend/tests/unit/library_service/test_collection_upgrade_service.py, backend/tests/unit/library_service/test_install_snapshot.py -->
 - [x] The collection detail view surfaces the FAR-759 flow: an update-available
       badge on the install row plus an Upgrade button whose failures render
       through the shared `ErrorAlert` (`collection-update-available` /
       `collection-upgrade` / `collection-upgrade-error`,
       `frontend/src/views/CollectionDetailView.vue`,
       `frontend/src/__tests__/CollectionDetailView.spec.ts`)
+      <!-- behaviour: library-collections-11 | tests: none -->
 
 ## Known Gaps
 

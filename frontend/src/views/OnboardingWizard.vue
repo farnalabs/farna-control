@@ -343,9 +343,9 @@
               role="alert"
               aria-live="assertive"
             />
-            <output v-if="telemetrySaved" data-testid="onboarding-wizard-telemetry-saved" class="mt-3 block rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text">
+            <Notice v-if="telemetrySaved" variant="success" live="polite" :icon="false" padding="sm" class="mt-3 text-sm" data-testid="onboarding-wizard-telemetry-saved">
               {{ $t('views.OnboardingWizard.telemetry_enabled_success') }}
-            </output>
+            </Notice>
             <div class="mt-6 flex items-center justify-center gap-3">
               <Button
                 v-if="!telemetryForbidden"
@@ -465,6 +465,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { useProductAnalytics } from '../composables/useProductAnalytics'
 import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'

@@ -18,7 +18,7 @@ unit-tests:
 bdd:
   - backend/tests/bdd/features/infra/secrets_backend.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Secrets Backend
@@ -47,40 +47,52 @@ rather than in the manifest registry.
 
 - [x] ``SecretsBackend`` ABC with async ``get_secret`` / ``set_secret`` /
       ``delete_secret`` and a ``KeyError`` contract for a missing key
+      <!-- behaviour: secrets-backend-01 | tests: none -->
 - [x] Secret keys are validated / normalized (non-empty string, stripped) -
       invalid keys raise ``ValueError``, never touch the store
+      <!-- behaviour: secrets-backend-02 | tests: none -->
 - [x] Factory ``create_secrets_backend`` selects the backend from
       ``backend_name`` / ``FARNA_CONTROL_SECRETS_BACKEND`` (``fernet`` default,
       ``vault``, ``aws``); unknown name → ``ValueError`` listing the choices
+      <!-- behaviour: secrets-backend-03 | tests: none -->
 - [x] External backends (``vault`` / ``aws``) are available on ALL tiers with
       no entitlement or license gate (FAR-2100): a configured backend is
       always constructed and is never silently downgraded to ``fernet`` on a
       license lapse (FAR-2059 / FAR-2060) - an unconfigured external backend
       fails hard in its own constructor instead
+      <!-- behaviour: secrets-backend-04 | tests: none -->
 - [x] ``fernet`` backend encrypts values with ``cryptography.fernet.Fernet``
       and persists them in the ``secrets`` table with an
       ``(organisation_id, key)`` scope
+      <!-- behaviour: secrets-backend-05 | tests: none -->
 - [x] ``fernet`` backend is RLS-aware - reads the organization id from the
       session (``app.organisation_id`` via ``current_setting``, falling back
       to ``session.info`` on non-Postgres backends) and scopes every row to
       that org; missing org context fails closed with an actionable error
+      <!-- behaviour: secrets-backend-06 | tests: none -->
 - [x] ``set_secret`` upserts under ``(organisation_id, key)`` with a
       row-lock + TOCTOU retry (``IntegrityError`` → one retry, then re-raise)
+      <!-- behaviour: secrets-backend-07 | tests: none -->
 - [x] ``get_secret`` retrieves and decrypts; a stored value the current key
       cannot decrypt is re-tried with an optional old key (no-downtime
       rotation) and fails with ``ValueError`` when no key matches
+      <!-- behaviour: secrets-backend-08 | tests: none -->
 - [x] Invalid Fernet keys surface a friendly config ``ValueError`` at
       construction, never an opaque ``binascii`` error
+      <!-- behaviour: secrets-backend-09 | tests: none -->
 - [x] ``vault`` / ``aws`` backends call out synchronously via ``run_sync``
       (bounded thread-pool execution with a configurable timeout)
+      <!-- behaviour: secrets-backend-10 | tests: none -->
 - [x] Implementations never log or leak secret values in exceptions,
       tracebacks or span attributes
+      <!-- behaviour: secrets-backend-11 | tests: none -->
 - [x] ``fernet_rotation`` - no-downtime key rotation: ``decrypt_with_fallback``
       decays to the old key, ``re_encrypt_*`` re-wraps plaintext under the new
       key, and ``rotate_all_encrypted_data`` re-encrypts every encrypted store
       (secrets table, connector instances, model backends, notification
       endpoints, OTel config, checkpoints / checkpoint blobs / writes),
       returning per-store counts
+      <!-- behaviour: secrets-backend-12 | tests: none -->
 
 ## Known Gaps
 

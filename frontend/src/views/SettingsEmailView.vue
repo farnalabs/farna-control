@@ -91,12 +91,15 @@
           </div>
         </DataCard>
 
-        <div
+        <Notice
           v-if="successMessage"
-          class="rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+          variant="success"
+          :icon="false"
+          padding="sm"
+          class="text-sm"
         >
           {{ successMessage }}
-        </div>
+        </Notice>
         <!-- Save/send action error: no refetch loader, the form's own submit
              button is the retry path. -->
         <ErrorAlert v-if="errorMessage" :message="errorMessage" :retryable="false" />
@@ -116,6 +119,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Button from 'primevue/button'
 

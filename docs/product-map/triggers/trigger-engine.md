@@ -59,7 +59,7 @@ bdd:
   - backend/tests/bdd/steps/test_polling_triggers.py
   - backend/tests/bdd/steps/test_ongoing_triggers.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Triggers
@@ -86,6 +86,7 @@ rate-limited by the `TriggerEngine`.
       so a stale fire self-drops; webhook pipelines leave it NULL (each
       delivery is discrete and coalescing folds repeats); manual/MCP pipelines
       leave it NULL (a human action)
+      <!-- behaviour: trigger-engine-01 | tests: none -->
 - [x] A **wedged** pipeline (queued runs, no progress) stops accepting NEW
       work, refused per funnel (FAR-1342, the FAR-604 D3 backpressure guard):
       **webhook** → HTTP 429 and no run (the sender retries); **cron** → the
@@ -119,10 +120,12 @@ rate-limited by the `TriggerEngine`.
       `core/cron_helpers.py` `_backpressure_skip` / `_polling_pre_fire_gate`;
       `unit-tests: test_run_admission.py,
       core/test_cron_helpers_residual.py, api/test_webhooks_endpoint.py`)
+      <!-- behaviour: trigger-engine-02 | tests: backend/tests/unit/test_run_admission.py, backend/tests/unit/core/test_cron_helpers_residual.py, backend/tests/unit/api/test_webhooks_endpoint.py -->
 - [x] Trigger CRUD via `/api/v1/triggers` (list, create, PUT update, delete,
       restore) with per-type config (webhook / cron / polling / ongoing);
       secret fields are encrypted at rest and never returned
       (`test_trigger_config_secrets`, `test_triggers_endpoint`)
+      <!-- behaviour: trigger-engine-03 | tests: none -->
 - [x] Trigger reads are viewer-level and team-bounded (PR #2552): `trigger.list` and
       `trigger.events.list` floor at `viewer`. A caller whose org role is `viewer`
       is clamped by `account_team_scope_clause(Pipeline.owner_team_id, account_id)`,
@@ -132,6 +135,7 @@ rate-limited by the `TriggerEngine`.
       read joins `pipelines` and excludes soft-deleted pipelines, and higher org
       roles keep the org-wide read (`backend/src/farna/api/routes/triggers.py`,
       `backend/tests/unit/api/test_triggers_routes_coverage.py`)
+      <!-- behaviour: trigger-engine-04 | tests: backend/tests/unit/api/test_triggers_routes_coverage.py -->
 - [x] MCP trigger reads carry the same viewer clamp (PR #2552):
       `get_trigger` loads the trigger with the account-team scope, `list_triggers`
       and `list_trigger_events` apply the membership clause (with the pipeline join
@@ -140,6 +144,7 @@ rate-limited by the `TriggerEngine`.
       read (`backend/src/farna/api/mcp_server.py`,
       `backend/tests/unit/mcp/test_get_trigger_events.py`,
       `backend/tests/unit/mcp/test_team_scope_enforcement.py`)
+      <!-- behaviour: trigger-engine-05 | tests: backend/tests/unit/mcp/test_get_trigger_events.py, backend/tests/unit/mcp/test_team_scope_enforcement.py -->
 - [x] Every trigger has a REQUIRED name (FAR-2227): trimmed, 1-255 characters,
       unique among a pipeline's live triggers. Creating without one is a 422
       (REST and the MCP `create_trigger` tool alike, plus the UI form and
@@ -150,12 +155,15 @@ rate-limited by the `TriggerEngine`.
       (same uniqueness check). Migration 0339 backfilled pre-existing unnamed
       rows as `<trigger_type>-<first 8 id chars>` and made the column NOT NULL
       (`test_migration_0339_triggers_name_not_null`)
+      <!-- behaviour: trigger-engine-06 | tests: none -->
 - [x] Manual run trigger: `POST /api/v1/runs` returns 202 and starts a pending
       run carrying caller-supplied `run_context`
+      <!-- behaviour: trigger-engine-07 | tests: none -->
 - [x] Webhook delivery (`POST /api/v1/triggers/{id}/webhook`): HMAC-SHA256
       signature and `X-Farna-Control-Timestamp` freshness (±300s replay window) are
       required – missing/invalid HMAC or stale timestamp → 401, unknown trigger
       → 404, accepted → 202
+      <!-- behaviour: trigger-engine-08 | tests: none -->
 - [x] Webhook delivery also accepts GitHub's `X-Hub-Signature-256`
       (`sha256=` HMAC-SHA256 of the exact raw body, keyed by the trigger's
       `hmac_secret`) when NO `X-Farna-Control-*` header is sent, so a native GitHub
@@ -165,20 +173,27 @@ rate-limited by the `TriggerEngine`.
       window; the payload-hash dedup (400 on repeat) is the only replay bound
       The replay route (`/webhook/replay/{event_id}`) applies the same rule to an
       unauthenticated replay, verifying the signature over the STORED body
+      <!-- behaviour: trigger-engine-09 | tests: none -->
 - [x] Flood protection: a duplicate payload hash → 400 and rapid duplicates are
       rate-limited → 429
+      <!-- behaviour: trigger-engine-10 | tests: none -->
 - [x] Webhook payload mapping: event filters and field mappings are applied to
       build the run context before dispatch
+      <!-- behaviour: trigger-engine-11 | tests: none -->
 - [x] Cron triggers: cron expression + IANA timezone are validated (invalid
       → 422), `next_fire_at` is computed and advanced after a fire, and the
       scheduler creates runs with `trigger_type cron`
+      <!-- behaviour: trigger-engine-12 | tests: none -->
 - [x] Cron preview (`GET /api/v1/triggers/{id}/cron/preview`) returns the
       upcoming scheduled fires for an expression/timezone without persisting
+      <!-- behaviour: trigger-engine-13 | tests: none -->
 - [x] Polling triggers evaluate a connector condition on a schedule (JMESPath),
       record a `TriggerEvent` with result `condition_met` / `no_match`, fire a
       run when met, and respect `max_concurrent_runs`
+      <!-- behaviour: trigger-engine-14 | tests: none -->
 - [x] Ongoing triggers top the pipeline up toward a target in-flight count,
       respecting `max_concurrent_runs` and the org daily spend limit
+      <!-- behaviour: trigger-engine-15 | tests: none -->
 - [x] Agent-signal triggers fire a child pipeline when a watched node
       completes (`trigger_type agent_signal`), respecting the concurrency limit.
       The child's `node_output` is the watched node's **PURE RETURN** – never the
@@ -191,14 +206,18 @@ rate-limited by the `TriggerEngine`.
       type – or a caller that supplies no type – keeps the value verbatim
       (pre-split legacy behavior), and a splittable type with no contract output
       OMITS the `node_output` key (never a bare `None`) (FAR-131)
+      <!-- behaviour: trigger-engine-16 | tests: none -->
 - [x] Org-wide pause kill-switch (`PUT /api/v1/admin/orgs/{org}/triggers/pause`):
       webhooks delivered to a paused org are dropped with a paused response and
       create no runs
+      <!-- behaviour: trigger-engine-17 | tests: none -->
 - [x] Every delivery/evaluation is recorded to an immutable `TriggerEvent` log;
       `GET /api/v1/triggers/{id}/events` is paginated
+      <!-- behaviour: trigger-engine-18 | tests: none -->
 - [x] Webhook replay (`POST /api/v1/triggers/{id}/webhook/replay/{event_id}`)
       re-fires a prior event, skipping HMAC/timestamp validation while
       preserving dedup and flood protection
+      <!-- behaviour: trigger-engine-19 | tests: none -->
 - [x] Streak/outcomes readout surfaces delivery health per trigger (`streak_status`:
       enabled / streak / threshold / state / deactivated_reason / last_outcomes)
       derived from the run-outcome classification records (≤5 outcomes, newest
@@ -216,6 +235,7 @@ rate-limited by the `TriggerEngine`.
       no_delivery / excluded / unclassified row, a non-agent-reported confidence,
       or an unknown/absent key renders no qualifier
       (`test_trigger_streak_engine.py`, `SettingsTriggersView.spec.ts`)
+      <!-- behaviour: trigger-engine-20 | tests: backend/tests/unit/core/test_trigger_streak_engine.py -->
 - [x] The no-delivery streak engine covers cron triggers as well as ongoing
       (FAR-1387): the sweep walks cron triggers' terminal classifications with
       the SAME streak walk and GREATEST(last_delivery_at, streak_epoch)
@@ -228,12 +248,14 @@ rate-limited by the `TriggerEngine`.
       (FARNA_CONTROL_CRON_STREAK_MIN_WINDOW_HOURS override), and cron audit records
       use `cron_trigger.*` event types, never the `ongoing_trigger.*` stream
       (`core/trigger_streak.py`, `test_trigger_streak_engine.py`)
+      <!-- behaviour: trigger-engine-21 | tests: backend/tests/unit/core/test_trigger_streak_engine.py -->
 - [x] The streak walk treats a `no_delivery` run with reason `no_work` (a
       poller that had nothing to do) as NEUTRAL (FAR-2276): it is not counted
       toward the streak, the cron alert or auto-deactivation, and it does not
       reset an existing streak of real failures. Any other no_delivery reason
       still counts
       (`core/trigger_streak.py`, `test_trigger_streak_engine_sql.py`)
+      <!-- behaviour: trigger-engine-22 | tests: backend/tests/integration/test_trigger_streak_engine_sql.py -->
 - [x] The streak badge in `SettingsTriggersView` renders for every trigger type
       the engine covers - ongoing AND cron - via ONE mirrored constant
       (`STREAK_COVERED_TRIGGER_TYPES`, pointing at the backend
@@ -245,6 +267,7 @@ rate-limited by the `TriggerEngine`.
       wording appears only when the backend reports the deactivated state
       (FAR-1405; `SettingsTriggersView.vue`,
       `frontend/src/__tests__/SettingsTriggersView.spec.ts`)
+      <!-- behaviour: trigger-engine-23 | tests: none -->
 - [x] Trigger mutation against a team-private pipeline enforces the team gate
       (FAR-1513): access derives from the trigger's owning pipeline (triggers
       carry no team columns of their own - same derivation as runs, ADR 038) via
@@ -268,6 +291,7 @@ rate-limited by the `TriggerEngine`.
       test_triggers_routes_coverage.py`,
       `integration: test_trigger_run_team_gate.py`,
       `bdd: features/teams/team_pipeline_visibility.feature`)
+      <!-- behaviour: trigger-engine-24 | tests: backend/tests/unit/api/test_team_scope_dependencies.py, backend/tests/unit/api/test_triggers_routes_coverage.py, backend/tests/integration/test_trigger_run_team_gate.py, backend/tests/bdd/features/teams/team_pipeline_visibility.feature -->
 - [x] A polling trigger's connector reference is team-scoped at BOTH save and
       read (FAR-1595): a trigger's `config_json.connector_instance_id` was never
       team-validated - the fire job reads the connector row team-blind
@@ -300,6 +324,7 @@ rate-limited by the `TriggerEngine`.
       `backend/src/farna/core/cron_helpers.py`;
       `unit-tests: test_polling_acl.py, test_triggers_routes_coverage.py,
       test_trigger_crud_tools.py, test_trigger_mgmt_tools.py`)
+      <!-- behaviour: trigger-engine-25 | tests: backend/tests/unit/trigger_engine/test_polling_acl.py, backend/tests/unit/api/test_triggers_routes_coverage.py, backend/tests/unit/mcp/test_trigger_crud_tools.py, backend/tests/unit/mcp/test_trigger_mgmt_tools.py -->
 
 ## Known Gaps
 

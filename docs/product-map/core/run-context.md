@@ -18,7 +18,7 @@ bdd:
   - backend/tests/bdd/features/pipelines/run_context.feature
   - backend/tests/bdd/steps/test_run_context.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Run Context
@@ -34,12 +34,17 @@ telemetry emits gate-outcome events for observability.
       an absent payload seeds an empty `input`; the payload is nested under the
       `input` key and coexists with the defaults (a same-named default is **not**
       overridden by input)
+      <!-- behaviour: run-context-01 | tests: none -->
 - [x] Seeded state always carries a resolvable `artifacts` key
+      <!-- behaviour: run-context-02 | tests: none -->
 - [x] `context_setter`-role nodes can write to the context and append a write log
+      <!-- behaviour: run-context-03 | tests: none -->
 - [x] Non-setter node roles (`agent`, `runner`, untyped) are refused write access
+      <!-- behaviour: run-context-04 | tests: none -->
 - [x] Reserved keys are stripped from context writes (with a warning) and a
       reserved-only write produces no write log; `cancellable_node` is resilient to
       DB check failures (fail-open with a logged warning)
+      <!-- behaviour: run-context-05 | tests: none -->
 - [x] Autonomy level resolution is clamped to the pipeline's ceiling: a
       run-context recommendation may always **lower** the effective level but is
       capped at the pinned `max_autonomy_level` (when unset, the effective
@@ -47,10 +52,13 @@ telemetry emits gate-outcome events for observability.
       autonomy - the FAR-1163 S0 fix for the context-setter escalation hole),
       with a safe manual-approval fallback when the default/recommendation is
       unset or invalid
+      <!-- behaviour: run-context-06 | tests: none -->
 - [x] Autonomy telemetry emits the expected gate-outcome event payload; failures are
       fail-open and a missing session factory is a no-op
+      <!-- behaviour: run-context-07 | tests: none -->
 - [x] `should_skip_hitl_review` / `should_notify_on_complete` derive from the effective
       autonomy level
+      <!-- behaviour: run-context-08 | tests: none -->
 
 ## Known Gaps
 
