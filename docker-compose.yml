@@ -47,7 +47,6 @@ services:
       db:
         condition: service_healthy
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       DATABASE_URL: postgresql+asyncpg://farna_control_app:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
       DATABASE_ADMIN_URL: postgresql+asyncpg://farna_control:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
       # farna_control_system (LOGIN, BYPASSRLS) role URL. The entrypoint's
@@ -97,7 +96,6 @@ services:
       db:
         condition: service_healthy
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       DATABASE_URL: postgresql+asyncpg://farna_control_app:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
       FARNA_CONTROL_DB: postgres
       SECRET_KEY: modulo-docker-compose-secret-key-32bytes!
@@ -133,7 +131,6 @@ services:
       db:
         condition: service_healthy
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       DATABASE_URL: postgresql+asyncpg://farna_control_app:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
       # Required: dispatcher_reconcile (and the other cross-org system crons)
       # build their session factory from this URL and FAIL CLOSED without it
