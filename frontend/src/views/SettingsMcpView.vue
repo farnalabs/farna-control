@@ -29,15 +29,17 @@
         :description="$t('views.SettingsMcpView.the_url_clients_use_to_connect_to_the_mcp_server')"
       >
         <div class="space-y-4">
-          <div
+          <Notice
             v-if="!publicUrlConfigured"
-            class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm text-warning-text"
+            variant="warning"
+            :icon="false"
+            class="text-sm"
           >
             <p class="font-medium">{{ $t('views.SettingsMcpView.modulo_public_url_not_set') }}</p>
             <p class="mt-1">
               {{ $t('views.SettingsMcpView.modulo_public_url_not_configured') }} <code class="rounded bg-warning/10 px-1 py-0.5 text-xs">http://localhost:8000</code>.
             </p>
-          </div>
+          </Notice>
 
           <div class="flex flex-col gap-3 rounded-lg bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
             <div class="min-w-0 flex-1">
@@ -361,6 +363,7 @@ import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import Badge from 'primevue/badge'
 import Button from 'primevue/button'

@@ -19,10 +19,13 @@
          sit above a full table — in that case a quieter notice replaces the
          banner rather than contradicting the rows beneath it. -->
     <div aria-live="polite">
-      <div
+      <Notice
         v-if="showNoEndpointsBanner"
+        variant="warning"
+        :icon="false"
+        padding="none"
         data-testid="admin-notification-log-no-endpoints"
-        class="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3"
+        class="mb-4 px-4 py-3"
       >
         <p class="text-sm font-semibold text-warning-text">
           {{ $t('views.AdminNotificationDeliveryLogView.no_outbound_endpoints_title') }}
@@ -47,7 +50,7 @@
             {{ $t('views.AdminNotificationDeliveryLogView.add_endpoint_needs_team') }}
           </span>
         </template>
-      </div>
+      </Notice>
 
       <p
         v-else-if="showHistoryOnlyNotice"
@@ -188,13 +191,16 @@
       <div v-if="total > 0" class="mt-3 text-sm text-muted-foreground">
         {{ $t('views.AdminNotificationDeliveryLogView.deliveries_count', { count: total }, total) }}
       </div>
-      <div
+      <Notice
         v-if="retrySuccessMessage"
+        variant="success"
+        :icon="false"
+        padding="none"
         data-testid="admin-notification-log-retry-success"
-        class="mt-3 rounded-lg border border-success/50 bg-success/10 px-4 py-3 text-sm text-success-text"
+        class="mt-3 px-4 py-3 text-sm"
       >
         {{ retrySuccessMessage }}
-      </div>
+      </Notice>
     </DataCard>
 
     <LoadingSpinner v-if="loading" />
@@ -393,6 +399,7 @@ import { dateRangeQuery, defaultDateRange } from '../lib/formatDate'
 import type { components, paths } from '../lib/api/client'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Button from 'primevue/button'

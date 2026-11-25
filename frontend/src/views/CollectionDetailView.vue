@@ -91,9 +91,10 @@
         class="empty:sr-only"
         data-testid="collection-install-warnings-live"
       >
-        <div
+        <Notice
           v-if="installWarnings.length > 0"
-          class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-warning-text"
+          variant="warning"
+          :icon="false"
           data-testid="collection-install-warnings"
         >
           <h3 class="text-sm font-medium">
@@ -107,7 +108,7 @@
               {{ warning }}
             </li>
           </ul>
-        </div>
+        </Notice>
       </div>
       <div v-if="collection.status === 'draft'" class="flex justify-end">
         <Button :disabled="publishing" data-testid="collection-publish" @click="publish">
@@ -265,6 +266,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'

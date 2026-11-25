@@ -4,7 +4,7 @@
 
     <FeatureGate feature-name="observability" show-disabled>
 
-      <div v-if="envOverrideActive" data-testid="settings-observability-env-override" class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm text-warning-text">
+      <Notice v-if="envOverrideActive" variant="warning" :icon="false" class="text-sm" data-testid="settings-observability-env-override">
         <p class="font-medium">{{ $t('views.SettingsObservabilityView.env_override_active') }}</p>
         <p class="mt-1">
           {{ $t('views.SettingsObservabilityView.env_override_description_prefix') }}
@@ -13,7 +13,7 @@
           <strong>{{ effectiveOtlpEndpoint }}</strong>.
           {{ $t('views.SettingsObservabilityView.env_override_description_suffix') }}
         </p>
-      </div>
+      </Notice>
 
       <div v-if="loading" data-testid="settings-observability-loading" class="space-y-6">
         <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
@@ -192,19 +192,20 @@
           :message="formError"
           :retryable="false"
         />
-        <div v-if="formSuccess" data-testid="settings-observability-form-success" class="rounded-lg border border-success/50 bg-success/10 p-4 text-sm text-success-text">
+        <Notice v-if="formSuccess" variant="success" :icon="false" class="text-sm" data-testid="settings-observability-form-success">
           {{ formSuccess }}
-        </div>
+        </Notice>
 
-        <div
+        <Notice
           v-if="testResult"
+          :variant="testResult.success ? 'success' : 'danger'"
+          :icon="false"
+          class="text-sm"
           data-testid="settings-observability-test-result"
-          class="rounded-lg border p-4 text-sm"
-          :class="testResult.success ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text'"
         >
           <p class="font-medium">{{ testResult.success ? $t('views.SettingsObservabilityView.connection_successful') : $t('views.SettingsObservabilityView.connection_failed') }}</p>
           <p class="mt-1">{{ testResult.message }}</p>
-        </div>
+        </Notice>
 
         <div v-if="canManage" class="flex items-center gap-3 pt-2">
           <button
@@ -249,6 +250,7 @@ import { usePlanStore } from '../stores/planStore'
 import { formatApiError } from '../lib/api/formatError'
 import FeatureGate from '../components/FeatureGate.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Button from 'primevue/button'
