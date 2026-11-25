@@ -91,6 +91,10 @@ API surface ships and is gated by the `plugin_management` feature and the
       `frontend/src/__tests__/AdminPluginsView.spec.ts`; a toggle once shipped
       that called a non-existent `PUT /api/v1/plugins/{id}/toggle` and was
       removed)
+- [ ] Plugin lifecycle management (install, enable, disable, uninstall) is not
+      exposed through the registry API; the registry is read-only
+      (`importlib.metadata` discovery at startup) and lifecycle stays
+      pip-managed (unshipped deferral; see Known Gaps).
 
 ## Known Gaps
 
