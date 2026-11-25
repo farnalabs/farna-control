@@ -254,6 +254,27 @@ describe('CardHeader and DataCard', () => {
     expect(wrapper.find('.actions-nowrap').text()).toBe('Go')
   })
 
+  it('stacks on mobile and restores the row layout at sm (FAR-2537)', () => {
+    const wrapper = mount(CardHeader, {
+      props: { title: 'Details' },
+      slots: { actions: '<button>Go</button>' },
+    })
+
+    const classes = wrapper.classes()
+    expect(classes).toContain('flex-col')
+    expect(classes).toContain('sm:flex-row')
+    expect(classes).toContain('sm:items-start')
+    expect(classes).toContain('sm:justify-between')
+
+    const actions = wrapper.get('[data-testid^="card-header-actions-"]').classes()
+    expect(actions).toContain('w-full')
+    expect(actions).toContain('flex-wrap')
+    expect(actions).toContain('sm:w-auto')
+    expect(actions).toContain('sm:shrink-0')
+    expect(actions).toContain('sm:flex-nowrap')
+    expect(actions).toContain('actions-nowrap')
+  })
+
   it('supports a leading slot and optional divider without changing the default header', () => {
     const composed = mount(CardHeader, {
       props: { title: 'Housekeeping', divider: true },

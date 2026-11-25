@@ -195,7 +195,7 @@ the form:
 
 ```
 Proves: backend/tests/unit/api/test_health.py::test_healthz_ready_mounted
-Proves: frontend/src/__tests__/ActionRow.spec.ts::stacks below sm and becomes a row at sm
+Proves: frontend/src/__tests__/design-system-components.spec.ts::maps the md header size to the default title and description styles
 ```
 
 - One marker suffices; repeat the line for as many tests as the change needs.
