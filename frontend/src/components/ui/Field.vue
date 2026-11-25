@@ -14,7 +14,7 @@ export interface FieldContext {
   required: ComputedRef<boolean>
 }
 
-export const FIELD_CONTEXT: InjectionKey<FieldContext> = Symbol('modulo-field')
+export const FIELD_CONTEXT: InjectionKey<FieldContext> = Symbol('field')
 
 let fieldCounter = 0
 

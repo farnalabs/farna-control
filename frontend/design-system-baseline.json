@@ -284,8 +284,6 @@
     "frontend/src/views/PipelineListView.vue": 1,
     "frontend/src/views/RunDetailView.vue": 3,
     "frontend/src/views/SchemaInferenceView.vue": 1,
-    "frontend/src/views/SettingsEmailView.vue": 6,
-    "frontend/src/views/SettingsErrorForwardersView.vue": 12,
     "frontend/src/views/SettingsGuardrailsView.vue": 2,
     "frontend/src/views/SettingsHitlReviewView.vue": 4,
     "frontend/src/views/SettingsMcpView.vue": 2,
