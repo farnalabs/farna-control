@@ -3805,10 +3805,9 @@ jobs:
           PY
           (cd release-artefacts && sha256sum --check SHA256SUMS)
 
-      # The step title is retained (the release rehearsal contract keys on it),
-      # but the behaviour is now idempotent: a job-level retry of this promote
-      # run converges instead of failing on an existing asset.
-      - name: Replace GA compose assets without clobbering
+      # The behaviour is idempotent: a job-level retry of this promote run
+      # converges instead of failing on an existing asset.
+      - name: Publish the GA compose assets (idempotent, verified)
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}

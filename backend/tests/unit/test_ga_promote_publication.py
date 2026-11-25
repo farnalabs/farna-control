@@ -21,10 +21,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release-unified.yml"
 
 PROMOTE_JOB = "promote-compose"
-# The upload step keeps its original title: the release rehearsal contract
-# (test_deploy_workflow_rehearsal.py) keys on this exact name. The behaviour it
-# pins is the idempotent, ordered, verified publication asserted below.
-UPLOAD_STEP = "Replace GA compose assets without clobbering"
+# The title states what the step does: the publication below is idempotent
+# (--clobber on a retry) and a verification step follows it. The release
+# rehearsal contract (test_deploy_workflow_rehearsal.py) keys on this exact name.
+UPLOAD_STEP = "Publish the GA compose assets (idempotent, verified)"
 VERIFY_STEP = "Verify the published GA compose assets"
 
 _COMPOSE = "farna-control-${VERSION}-compose.tar.gz"
