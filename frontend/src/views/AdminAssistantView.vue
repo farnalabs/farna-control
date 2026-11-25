@@ -56,7 +56,7 @@
                 v-for="p in providerStatus"
                 :key="p.id"
                 class="flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-all cursor-help"
-                :class="p.configured ? 'border-success/40 bg-success/5' : 'border-muted bg-muted/20 opacity-60'"
+                :class="p.configured ? 'border-success/40 bg-success/5' : 'border-muted bg-muted/20'"
                 v-tooltip.top="providerTooltip(p)">
                 <span
                   class="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold"
@@ -531,7 +531,7 @@ import { formatApiError } from '../lib/api/formatError'
 import FeatureGate from '../components/FeatureGate.vue'
 import AssistantSkillDialog from '../components/assistant/AssistantSkillDialog.vue'
 import AccessEntitySelector from '../components/assistant/AccessEntitySelector.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import type { SkillItem } from '../types/assistant'
 import { useI18n } from 'vue-i18n'

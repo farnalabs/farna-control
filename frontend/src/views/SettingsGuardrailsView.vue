@@ -6,7 +6,8 @@
             <Button
               v-if="isAdmin"
               data-testid="settings-guardrails-import"
-              severity="secondary"
+              variant="secondary"
+              :outlined="false"
               class="border-primary/30 hover:border-primary/60"
               @click="openImportDialog"
             >
@@ -269,7 +270,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDataFetch } from '../composables/useDataFetch'
 import { useApi } from '../composables/useApi'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { api } from '../lib/api/client'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import { formatApiError } from '../lib/api/formatError'

@@ -157,7 +157,7 @@ import { useDataFetch } from '../composables/useDataFetch'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FeatureGate from '../components/FeatureGate.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 
 interface PluginItem {
   PLUGIN_ID: string

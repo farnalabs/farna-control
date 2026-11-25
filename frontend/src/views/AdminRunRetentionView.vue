@@ -7,8 +7,7 @@
       >
         <template #right>
           <Button
-            severity="secondary"
-            outlined
+            variant="secondary"
             data-testid="admin-run-retention-refresh"
             :disabled="loading"
             @click="loadCandidates"
@@ -23,7 +22,7 @@
             {{ exporting ? $t('views.AdminRunRetentionView.exporting') : $t('views.AdminRunRetentionView.export_to_file') }}
           </Button>
           <Button
-            severity="danger"
+            variant="danger"
             data-testid="admin-run-retention-purge"
             :disabled="purging || terminalCandidates.length === 0"
             @click="openPurgeConfirm"
@@ -277,7 +276,7 @@ import DataCard from '../components/ui/DataCard.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import Select from '../components/shared/AppSelect.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { api, getAuthHeaders } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { isTerminalStatus } from '../constants/runStatuses'

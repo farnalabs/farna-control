@@ -28,6 +28,7 @@ from farna.api.constants import (
     MSG_DATABASE_TEMPORARILY_UNAVAILABLE,
     MSG_FEATURE_NOT_AVAILABLE_CONTACT_SUPPORT,
     MSG_RESOURCE_ALREADY_EXISTS,
+    MSG_RUN_NOT_FOUND,
     MSG_UNEXPECTED_ERROR,
 )
 from farna.api.db_error_handling import (
@@ -140,7 +141,6 @@ from farna.settings import Settings, get_settings
 
 _CODE_ROUTE_DB_ERROR = "route.db_error"
 _CODE_PIPELINE_EXECUTION_UNEXPECTED_ERROR = "pipeline_execution.unexpected_error"
-_MSG_RUN_NOT_FOUND = "Run not found"
 _CODE_RUN_OUTPUT = "run.output"
 _MASKED_PLACEHOLDER = "••••••"
 _CODE_RUNS_OBSERVE_RUN_NODE = "runs.observe_run_node"
@@ -2041,9 +2041,9 @@ async def trigger_rerun(
             await set_rls_user_context(session, principal.account_id, principal.org_role)
             source_run = await _load_run_in_scope(session, principal, run_id)
             if source_run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             if await _run_owned_by_another_team(session, principal, source_run):
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             run = await _create_rerun_run(session, principal, source_run)
             run_id_new = run.id
             # Build the response while the transaction is still open (same
@@ -2247,7 +2247,7 @@ async def get_run_status(
     except RunNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_MSG_RUN_NOT_FOUND,
+            detail=MSG_RUN_NOT_FOUND,
         ) from None
     except HTTPException:
         raise
@@ -2294,8 +2294,9 @@ async def _cancel_run(session: AsyncSession, principal: TenantPrincipal, run_id:
 
     FAR-1610 lock bound: this is a REQUEST path on the hot ``runs`` row, and the
     FIRST lock in the caller's transaction is ``request_cancellation``'s
-    ``SELECT ... FOR UPDATE`` below (``get_run`` is a plain read). The bound is
-    issued HERE — the caller of the shared ``request_cancellation`` — before
+    ``SELECT ... FOR UPDATE`` below (the scoped load's ``get_run`` is a plain
+    read). The bound is issued HERE — the caller of the shared
+    ``request_cancellation`` — before
     that lock, so a contended row surfaces as a bounded 55P03 the route maps to
     a visible 409 rather than an unbounded wait. It is transaction-scoped, so
     it also bounds the ``finalize_cancelled_run`` write that follows. (Bounding
@@ -2303,10 +2304,13 @@ async def _cancel_run(session: AsyncSession, principal: TenantPrincipal, run_id:
     Exception`` caller swallow the 55P03 into a silent lost write — FAR-1601.)
     """
     await set_mutation_row_lock_timeout(session)
-    run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+    # ADR 070 §4: the shared per-run clamp, applied before anything is written.
+    # A run outside the principal's team boundary answers ``None`` exactly like
+    # a missing run, so the cancel is never requested for another team's run.
+    run = await _load_run_in_scope(session, principal, run_id)
 
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
     if run.status in TERMINAL_STATUSES:
         raise HTTPException(
@@ -2656,7 +2660,7 @@ async def get_run_io_endpoint(
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
     if run is None or blobs is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
     node_labels = _build_node_labels(snapshot.graph_json if snapshot else None)
     return _build_run_io_response(run, node_labels, blobs)
@@ -2707,9 +2711,9 @@ async def get_run_work_item_enrichment(
             await set_rls_org(session, principal.organisation_id)
             run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             if await _run_owned_by_another_team(session, principal, run):
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             refs = run.work_item_refs
             raw_payload = getattr(run, "input_payload", None)
             payload = raw_payload if isinstance(raw_payload, dict) else None
@@ -2770,7 +2774,7 @@ async def export_run_fixture(
             await set_rls_org(session, principal.organisation_id)
             run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             snapshot = await _load_snapshot_for_run(session, run)
             # FAR-583 read-switch: reassemble the blobs INSIDE the transaction
             # (the response body is built after the tx closes).
@@ -2881,7 +2885,7 @@ async def get_run_workspace_events(
             # than relying on RLS alone.
             run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
             result = await session.execute(
                 select(AuditEvent)
@@ -2977,7 +2981,7 @@ async def _do_get_run_logs(
 
     run = await _load_run_in_scope(session, principal, run_id)
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
     event_rows = (
         (
             await session.execute(
@@ -3148,7 +3152,7 @@ async def get_run_node_output(
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
     if run is None or blobs is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
     outputs = blobs.outputs or {}
     telemetry = blobs.telemetry or {}
@@ -3247,9 +3251,9 @@ async def list_run_attempts(
             await set_rls_user_context(session, principal.account_id, principal.org_role)
             run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             if await _run_owned_by_another_team(session, principal, run):
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             attempts = await db_list_attempts(session, run_id, org_id=principal.organisation_id)
     except IntegrityError:
         _log.exception(_CODE_RUNS_LIST_RUN_ATTEMPTS)
@@ -3334,7 +3338,7 @@ async def get_run_events(
     try:
         run = await _run_with_retry(lambda: _do_get_run(factory, principal, run_id))
     except RunNotFoundError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND) from None
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND) from None
     broker = get_registry().get(run.id)
     events: list[RunEventItem] = []
     if broker is not None:
@@ -3397,7 +3401,11 @@ async def observe_run_node(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            # ADR 070 §4: load through the shared per-run clamp, so a
+            # team-scoped credential outside the run's team boundary is served
+            # the same NOT FOUND as a missing run and ``observe_node`` below is
+            # never reached.
+            run = await _load_run_in_scope(session, principal, run_id)
     except IntegrityError:
         _log.exception(_CODE_RUNS_OBSERVE_RUN_NODE)
         raise HTTPException(
@@ -3428,7 +3436,7 @@ async def observe_run_node(
             detail=MSG_UNEXPECTED_ERROR,
         ) from None
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
     try:
         async with session.begin():
@@ -3689,6 +3697,12 @@ async def recover_run_node(
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
             await set_rls_user_context(session, principal.account_id, principal.org_role)
+            # ADR 070 §4: ``recover_node`` resolves the run itself, so the
+            # boundary is applied HERE, at the route, before the core call. A
+            # run outside the principal's team boundary is the caller's normal
+            # NOT FOUND — no stamp is resolved and no recovery is attempted.
+            if await _load_run_in_scope(session, principal, run_id) is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             stamp_review_id = await _resolve_recovery_stamp(session, principal, run_id, node_id)
             run = await _recover_node_or_http_error(session, principal, run_id, node_id, req.input_data)
     except IntegrityError:
@@ -3764,9 +3778,16 @@ async def _do_guardrail_override(
     Persists the post-redaction payload and flips the run (FAR-208 /
     FAR-1711), mapping every domain failure to its HTTP contract. The caller
     keeps only the transaction's DB-error mapping.
+
+    ADR 070 §4: ``guardrail_override`` resolves the run itself, so the boundary
+    is applied HERE, in the route-level wrapper, before the core call. A run
+    outside the principal's team boundary is the caller's normal NOT FOUND and
+    nothing is persisted or re-dispatched.
     """
     await set_rls_org(session, principal.organisation_id)
     await set_rls_user_context(session, principal.account_id, principal.org_role)
+    if await _load_run_in_scope(session, principal, run_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
     try:
         return await guardrail_override(
             session,
@@ -4343,7 +4364,7 @@ async def reveal_node_prompt(
             run = await _load_run_in_scope(session, principal, run_id)
 
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
             # Load snapshot to get graph definition.
             snapshot = await _load_snapshot_for_run(session, run)
@@ -4587,7 +4608,7 @@ async def list_run_artifacts(
             # applied on the run load before any pointer is read.
             run = await _load_run_in_scope(session, principal, run_id)
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
             rows = (
                 (
                     await session.execute(
@@ -4617,7 +4638,7 @@ async def list_run_artifacts(
     if not rows:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=_MSG_RUN_NOT_FOUND,
+            detail=MSG_RUN_NOT_FOUND,
         )
 
     # Sort rows by the trailing attempt suffix descending so the listing is
@@ -4960,7 +4981,7 @@ async def get_run_schema_enforcement(
     try:
         run = await _do_get_run(session_factory, current_user, run_id)
     except RunNotFoundError:
-        raise HTTPException(status_code=404, detail=_MSG_RUN_NOT_FOUND) from None
+        raise HTTPException(status_code=404, detail=MSG_RUN_NOT_FOUND) from None
 
     async with session_factory() as session, session.begin():
         await set_rls_org(session, current_user.organisation_id)
