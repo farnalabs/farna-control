@@ -189,6 +189,31 @@ _INTERNAL_SYSTEM_MAP_PERMISSION = SYSTEM_MAPS_ACCESS_PERMISSION
 _require_system_maps_feature = require_org_feature_any_credential("system_maps")
 _require_system_maps_read_feature = require_feature_any_credential("system_maps_read")
 
+_MSG_TEAM_SCOPED_KEY_NEEDS_ORG_WIDE = "This API key is team-scoped; system-map apply requires an org-wide key."
+
+
+def _reject_team_scoped_key(principal: TenantPrincipal) -> None:
+    """Deny a team-scoped ``mk_`` key on the four apply-facing system-map routes.
+
+    FAR-2748: ``farna-control apply`` authenticates with an org-wide (team-less)
+    key. These four routes were JWT-only before the widening, so a team-scoped
+    key never reached them; keeping that denial is the least-privilege fix for
+    the boundary the review found. The key's ``team_id`` cannot be enforced by
+    the request-time owner-team guards: they check the key OWNER's memberships
+    (``principal.account_id``) and the RLS context is set from that owner, so a
+    team-A-scoped key whose owner is also a team-B member could read, create,
+    update and attach revisions to team-B-private maps. The collection read and
+    the create path have no request-scoped row to hand
+    ``require_team_membership_or_admin_any_credential`` either, so fail closed
+    here rather than invent a per-route team predicate.
+    """
+    if principal.team_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_MSG_TEAM_SCOPED_KEY_NEEDS_ORG_WIDE,
+        )
+
+
 _log = logging.getLogger(__name__)
 
 
@@ -267,6 +292,7 @@ async def list_system_maps_endpoint(
     repository: SystemMapRepository = Depends(get_repo),
 ) -> SystemMapListResponse:
     """List published maps for org (pagination, filtering by name/owner_team_id)."""
+    _reject_team_scoped_key(principal)
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
@@ -344,6 +370,7 @@ async def create_system_map_endpoint(
     repository: SystemMapRepository = Depends(get_repo),
 ) -> SystemMapResponse:
     """Create draft map (name, description, owner_team_id, visibility)."""
+    _reject_team_scoped_key(principal)
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
@@ -461,6 +488,7 @@ async def update_system_map_endpoint(
     repository: SystemMapRepository = Depends(get_repo),
 ) -> SystemMapResponse:
     """Update a system map."""
+    _reject_team_scoped_key(principal)
     updates = req.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
@@ -862,6 +890,7 @@ async def create_system_map_revision_endpoint(
     repository: SystemMapRepository = Depends(get_repo),
 ) -> SystemMapRevisionResponse:
     """Create draft revision (nodes, relationships, loop configs)."""
+    _reject_team_scoped_key(principal)
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)

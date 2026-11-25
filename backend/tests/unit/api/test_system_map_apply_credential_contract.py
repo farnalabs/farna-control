@@ -50,6 +50,7 @@ _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 _USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 _MAP_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
 _REV_ID = uuid.UUID("00000000-0000-0000-0000-000000000004")
+_TEAM_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")
 _NOW = datetime(2025, 1, 1, tzinfo=UTC)
 
 _KEY = "mk_12345678_" + "x" * 32
@@ -121,22 +122,22 @@ def _revision_row() -> SimpleNamespace:
     )
 
 
-def _fake_key(role: str = "operator") -> SimpleNamespace:
+def _fake_key(role: str = "operator", *, team_id: uuid.UUID | None = None) -> SimpleNamespace:
     return SimpleNamespace(
         name="apply-key",
         organisation_id=_ORG_ID,
         account_id=_USER_ID,
         role=role,
-        team_id=None,
+        team_id=team_id,
     )
 
 
-def _make_auth_session(*, role: str = "operator") -> AsyncMock:
+def _make_auth_session(*, role: str = "operator", key_team_id: uuid.UUID | None = None) -> AsyncMock:
     """Session used by ``get_current_tenant_user_or_api_key``'s org lookups."""
     session = configure_mock_session(AsyncMock(), allow_empty_execute=True)
     session.info = {}
     result = MagicMock()
-    result.scalar_one_or_none.return_value = _fake_key(role)
+    result.scalar_one_or_none.return_value = _fake_key(role, team_id=key_team_id)
     session.execute = AsyncMock(return_value=result)
     return session
 
@@ -196,6 +197,7 @@ def _api_key_request(
     feature_enabled: bool = True,
     grants: frozenset[str] | None = None,
     key_role: str = "operator",
+    key_team_id: uuid.UUID | None = None,
     repo: SimpleNamespace | None = None,
     handler_patches: list[Any] | None = None,
 ) -> Generator[TestClient, None, None]:
@@ -223,10 +225,10 @@ def _api_key_request(
         stack.enter_context(
             patch(
                 "farna.api.dependencies.get_or_create_session_factory",
-                return_value=_FakeFactory(_make_auth_session(role=key_role)),
+                return_value=_FakeFactory(_make_auth_session(role=key_role, key_team_id=key_team_id)),
             )
         )
-        stack.enter_context(patch("farna.auth.api_key.validate_api_key", return_value=_fake_key(key_role)))
+        stack.enter_context(patch("farna.auth.api_key.validate_api_key", return_value=_fake_key(key_role, team_id=key_team_id)))
         stack.enter_context(
             patch(
                 "farna.db.crud.org_membership.resolve_live_role_and_kind",
@@ -322,6 +324,56 @@ class TestOrgApiKeySucceeds:
 
         assert resp.status_code == 201, resp.text
         assert resp.json()["system_map_id"] == str(_MAP_ID)
+
+
+# ---------------------------------------------------------------------------
+# (a2) a TEAM-scoped key (team_id set) is denied on all four routes.
+#
+
+
+class TestTeamScopedKeyIsRejected:
+    """A team-scoped ``mk_`` key keeps the pre-widening denial on these routes.
+
+    FAR-2748 widened the four routes to org API keys because the apply CLI uses
+    an ORG-WIDE key. A team-scoped key must not ride that widening: the
+    request-time owner-team guards check the key OWNER's memberships and RLS is
+    set from the owner account, so a team-A key owned by a team-B member could
+    reach team-B-private maps (the review's cross-team finding). The collection
+    read and create path also have no request-scoped row for the team gate.
+    """
+
+    def test_team_scoped_key_cannot_read_the_collection(self) -> None:
+        with _api_key_request(key_role="viewer", key_team_id=_TEAM_ID) as client:
+            resp = client.get(_COLLECTION, headers=_AUTH_HEADERS)
+
+        assert resp.status_code == 403, resp.text
+        assert "team-scoped" in resp.json()["detail"]
+
+    def test_team_scoped_key_cannot_create_a_map(self) -> None:
+        repo = _stub_repo()
+        with _api_key_request(key_team_id=_TEAM_ID, repo=repo) as client:
+            resp = client.post(_COLLECTION, json=_CREATE_BODY, headers=_AUTH_HEADERS)
+
+        assert resp.status_code == 403, resp.text
+        assert "team-scoped" in resp.json()["detail"]
+        repo.create_map.assert_not_awaited()
+
+    def test_team_scoped_key_cannot_update_a_map(self) -> None:
+        repo = _stub_repo(current_map=_map_row())
+        with _api_key_request(key_team_id=_TEAM_ID, repo=repo) as client:
+            resp = client.put(_MAP, json=_UPDATE_BODY, headers=_AUTH_HEADERS)
+
+        assert resp.status_code == 403, resp.text
+        assert "team-scoped" in resp.json()["detail"]
+
+    def test_team_scoped_key_cannot_write_a_revision(self) -> None:
+        repo = _stub_repo(current_map=_map_row())
+        with _api_key_request(key_team_id=_TEAM_ID, repo=repo) as client:
+            resp = client.post(_REVISIONS, json=_REVISION_BODY, headers=_AUTH_HEADERS)
+
+        assert resp.status_code == 403, resp.text
+        assert "team-scoped" in resp.json()["detail"]
+        repo.create_revision.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
