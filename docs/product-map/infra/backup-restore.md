@@ -355,10 +355,12 @@ operator-facing contract lives in `docs/operations/backup.md`.
   Closing the gap means moving the snapshot into the release stage, where the
   normal migration happens. The unsupported `FARNA_CONTROL_SNAPSHOT_DIR` opt-in
   was removed rather than left documented-but-dead.
-- The RC matrix (`scripts/verify_compose_upgrade_rollback.py`) does not yet
-  rehearse the snapshot-restore leg (restore the pre-upgrade snapshot, then
-  start the previous image); its rollback leg currently only re-points the
-  image tag. FAR-2674 owns that harness change.
+- The RC matrix (`scripts/verify_compose_upgrade_rollback.py`) rehearses the
+  snapshot-restore leg (FAR-2674): it verifies the pre-upgrade snapshot, asserts
+  the previous image is refused by the startup guard, restores the snapshot with
+  the shipped `compose-restore.sh`, then starts the previous release with
+  `compose-rollback.sh` and asserts the data written before the upgrade is still
+  present. The green path through the restore is still gated on FAR-2763.
 - The in-product `farna-control backup` directory is written unencrypted. An
   operator who needs encryption at rest must use the `scripts/backup.py`
   archive or store the backup directory on encrypted media.
@@ -453,7 +455,8 @@ operator-facing contract lives in `docs/operations/backup.md`.
   snapshot of the CURRENT schema; retention is bounded at two snapshots plus
   the recovery point; the pending check moved inside the shared helper with
   `--target-bundle` so the installer cannot bypass it; and the docs no longer
-  claim the RC matrix rehearses the restore (FAR-2674 owns that).
+  claim the RC matrix rehearses the restore (at the time it did not; FAR-2674
+  has since taught the harness that leg).
 - 2026-11-22 (FAR-2667 review round): fixed the findings from the five-lens
   review. The compose snapshot could not run at all (libpq rejects the
   `postgresql+asyncpg://` scheme the compose file exports; the `/backups` bind
