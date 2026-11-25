@@ -11,59 +11,53 @@
       <div v-else class="space-y-6">
         <DataCard variant="bordered" padding="lg" elevation="sm" class="max-w-3xl">
           <div class="space-y-4">
-            <div>
-              <label for="settingsemailview-field-5" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsEmailView.smtp_host') }}</label>
-              <input id="settingsemailview-field-5"
+            <Field id="settingsemailview-field-5" :label="$t('views.SettingsEmailView.smtp_host')">
+              <Input
                 v-model="form.smtp_host"
                 type="text"
                 data-testid="settings-email-smtp-host"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :placeholder="$t('views.SettingsEmailView.smtp_host_placeholder')"
               />
-            </div>
-            <div>
-              <label for="settingsemailview-field-4" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsEmailView.smtp_port') }}</label>
-              <input id="settingsemailview-field-4"
+            </Field>
+            <Field id="settingsemailview-field-4" :label="$t('views.SettingsEmailView.smtp_port')">
+              <Input
                 v-model.number="form.smtp_port"
                 type="number"
                 data-testid="settings-email-smtp-port"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 placeholder="587"
               />
-            </div>
-            <div>
-              <label for="settingsemailview-field-3" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsEmailView.smtp_username') }}</label>
-              <input id="settingsemailview-field-3"
+            </Field>
+            <Field id="settingsemailview-field-3" :label="$t('views.SettingsEmailView.smtp_username')">
+              <Input
                 v-model="form.smtp_username"
                 type="text"
                 data-testid="settings-email-smtp-username"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :placeholder="$t('views.SettingsEmailView.smtp_username_placeholder')"
               />
-            </div>
-            <div>
-              <label for="settingsemailview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsEmailView.smtp_password') }}</label>
-              <input id="settingsemailview-field-2"
+            </Field>
+            <Field id="settingsemailview-field-2" :label="$t('views.SettingsEmailView.smtp_password')">
+              <Input
                 v-model="form.smtp_password"
                 type="password"
                 data-testid="settings-email-smtp-password"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :placeholder="$t('views.SettingsEmailView.smtp_password_placeholder')"
               />
-            </div>
-            <div>
-              <label for="settingsemailview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsEmailView.email_from') }}</label>
-              <input id="settingsemailview-field-1"
+            </Field>
+            <Field id="settingsemailview-field-1" :label="$t('views.SettingsEmailView.email_from')">
+              <Input
                 v-model="form.email_from"
                 type="email"
                 data-testid="settings-email-from"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :placeholder="$t('views.SettingsEmailView.email_from_placeholder')"
               />
-            </div>
-            <div>
-              <label for="settingsemailview-field-6" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsEmailView.smtp_timeout') }}</label>
-              <input id="settingsemailview-field-6"
+            </Field>
+            <Field id="settingsemailview-field-6" :label="$t('views.SettingsEmailView.smtp_timeout')">
+              <Input
                 v-model.number="form.smtp_timeout"
                 type="number"
                 min="1"
@@ -72,7 +66,7 @@
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 :placeholder="$t('views.SettingsEmailView.smtp_timeout_placeholder')"
               />
-            </div>
+            </Field>
 
             <div class="flex items-center gap-3 pt-2">
               <Button type="button" :disabled="saving" @click="saveSettings" data-testid="settings-email-save">
@@ -121,6 +115,8 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import Button from 'primevue/button'
 
 interface EmailForm {

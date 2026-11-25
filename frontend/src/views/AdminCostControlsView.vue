@@ -76,7 +76,7 @@
               :row-clickable="false"
             >
               <template #cell-budget="{ row }">
-                <InputText :aria-label="$t('views.AdminCostControlsView.budget')"
+                <Input :aria-label="$t('views.AdminCostControlsView.budget')"
                   :model-value="(row as any).editingBudget == null ? '' : String((row as any).editingBudget)" @update:model-value="(v: any) => (row as any).editingBudget = v === '' ? null : Number(v)"
                   type="number"
                   min="0"
@@ -212,23 +212,27 @@
               </div>
             </div>
             <div class="mt-6">
-              <span class="mb-1.5 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminCostControlsView.monthly_budget', { currency: settings.currency }) }}</span>
-              <div class="flex items-end gap-3">
-                <div class="flex-1">
-                  <InputText :aria-label="$t('views.AdminCostControlsView.monthly_budget', { currency: settings.currency })"
-                    :model-value="settings.budget == null ? '' : String(settings.budget)"
-                    @update:model-value="(v: any) => settings.budget = v === '' ? 0 : Number(v)"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    data-testid="cc-budget-input"
-                  />
+              <Field
+                :label="$t('views.AdminCostControlsView.monthly_budget', { currency: settings.currency })"
+                label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+              >
+                <div class="flex items-end gap-3">
+                  <div class="flex-1">
+                    <Input :aria-label="$t('views.AdminCostControlsView.monthly_budget', { currency: settings.currency })"
+                      :model-value="settings.budget == null ? '' : String(settings.budget)"
+                      @update:model-value="(v: any) => settings.budget = v === '' ? 0 : Number(v)"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      data-testid="cc-budget-input"
+                    />
+                  </div>
+                  <Button :disabled="savingBudget" data-testid="cc-budget-save" @click="saveBudget">
+                    {{ savingBudget ? $t('views.AdminCostControlsView.saving') : $t('views.AdminCostControlsView.save') }}
+                  </Button>
                 </div>
-                <Button :disabled="savingBudget" data-testid="cc-budget-save" @click="saveBudget">
-                  {{ savingBudget ? $t('views.AdminCostControlsView.saving') : $t('views.AdminCostControlsView.save') }}
-                </Button>
-              </div>
+              </Field>
               <p v-if="budgetSaveError" class="mt-2 text-xs text-destructive">{{ budgetSaveError }}</p>
               <p v-if="budgetSaveSuccess" class="mt-2 text-xs text-success-text">{{ $t('views.AdminCostControlsView.budget_updated') }}</p>
             </div>
@@ -251,8 +255,9 @@ import { usePlanStore } from '../stores/planStore'
 import FeatureGate from '../components/FeatureGate.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import StatCard from '../components/ui/StatCard.vue'
-import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import { DataTable } from '../components/ui/data-table'
 import Select from '../components/shared/AppSelect.vue'

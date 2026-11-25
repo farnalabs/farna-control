@@ -113,25 +113,31 @@
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             data-testid="admin-audit-actor"
           />
-          <div>
-            <label for="adminauditview-field-from" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.from') }}</label>
-            <input id="adminauditview-field-from"
+          <Field
+            id="adminauditview-field-from"
+            :label="$t('views.AdminAuditView.from')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="filterDateFrom"
               type="date"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-date-from"
             />
-          </div>
+          </Field>
         </template>
-        <div>
-          <label for="adminauditview-field-2" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.to') }}</label>
-          <input id="adminauditview-field-2"
+        <Field
+          id="adminauditview-field-2"
+          :label="$t('views.AdminAuditView.to')"
+          label-class="mb-1 block text-xs font-medium text-muted-foreground"
+        >
+          <Input
             v-model="filterDateTo"
             type="date"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             data-testid="admin-audit-date-to"
           />
-        </div>
+        </Field>
         <div>
           <span class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.target_type') }}</span>
           <Select
@@ -329,46 +335,54 @@
 
       <BaseCard padding="md">
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label for="admin-audit-system-event-type" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.event_type') }}</label>
-            <input
-              id="admin-audit-system-event-type"
+          <Field
+            id="admin-audit-system-event-type"
+            :label="$t('views.AdminAuditView.event_type')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="systemFilterEventType"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-system-event-type"
             />
-          </div>
-          <div>
-            <label for="admin-audit-system-org-id" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.system_organisation') }}</label>
-            <input
-              id="admin-audit-system-org-id"
+          </Field>
+          <Field
+            id="admin-audit-system-org-id"
+            :label="$t('views.AdminAuditView.system_organisation')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="systemFilterOrgId"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-system-org-id"
             />
-          </div>
-          <div>
-            <label for="admin-audit-system-date-from" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.from') }}</label>
-            <input
-              id="admin-audit-system-date-from"
+          </Field>
+          <Field
+            id="admin-audit-system-date-from"
+            :label="$t('views.AdminAuditView.from')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="systemFilterDateFrom"
               type="date"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-system-date-from"
             />
-          </div>
-          <div>
-            <label for="admin-audit-system-date-to" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.to') }}</label>
-            <input
-              id="admin-audit-system-date-to"
+          </Field>
+          <Field
+            id="admin-audit-system-date-to"
+            :label="$t('views.AdminAuditView.to')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="systemFilterDateTo"
               type="date"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-system-date-to"
             />
-          </div>
+          </Field>
         </div>
         <div class="mt-3 flex items-center gap-2">
           <button
@@ -530,6 +544,8 @@ import JsonViewer from '../components/shared/JsonViewer.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import Notice from '../components/shared/Notice.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../lib/api/client'
