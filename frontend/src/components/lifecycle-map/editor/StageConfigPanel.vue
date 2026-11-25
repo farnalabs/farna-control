@@ -63,7 +63,7 @@
     </div>
 
     <div v-if="isGraduatable" class="border-t pt-4">
-      <Button severity="secondary" outlined class="w-full gap-2" @click="$emit('graduate', { ...form, id: stageId })">
+      <Button variant="secondary" class="w-full gap-2" @click="$emit('graduate', { ...form, id: stageId })">
         <GraduationCapIcon class="h-4 w-4" />
         Graduate Stage
       </Button>
@@ -78,7 +78,7 @@
 import { ref, computed, watch } from 'vue'
 import { GraduationCap as GraduationCapIcon } from '@lucide/vue'
 import InputText from 'primevue/inputtext'
-import Button from 'primevue/button'
+import Button from '../../ui/Button.vue'
 import Select from '../../shared/AppSelect.vue'
 import type { StageType, PipelineSummary } from '../../../types/lifecycleMap'
 

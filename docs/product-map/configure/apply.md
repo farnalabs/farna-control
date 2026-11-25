@@ -45,17 +45,22 @@ status: covered
 # Declarative Configuration CLI (`farna-control apply`)
 
 `farna-control apply -f <config.yaml>` applies an organization's schemas (+ versions),
-model backends, pipelines and triggers to a live deployment from one YAML file
+model backends, pipelines, triggers and System Maps to a live deployment from one YAML file
 (`api_version: farna.dev/v1`), driven by `FARNA_CONTROL_URL` +
 `FARNA_CONTROL_API_KEY` (a bearer `mk_` org key). The installed executable is
 `farna-control` (`backend/pyproject.toml` `[project.scripts]`). The API routes the CLI writes to are `/api/v1/schemas`,
 `/api/v1/model-backends`, `/api/v1/pipelines`,
-`/api/v1/pipelines/{pipeline_id}/triggers` (create) and
-`/api/v1/triggers/{trigger_id}` (update); plan-time `credential_ref` validation
+`/api/v1/pipelines/{pipeline_id}/triggers` (create),
+`/api/v1/triggers/{trigger_id}` (update), `/api/v1/system-maps` (create),
+`/api/v1/system-maps/{map_id}` (update) and
+`/api/v1/system-maps/{map_id}/revisions` (the create-only draft revision); it
+plans System Maps from the `GET /api/v1/system-maps` collection read. Every one
+of those routes accepts the same `mk_` org key (the any-credential gate,
+FAR-2748 for System Maps). Plan-time `credential_ref` validation
 also reads the org vault through the MCP `list_secrets` tool. The matching UI
 surfaces are `/admin/model-backends` and `/settings/triggers`; there is no
 dedicated CLI page in the nav. Built on the
-schemas, model-backends, pipelines and triggers features. For a copy-paste
+schemas, model-backends, pipelines, triggers and System Maps features. For a copy-paste
 Terraform-style CI loop (plan on every pull request, apply on merge to `main`),
 see the [`farna-control apply` GitHub Actions example](../../farna-control-apply-github-actions.md).
 

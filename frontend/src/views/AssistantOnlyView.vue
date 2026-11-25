@@ -16,7 +16,7 @@
           <span class="text-xs text-muted-foreground">{{ $t('components.assistant.AssistantOnlyView.assistant_only_mode') }}</span>
         </div>
       </div>
-      <Button severity="secondary" outlined size="small" data-testid="assistant-only-return-home" @click="returnHome">
+      <Button variant="secondary" size="sm" data-testid="assistant-only-return-home" @click="returnHome">
         <ArrowLeft class="mr-1 h-3.5 w-3.5" aria-hidden="true" />
         {{ $t('components.assistant.AssistantOnlyView.return_home') }}
       </Button>
@@ -34,7 +34,7 @@
         <div class="max-w-md space-y-2 text-center">
           <h2 class="text-lg font-semibold">{{ $t('components.assistant.AssistantOnlyView.assistant_unavailable') }}</h2>
           <p class="text-sm text-muted-foreground">{{ $t('components.assistant.AssistantOnlyView.assistant_unavailable_desc') }}</p>
-          <Button severity="secondary" outlined size="small" data-testid="assistant-only-return-home" @click="returnHome">
+          <Button variant="secondary" size="sm" data-testid="assistant-only-return-home" @click="returnHome">
             {{ $t('components.assistant.AssistantOnlyView.return_home') }}
           </Button>
         </div>
@@ -116,7 +116,7 @@
           :title="$t('components.assistant.AssistantOnlyView.no_tabs_yet')"
           :description="$t('components.assistant.AssistantOnlyView.start_new')"
         >
-          <Button size="small" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
+          <Button size="sm" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
         </EmptyState>
       </div>
 
@@ -126,7 +126,7 @@
         data-testid="assistant-only-no-active"
       >
         <EmptyState :title="$t('components.assistant.AssistantOnlyView.select_tab_or_new')">
-          <Button size="small" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
+          <Button size="sm" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
         </EmptyState>
       </div>
 
@@ -178,7 +178,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { ArrowLeft, Plus, X } from '@lucide/vue'
 import { shortId } from '@/utils/format'
 import { useAssistantStore } from '@/composables/useAssistantStore'

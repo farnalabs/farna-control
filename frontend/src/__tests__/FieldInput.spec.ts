@@ -333,6 +333,27 @@ describe('Input', () => {
     expect(wrapper.get('[data-testid="control"]').attributes('aria-invalid')).toBe('false')
   })
 
+  it('honours an explicit aria-required string over the Field state', () => {
+    const wrapper = mountHarness(`
+      <Field label="Project" required>
+        <FieldInput data-testid="control" aria-required="false" />
+      </Field>
+    `)
+
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-required')).toBe('false')
+  })
+
+  it('honours an explicit boolean aria-required over the Field state', () => {
+    const wrapper = mountHarness(`
+      <Field label="Project">
+        <FieldInput data-testid="control" :aria-required="true" />
+      </Field>
+    `)
+
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-required')).toBe('true')
+  })
+
+
   it('honours an explicit required attribute without a Field', () => {
     const wrapper = mount(Input, {
       props: { modelValue: '' },
@@ -371,6 +392,20 @@ describe('Input', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([''])
+  })
+
+  it('normalises a boolean autocomplete model to on and off', () => {
+    const on = mount(Input, {
+      props: { modelValue: '', autocomplete: true },
+      attrs: { 'data-testid': 'control' },
+    })
+    const off = mount(Input, {
+      props: { modelValue: '', autocomplete: false },
+      attrs: { 'data-testid': 'control' },
+    })
+
+    expect(on.get('[data-testid="control"]').attributes('autocomplete')).toBe('on')
+    expect(off.get('[data-testid="control"]').attributes('autocomplete')).toBe('off')
   })
 })
 

@@ -26,8 +26,7 @@
             </Button>
 
             <Button
-              severity="secondary"
-              outlined
+              variant="secondary"
               data-testid="variant-compare-new-group"
               @click="showBuilder = true"
             >
@@ -124,9 +123,8 @@
             </template>
             <template #cell-actions="{ row }">
               <Button
-                size="small"
-                severity="secondary"
-                outlined
+                size="sm"
+                variant="secondary"
                 :data-testid="`variant-compare-select-${row.id}`"
                 :aria-label="selectedGroupId === row.id
                   ? $t('views.variantCompare.viewingComparison', { name: String(row.name) })
@@ -359,7 +357,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import { formatApiError } from '../lib/api/formatError'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import Select from '../components/shared/AppSelect.vue'
