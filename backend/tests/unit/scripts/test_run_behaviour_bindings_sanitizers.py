@@ -46,7 +46,20 @@ def test_sanitize_relpath_accepts_repo_relative_paths(good: str):
     assert _bindings._sanitize_relpath(good, "path") == good
 
 
-@pytest.mark.parametrize("bad", ["../etc/passwd", "/etc/passwd", "-x", "a/../../b", "a/./b", ".", "..", "a//b"])
+@pytest.mark.parametrize(
+    "bad",
+    ["../etc/passwd", "/etc/passwd", "-x", "a/../../b", "a/./b", ".", "..", "a//b"],
+    ids=[
+        "relative-traversal",
+        "absolute-path",
+        "leading-dash",
+        "nested-traversal",
+        "dot-segment",
+        "single-dot",
+        "parent-dot",
+        "double-slash",
+    ],
+)
 def test_sanitize_relpath_rejects_traversal_absolute_paths_and_flags(bad: str):
     with pytest.raises(ValueError, match="not a safe relative path"):
         _bindings._sanitize_relpath(bad, "path")
