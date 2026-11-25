@@ -609,6 +609,64 @@ describe('VariantBatchCompareView', () => {
     expect(wrapper.text()).not.toContain('>partial<')
   })
 
+  it('renders in-flight comparison badges with a class `style.css` defines, and falls back to muted (FAR-2793)', async () => {
+    batchMocks.fetchVariantBatches.mockResolvedValue({
+      data: {
+        items: [
+          { batch_id: 'b1', name: 'Sonnet vs Opus', pipeline_name: 'Summarizer', status: 'complete', run_count: 2, created_at: '2026-01-01T00:00:00Z' },
+          { batch_id: 'b4', name: 'pending batch', pipeline_name: 'Summarizer', status: 'pending', run_count: 0, created_at: '2026-01-02T00:00:00Z' },
+          { batch_id: 'b5', name: 'out-of-vocabulary batch', pipeline_name: 'Summarizer', status: 'skipped', run_count: 0, created_at: '2026-01-03T00:00:00Z' },
+        ],
+        total: 3,
+      },
+      error: undefined,
+    })
+
+    const wrapper = mount(VariantBatchCompareView, {
+      global: { stubs: { FeatureGate: { template: '<div><slot /></div>' } } },
+    })
+    await flushPromises()
+    await nextTick()
+
+    const badgeFor = (batchId: string) => {
+      const link = wrapper.find(`[data-testid="variant-batch-link-${batchId}"]`)
+      expect(link.exists()).toBe(true)
+      return link.element.closest('tr')!.querySelector('span.badge') as HTMLElement
+    }
+
+    const pendingBadge = badgeFor('b4')
+    expect(pendingBadge).not.toBeNull()
+    expect(pendingBadge.classList.contains('badge-status-primary')).toBe(true)
+    expect(pendingBadge.classList.contains('badge-status-info')).toBe(false)
+
+    const fallbackBadge = badgeFor('b5')
+    expect(fallbackBadge.classList.contains('badge-status-muted')).toBe(true)
+  })
+
+  it('renders a muted badge for a per-variant status outside the known vocabulary (FAR-2793)', async () => {
+    batchMocks.fetchVariantBatch.mockResolvedValue({
+      data: mockBatch({
+        runs: [
+          run({ run_id: 'r1', variant_name: 'a', run_status: 'complete', pass_rate: 100 }),
+          run({ run_id: 'r4', variant_name: 'd', run_status: 'skipped', pass_rate: null, total_cost_usd: null, total_tokens: null, eval_results: [], node_outputs: null }),
+        ],
+      }),
+      error: undefined,
+    })
+
+    const wrapper = mount(VariantBatchCompareView, {
+      global: { stubs: { FeatureGate: { template: '<div><slot /></div>' } } },
+    })
+    await flushPromises()
+    await nextTick()
+
+    const badges = wrapper.findAll('[data-testid="variant-batch-status-badge"]')
+    const skippedBadge = badges.find((b) => b.text().includes('skipped'))
+    expect(skippedBadge).toBeDefined()
+    expect(skippedBadge!.classes()).toContain('badge-status-muted')
+    expect(skippedBadge!.classes()).not.toContain('badge-status-info')
+  })
+
   it('offers Retry on a failed batch load and re-fetches on click (FAR-1655)', async () => {
     batchMocks.fetchVariantBatch.mockRejectedValueOnce(new Error('batch backend down'))
 
