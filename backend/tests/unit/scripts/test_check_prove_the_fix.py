@@ -473,3 +473,47 @@ def test_an_unknown_pytest_node_is_rejected(tmp_path: Path):
     problem = _module.verify_ref(f"{_PROBE_MODULE}::test_never_written", root, _changed(_PROBE_MODULE))
     assert problem is not None
     assert "not defined" in problem
+
+
+# --- CLI input path confinement (FAR-2701: pythonsecurity:S8707) -----------
+
+
+def test_read_input_path_accepts_a_file_in_the_temp_directory(tmp_path: Path):
+    """CI hands the inputs in from ``/tmp``, outside the checkout."""
+    probe = tmp_path / "pr-body.md"
+    probe.write_text("Proves: x\n", encoding="utf-8")
+    assert _module._sanitize_read_path(str(probe), "pr-body", _REPO_ROOT) == probe.resolve()
+
+
+def test_read_input_path_accepts_a_file_in_the_repo(tmp_path: Path):
+    probe = tmp_path / "body.md"
+    probe.write_text("x", encoding="utf-8")
+    assert _module._sanitize_read_path(str(probe), "pr-body", tmp_path) == probe.resolve()
+
+
+def test_read_input_path_rejects_traversal_and_paths_outside_the_allowed_roots(tmp_path: Path):
+    """``..``/``.`` segments and a leading ``-`` are refused before the read, and
+    an absolute path outside the repo and the temp directory is refused after it
+    resolves."""
+    import pytest
+
+    for bad in ("../secrets", "-x", "a/../b", "/etc/passwd", "C:\\Windows\\win.ini"):
+        with pytest.raises(ValueError, match="invalid"):
+            _module._sanitize_read_path(bad, "pr-body", tmp_path)
+
+
+def test_main_reads_the_confined_inputs_it_is_given(tmp_path: Path):
+    root = _make_repo(tmp_path)
+    body = tmp_path / "body.md"
+    body.write_text(f"Proves: {_PROBE_MODULE}::test_runs\n", encoding="utf-8")
+    changed = tmp_path / "changed.txt"
+    changed.write_text(f"{_PRODUCT_FILE}\n{_PROBE_MODULE}\n", encoding="utf-8")
+
+    code = _module.main(["--pr-body", str(body), "--changed-files", str(changed), "--repo-root", str(root)])
+
+    assert code == 0
+
+
+def test_main_refuses_a_traversing_input_path(tmp_path: Path):
+    code = _module.main(["--pr-body", "../body.md", "--changed-files", str(tmp_path / "changed.txt"), "--repo-root", str(tmp_path)])
+    assert code == 2

@@ -1294,6 +1294,87 @@ def write_outputs(root: Path, *, write_baseline: bool, write_report: bool) -> tu
     return audit_result.bound_count, len(audit_result.unbound)
 
 
+# ---------------------------------------------------------------------------
+# Argument and path sanitisers
+# ---------------------------------------------------------------------------
+#: A git revision that reaches a ``git`` subprocess argument: a commit SHA or a
+#: safe ref name (``HEAD``, ``origin/main``, ``v1.2.3``).  The pattern is an
+#: allow-list, so ``..`` segments and a leading ``-`` cannot be spelled.
+_GIT_REV_PATTERN = r"[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*"
+
+#: A repo-relative POSIX path whose every segment starts with an alphanumeric or
+#: underscore character, so ``.``/``..`` segments and a leading ``-`` are
+#: impossible.
+_GIT_PATH_PATTERN = r"[A-Za-z0-9_][A-Za-z0-9._-]*(?:/[A-Za-z0-9_][A-Za-z0-9._-]*)*"
+
+#: ``<rev>^{commit}``, the committish ``git rev-parse --verify`` is given.
+_GIT_COMMIT_RE = re.compile(rf"{_GIT_REV_PATTERN}\^{{commit}}", re.ASCII)
+
+#: ``<rev>:<path>``, the object spec ``git cat-file`` / ``git show`` are given.
+#: The value passed to the subprocess is the ``fullmatch(...).group(0)`` of this
+#: pattern, so the taint analyser sees a bounded string rather than the
+#: concatenation of two bounded strings (resolves pythonsecurity:S8705).
+_GIT_OBJECT_RE = re.compile(rf"{_GIT_REV_PATTERN}:{_GIT_PATH_PATTERN}", re.ASCII)
+
+#: A repo-relative path used as a filesystem target.  As above, every segment
+#: starts with an alphanumeric or underscore character.
+_REL_PATH_RE = re.compile(_GIT_PATH_PATTERN, re.ASCII)
+
+
+def _sanitize_committish(rev: str) -> str:
+    """Bound the ``<rev>^{commit}`` spec handed to ``git rev-parse``.
+
+    Returns ``regex.fullmatch(...).group(0)``, so the value reaching the
+    subprocess is provably limited to the allow-listed characters and cannot be
+    read as an extra option (pythonsecurity:S8705).
+    """
+    matched = _GIT_COMMIT_RE.fullmatch(f"{rev}^{{commit}}")
+    if matched is None:
+        raise ValueError(f"refusing to pass {rev!r} to git as a revision")
+    return matched.group(0)
+
+
+def _sanitize_git_object(rev: str, relpath: str) -> str:
+    """Bound the ``<rev>:<path>`` object spec handed to ``git cat-file``/``git show``.
+
+    Both halves are allow-listed by :data:`_GIT_OBJECT_RE`, whose ``.group(0)``
+    is what reaches the subprocess (pythonsecurity:S8705).
+    """
+    matched = _GIT_OBJECT_RE.fullmatch(f"{rev}:{relpath}")
+    if matched is None:
+        raise ValueError(f"refusing to pass {rev!r}:{relpath!r} to git as an object spec")
+    return matched.group(0)
+
+
+def _sanitize_relpath(value: str, name: str) -> str:
+    """Bound a repo-relative path to the allow-listed characters.
+
+    Returns ``regex.fullmatch(value).group(0)`` so a sanitised path carries no
+    ``.``/``..`` segment and cannot start with ``-`` before it reaches a git
+    argument or a filesystem sink.
+    """
+    matched = _REL_PATH_RE.fullmatch(value)
+    if matched is None:
+        raise ValueError(f"invalid {name}: {value!r} is not a safe relative path")
+    return matched.group(0)
+
+
+def _contained_entry_path(root: Path, rel: str) -> Path:
+    """Resolve a scanned entry's path to a write target inside the product map.
+
+    ``rel`` describes an entry the scan walked, but it is still regex-bounded to
+    a safe relative path and required to resolve under ``docs/product-map``
+    before anything is written to it, so no scanned value can steer the write
+    outside the map (pythonsecurity:S2083).
+    """
+    safe_rel = _sanitize_relpath(rel, "entry path")
+    base = (root / PRODUCT_MAP_DIR).resolve()
+    target = (root / safe_rel).resolve()
+    if not target.is_relative_to(base):
+        raise ValueError(f"refusing to write {rel!r}: it resolves outside {PRODUCT_MAP_DIR}")
+    return target
+
+
 def write_statuses(root: Path) -> dict[str, tuple[str, str]]:
     """Rewrite every entry's frontmatter ``status:`` to the derived value.
 
@@ -1324,7 +1405,8 @@ def write_statuses(root: Path) -> dict[str, tuple[str, str]]:
         if not replaced:
             lines.insert(fm_end, f"status: {derived}")
         if previous != derived or not replaced:
-            entry.path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+            target = _contained_entry_path(root, entry.rel)
+            target.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
             changed[entry.rel] = (previous or "", derived)
     return changed
 
@@ -1386,11 +1468,15 @@ def _git_show(root: Path, rev: str, relpath: str) -> str | None:
     would silently disable the shrink-only ratchet. ``git cat-file -e`` is the
     only probe allowed to answer "absent"; a failed ``git show`` on a path that
     ``cat-file`` says exists is a hard error (fail closed).
+
+    Both *rev* and *relpath* are regex-bounded before they reach the subprocess,
+    and the argv is a list with no shell, so neither can be read as a flag or a
+    second command (pythonsecurity:S8705).
     """
-    if not rev or rev.startswith("-"):
-        raise ValueError(f"refusing to pass {rev!r} to git as a revision")
+    committish = _sanitize_committish(rev)
+    object_spec = _sanitize_git_object(rev, relpath)
     resolved = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}"],
+        ["git", "rev-parse", "--verify", "--quiet", committish],
         cwd=root,
         check=False,
         capture_output=True,
@@ -1399,7 +1485,7 @@ def _git_show(root: Path, rev: str, relpath: str) -> str | None:
     if resolved.returncode != 0:
         raise ValueError(f"base revision {rev!r} does not resolve to a commit")
     present = subprocess.run(
-        ["git", "cat-file", "-e", f"{rev}:{relpath}"],
+        ["git", "cat-file", "-e", object_spec],
         cwd=root,
         check=False,
         capture_output=True,
@@ -1408,7 +1494,7 @@ def _git_show(root: Path, rev: str, relpath: str) -> str | None:
     if present.returncode != 0:
         return None
     shown = subprocess.run(
-        ["git", "show", f"{rev}:{relpath}"],
+        ["git", "show", object_spec],
         cwd=root,
         check=False,
         capture_output=True,

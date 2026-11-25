@@ -46,6 +46,7 @@ import argparse
 import ast
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 #: A change to these trees changes product behaviour and needs a proving test.
@@ -98,9 +99,51 @@ _SKIP_BODY_CALLS = frozenset({"pytest.skip", "pytest.xfail"})
 _MODULE_SKIP_CALLS = frozenset({"pytest.skip", "pytest.importorskip"})
 
 
-def _read_lines(path: Path) -> list[str]:
+#: Allow-list for a caller-supplied input path.  The value is derived through
+#: ``fullmatch(...).group(0)``, so the taint analyser sees a string bounded to
+#: safe path characters before it reaches the filesystem
+#: (pythonsecurity:S8707).
+_PATH_CHARS_RE = re.compile(r"[A-Za-z0-9._/\\:-]+", re.ASCII)
+
+
+def _allowed_read_roots(repo_root: Path) -> tuple[Path, ...]:
+    """The only roots the gate may read its two inputs from.
+
+    The workflow writes the PR body and the changed-file list into the system
+    temp directory (``/tmp`` in CI) and runs the gate from the checkout, so those
+    two roots are the whole legitimate surface.
+    """
+    roots = {Path(tempfile.gettempdir()).resolve(), repo_root.resolve()}
+    return tuple(roots)
+
+
+def _sanitize_read_path(value: str, name: str, repo_root: Path) -> Path:
+    """Bound a CLI-supplied input path and confine it to an allowed root.
+
+    Rejects disallowed characters, a leading ``-``, and any ``.``/``..`` segment,
+    then resolves the path and requires it to sit under the repo or the temp
+    directory before it is opened (pythonsecurity:S8707).
+    """
+    matched = _PATH_CHARS_RE.fullmatch(value)
+    if matched is None:
+        raise ValueError(f"invalid {name}: {value!r} is not a plain file path")
+    safe = matched.group(0)
+    if safe.startswith("-") or any(part in {".", ".."} for part in re.split(r"[\\/]", safe)):
+        raise ValueError(f"invalid {name}: {value!r} contains a traversal segment or a leading '-'")
+    resolved = Path(safe).resolve()
+    if not any(resolved.is_relative_to(root) for root in _allowed_read_roots(repo_root)):
+        raise ValueError(f"invalid {name}: {value!r} resolves outside the repository and the temp directory")
+    return resolved
+
+
+def _read_text(path: Path, name: str, repo_root: Path) -> str:
+    """Read an input file after confining its path (see :func:`_sanitize_read_path`)."""
+    return _sanitize_read_path(str(path), name, repo_root).read_text(encoding="utf-8")
+
+
+def _read_lines(path: Path, repo_root: Path) -> list[str]:
     try:
-        text = path.read_text(encoding="utf-8")
+        text = _read_text(path, "changed-files", repo_root)
     except OSError as exc:
         raise SystemExit(f"prove-the-fix: cannot read {path}: {exc}") from exc
     return [line.strip() for line in text.splitlines() if line.strip()]
@@ -486,14 +529,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-root", default=None, help="Repository root (defaults to the parent of this script's directory).")
     args = parser.parse_args(argv)
 
-    body_path = Path(args.pr_body)
-    try:
-        body = body_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        print(f"prove-the-fix: FAILED - cannot read the PR body file {body_path}: {exc}", file=sys.stderr)
-        return 2
-    changed = _read_lines(Path(args.changed_files))
     root = Path(args.repo_root).resolve() if args.repo_root else _repo_root()
+    try:
+        body = _read_text(Path(args.pr_body), "pr-body", root)
+        changed = _read_lines(Path(args.changed_files), root)
+    except ValueError as exc:
+        print(f"prove-the-fix: FAILED - {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"prove-the-fix: FAILED - cannot read an input file: {exc}", file=sys.stderr)
+        return 2
     return evaluate(body, changed, root)
 
 
