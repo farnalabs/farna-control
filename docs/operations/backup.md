@@ -481,7 +481,16 @@ throwaway Postgres 16 it:
    parent - a downgrade that was skipped fails the gate rather than passing
    silently;
 8. runs `alembic upgrade heads` and asserts the revision is back at head, with
-   the seeded rows still intact.
+   the seeded rows still intact;
+9. restores a PRE-UPGRADE snapshot over a forward-migrated database - the
+   compose recovery. The source is stepped back one revision and snapshotted
+   there, migrated forward again, then given the object a later release's
+   migration would add (a table whose foreign key targets the existing
+   `organisations` primary key) and a changed row; the restore must replay with
+   `--verify-target-schema`, land back on the snapshot's revision, restore the
+   seeded rows, remove the drift object and write its pre-restore safety dump.
+   A snapshot that cannot be restored onto the database it protects is not a
+   recovery point (FAR-2763).
 
 A `downgrade()` that cannot run, a dump that cannot be restored, or data lost
 in either direction fails the job.
