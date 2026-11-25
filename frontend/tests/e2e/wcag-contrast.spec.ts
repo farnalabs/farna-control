@@ -412,6 +412,23 @@ test.describe('authenticated shell — sidebar profile links (FAR-1907)', { tag:
       // pass. Assert the navigation landed on the route under test.
       expect(new URL(page.url()).pathname, `${path} must render its own route, not a redirect`).toBe(path)
 
+      // MINOR A proof (single targeted assertion, not a general content anchor):
+      // /settings/assistant must render its REAL empty state, not junk rows. The
+      // old `includes('/api/v1/me')` catch-all answered `/me/assistant/skills`
+      // with the profile object, which `v-for` rendered as 3 junk rows and left
+      // `skills.length === 0` undefined, so the EmptyState never showed — with
+      // no throw and no console.error, invisible to the render-error guard.
+      if (path === '/settings/assistant') {
+        await expect(
+          page.locator('[data-testid^="assistant-user-skill-row-"]'),
+          'the skills table must render no junk rows from a wrong-shaped body',
+        ).toHaveCount(0)
+        await expect(
+          page.getByText('No personal skills configured'),
+          'the real empty state must render when there are no skills',
+        ).toBeVisible({ timeout: ROUTE_AUDIT_TIMEOUT })
+      }
+
       const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
       const violations = filterViolations(results.violations)
       if (violations.length > 0) {

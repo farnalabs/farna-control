@@ -232,20 +232,6 @@ const MOCK_ADMIN_FEATURE_FLAGS = {
   would_activate: [],
 }
 
-/*
- * FAR-2761: `GET /api/v1/admin/assistant/skills` returns a BARE ARRAY
- * (`list[SkillResponse]`, see backend/src/farna/api/routes/admin_assistant.py).
- * AdminAssistantView assigns the body straight into `skills.value` and iterates
- * it (`for (const skill of skills.value)`), so the generic `{items,total}`
- * envelope throws `TypeError: skills.value is not iterable` and the route fails
- * to render. An empty array is the legitimate "no skills yet" state.
- *
- * `GET /api/v1/api-keys` likewise returns a BARE ARRAY on the real backend
- * (SettingsMcpView checks `Array.isArray`); the envelope makes the view treat
- * the response as page-fatal ("Could not read the API key list"), so
- * `/settings/mcp` never renders its content.
- */
-
 /**
  * FAR-2713: the caller-scoped permission list the router gate and the sidebar
  * read (`GET /api/v1/auth/permissions` → `{ permissions: string[] }`, resolved
@@ -448,7 +434,20 @@ export async function setupLocalMockApi(page: Page) {
         body: JSON.stringify({ permissions: MOCK_PERMISSIONS }),
       })
     }
-    if (url.includes('/api/v1/me')) {
+    if (method === 'GET' && new URL(url).pathname === '/api/v1/me/assistant/skills') {
+      // Bare array (`list[SkillResponse]`). UserAssistantSkillsView does
+      // `skills = computed(() => skillsResp ?? [])` and `v-for`s it, so an OBJECT
+      // body (e.g. the profile object this path used to inherit from the
+      // `includes('/api/v1/me')` catch-all) paints junk rows AND never satisfies
+      // `skills.length === 0`, so the real EmptyState never shows: the route
+      // renders wrong with no error (FAR-2761 minor A). Empty array = no skills.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    }
+    if (new URL(url).pathname === '/api/v1/me') {
+      // EXACT pathname, not `includes('/api/v1/me')`: the prefix match also
+      // swallowed every `/api/v1/me/*` sub-path (notably
+      // `/api/v1/me/assistant/skills`) and answered it with this profile object.
+      // Sub-paths have their own handlers above.
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: '1', email: 'admin@example.com', display_name: 'Admin' }) })
     }
     if (url.includes('/api/v1/pipelines') && method === 'GET') {
@@ -474,8 +473,10 @@ export async function setupLocalMockApi(page: Page) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_ADMIN_FEATURE_FLAGS) })
     }
     if (url.includes('/api/v1/admin/assistant/skills') && method === 'GET') {
-      // Bare array (list[SkillResponse]); an envelope breaks the view's
-      // `for (const skill of skills.value)` iteration. See the constant's note.
+      // Bare array (`list[SkillResponse]`, admin_assistant.py). AdminAssistantView
+      // assigns the body into `skills.value` and iterates it
+      // (`for (const skill of skills.value)`), so the generic `{items,total}`
+      // envelope throws `TypeError: skills.value is not iterable`.
       return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     }
     if (url.includes('/api/v1/admin/assistant/available-providers') && method === 'GET') {
