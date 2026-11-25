@@ -202,7 +202,7 @@ def database_at_head(postgres_container: PostgresContainer) -> _Database:
 
 def test_entrypoint_migrations_create_a_fresh_database(fresh_database: _Database) -> None:
     """FAR-2786: a fresh database must reach head, not die on a deleted revision id."""
-    assert _tables(fresh_database) == set(), "the fresh database must start empty"
+    assert not _tables(fresh_database), "the fresh database must start empty"
 
     result = _run_entrypoint_migrations(fresh_database.migration_url)
     output = _output(result)
