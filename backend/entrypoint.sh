@@ -48,15 +48,12 @@ fi
 
 echo "Running database migrations..."
 
-# Phase 1: apply the initial schema (creates version table with VARCHAR(32))
-alembic upgrade 0001_v2_identity_org
-
-# Widen the version_num column to VARCHAR(64) — long revision IDs like
-# 0005_library_community_visibility (34 chars) exceed the default 32.
-PGPASSWORD=${POSTGRES_PASSWORD:-changeme} psql -X -h db -U modulo -d modulo -c \
-  "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(64);" 2>/dev/null || true
-
-# Phase 2: apply remaining migrations
+# One `alembic upgrade heads` is the whole migration step: 0350_baseline_schema
+# is the root of the chain, so there is no separate bootstrap revision to apply
+# first, and migrations/env.py owns the version-table width — its pre-flight
+# widens alembic_version.version_num to VARCHAR(255) before the first migration
+# runs, so revision ids longer than Alembic's 32-character default fit without
+# an ALTER run from here.
 alembic upgrade heads
 
 echo "Migrations complete. Starting uvicorn..."
