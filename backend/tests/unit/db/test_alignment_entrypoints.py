@@ -112,8 +112,8 @@ def test_fresh_boot_runs_exactly_one_alembic_upgrade_heads(tmp_path: Path) -> No
 
     A fresh Compose install could not boot because the entrypoint still ran
     ``alembic upgrade 0001_v2_identity_org`` - a revision that no longer exists -
-    plus a psql ``alembic_version`` widening against the retired ``modulo``
-    role/db. Asserting the shipped text is not enough: the broken phase-2
+    plus a psql ``alembic_version`` widening against the retired owner
+    role and database. Asserting the shipped text is not enough: the broken phase-2
     ``alembic upgrade heads`` line passes a substring check, so the old pins kept
     passing after ``entrypoint.sh`` was reverted to ``origin/main``. Running the
     real script proves the fresh-boot path reaches uvicorn with exactly one
@@ -151,5 +151,5 @@ def test_fresh_boot_runs_exactly_one_alembic_upgrade_heads(tmp_path: Path) -> No
     assert alembic_upgrades == ["alembic upgrade heads"], (
         f"backend/entrypoint.sh must run exactly ONE migration command, `alembic upgrade heads`: the pre-FAR-2777 phase-1 `alembic upgrade 0001_v2_identity_org` names a revision that no longer exists and aborts a fresh boot. Observed: {alembic_upgrades!r}"
     )
-    assert not [call for call in calls if call.startswith("psql ")], f"backend/entrypoint.sh must not run the retired psql alembic_version widening: migrations/env.py widens version_num itself and the removed step targeted the retired modulo role/db. Observed: {calls!r}"
+    assert not [call for call in calls if call.startswith("psql ")], f"backend/entrypoint.sh must not run the retired psql alembic_version widening: migrations/env.py widens version_num itself and the removed step targeted the retired owner role and database. Observed: {calls!r}"
     assert any(call.startswith("uvicorn ") for call in calls), f"backend/entrypoint.sh must reach `exec uvicorn` after migrating; observed {calls!r}"
