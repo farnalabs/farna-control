@@ -85,6 +85,7 @@ vi.mock('../composables/useDataFetch', async () => {
 
 import EvalProposalsQueueView from '../views/EvalProposalsQueueView.vue'
 import PageTabs from '../components/PageTabs.vue'
+import FormDialog from '../components/shared/FormDialog.vue'
 
 // The PrimeVue Dialog portals to <body>; this stub renders the default and
 // footer slots inline so the publish form and its buttons are DOM-reachable.
@@ -516,6 +517,26 @@ describe('EvalProposalsQueueView', () => {
       expect(wrapper.findAll('[data-testid^="proposal-card-"]').length).toBe(3)
       expect(wrapper.find('[data-testid="proposal-readonly-notice"]').exists()).toBe(false)
     })
+  })
+
+  it('runs the publish teardown only when FormDialog reports it closed', async () => {
+    const wrapper = mountView()
+    await flush()
+
+    await wrapper.find('[data-testid="proposal-publish"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="publish-name"]').exists()).toBe(true)
+
+    const formDialog = wrapper.findComponent(FormDialog)
+    // An open signal leaves the dialog's target in place.
+    formDialog.vm.$emit('update:open', true)
+    await nextTick()
+    expect(wrapper.find('[data-testid="publish-name"]').exists()).toBe(true)
+
+    // A close signal clears the target so the next open starts clean.
+    formDialog.vm.$emit('update:open', false)
+    await nextTick()
+    expect(wrapper.find('[data-testid="publish-name"]').exists()).toBe(false)
   })
 })
 

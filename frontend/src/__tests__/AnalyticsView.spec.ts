@@ -896,6 +896,13 @@ describe('AnalyticsView', () => {
     expect(wrapper.find('[data-testid="analytics-title"]').exists()).toBe(true)
   })
 
+  it('renders the stale-data notice when the results are flagged stale', async () => {
+    setupMocks({ ...validResponse, facts_stale: true })
+    const wrapper = mount(AnalyticsView)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="analytics-stale-notice"]').exists()).toBe(true)
+  })
+
   it('puts the chart first and keeps the detail table collapsed by default', async () => {
     setupMocks()
     const wrapper = mount(AnalyticsView)

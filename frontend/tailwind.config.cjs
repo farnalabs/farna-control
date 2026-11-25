@@ -66,6 +66,12 @@ module.exports = {
         // lightness, and is identical to `--warning` in the dark theme. Use `text-warning-text` - never `text-warning` - for warning
         // COLOURED TEXT (see style.css for the measured ratios).
         'warning-text': 'hsl(var(--warning-text))',
+        // FAR-1607: ink drawn ON a `bg-warning` SOLID fill (confirm buttons,
+        // banners). `--warning-foreground` is a dark ink in every theme, so a
+        // warning-filled surface that carries text clears WCAG AA; without this
+        // registration Tailwind emits no rule and the text falls back to the
+        // body colour (near-white on amber, ~2:1). See style.css for ratios.
+        'warning-foreground': 'hsl(var(--warning-foreground))',
         // FAR-1913: text-safe counterpart of `destructive`. `--destructive` is
         // tuned as a FILL/accent hue, so destructive COLOURED TEXT on a
         // bg-destructive/* tint is only 4.32:1 (dark) / 3.46:1 (light) - below

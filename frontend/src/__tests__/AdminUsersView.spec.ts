@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
+import StateTabs from '../components/shared/StateTabs.vue'
 
 vi.mock('../lib/api/client', () => ({
   getAccessToken: vi.fn().mockReturnValue('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSJ9.AAA'),
@@ -553,6 +554,28 @@ describe('AdminUsersView', () => {
 
     expect(wrapper.get('[data-testid="admin-users-mode-invite"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(false)
+  })
+
+  it('returns to password mode when the create tab is reselected and ignores unknown ids', async () => {
+    const wrapper = mountView()
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="admin-users-add-user"]').exists()).toBe(true)
+    })
+    await wrapper.find('[data-testid="admin-users-add-user"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="admin-users-mode-invite"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(false)
+
+    const modeTabs = wrapper.findComponent(StateTabs)
+    modeTabs.vm.$emit('update:modelValue', 'create')
+    await nextTick()
+    expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(true)
+
+    // An unknown mode id is ignored and leaves the current selection in place.
+    modeTabs.vm.$emit('update:modelValue', 'bogus')
+    await nextTick()
+    expect(wrapper.get('[data-testid="admin-users-mode-create"]').attributes('aria-selected')).toBe('true')
   })
 
   it('submits an invite and surfaces the single-use invite link', async () => {

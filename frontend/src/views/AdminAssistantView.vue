@@ -3,7 +3,7 @@
   <div class="page-wide">
     <PageHeader :title="$t('views.AdminAssistantView.assistant_configuration')" :subtitle="$t('views.AdminAssistantView.configure_assistant_ai_assistant_behaviour_access_and_skills')" />
     <template v-if="loading">
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4">
+      <BaseCard padding="lg" class="space-y-4">
         <div class="h-5 w-48 animate-pulse rounded bg-muted" />
         <div class="h-3 w-96 animate-pulse rounded bg-muted" />
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 mt-4">
@@ -13,31 +13,31 @@
             <div class="h-3 w-16 animate-pulse rounded bg-muted" />
           </div>
         </div>
-      </div>
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4 mt-6">
+      </BaseCard>
+      <BaseCard padding="lg" class="space-y-4 mt-6">
         <div class="h-5 w-40 animate-pulse rounded bg-muted" />
         <div class="h-3 w-80 animate-pulse rounded bg-muted" />
         <div class="h-24 w-full animate-pulse rounded bg-muted mt-4" />
-      </div>
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4 mt-6">
+      </BaseCard>
+      <BaseCard padding="lg" class="space-y-4 mt-6">
         <div class="h-5 w-36 animate-pulse rounded bg-muted" />
         <div class="h-3 w-72 animate-pulse rounded bg-muted" />
         <div class="space-y-3 mt-4">
           <div v-for="n in 3" :key="n" class="h-12 w-full animate-pulse rounded bg-muted" />
         </div>
-      </div>
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4 mt-6">
+      </BaseCard>
+      <BaseCard padding="lg" class="space-y-4 mt-6">
         <div class="h-5 w-36 animate-pulse rounded bg-muted" />
         <div class="h-3 w-64 animate-pulse rounded bg-muted" />
         <div class="h-32 w-full animate-pulse rounded bg-muted mt-4" />
-      </div>
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4 mt-6">
+      </BaseCard>
+      <BaseCard padding="lg" class="space-y-4 mt-6">
         <div class="h-5 w-28 animate-pulse rounded bg-muted" />
         <div class="h-3 w-56 animate-pulse rounded bg-muted" />
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
           <div v-for="n in 6" :key="n" class="h-20 w-full animate-pulse rounded bg-muted" />
         </div>
-      </div>
+      </BaseCard>
     </template>
     <template v-else>
       <!-- Configured Providers -->
@@ -520,6 +520,7 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import { ref, reactive, computed, watch } from 'vue'

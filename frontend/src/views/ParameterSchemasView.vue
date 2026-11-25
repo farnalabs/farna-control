@@ -450,7 +450,7 @@
           </DataCard>
 
           <!-- Set Editor -->
-          <div v-if="editingSet" class="rounded-lg border bg-card p-4 space-y-4">
+          <BaseCard v-if="editingSet" padding="md" class="space-y-4">
             <h4 class="text-sm font-semibold">{{ editingSetId ? $t('views.ParameterSchemasView.edit_set') : $t('views.ParameterSchemasView.new_set') }}</h4>
 
             <div class="space-y-3">
@@ -580,7 +580,7 @@
                 {{ $t('views.ParameterSchemasView.cancel') }}
               </button>
             </div>
-          </div>
+          </BaseCard>
 
           <div v-if="deleteSetConfirmId" class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
             <p class="text-sm font-medium text-destructive-text">
@@ -748,6 +748,7 @@ import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import Button from 'primevue/button'

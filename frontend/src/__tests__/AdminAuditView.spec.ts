@@ -21,6 +21,7 @@ vi.mock('../lib/api/client', () => ({
 }))
 
 import AdminAuditView from '../views/AdminAuditView.vue'
+import StateTabs from '../components/shared/StateTabs.vue'
 import { api, getAccessToken } from '../lib/api/client'
 
 const auditEvent = (id: string, over: Record<string, unknown> = {}) => ({
@@ -1155,6 +1156,24 @@ describe('AdminAuditView — system ledger (system admin)', () => {
     await wrapper.get('[data-testid="admin-audit-tab-system"]').trigger('keydown', { key: 'Home' })
     await flushPromises()
 
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-selected')).toBe('true')
+  })
+
+  it('selects only the two declared audit sources and ignores unknown ids', async () => {
+    const wrapper = await mountLoaded()
+    const sourceTabs = wrapper.findComponent(StateTabs)
+
+    sourceTabs.vm.$emit('update:modelValue', 'system')
+    await nextTick()
+    expect(wrapper.get('[data-testid="admin-audit-tab-system"]').attributes('aria-selected')).toBe('true')
+
+    sourceTabs.vm.$emit('update:modelValue', 'org')
+    await nextTick()
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-selected')).toBe('true')
+
+    // An unknown id is not a declared source, so the current selection stays.
+    sourceTabs.vm.$emit('update:modelValue', 'bogus')
+    await nextTick()
     expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-selected')).toBe('true')
   })
 

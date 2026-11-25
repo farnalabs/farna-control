@@ -238,6 +238,35 @@ describe('StateTabs', () => {
     wrapper.unmount()
   })
 
+  it('omits data-testid attributes when no testidPrefix is supplied', () => {
+    const wrapper = mountTabs({ idPrefix: 'only-id' })
+
+    for (const button of wrapper.findAll('[role="tab"]')) {
+      expect(button.attributes('data-testid')).toBeUndefined()
+    }
+    wrapper.unmount()
+  })
+
+  it('omits data-testid when no testidPrefix is supplied', () => {
+    const wrapper = mountTabs()
+
+    expect(wrapper.get('[role="tab"]').attributes('data-testid')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('keeps the first tab in the tab order when nothing is selected and every tab is disabled', () => {
+    const wrapper = mountTabs({ modelValue: 'missing', testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha', disabled: true },
+      { id: 'beta', label: 'Beta', disabled: true },
+    ])
+
+    // No active tab and no enabled fallback: index 0 stays tabbable so the list
+    // is never unreachable from the keyboard.
+    expect(tab(wrapper, 'example-alpha').attributes('tabindex')).toBe('0')
+    expect(tab(wrapper, 'example-beta').attributes('tabindex')).toBe('-1')
+    wrapper.unmount()
+  })
+
   it('keeps the first tab tabbable when nothing is selected and every tab is disabled', () => {
     const wrapper = mountTabs({ modelValue: 'missing' }, [
       { id: 'alpha', label: 'Alpha', disabled: true },
@@ -250,10 +279,16 @@ describe('StateTabs', () => {
     wrapper.unmount()
   })
 
-  it('omits data-testid when no testidPrefix is supplied', () => {
-    const wrapper = mountTabs()
+  it('handles arrow keys on a fully disabled list without moving selection', () => {
+    const wrapper = mountTabs({ modelValue: 'missing', testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha', disabled: true },
+      { id: 'beta', label: 'Beta', disabled: true },
+    ])
 
-    expect(wrapper.get('[role="tab"]').attributes('data-testid')).toBeUndefined()
+    tab(wrapper, 'example-alpha').element.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+    )
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     wrapper.unmount()
   })
 
@@ -278,16 +313,36 @@ describe('StateTabs', () => {
     wrapper.unmount()
   })
 
-  it('handles arrow keys on a fully disabled list without moving selection', () => {
-    const wrapper = mountTabs({ modelValue: 'missing', testidPrefix: 'example' }, [
-      { id: 'alpha', label: 'Alpha', disabled: true },
+  it('does not activate a disabled tab even if a click reaches it', async () => {
+    const wrapper = mountTabs({ testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha' },
       { id: 'beta', label: 'Beta', disabled: true },
     ])
 
-    tab(wrapper, 'example-alpha').element.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
-    )
+    const beta = tab(wrapper, 'example-beta')
+    // A natively-disabled button suppresses clicks; drop the attribute so the
+    // click handler runs and the component's own disabled guard can be proven.
+    beta.element.removeAttribute('disabled')
+    await beta.trigger('click')
+
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('moves from a disabled tab to the first enabled tab', async () => {
+    const wrapper = mountTabs({ testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha' },
+      { id: 'beta', label: 'Beta', disabled: true },
+      { id: 'gamma', label: 'Gamma' },
+    ])
+
+    const beta = tab(wrapper, 'example-beta')
+    // A disabled button receives no focus, so drop the attribute to let the
+    // keydown reach the handler while the tab itself is still disabled.
+    beta.element.removeAttribute('disabled')
+    await beta.trigger('keydown', { key: 'ArrowRight' })
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['alpha'])
     wrapper.unmount()
   })
 
@@ -301,6 +356,33 @@ describe('StateTabs', () => {
       new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
     )
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['alpha'])
+    wrapper.unmount()
+  })
+
+  it('ignores arrow keys when every tab is disabled', async () => {
+    const wrapper = mountTabs({ testidPrefix: 'example' }, [
+      { id: 'alpha', label: 'Alpha', disabled: true },
+      { id: 'beta', label: 'Beta', disabled: true },
+    ])
+
+    const alpha = tab(wrapper, 'example-alpha')
+    // Drop the native disabled attribute so the keydown reaches the handler;
+    // the tab object itself stays disabled, so no enabled neighbour exists.
+    alpha.element.removeAttribute('disabled')
+    await alpha.trigger('keydown', { key: 'ArrowRight' })
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('ignores navigation while a modifier key is held', async () => {
+    const wrapper = mountTabs({ testidPrefix: 'example' })
+
+    for (const modifier of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'] as const) {
+      await tab(wrapper, 'example-alpha').trigger('keydown', { key: 'ArrowRight', [modifier]: true })
+    }
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     wrapper.unmount()
   })
 })

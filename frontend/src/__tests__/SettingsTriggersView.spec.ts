@@ -727,6 +727,30 @@ describe('SettingsTriggersView — FAR-191 streak surfacing + operator re-enable
     expect(wrapper.text()).toContain('pr_merged')
   })
 
+  it('renders a neutral outcome badge for non-delivered, non-no-delivery classifications', async () => {
+    const wrapper = mountView(fakeJwt('admin'), {
+      ...baseListData,
+      items: [
+        ongoing({
+          streak_status: streakStatus({
+            streak: 2,
+            last_outcomes: [
+              { run_id: 'r1', classification: 'excluded', reason: 'gate_skip', completed_at: '2026-08-01T00:00:00Z' },
+              { run_id: 'r2', classification: 'unclassified', reason: 'unknown', completed_at: '2026-08-01T01:00:00Z' },
+            ],
+          }),
+        }),
+      ],
+    })
+    await flush()
+
+    await wrapper.find('[data-testid="settings-triggers-outcomes-toggle"]').trigger('click')
+    await flush()
+
+    expect(wrapper.text()).toContain('gate_skip')
+    expect(wrapper.text()).toContain('unknown')
+  })
+
   it('FAR-1373/FAR-1388: renders a visible qualifier for an agent-reported outcome', async () => {
     const wrapper = mountView(fakeJwt('admin'), {
       ...baseListData,
