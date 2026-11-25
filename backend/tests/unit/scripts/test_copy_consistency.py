@@ -71,6 +71,17 @@ def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         ("cd-product-name", "Run cd Farna Control before the first task.", False),
         ("retired-product-name", "Modulo governs the pipeline run.", True),
     ],
+    ids=[
+        "app-farna-dev",
+        "old-repo-url-clone",
+        "old-repo-url-api",
+        "retired-host",
+        "opt-in-only",
+        "milestone-label-ga",
+        "milestone-label-beta",
+        "cd-product-name",
+        "retired-product-name",
+    ],
 )
 def test_each_rule_fires_on_its_fixture(rule: str, text: str, customer_copy: bool) -> None:
     assert rule_names(text, customer_copy=customer_copy) == {rule}
@@ -88,10 +99,20 @@ def test_each_rule_fires_on_its_fixture(rule: str, text: str, customer_copy: boo
         "Notes live in Repos/modulo/backend/README.md.",
         "The repo is farnalabs/farna-control and the site is farna.dev.",
     ],
+    ids=[
+        "webhook-secret-header",
+        "timestamp-header",
+        "dmg-artefact",
+        "tarball-artefact",
+        "pinned-artefact",
+        "dmg-version-placeholder",
+        "repo-path",
+        "clean-copy",
+    ],
 )
 def test_exempt_identifiers_do_not_fire(text: str) -> None:
     # Checked in the strict mode, where the brand rule actually runs.
-    assert rule_names(text, customer_copy=True) == set()
+    assert not rule_names(text, customer_copy=True)
 
 
 def test_hyphenated_brand_compound_is_not_an_artefact() -> None:
@@ -140,7 +161,7 @@ def test_host_rule_reports_the_host_not_the_adjacent_email() -> None:
 def test_customer_rules_follow_the_flag_not_the_path() -> None:
     text = "Modulo governs it. The demo is opt-in only. Ship in Beta scope."
     for path in ("docs/overview.md", "backend/src/service.py", "notes.txt"):
-        assert rule_names(text, path) == set()
+        assert not rule_names(text, path)
         assert rule_names(text, path, customer_copy=True) == {
             "milestone-label",
             "opt-in-only",
@@ -157,7 +178,7 @@ def test_hint_names_the_flag_when_it_is_absent(tmp_path: Path) -> None:
     assert "--customer-copy" in plain.stderr
     flagged = run_cli("--customer-copy", str(docs))
     assert flagged.returncode == 0
-    assert flagged.stderr == ""
+    assert not flagged.stderr
 
 
 def test_line_marker_suppresses_one_line(tmp_path: Path) -> None:
