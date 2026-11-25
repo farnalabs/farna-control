@@ -414,6 +414,12 @@ async def admin_create_org_user(
 
     try:
         async with session.begin():
+            # Bind the org RLS context first: migration 0367 fail-closes
+            # org_memberships with no org GUC, and a system admin's token carries
+            # no org_id, so the membership INSERT would otherwise violate the
+            # policy (HTTP 501 migration_required) on an org this route targets
+            # via the path parameter.
+            await set_rls_org(session, org_id)
             org = await get_organisation(session, org_id)
             if org is None:
                 raise HTTPException(

@@ -438,6 +438,45 @@ def test_create_org_user_unexpected_error_500(api: tuple[TestClient, AsyncMock],
     assert resp.status_code == 500
 
 
+def test_create_org_user_binds_target_org_rls(api: tuple[TestClient, AsyncMock], monkeypatch: pytest.MonkeyPatch) -> None:
+    """The create-user route binds RLS to the target org before touching it.
+
+    Migration 0367 fail-closes ``org_memberships`` when no org GUC is bound, and
+    a system-admin token carries no org id, so without ``set_rls_org(session,
+    org_id)`` the membership INSERT violates the policy and the route returns
+    501 migration_required. This pins the binding to the path org, and pins that
+    it happens before the org read. Without the fix ``set_rls_org`` is never
+    called and this test fails.
+    """
+    client, _ = api
+    events: list[tuple[str, object]] = []
+
+    async def record_set_rls(_session: object, org_id: object) -> None:
+        events.append(("set_rls_org", org_id))
+
+    async def record_get_org(_session: object, org_id: object) -> Organisation:
+        events.append(("get_organisation", org_id))
+        return _org()
+
+    monkeypatch.setattr(admin_orgs, "set_rls_org", record_set_rls)
+    monkeypatch.setattr(admin_orgs, "get_organisation", record_get_org)
+    monkeypatch.setattr(admin_orgs, "get_account_by_email", AsyncMock(return_value=None))
+    monkeypatch.setattr(admin_orgs, "create_account", AsyncMock(return_value=_account()))
+    membership = MagicMock()
+    membership.role = "runner"
+    monkeypatch.setattr(admin_orgs, "create_membership", AsyncMock(return_value=membership))
+
+    resp = client.post(
+        f"/api/v1/admin/orgs/{_TARGET_ORG_ID}/users",
+        json={"email": "newuser@example.com", "display_name": "New", "password": "Sup3r-Secret!", "org_role": "runner"},
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert [event for event in events if event[0] == "set_rls_org"] == [("set_rls_org", _TARGET_ORG_ID)]
+    order = [name for name, _ in events]
+    assert order.index("set_rls_org") < order.index("get_organisation")
+
+
 # ── GET/PUT/DELETE /{org_id}/license ──
 
 
