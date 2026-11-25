@@ -2294,8 +2294,9 @@ async def _cancel_run(session: AsyncSession, principal: TenantPrincipal, run_id:
 
     FAR-1610 lock bound: this is a REQUEST path on the hot ``runs`` row, and the
     FIRST lock in the caller's transaction is ``request_cancellation``'s
-    ``SELECT ... FOR UPDATE`` below (``get_run`` is a plain read). The bound is
-    issued HERE — the caller of the shared ``request_cancellation`` — before
+    ``SELECT ... FOR UPDATE`` below (the scoped load's ``get_run`` is a plain
+    read). The bound is issued HERE — the caller of the shared
+    ``request_cancellation`` — before
     that lock, so a contended row surfaces as a bounded 55P03 the route maps to
     a visible 409 rather than an unbounded wait. It is transaction-scoped, so
     it also bounds the ``finalize_cancelled_run`` write that follows. (Bounding
@@ -2303,7 +2304,10 @@ async def _cancel_run(session: AsyncSession, principal: TenantPrincipal, run_id:
     Exception`` caller swallow the 55P03 into a silent lost write — FAR-1601.)
     """
     await set_mutation_row_lock_timeout(session)
-    run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+    # ADR 070 §4: the shared per-run clamp, applied before anything is written.
+    # A run outside the principal's team boundary answers ``None`` exactly like
+    # a missing run, so the cancel is never requested for another team's run.
+    run = await _load_run_in_scope(session, principal, run_id)
 
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
@@ -3397,7 +3401,11 @@ async def observe_run_node(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run = await get_run(session, run_id, organisation_id=principal.organisation_id)
+            # ADR 070 §4: load through the shared per-run clamp, so a
+            # team-scoped credential outside the run's team boundary is served
+            # the same NOT FOUND as a missing run and ``observe_node`` below is
+            # never reached.
+            run = await _load_run_in_scope(session, principal, run_id)
     except IntegrityError:
         _log.exception(_CODE_RUNS_OBSERVE_RUN_NODE)
         raise HTTPException(
@@ -3689,6 +3697,12 @@ async def recover_run_node(
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
             await set_rls_user_context(session, principal.account_id, principal.org_role)
+            # ADR 070 §4: ``recover_node`` resolves the run itself, so the
+            # boundary is applied HERE, at the route, before the core call. A
+            # run outside the principal's team boundary is the caller's normal
+            # NOT FOUND — no stamp is resolved and no recovery is attempted.
+            if await _load_run_in_scope(session, principal, run_id) is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
             stamp_review_id = await _resolve_recovery_stamp(session, principal, run_id, node_id)
             run = await _recover_node_or_http_error(session, principal, run_id, node_id, req.input_data)
     except IntegrityError:
@@ -3764,9 +3778,16 @@ async def _do_guardrail_override(
     Persists the post-redaction payload and flips the run (FAR-208 /
     FAR-1711), mapping every domain failure to its HTTP contract. The caller
     keeps only the transaction's DB-error mapping.
+
+    ADR 070 §4: ``guardrail_override`` resolves the run itself, so the boundary
+    is applied HERE, in the route-level wrapper, before the core call. A run
+    outside the principal's team boundary is the caller's normal NOT FOUND and
+    nothing is persisted or re-dispatched.
     """
     await set_rls_org(session, principal.organisation_id)
     await set_rls_user_context(session, principal.account_id, principal.org_role)
+    if await _load_run_in_scope(session, principal, run_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
     try:
         return await guardrail_override(
             session,
