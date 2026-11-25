@@ -365,19 +365,31 @@ For the whole window the restore handles `SIGTERM`, `SIGINT` and `SIGHUP`: each
 stops that cluster (PostgreSQL's fast shutdown, then `SIGTERM`, then `SIGKILL`)
 before the command unwinds, the shell's previous handlers are restored
 afterwards, and a second Ctrl-C while that stop is running is ignored so the
-shutdown can finish. The pid of the cluster the window started is recorded in
+shutdown can finish. The identity of the cluster the window started - its pid,
+that process's start time and the data dir it belongs to - is recorded in
 `<data-dir>/restore-window-postmaster.pid` while the window is open.
 
 **If the process is killed with `SIGKILL`** (a timeout wrapper, the OOM killer, a
 service manager) no handler can run: the postmaster keeps its data directory and
-its port with nothing supervising it. The pid file is what makes that
-recoverable rather than cryptic:
+its port with nothing supervising it. The record is what makes that recoverable
+rather than cryptic - but a pid on its own is not an identity, because the same
+number can belong to any live postgres after a reboot, a `kill -9`, or a data
+dir copied to another machine:
 
-- `farna-control restore <snapshot> --data-dir <data-dir>` reports the leftover
-  by pid and stops it before starting a fresh window;
+- all three recorded fields must match before anything is signalled. A pid that
+  is alive and postgres-looking but whose start time differs is a different
+  process, and it is never stopped;
+- a record that cannot be verified (a legacy bare pid from an older release, a
+  truncated or unreadable file, a record written for a different data dir) is
+  reported with its file, the pid it names and what to do. It is never acted
+  on: `farna-control restore` refuses rather than signal a process it cannot
+  prove it started;
+- `farna-control restore <snapshot> --data-dir <data-dir>` reports a verified
+  leftover by pid and stops it before starting a fresh window;
 - `farna-control start --data-dir <data-dir>` refuses with the pid, the file it
-  was recorded in, and the command to run — instead of only "belongs to a live
+  was recorded in, and the command to run - instead of only "belongs to a live
   postgres process" or a port-in-use error.
+
 
 Either way the process to stop is named for you:
 `kill -INT <pid>` is the same fast shutdown the restore performs itself.
