@@ -411,8 +411,12 @@ kubectl delete namespace farna-control  # If namespace.create=true
   `alembic upgrade heads`, but that revision no longer exists: the migrations
   were collapsed onto the `0350_baseline_schema` root, so the command aborts on a
   **fresh** database before creating a single table (`alembic_version` did not
-  exist afterwards). The same defect breaks the Docker Compose production
-  install, which uses the same image entrypoint. Because no backend pod becomes
+  exist afterwards). The same defect breaks any install that boots the API-only
+  backend image through `backend/entrypoint.sh` — the Helm chart and the root
+  development `docker-compose.yml`. It does **not** affect the production Docker
+  Compose install: `deploy/compose/docker-compose.prod.yml` runs the all-in-one
+  image via `deploy/supervisor/entrypoint.sh`, which only runs
+  `alembic upgrade heads`. Because no backend pod becomes
   Ready, this attempt did **not** prove `/healthz/ready`, sign-in, model-backend
   creation (and therefore `FERNET_KEY`), pipeline execution, `helm upgrade` or
   `helm rollback`. Steps 1 to 4 of FAR-2770 did not pass; do not offer the chart
@@ -430,8 +434,11 @@ kubectl delete namespace farna-control  # If namespace.create=true
 - **FAR-1053:** Live kind validation (EKS done — see Validation Status)
 - **Fresh-install blocker (found 2026-11-25, FAR-2770):** `backend/entrypoint.sh`
   still runs `alembic upgrade 0001_v2_identity_org`, a revision the rebrand
-  baseline removed; every fresh database install (Helm and Docker Compose prod)
-  crash-loops the backend. `backend/tests/unit/db/test_alignment_entrypoints.py`
+  baseline removed; every fresh database install that boots the API-only backend
+  image through `backend/entrypoint.sh` (the Helm chart and the root development
+  `docker-compose.yml`) crash-loops the backend. The production Docker Compose
+  install is unaffected (it runs the all-in-one image via
+  `deploy/supervisor/entrypoint.sh`). `backend/tests/unit/db/test_alignment_entrypoints.py`
   pins that literal, so the fix must update the test with the code.
 - **FAR-2675:** pre-upgrade snapshot for the Helm path (documented as a limitation
   in Validation Status; not implemented)

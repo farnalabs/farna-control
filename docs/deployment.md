@@ -634,7 +634,11 @@ four of its five workloads (`frontend`, `redis`, `saq-runner`, `saq-system`) bec
 Ready, but the backend crash-looped because `backend/entrypoint.sh` migrates with
 `alembic upgrade 0001_v2_identity_org`, a revision the collapsed migration baseline
 no longer contains, so a fresh database cannot be migrated at all. That defect
-affects the Docker Compose production install too. Readiness, sign-in, model
+affects any install that boots the API-only backend image through
+`backend/entrypoint.sh` — the Helm chart and the root development
+`docker-compose.yml`. The production Docker Compose install is unaffected: it runs
+the all-in-one image via `deploy/supervisor/entrypoint.sh`, which only runs
+`alembic upgrade heads`. Readiness, sign-in, model
 backends, pipeline runs, upgrade and rollback are therefore unproven on the current
 release.
 
