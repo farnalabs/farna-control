@@ -35,6 +35,18 @@ describe('Notice', () => {
     expect(slotted.findAll('li').length).toBe(2)
   })
 
+  it('renders title and message in the icon-less layout, applying the title spacing', () => {
+    const wrapper = mount(Notice, {
+      props: { variant: 'info', icon: false, title: 'Saved', message: 'All good' },
+    })
+
+    const paragraphs = wrapper.findAll('p')
+    expect(paragraphs).toHaveLength(2)
+    expect(paragraphs[0].text()).toBe('Saved')
+    expect(paragraphs[1].text()).toBe('All good')
+    expect(paragraphs[1].classes()).toContain('mt-1')
+  })
+
   it('is not a live region by default, and opts in when live is passed', () => {
     const staticBanner = mount(Notice, { props: { message: 'static' } })
     expect(staticBanner.attributes('aria-live')).toBeUndefined()
