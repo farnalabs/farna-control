@@ -69,10 +69,7 @@ def _posix_shell() -> str | None:
 
 SHELL = _posix_shell()
 
-pytestmark = pytest.mark.skipif(
-    SHELL is None,
-    reason="a POSIX shell is required to execute the entrypoint's migration block",
-)
+pytestmark = [pytest.mark.integration, pytest.mark.posix_only]
 
 
 def _script_directory() -> ScriptDirectory:
