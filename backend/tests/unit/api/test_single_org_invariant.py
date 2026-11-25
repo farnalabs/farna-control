@@ -426,7 +426,11 @@ async def test_seed_demo_proceeds_when_multi_org_enabled() -> None:
     )
     assert settings.multi_org_enabled is True
 
-    mock_session = AsyncMock()
+    # ``seed_demo`` wraps its org/account/membership writes in the pre-auth
+    # bootstrap grant (ADR 070 §2), which reads ``in_transaction()`` /
+    # ``get_bind()`` synchronously — the contract-correct preamble keeps those
+    # sync instead of leaking never-awaited AsyncMock coroutines.
+    mock_session = configure_rls_preamble(AsyncMock())
 
     fake_org = SimpleNamespace(
         id=uuid.uuid4(),

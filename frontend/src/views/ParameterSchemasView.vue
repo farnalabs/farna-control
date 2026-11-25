@@ -141,9 +141,9 @@
             an automatic Retry could double-create, so none is offered.
           -->
           <ErrorAlert v-if="saveError" :message="saveError" :retryable="false" />
-          <div v-if="saveSuccess" class="rounded-lg border border-success/50 bg-success/10 p-4 text-sm text-success-text">
+          <Notice v-if="saveSuccess" variant="success" :icon="false" class="text-sm">
             {{ saveSuccess }}
-          </div>
+          </Notice>
 
           <div class="space-y-4">
             <div>
@@ -719,9 +719,9 @@
           </div>
 
           <div v-if="validateResult !== null" class="space-y-2">
-            <div v-if="validateResult.valid" class="rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text">
+            <Notice v-if="validateResult.valid" variant="success" :icon="false" padding="sm" class="text-sm">
               {{ $t('views.ParameterSchemasView.validation_passed') }}
-            </div>
+            </Notice>
             <ErrorAlert v-else compact>
               <p class="text-sm font-medium text-destructive-text">{{ $t('views.ParameterSchemasView.validation_failed') }}</p>
               <ul v-if="validateResult.errors?.length" class="mt-1 list-inside list-disc text-sm text-destructive-text">
@@ -746,6 +746,7 @@ import { shortId } from '../utils/format'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import BaseCard from '../components/ui/BaseCard.vue'

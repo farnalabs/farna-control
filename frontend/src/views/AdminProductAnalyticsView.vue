@@ -10,9 +10,9 @@
       <div class="space-y-6">
         <!-- Warning banner: one shell, content chosen by the warning value so
              the two cases stay distinct without a second hand-rolled card. -->
-        <div v-if="warningMessage" class="rounded-lg border border-warning/40 bg-warning/10 p-4 text-warning-text">
+        <Notice v-if="warningMessage" variant="warning" :icon="false">
           <p class="text-sm font-medium">{{ warningMessage }}</p>
-        </div>
+        </Notice>
 
         <!-- Transparency data -->
         <DataCard variant="bordered" heading-level="h2" :title="$t('views.AdminProductAnalyticsView.delivery_status')">
@@ -128,6 +128,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import { useProductAnalyticsStore } from '../stores/productAnalyticsStore'
 import { formatDateShort } from '../lib/formatDate'
 import { formatApiError } from '../lib/api/formatError'
