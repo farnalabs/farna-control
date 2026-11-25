@@ -213,8 +213,12 @@ async def test_me_update_skill_applies_every_optional_field() -> None:
 
 @pytest.mark.anyio
 async def test_me_change_password_rethrows_blacklist_db_error() -> None:
-    session = AsyncMock()
-    session.add = MagicMock()
+    # ``change_password`` now wraps its token-family work in the pre-auth
+    # bootstrap grant (ADR 070 §2), which — like ``set_rls_org`` — reads
+    # ``in_transaction()`` / ``get_bind()`` synchronously. The contract-correct
+    # preamble keeps those as sync MagicMocks instead of leaking never-awaited
+    # AsyncMock coroutines.
+    session = configure_rls_preamble(AsyncMock())
     session.begin = MagicMock(return_value=_SessionContext(session))
     family = MagicMock(family_id=uuid.uuid4())
     with (
@@ -235,11 +239,46 @@ async def test_me_change_password_rethrows_blacklist_db_error() -> None:
 
 
 @pytest.mark.anyio
+async def test_me_change_password_reraises_blacklist_http_exception() -> None:
+    """An HTTPException from ``blacklist_family`` is a deliberate control-flow
+    signal and must propagate unchanged (the SQLAlchemyError arm is the only one
+    that is re-wrapped); it must not be swallowed by the bootstrap block."""
+    session = configure_rls_preamble(AsyncMock())
+    session.begin = MagicMock(return_value=_SessionContext(session))
+    family = MagicMock(family_id=uuid.uuid4())
+    with (
+        patch.object(me, "get_account_by_id", new_callable=AsyncMock, return_value=_account()),
+        patch.object(me, "verify_password", return_value=True),
+        patch.object(me, "validate_password_strength"),
+        patch.object(me, "hash_password", return_value="new-hash"),
+        patch.object(me, "list_families_for_account", new_callable=AsyncMock, return_value=[family]),
+        patch.object(
+            me,
+            "blacklist_family",
+            new_callable=AsyncMock,
+            side_effect=HTTPException(status_code=409, detail="family busy"),
+        ),
+        pytest.raises(HTTPException) as raised,
+    ):
+        await me.change_password(
+            me.PasswordChangeRequest(current_password="old-password", new_password="new-password"),
+            _Principal(),
+            session,
+        )
+    assert raised.value.status_code == 409
+    assert raised.value.detail == "family busy"
+
+
+@pytest.mark.anyio
 async def test_me_change_password_audit_failure_is_logged_and_programming_error_maps(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    session = AsyncMock()
-    session.add = MagicMock()
+    # ``change_password`` now wraps its token-family work in the pre-auth
+    # bootstrap grant (ADR 070 §2), which — like ``set_rls_org`` — reads
+    # ``in_transaction()`` / ``get_bind()`` synchronously. The contract-correct
+    # preamble keeps those as sync MagicMocks instead of leaking never-awaited
+    # AsyncMock coroutines.
+    session = configure_rls_preamble(AsyncMock())
     session.begin = MagicMock(return_value=_SessionContext(session))
     family = MagicMock(family_id=uuid.uuid4())
     with (
@@ -281,8 +320,12 @@ async def test_me_change_password_audit_failure_is_logged_and_programming_error_
 
 @pytest.mark.anyio
 async def test_me_change_password_raises_when_no_token_family_created() -> None:
-    session = AsyncMock()
-    session.add = MagicMock()
+    # ``change_password`` now wraps its token-family work in the pre-auth
+    # bootstrap grant (ADR 070 §2), which — like ``set_rls_org`` — reads
+    # ``in_transaction()`` / ``get_bind()`` synchronously. The contract-correct
+    # preamble keeps those as sync MagicMocks instead of leaking never-awaited
+    # AsyncMock coroutines.
+    session = configure_rls_preamble(AsyncMock())
     session.begin = MagicMock(return_value=_SessionContext(session))
     family = MagicMock(family_id=uuid.uuid4())
     with (
