@@ -50,7 +50,7 @@ registry. It is the inventory half (S1) of FAR-1692; ingestion slices S3/S4
       as a structural backstop, plus `owner_team_id NOT NULL` whenever
       `visibility = 'team'` (`db/models/external_agent.py`;
       `0350_baseline_schema.py`).
-      <!-- behaviour: external-agent-registry-02 | tests: none -->
+      <!-- behaviour: external-agent-registry-02 | tests: backend/tests/unit/api/routes/test_far1692_registry_routes.py::test_create_external_agent_rejects_out_of_shape_requests, backend/tests/unit/api/routes/test_far1692_registry_routes.py::test_create_external_agent_applies_documented_defaults -->
 - [x] Access is permission-floored per verb: `external_agent.list` (viewer
       floor) for list and read, `external_agent.create` / `.update` / `.delete`
       (operator floor) for mutations (`auth/permissions.py`;
@@ -115,6 +115,12 @@ registry. It is the inventory half (S1) of FAR-1692; ingestion slices S3/S4
   is only as strong as the RLS policy is applied to a given connection.
 
 ## QA History
+
+- 2026-11-25: **Improve Architecture product-map walk** - bound
+  `external-agent-registry-02` (create-shape constraints and defaults) to new
+  route tests in `test_far1692_registry_routes.py` that drive each invalid shape
+  to 422 without reaching the CRUD seam and assert the documented defaults on a
+  bare-name create. No product code changed.
 
 - 2026-11-23: Added this tracker after walking the product map and finding the
   shipped FAR-1692 S1 external-agent registry had no entry in either

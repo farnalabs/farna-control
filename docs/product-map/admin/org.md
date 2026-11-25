@@ -10,6 +10,7 @@ code:
   - backend/src/farna/api/routes/admin.py
   - frontend/src/views/AdminOrgSettingsView.vue
 unit-tests:
+  - backend/tests/unit/api/test_org_settings_routes.py
   - backend/tests/unit/api/test_admin_orgs.py
   - backend/tests/unit/api/test_admin_orgs_coverage_gaps.py
   - backend/tests/unit/api/test_admin_feature_flags.py
@@ -37,10 +38,10 @@ kill-switch, authorization enforcement).
 
 - [x] `GET /api/v1/org/settings` returns the org's display currency for any
       authenticated org member (`backend/src/farna/api/routes/org_settings.py`)
-      <!-- behaviour: org-01 | tests: none -->
+      <!-- behaviour: org-01 | tests: backend/tests/unit/api/test_org_settings_routes.py::test_org_settings_returns_org_display_currency, backend/tests/unit/api/test_org_settings_routes.py::test_org_settings_is_readable_by_a_non_admin_member -->
 - [x] `GET /api/v1/org/settings/guardrails/kill-switch` returns the kill-switch
       state (read-only for non-admins)
-      <!-- behaviour: org-02 | tests: none -->
+      <!-- behaviour: org-02 | tests: backend/tests/unit/api/test_org_settings_routes.py::test_kill_switch_read_returns_enabled_state_for_any_member, backend/tests/unit/api/test_org_settings_routes.py::test_kill_switch_read_returns_404_when_the_org_is_absent -->
 - [x] Admin endpoints handle org CRUD, license management, trigger pause/unpause,
       guardrails kill-switch toggle, and authorization enforcement flag
       (`backend/src/farna/api/routes/admin_orgs.py`,
@@ -129,6 +130,13 @@ execute (they stayed pinned `@awaiting-implementation`). Each flow's real
 behavior is covered by the citations above.
 
 ## QA History
+
+- 2026-11-25: **Improve Architecture product-map walk** - bound the two
+  member-facing org settings reads to focused tests in
+  `backend/tests/unit/api/test_org_settings_routes.py`: the display-currency
+  resolution (supported value, unsupported fallback, non-admin member) for
+  `org-01` and the guards kill-switch read (state, non-admin member, missing
+  org 404) for `org-02`. No product code changed.
 - 2026-11-02: **FAR-2302 delivery follow-up** - registered the org-admin
   feature-flag governance surface on this tracker: added the route module and
   the org-settings view to `code:`, their tests to `unit-tests:`, and the
