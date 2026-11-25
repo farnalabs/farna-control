@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader
       :title="$t('views.AdminOrgSettingsView.title')"
       :subtitle="$t('views.AdminOrgSettingsView.subtitle')"

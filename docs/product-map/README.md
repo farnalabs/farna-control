@@ -850,10 +850,11 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > `journeys/eval-journey.spec.ts`; real-time run events by
 > `frontend/tests/e2e/sse-crossworker-notification.spec.ts` plus the backend
 > `operations/websocket_reconnection.feature` and
-> `observability/active_run_observability.feature` (all executing BDD); theme
-> switching does not ship (there is no theme toggle; the static
-> `data-theme="agent"` CSS hook is locked by
-> `frontend/src/__tests__/agent-theme-audit.spec.ts`).
+> `observability/active_run_observability.feature` (all executing BDD). Theme
+> switching ships as the sidebar light/dark toggle (`.light` / `.dark` on
+> `<html>`); the per-view theme hook these drafts assumed was retired in FAR-2756,
+> and `frontend/src/__tests__/agent-theme-audit.spec.ts` now audits view rendering
+> and testid coverage.
 > `_ORPHANED_BDD_FEATURES` stays empty and the new guard
 > `test_no_bdd_citations_for_fully_deselected_features` makes it an invariant
 > that a product-map `bdd:` citation always names at least one scenario CI

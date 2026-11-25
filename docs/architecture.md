@@ -7,7 +7,7 @@ Farna Control is a self-hosted Delivery Governance Platform: govern the software
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    Browser UI (Vue 3 SPA)                     │
-│  Standard Theme (light) │ Agent Theme (dark, v1)             │
+│  Single app theme: dark by default, light toggle available   │
 │  Pinia stores → Composables → Views → Components             │
 │  PrimeVue component library                             │
 └──────────────────────┬───────────────────────────────────────┘
@@ -60,7 +60,7 @@ Farna Control is a self-hosted Delivery Governance Platform: govern the software
 | **State** | Pinia | Client-side state |
 | **UI primitives** | PrimeVue | Component library (themed via `primevue-theme.ts` token bridge) |
 | **Routing** | Vue Router | Client-side routing |
-| **Styling** | CSS custom properties | Theming (standard/agent) |
+| **Styling** | CSS custom properties | Theming (single palette, light/dark toggle) |
 | **Database** | PostgreSQL 16 | Primary data store |
 | **Cache/queue** | Redis 8 | SAQ broker, rate limiting |
 | **Container** | Docker Compose | Local dev, production |

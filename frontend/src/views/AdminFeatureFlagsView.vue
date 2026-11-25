@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <header>
       <PageHeader :title="$t('views.AdminFeatureFlagsView.feature_flags')" :subtitle="$t('views.AdminFeatureFlagsView.all_known_feature_flags_and_their_current_activation_status')" />
       <output v-if="planInfoPending" class="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" aria-busy="true" :aria-label="$t('views.AdminFeatureFlagsView.loading_plan_info')">

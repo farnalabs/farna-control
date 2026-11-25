@@ -1,6 +1,6 @@
 <template>
 
-    <div data-theme="agent" class="page-wide">
+    <div class="page-wide">
     <PageHeader :title="$t('views.AdminProductAnalyticsView.title')" :subtitle="$t('views.AdminProductAnalyticsView.subtitle')" />
 
     <LoadingSpinner v-if="store.isLoading" />

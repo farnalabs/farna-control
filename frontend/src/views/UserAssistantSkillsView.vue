@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader :title="$t('views.UserAssistantSkillsView.my_assistant_skills')" :subtitle="$t('views.UserAssistantSkillsView.manage_your_personal_skills_for_the_assistant_ai_assistant')">
       <template #right>
         <Button class="border border-primary/30" data-testid="assistant-user-skills-add" @click="skillDialogRef?.openCreate()">

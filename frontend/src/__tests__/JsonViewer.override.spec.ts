@@ -251,7 +251,7 @@ function tokenNamesFromCss(css: string): string[] {
 }
 
 function tokenDefinedInStyleCss(styleCss: string, token: string): boolean {
-  // e.g. `--primary:` appears once per theme block (dark default, .light, [data-theme="agent"])
+  // e.g. `--primary:` appears once per theme block (dark default, .light)
   return styleCss.includes(`${token}:`)
 }
 

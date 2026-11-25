@@ -1,5 +1,5 @@
 <template>
-    <div data-theme="agent" class="page-wide">
+    <div class="page-wide">
       <PageHeader :title="$t('views.SettingsGuardrailsView.title')" :subtitle="$t('views.SettingsGuardrailsView.subtitle')">
         <template #right>
           <div class="flex items-center gap-2">
