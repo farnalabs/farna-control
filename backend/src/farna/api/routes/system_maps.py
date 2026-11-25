@@ -29,9 +29,10 @@ from farna.api.dependencies import (
     get_db_session,
     get_or_create_engine,
     get_or_create_session_factory,
-    require_feature,
-    require_org_feature,
+    require_feature_any_credential,
+    require_org_feature_any_credential,
     require_permission,
+    require_permission_any_credential,
 )
 from farna.api.schemas.system_maps import (
     AttributionBindingCreate,
@@ -176,13 +177,42 @@ _INTERNAL_SYSTEM_MAP_PERMISSION = SYSTEM_MAPS_ACCESS_PERMISSION
 # be resolved with the org's ``feature_overrides`` applied. Plain
 # ``require_feature`` only reads the tier/licence default, which is always OFF
 # for this flag, so an admin enabling it in the UI would still get 402 here.
-# FAR-2730: the override is read for the JWT principal the internal authoring
-# router authenticates — every route on it carries a JWT-only
-# ``require_permission`` and ``get_plan_context`` resolves through
-# ``get_current_user``, so the any-credential default would imply an ``mk_``
-# capability no route on this router can deliver.
-_require_system_maps_feature = require_org_feature("system_maps", principal_dependency=get_current_tenant_user)
-_require_system_maps_read_feature = require_feature("system_maps_read")
+# FAR-2748: both router-level feature gates resolve the plan through the
+# any-credential variant. The ``farna-control apply`` CLI manages system maps
+# with its documented ``mk_`` org key, so the two routes it needs (the map
+# collection read and the create/update/revision writes) must not be rejected
+# by a JWT-only plan gate before their any-credential permission gate runs
+# (the FAR-2729 trap: a feature gate composed from ``get_plan_context``
+# authenticates a Bearer JWT only). Per-route ``require_permission`` remains
+# the credential floor, so a route that keeps the JWT-only variant is still
+# JWT-only by construction.
+_require_system_maps_feature = require_org_feature_any_credential("system_maps")
+_require_system_maps_read_feature = require_feature_any_credential("system_maps_read")
+
+_MSG_TEAM_SCOPED_KEY_NEEDS_ORG_WIDE = "This API key is team-scoped; system-map apply requires an org-wide key."
+
+
+def _reject_team_scoped_key(principal: TenantPrincipal) -> None:
+    """Deny a team-scoped ``mk_`` key on the four apply-facing system-map routes.
+
+    FAR-2748: ``farna-control apply`` authenticates with an org-wide (team-less)
+    key. These four routes were JWT-only before the widening, so a team-scoped
+    key never reached them; keeping that denial is the least-privilege fix for
+    the boundary the review found. The key's ``team_id`` cannot be enforced by
+    the request-time owner-team guards: they check the key OWNER's memberships
+    (``principal.account_id``) and the RLS context is set from that owner, so a
+    team-A-scoped key whose owner is also a team-B member could read, create,
+    update and attach revisions to team-B-private maps. The collection read and
+    the create path have no request-scoped row to hand
+    ``require_team_membership_or_admin_any_credential`` either, so fail closed
+    here rather than invent a per-route team predicate.
+    """
+    if principal.team_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_MSG_TEAM_SCOPED_KEY_NEEDS_ORG_WIDE,
+        )
+
 
 _log = logging.getLogger(__name__)
 
@@ -256,10 +286,13 @@ async def list_system_maps_endpoint(
     owner_team_id: uuid.UUID | None = Query(default=None),
     visibility: str | None = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = require_permission(SYSTEM_MAPS_READ_PERMISSION),
+    # any_credential: the `farna-control apply` CLI plans system maps from this
+    # collection read with its documented `mk_` org key (FAR-2748).
+    principal: TenantPrincipal = require_permission_any_credential(SYSTEM_MAPS_READ_PERMISSION),
     repository: SystemMapRepository = Depends(get_repo),
 ) -> SystemMapListResponse:
     """List published maps for org (pagination, filtering by name/owner_team_id)."""
+    _reject_team_scoped_key(principal)
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
@@ -330,10 +363,14 @@ async def list_system_maps_endpoint(
 async def create_system_map_endpoint(
     req: SystemMapCreate,
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = require_permission(_CODE_SYSTEM_MAP_CREATE),
+    # any_credential: the `farna-control apply` CLI creates declared system
+    # maps with its documented `mk_` org key (FAR-2748). Same operator floor;
+    # `validate_owner_team_for_create` is the request-time visibility guard.
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_SYSTEM_MAP_CREATE),
     repository: SystemMapRepository = Depends(get_repo),
 ) -> SystemMapResponse:
     """Create draft map (name, description, owner_team_id, visibility)."""
+    _reject_team_scoped_key(principal)
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
@@ -444,10 +481,14 @@ async def update_system_map_endpoint(
     map_id: uuid.UUID = Path(..., description=_DESC_SYSTEM_MAP_ID),
     req: SystemMapUpdate = Body(...),
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = require_permission(_CODE_SYSTEM_MAP_UPDATE),
+    # any_credential: the `farna-control apply` CLI updates declared system
+    # maps with its documented `mk_` org key (FAR-2748). Same operator floor;
+    # `validate_team_transition_for_update` is the request-time visibility guard.
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_SYSTEM_MAP_UPDATE),
     repository: SystemMapRepository = Depends(get_repo),
 ) -> SystemMapResponse:
     """Update a system map."""
+    _reject_team_scoped_key(principal)
     updates = req.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
@@ -841,10 +882,15 @@ async def create_system_map_revision_endpoint(
     map_id: uuid.UUID = Path(..., description=_DESC_SYSTEM_MAP_ID),
     req: SystemMapRevisionCreate = Body(...),
     session: AsyncSession = Depends(get_db_session),
-    principal: TenantPrincipal = require_permission(_CODE_SYSTEM_MAP_REVISION_CREATE),
+    # any_credential: the `farna-control apply` CLI writes a declared map's
+    # create-only draft revision with its documented `mk_` org key (FAR-2748).
+    # Same operator floor; `repository.validate_bindings` is the request-time
+    # visibility guard on the referenced pipeline / connector / eval rows.
+    principal: TenantPrincipal = require_permission_any_credential(_CODE_SYSTEM_MAP_REVISION_CREATE),
     repository: SystemMapRepository = Depends(get_repo),
 ) -> SystemMapRevisionResponse:
     """Create draft revision (nodes, relationships, loop configs)."""
+    _reject_team_scoped_key(principal)
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)

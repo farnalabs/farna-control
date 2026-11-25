@@ -3160,7 +3160,7 @@ def _install_viewer_overrides(
     contract is enforced. These overrides leave resolution intact so the real
     ``system_maps.read`` / ``system_maps_access`` gates run.
     """
-    from farna.api.dependencies import get_current_tenant_user, get_db_session, get_plan_context, get_settings
+    from farna.api.dependencies import get_current_tenant_user, get_db_session, get_plan_context, get_plan_context_any_credential, get_settings
     from farna.auth.dependencies import get_current_tenant_user_or_api_key
     from farna.settings import Settings
 
@@ -3199,6 +3199,10 @@ def _install_viewer_overrides(
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_db_session] = _get_session
     app.dependency_overrides[get_plan_context] = lambda: _ReadPlan(read_enabled=read_enabled)
+    # FAR-2748: the system-map feature gates now resolve the plan through the
+    # any-credential variant, so the read-entitlement stub must be applied to it
+    # too — otherwise `read_enabled=False` no longer reaches the gate.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: _ReadPlan(read_enabled=read_enabled)
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal
     from farna.api.dependencies import _system_maps_internal_access
