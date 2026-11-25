@@ -1440,6 +1440,21 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > malformed-graph scan, instance-wide scope). `_ORPHANED_BDD_FEATURES` stays
 > empty.
 
+> **Closed this walk (2026-11-25):** tracked one shipped but untracked backend
+> surface: the community primitive registry and its publisher trust model
+> (`library/primitive-registry.md`). `/api/v1/registry/*` (public anonymous
+> catalogue list/detail/pull, legacy and v2 publish, verify, download) and the
+> org-scoped `/api/v1/admin/publishers` CRUD ship REST-only with no manifest
+> route, no UI and no MCP tool, so neither product-map layer described them. The
+> entry records the anonymous catalogue contract, filtering/ranking,
+> signing/checksum verification, publisher trust states, the DB-backed
+> green/amber publisher CRUD and the library in-code-registry fallback, and
+> keeps the honest gaps (in-memory catalogue, per-process signing/trust keys,
+> two disagreeing publisher trust models, public third-party verification gap,
+> v2 payload/version mismatch, legacy private-key publish, authenticated
+> `/verify`, untested anonymous `GET /publishers`, unpinned pagination and
+> download materialisation). `_ORPHANED_BDD_FEATURES` stays empty.
+
 ### Admin
 - [feat-product-analytics](admin/product-analytics.md) => PRD N/A
 - [feat-plugins](admin/plugins.md) => PRD N/A
@@ -1507,6 +1522,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 ### Library
 - [feat-library](library/library.md) => PRD N/A
 - [feat-library-collections](library/library-collections.md) => PRD N/A
+- [feat-primitive-registry](library/primitive-registry.md) => PRD N/A
 
 ### Licensing
 - [feat-license](licensing/license.md) => PRD N/A
