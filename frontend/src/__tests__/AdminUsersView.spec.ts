@@ -824,3 +824,24 @@ describe('generateStrongPassword', () => {
     }
   })
 })
+
+describe('AdminUsersView — create mode guard', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    baseMocks()
+  })
+
+  it('ignores an unknown create mode id and honours the two declared modes', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { createMode: string; onCreateModeSelected: (id: string) => void }
+
+    vm.onCreateModeSelected('create')
+    expect(vm.createMode).toBe('password')
+    vm.onCreateModeSelected('invite')
+    expect(vm.createMode).toBe('invite')
+    vm.onCreateModeSelected('bogus')
+    expect(vm.createMode).toBe('invite')
+  })
+})

@@ -1478,3 +1478,22 @@ describe('AdminAuditView — table spacing (FAR-2584)', () => {
     expect(panel.find('.table-wrapper').exists()).toBe(true)
   })
 })
+
+describe('AdminAuditView — audit source guard', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('honours the two declared sources and ignores an unknown id', async () => {
+    mockAuditGet([])
+    const wrapper = mountView()
+    await nextTick()
+    const vm = wrapper.vm as unknown as { auditSource: string; onAuditSourceSelected: (id: string) => void }
+
+    vm.onAuditSourceSelected('system')
+    expect(vm.auditSource).toBe('system')
+    vm.onAuditSourceSelected('bogus')
+    expect(vm.auditSource).toBe('system')
+  })
+})

@@ -1539,3 +1539,20 @@ describe('SettingsTriggersView — FAR-617 create/delete/error-state coverage', 
     expect(vm.deleteDialogOpen).toBe(true)
   })
 })
+
+describe('SettingsTriggersView — outcome badge classification', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('maps a no-delivery outcome to the warning badge and every other value to neutral', async () => {
+    const wrapper = mountView(fakeJwt('admin'), baseListData)
+    await flush()
+    const vm = wrapper.vm as unknown as { outcomeBadgeClass: (c: string | null | undefined) => string }
+
+    expect(vm.outcomeBadgeClass('no_delivery')).toContain('bg-warning')
+    expect(vm.outcomeBadgeClass('excluded')).toContain('bg-muted')
+    expect(vm.outcomeBadgeClass(null)).toContain('bg-muted')
+  })
+})

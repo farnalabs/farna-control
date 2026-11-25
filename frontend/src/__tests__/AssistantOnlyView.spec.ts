@@ -363,4 +363,25 @@ describe('AssistantOnlyView', () => {
     await closeButton.trigger('click')
     expect(closeSpy).not.toHaveBeenCalled()
   })
+
+  it('ignores an unknown sub-tab, session-tab or close id from a caller', async () => {
+    ;(api.GET as any).mockResolvedValue({ error: null, data: { items: [], total: 0 } })
+    const wrapper = mount(AssistantOnlyView)
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      subTab: string
+      onSubTabSelected: (id: string) => void
+      onSessionTabSelected: (id: string) => void
+      closeTabById: (id: string) => void
+    }
+
+    vm.onSubTabSelected('not-a-sub-tab')
+    expect(vm.subTab).toBe('chat')
+
+    // Unknown ids must not resume or close anything, and must not throw.
+    vm.onSessionTabSelected('not-a-tab')
+    vm.closeTabById('not-a-tab')
+    wrapper.unmount()
+  })
 })
