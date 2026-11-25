@@ -242,6 +242,27 @@ jobs:
             echo "last_deploy_attempt=${LAST:-none}"
           }
 
+          # FAR-954 (legibility): force_deploy is the emergency bypass, so it
+          # must never wait on the Actions API. It runs FIRST, before the anchor
+          # scan below (1 + up to 50 Actions reads): a forced run reports
+          # last_deploy as unknown and jumps straight to the bypass, matching the
+          # pre-FAR-954 guarantee that force performed no Actions read.
+          LAST=""
+          if [ "$FORCE_DEPLOY" = "true" ]; then
+            {
+              echo "should_deploy=true"
+              echo "deployed=true"
+              echo "skip_reason="
+              echo "next_deploy="
+              echo "last_deploy=${LAST}"
+            } >> "$GITHUB_OUTPUT"
+            echo "DEPLOY VERDICT: YES (forced - throttle bypassed)"
+            log_detail
+            echo "Force deploy requested — bypassing throttle."
+            write_verdict "YES (forced - throttle bypassed)" "workflow_dispatch force_deploy=true" ""
+            exit 0
+          fi
+
           # Anchor the throttle on the most recent run that ACTUALLY deployed to
           # production — the "Deploy to control.farna.dev" job concluded with success.
           # A run that was itself throttled (all jobs skipped), failed pre-deploy or
@@ -263,14 +284,17 @@ jobs:
           # self-perpetuation. A structural test pins this input so a future
           # edit cannot swap in a run-level read.
           #
-          # FAR-954 (legibility): this observation is hoisted ABOVE the decision
-          # branches so every path - including the in-progress skip, which used
-          # to exit before it - can report WHEN the last real deploy was. It is
-          # an observation only: the force/in-progress/commit-fix/interval
-          # conditions below are unchanged and still evaluated in the same
-          # order, and only the printed verdict / summary text was added.
-          LAST=""
-          for RID in $(gh run list --repo "${{ github.repository }}" \
+          # FAR-954 (legibility): this observation is hoisted ABOVE the remaining
+          # decision branches (in-progress skip, commit-fix bypass, interval) so
+          # each can report WHEN the last real deploy was. It is an observation
+          # only: those conditions evaluate in the same order as before.
+          # force_deploy is the documented exception (it reports last_deploy
+          # unknown) because its bypass must not wait on Actions.
+          #
+          # Each Actions read is bounded by `timeout` so a slow or hung API
+          # degrades to "no anchor" (deploy proceeds) instead of stalling the
+          # throttle check.
+          for RID in $(timeout 20 gh run list --repo "${{ github.repository }}" \
             --workflow "Deploy: Staging + Prod" \
             --limit 50 \
             --json databaseId --jq '.[].databaseId' 2>/dev/null || echo ""); do
@@ -278,29 +302,14 @@ jobs:
             # per_page=100: the deploy job must be found even if the job list
             # grows past the API's default page of 30 (a silent miss would
             # anchor on a stale/failed run instead of the real deploy).
-            DEPLOY_JOB_CONCLUSION="$(gh api "repos/${{ github.repository }}/actions/runs/$RID/jobs?per_page=100" \
+            DEPLOY_JOB_CONCLUSION="$(timeout 20 gh api "repos/${{ github.repository }}/actions/runs/$RID/jobs?per_page=100" \
               --jq '[.jobs[] | select(.name == "Deploy to control.farna.dev") | .conclusion] | .[0] // empty' 2>/dev/null || echo "")"
             if [ "$DEPLOY_JOB_CONCLUSION" = "success" ]; then
-              LAST="$(gh api "repos/${{ github.repository }}/actions/runs/$RID" \
+              LAST="$(timeout 20 gh api "repos/${{ github.repository }}/actions/runs/$RID" \
                 --jq '.created_at' 2>/dev/null || echo "")"
               break
             fi
           done
-
-          if [ "$FORCE_DEPLOY" = "true" ]; then
-            {
-              echo "should_deploy=true"
-              echo "deployed=true"
-              echo "skip_reason="
-              echo "next_deploy="
-              echo "last_deploy=${LAST}"
-            } >> "$GITHUB_OUTPUT"
-            echo "DEPLOY VERDICT: YES (forced - throttle bypassed)"
-            log_detail
-            echo "Force deploy requested — bypassing throttle."
-            write_verdict "YES (forced - throttle bypassed)" "workflow_dispatch force_deploy=true" ""
-            exit 0
-          fi
           # If a deploy run is already in progress, batch this one - do not cancel/compete.
           # FAR-492 (documented, accepted): a push and a workflow_dispatch can fire
           # near-simultaneously; both register as in-progress within seconds, so this
@@ -4335,7 +4344,6 @@ jobs:
           SKIP_REASON: ${{ needs.deploy-throttle.outputs.skip_reason }}
           NEXT_DEPLOY: ${{ needs.deploy-throttle.outputs.next_deploy }}
           LAST_DEPLOY: ${{ needs.deploy-throttle.outputs.last_deploy }}
-          INTERVAL_HOURS: ${{ vars.DEPLOY_INTERVAL_HOURS || 3 }}
           PROD_SHA: ${{ steps.state.outputs.prod_sha }}
           MAIN_SHA: ${{ steps.state.outputs.main_sha }}
           COMMITS_BEHIND: ${{ steps.state.outputs.commits_behind }}
