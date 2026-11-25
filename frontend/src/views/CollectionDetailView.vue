@@ -163,7 +163,7 @@
                 </span>
                 <Button
                   v-if="install.registry_sourced && !install.agents_granted"
-                  size="small"
+                  size="sm"
                   :disabled="granting === install.install_id"
                   data-testid="collection-grant-agents"
                   @click="grantAgents(install.install_id)"
@@ -188,7 +188,7 @@
                 </span>
                 <Button
                   v-if="install.update_available"
-                  size="small"
+                  size="sm"
                   :disabled="upgrading === install.install_id"
                   data-testid="collection-upgrade"
                   @click="upgrade(install.install_id)"
@@ -234,8 +234,8 @@
                     v-if="entry.status !== 'configured+bound'"
                     as="router-link"
                     :to="`/admin/connectors`"
-                    size="small"
-                    variant="ghost"
+                    variant="primary"
+                    size="sm"
                     class="text-xs"
                     data-testid="collection-create-connector"
                   >
@@ -263,7 +263,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'

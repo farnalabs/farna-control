@@ -106,7 +106,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { Pencil, Trash2 } from '@lucide/vue'
 import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'
