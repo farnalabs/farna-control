@@ -226,6 +226,44 @@ def test_create_external_agent_team_visibility(client: TestClient) -> None:
     validate.assert_awaited_once()
 
 
+_INVALID_CREATE_SHAPES = [
+    pytest.param({"name": ""}, id="empty-name"),
+    pytest.param({"name": "x" * 256}, id="name-too-long"),
+    pytest.param({"name": "x", "runtime_kind": "claude"}, id="unknown-runtime-kind"),
+    pytest.param({"name": "x", "host_descriptor": "h" * 501}, id="host-descriptor-too-long"),
+    pytest.param({"name": "x", "status": "live"}, id="unknown-status"),
+    pytest.param({"name": "x", "discovery_provenance": "scan"}, id="unknown-provenance"),
+    pytest.param({"name": "x", "visibility": "public"}, id="unknown-visibility"),
+]
+
+
+@pytest.mark.parametrize("payload", _INVALID_CREATE_SHAPES)
+def test_create_external_agent_rejects_out_of_shape_requests(client: TestClient, payload: dict[str, Any]) -> None:
+    create = AsyncMock()
+    with (
+        patch.object(ext_mod, "validate_owner_team_for_create", AsyncMock()),
+        patch.object(ext_mod, "create_external_agent", create),
+    ):
+        resp = client.post(AGENTS, json=payload)
+    assert resp.status_code == 422
+    create.assert_not_awaited()
+
+
+def test_create_external_agent_applies_documented_defaults(client: TestClient) -> None:
+    create = AsyncMock(return_value=_agent(name="claude"))
+    with (
+        patch.object(ext_mod, "validate_owner_team_for_create", AsyncMock()),
+        patch.object(ext_mod, "create_external_agent", create),
+    ):
+        resp = client.post(AGENTS, json={"name": "claude"})
+    assert resp.status_code == 201
+    kwargs = create.await_args.kwargs
+    assert kwargs["runtime_kind"] == "other"
+    assert kwargs["status"] == "active"
+    assert kwargs["discovery_provenance"] == "manual"
+    assert kwargs["visibility"] == "org"
+
+
 @pytest.mark.parametrize(("exc", "status"), _ERRORS_WITH_INTEGRITY)
 def test_create_external_agent_error_arms(client: TestClient, exc: Exception, status: int) -> None:
     with (

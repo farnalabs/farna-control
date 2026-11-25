@@ -10,17 +10,13 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 485 of 922 ticked behaviours (105 node, 137 feature, 243 module strength).
+Bound today: 490 of 922 ticked behaviours (109 node, 138 feature, 243 module strength).
 Weak bindings (module-only): 243. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
 
 Derived status: `partial`
 
-- `org-01` - `GET /api/v1/org/settings` returns the org's display currency for any
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `org-02` - `GET /api/v1/org/settings/guardrails/kill-switch` returns the kill-switch
-  - why: behaviour text names no test; only code paths (or nothing) are cited
 - `org-08` - Frontend renders org settings at `/admin/org` with export, product-analytics
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
@@ -338,13 +334,6 @@ Derived status: `partial`
 - `connectors-07` - AdminConnectorsView renders schema-driven structured forms for REST
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `connectors-08` - ConnectorHub registers and manages 30+ native connector types with
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-
-## docs/product-map/configure/external-agent-registry.md
-
-Derived status: `partial`
-
-- `external-agent-registry-02` - The create shape is constrained: `name` 1..255, `runtime_kind` one of
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
 ## docs/product-map/configure/guardrails.md
@@ -1104,20 +1093,6 @@ Derived status: `partial`
 - `runtime-11` - Org sandbox concurrency is viewable/updatable on
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
-## docs/product-map/system/system-config.md
-
-Derived status: `partial`
-
-- `system-config-01` - GET `/api/v1/system-admin/config` lists all config entries with sensitive
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-
-## docs/product-map/system/system-orgs.md
-
-Derived status: `partial`
-
-- `system-orgs-06` - Org-level license management: GET/PUT/DELETE on
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-
 ## docs/product-map/teams/org-entity.md
 
 Derived status: `partial`
@@ -1190,7 +1165,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 105  Feature: 137  Module (weak): 243
+Node: 109  Feature: 138  Module (weak): 243
 
 ### Weak (module-only) bindings
 
