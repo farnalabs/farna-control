@@ -134,7 +134,7 @@
                     {{ $t('views.AdminCostBreakdownView.anomaly_spend_detail', { amount: formatMoney(anomaly.amount, currencyCode), baseline: formatMoney(anomaly.baseline, currencyCode), percent: (anomaly.percent_above > 0 ? '+' : '') + anomaly.percent_above.toFixed(0) + '%' }) }}
                   </p>
                 </div>
-                <Button size="small" severity="secondary" outlined :disabled="dismissLoading[anomaly.id]" :data-testid="'cost-anomaly-dismiss-' + anomaly.id" @click="dismissAnomaly(anomaly.id)">
+                <Button size="sm" variant="secondary" :disabled="dismissLoading[anomaly.id]" :data-testid="'cost-anomaly-dismiss-' + anomaly.id" @click="dismissAnomaly(anomaly.id)">
                   {{ $t('views.AdminCostBreakdownView.dismiss') }}
                 </Button>
               </div>
@@ -164,7 +164,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import StatCard from '../components/ui/StatCard.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { DataTable } from '../components/ui/data-table'
 import { formatMoney } from '../lib/money'
 import { useOrgCurrency } from '../composables/useOrgCurrency'

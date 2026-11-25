@@ -110,7 +110,7 @@
         <p class="text-sm font-medium text-destructive-text">{{ $t('views.AdminNodeCategoriesView.delete_confirm', { name: deleteConfirmName }) }}</p>
         <p class="mt-1 text-sm text-destructive-text">{{ $t('views.AdminNodeCategoriesView.this_action_cannot_be_undone') }}</p>
         <div class="mt-3 flex items-center gap-2">
-          <Button :disabled="deleting" severity="danger" data-testid="admin-node-categories-delete-confirm" @click="deleteCategory">
+          <Button :disabled="deleting" variant="danger" data-testid="admin-node-categories-delete-confirm" @click="deleteCategory">
             {{ deleting ? $t('common.deleting') : $t('common.delete') }}
           </Button>
           <button type="button"
@@ -142,7 +142,7 @@ import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import { usePlanStore } from '../stores/planStore'
 import FeatureGate from '../components/FeatureGate.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import TableActions from '../components/shared/TableActions.vue'
 
 const planStore = usePlanStore()

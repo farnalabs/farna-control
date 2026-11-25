@@ -47,7 +47,7 @@
               <p class="mt-0.5 select-all cursor-text break-all sm:break-normal font-mono text-sm text-muted-foreground">{{ mcpUrl || 'http://localhost:8000' }}</p>
             </div>
             <div class="actions-nowrap flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
-              <Button severity="secondary" outlined size="small" data-testid="settings-mcp-copy-url" @click="copyServerUrl">
+              <Button variant="secondary" size="sm" data-testid="settings-mcp-copy-url" @click="copyServerUrl">
                 {{ copiedField === 'server-url' ? $t('views.SettingsMcpView.copied') : $t('views.SettingsMcpView.copy') }}
               </Button>
               <Badge :severity="publicUrlConfigured ? 'info' : 'secondary'">
@@ -149,7 +149,7 @@
                   {{ key.last_used_at ? formatDate(key.last_used_at) : $t('views.SettingsMcpView.never') }}
                 </td>
                 <td class="table-cell-numeric">
-                  <Button v-if="key.is_active" severity="danger" size="small" data-testid="settings-mcp-revoke-key" @click="confirmRevokeKey(key)">
+                  <Button v-if="key.is_active" variant="danger" size="sm" data-testid="settings-mcp-revoke-key" @click="confirmRevokeKey(key)">
                     {{ $t('views.SettingsMcpView.revoke') }}
                   </Button>
                 </td>
@@ -189,7 +189,7 @@
           </div>
           <div class="rounded-lg bg-muted/30 p-4">
             <pre class="text-xs font-mono whitespace-pre-wrap break-all">{{ mcpConfigSnippet }}</pre>
-            <Button severity="secondary" outlined size="small" class="mt-2" data-testid="settings-mcp-copy-snippet" @click="copySnippet">{{ $t('views.SettingsMcpView.copy') }}</Button>
+            <Button variant="secondary" size="sm" class="mt-2" data-testid="settings-mcp-copy-snippet" @click="copySnippet">{{ $t('views.SettingsMcpView.copy') }}</Button>
           </div>
           </div>
       </DataCard>
@@ -321,7 +321,7 @@
                 readonly
                 class="w-full rounded-lg border border-input bg-muted px-3 py-2 font-mono text-sm"
               />
-              <Button severity="secondary" outlined size="small" class="absolute right-1 top-1" data-testid="settings-mcp-copy-key-value" @click="copyToClipboard(createdKeyValue, 'key-value')">
+              <Button variant="secondary" size="sm" class="absolute right-1 top-1" data-testid="settings-mcp-copy-key-value" @click="copyToClipboard(createdKeyValue, 'key-value')">
                 {{ copiedField === 'key-value' ? $t('views.SettingsMcpView.copied') : $t('views.SettingsMcpView.copy') }}
               </Button>
             </div>
@@ -366,7 +366,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import Badge from 'primevue/badge'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Dialog from 'primevue/dialog'
 import FormDialog from '../components/shared/FormDialog.vue'

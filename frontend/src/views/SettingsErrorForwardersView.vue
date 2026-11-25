@@ -284,7 +284,7 @@ import Notice from '../components/shared/Notice.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 
 interface ForwarderItem {
