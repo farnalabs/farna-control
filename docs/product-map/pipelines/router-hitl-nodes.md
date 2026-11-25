@@ -23,7 +23,7 @@ bdd:
   - backend/tests/bdd/features/pipelines/router_nodes.feature
 depends-on:
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Router & HITL Execution-Graph Nodes
@@ -41,48 +41,62 @@ registry (`feat-router`).
 - [x] `router` is an API-authorable `PipelineGraphNode.node_type` (with a
       `router_config`; `PipelineGraphNode` validates presence of rules) and
       compiles in `build_graph_from_json`
+      <!-- behaviour: router-hitl-nodes-01 | tests: none -->
 - [x] `make_router_node_fn` evaluates ordered `{guard (JMESPath), target}`
       rules against state, first-match-wins
+      <!-- behaviour: router-hitl-nodes-02 | tests: none -->
 - [x] An explicit `default` rule maps to its target; `/ _make_conditional_router`
       lowers Router onto the existing conditional-edge compile path
+      <!-- behaviour: router-hitl-nodes-03 | tests: none -->
 - [x] LLM classifier mode (`mode == "classifier"`) matches the
       `state["_llm_next_node"]` label to a rule `label`, falling back to the
       default rule
+      <!-- behaviour: router-hitl-nodes-04 | tests: none -->
 - [x] Router shares ONE truthiness rule (`bool(...)`) with the pipeline-engine
       JMESPath guard sites (conditional edges, loop counters, HITL gate conditions)
       via the consolidated compiler/evaluator `compile_jmespath` /
       `evaluate_jmespath_condition` (`jmespath_eval.py`); invalid expressions
       surface a `ValueError`. Polling-trigger conditions are a separate
       (type-aware) evaluator in `trigger_engine/polling.py`, not this one
+      <!-- behaviour: router-hitl-nodes-05 | tests: none -->
 - [x] Compile-time default-rule enforcement: a *new* Router node without a
       `default` rule raises `RouterConfigError` (classifier mode exempt);
       existing conditional-edge graphs remain valid (backward compat)
+      <!-- behaviour: router-hitl-nodes-06 | tests: none -->
 - [x] Runtime no-match (no rule matches and no default) raises
       `RouterNoMatchError`; the executor terminalizes the run with the
       `router_no_match` terminal status and error code `router.no_match`,
       NOT classified as `failed`
+      <!-- behaviour: router-hitl-nodes-07 | tests: none -->
 - [x] `router_no_match` is a terminal, non-failure run status in
       `TERMINAL_STATUSES` (`run.py`) and in the `ck_runs_status` DB CHECK
       constraint (baseline schema, `0350_baseline_schema.py`), echoed in
       `frontend/src/constants/runStatuses.ts` and analyzable via the analytics
       status filter
+      <!-- behaviour: router-hitl-nodes-08 | tests: none -->
 - [x] `rejected` (FAR-1487) joins the same closed run-status vocabulary as a
       terminal, non-failure status (HITL reject with no reject route; the
       baseline schema widens `ck_runs_status` and the
       workspace-drift sweep partial index): classified `excluded`, never
       advances a lifecycle journey, excluded from failure analytics
+      <!-- behaviour: router-hitl-nodes-09 | tests: none -->
 - [x] Router rule targets are excluded from pipeline entry-point resolution
+      <!-- behaviour: router-hitl-nodes-10 | tests: none -->
 - [x] `hitl` is an API-authorable node type; the HITL node's `hitl_config` is
       injected onto each outgoing edge and flows through the identical legacy
       synthetic-gate path (a compile-equivalence test asserts the `hitl` node
       produces the same compiled graph as the legacy edge-gate HITL)
+      <!-- behaviour: router-hitl-nodes-11 | tests: none -->
 - [x] `manual` is retained as the non-gating human-output step (distinct from
       the gating `hitl` node)
+      <!-- behaviour: router-hitl-nodes-12 | tests: none -->
 - [x] Taxonomy reconciliation: `loop` is an authorable edge type in
       `VALID_EDGE_TYPES`, while `connector` remains an internal engine
       resolution, never an API-authored node type
+      <!-- behaviour: router-hitl-nodes-13 | tests: none -->
 - [x] Pipeline editor renders Router nodes with a dedicated `node-router`
       template slot and localized labels (`PipelineEditorView.vue`)
+      <!-- behaviour: router-hitl-nodes-14 | tests: none -->
 
 ## Known Gaps
 

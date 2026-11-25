@@ -506,6 +506,39 @@ class TestRunPsql:
 
         assert mock_run.call_args[1]["timeout"] == 1200
 
+    @patch.object(shutil, "which")
+    @patch("farna.cli.backup.subprocess.run")
+    def test_recreates_the_public_schema_before_the_dump_in_one_transaction(self, mock_run: MagicMock, mock_which: MagicMock, tmp_path: Path) -> None:
+        """FAR-2763 defect 2: the replay must not rely on pg_dump's drop ordering.
+
+        A snapshot taken at revision N cannot be replayed over a database
+        migrated to N+k by replaying the dump's ``--clean`` drops: a later
+        migration may have added an FK/constraint that depends on a
+        pre-existing PK, and the dump's ``DROP CONSTRAINT`` then fails. The
+        replay therefore recreates ``public`` FIRST, in the SAME single
+        transaction (``-1``), so every dump drop is an ``--if-exists`` no-op and
+        a failed replay rolls the reset back with it.
+        """
+        mock_which.return_value = "psql"
+        mock_run.return_value = MagicMock(returncode=0, stderr=b"")
+
+        input_path = tmp_path / "restore.sql"
+        input_path.write_text("RESTORE;")
+
+        _run_psql("postgresql://user:pass@localhost/db", input_path)
+
+        cmd = mock_run.call_args[0][0]
+        assert "-1" in cmd, "the reset and the dump must share ONE transaction"
+        reset_index = cmd.index("-c")
+        dump_index = cmd.index("-f")
+        assert reset_index < dump_index, "psql runs -c/-f in argv order; the reset must precede the dump"
+        reset_sql = cmd[reset_index + 1]
+        assert "DROP SCHEMA IF EXISTS public CASCADE" in reset_sql
+        assert "CREATE SCHEMA public" in reset_sql
+        assert cmd[dump_index + 1] == str(input_path)
+        # The dump is replayed from -f, never inherited stdin.
+        assert "stdin" not in mock_run.call_args[1]
+
 
 # ── _export_checkpoint_blobs_sync ─────────────────────────────────────────────
 
@@ -1561,6 +1594,51 @@ class TestRestoreCli:
         # be supplied explicitly (the ambient test DATABASE_URL is sqlite).
         result = runner.invoke(cli, ["restore", str(tmp_path), "--yes", "--app-db-url", _TEST_APP_DB_URL])
 
+        assert result.exit_code != 0
+        assert "backup-info.json not found" in result.output
+
+    def test_restore_accepts_an_unreadable_db_capacity_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """FAR-2763 defect 1: the compose default DB_CAPACITY_PATH must parse.
+
+        The documented compose recovery runs as www-data while
+        DB_CAPACITY_PATH is the postgres-owned 0700 database volume mounted
+        read-only for the capacity monitor. ``click.Path`` defaults to
+        readable=True, so restore exited 2 at OPTION PARSING ("Invalid value
+        for '--target-fs': ... is not readable") before any pre-flight — the
+        recovery command could never get as far as its own checks. The path is
+        only statvfs()'d, so it must be accepted unreadable.
+
+        ``os.access`` is denied for the directory rather than chmod'ing it:
+        the observable behaviour is the same under any uid (root reads a 000
+        directory, so a chmod-based fixture could not discriminate there).
+        """
+        unreadable = tmp_path / "db-volume"
+        unreadable.mkdir()
+        unreadable.chmod(0o000)
+        real_access = os.access
+
+        def _deny_capacity_path(path: Any, mode: int, *args: Any, **kwargs: Any) -> bool:
+            if os.fspath(path) == os.fspath(unreadable):
+                return False
+            return real_access(path, mode)
+
+        monkeypatch.setattr(os, "access", _deny_capacity_path)
+
+        try:
+            runner = CliRunner()
+            result = runner.invoke(
+                cli,
+                ["restore", str(tmp_path), "--yes", "--app-db-url", _TEST_APP_DB_URL],
+                env={"DB_CAPACITY_PATH": str(unreadable)},
+            )
+        finally:
+            # Leave a removable directory behind: pytest's tmp cleanup (and a
+            # developer's) cannot descend into a 000 directory.
+            unreadable.chmod(0o700)
+
+        # The path is NOT rejected at parsing; the run reaches the archive and
+        # fails on its (missing) manifest instead.
+        assert "is not readable" not in result.output
         assert result.exit_code != 0
         assert "backup-info.json not found" in result.output
 

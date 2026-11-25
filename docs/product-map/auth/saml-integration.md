@@ -15,7 +15,7 @@ bdd:
   - backend/tests/bdd/steps/test_sso_saml.py
 depends-on:
   - feat-auth-jwt-auth
-status: covered
+status: partial
 ---
 
 # SAML Integration
@@ -27,12 +27,17 @@ signature verification, wired into the SSO ACS flow (`feat-sso`).
 ## Behaviors
 
 - [x] `AuthnRequest` generation from the IdP metadata (optional SP signing)
+      <!-- behaviour: saml-integration-01 | tests: none -->
 - [x] `SAMLResponse` parsing with XML digital signature verification against the
       IdP X.509 certificate from metadata
+      <!-- behaviour: saml-integration-02 | tests: none -->
 - [x] IdP metadata parsing via `OneLogin_Saml2_IdPMetadataParser`
+      <!-- behaviour: saml-integration-03 | tests: none -->
 - [x] SAML ACS flow validates the assertion, resolves the provider, and issues a
       JWT pair (`feat-auth-jwt-auth`)
+      <!-- behaviour: saml-integration-04 | tests: none -->
 - [x] Signed vs unsigned responses fail closed (no silent unsigned response accept)
+      <!-- behaviour: saml-integration-05 | tests: none -->
 - [x] An assertion that parses but fails validation (bad signature, expired
       conditions, missing assertion) surfaces a typed `SamlAuthError`; input that
       cannot even be base64-decoded or parsed as XML fails earlier inside
@@ -40,6 +45,7 @@ signature verification, wired into the SSO ACS flow (`feat-sso`).
       (`binascii.Error`, a `ValueError` subclass) is mapped to 401 by the ACS
       route, while a non-XML document (`lxml.etree.XMLSyntaxError`) falls through
       to the generic 500
+      <!-- behaviour: saml-integration-06 | tests: none -->
 - [x] Cross-org assertion reuse fails closed (FAR-1010): an assertion minted
       for one provider's entity ID, replayed at another provider's ACS, is
       rejected 401 ("SAML response validation failed" - python3-saml's own
@@ -53,9 +59,11 @@ signature verification, wired into the SSO ACS flow (`feat-sso`).
       an integrity signal only, never the routing key)
       (`auth/saml_handler.py`, `test_saml_audience_containment`,
       `test_saml_per_org_regression`, `test_sso`)
+      <!-- behaviour: saml-integration-07 | tests: none -->
 - [x] Per-organization provider isolation: metadata XML and the ACS surface
       are per-provider; an org's assertion is accepted only at the matching
       org's ACS (`test_saml_per_org_regression`)
+      <!-- behaviour: saml-integration-08 | tests: none -->
 
 ## Known Gaps
 

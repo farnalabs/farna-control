@@ -314,11 +314,25 @@ arbitrary file and print its digest. psql runs with `-X`, so an operator's
 zero.
 
 `--verify-target-schema` is the compose path's stand-in for the data-dir
-instance identity: it refuses unless the TARGET database records exactly the
-schema revisions the archive was taken from. `--replace-cluster` overrides it.
-The disk pre-flight measures the DATABASE's filesystem — pass `--target-fs` (or
-set `DB_CAPACITY_PATH`, which the compose deployment does) when the archive is
-on a different volume from the database.
+instance identity: it proceeds when the target records the snapshot's
+revisions, and also when the target has MIGRATED PAST them (the rollback the
+snapshot exists for), naming the migrations being rolled back. A target that is
+unrelated — a different revision train, or not a bootstrapped database — is
+refused; `--replace-cluster` overrides it. The disk pre-flight measures the
+DATABASE's filesystem — pass `--target-fs` (or set `DB_CAPACITY_PATH`, which
+the compose deployment does) when the archive is on a different volume from
+the database. The path is only `statvfs`'d, so it does not need to be readable;
+the compose database volume is not, and the pre-flight degrades with a loud
+warning when it cannot measure.
+
+Before the dump is applied, the replay recreates the target's `public` schema
+**in the same `psql` transaction as the dump**. pg_dump's `--clean` preamble
+only knows the objects that existed when the snapshot was taken, so replaying
+it over a forward-migrated schema can fail on a drop a newer object depends on
+(an FK added by a later migration onto a pre-existing primary key). Recreating
+the schema first makes those drops no-ops, and because the reset and the dump
+commit or roll back together, a failed replay leaves the target exactly as it
+was — on top of the pre-restore safety dump taken before either runs.
 
 Because `database.sql` is a dump of the whole database, restoring it also
 restores the pre-upgrade `alembic_version` row, leaving the database recorded

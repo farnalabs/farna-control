@@ -281,14 +281,17 @@
         <!-- The unrestricted option is plan-gated off while the provider is
              already in unrestricted mode: surface it so the state is not
              silently re-committed on save. -->
-        <div
+        <Notice
           v-if="unrestrictedOptionHidden"
-          class="mb-2 rounded-lg border border-destructive/50 bg-destructive/5 p-3 text-xs text-destructive-text"
-          role="alert"
+          variant="danger"
+          live="assertive"
+          :icon="false"
+          padding="sm"
+          class="mb-2 text-xs"
           data-testid="sso-unrestricted-locked-notice"
         >
           {{ $t('components.SsoProviderForm.mode_unrestricted_locked') }}
-        </div>
+        </Notice>
 
         <!-- Mode 1: Invitation only -->
         <label
@@ -354,14 +357,17 @@
           <div class="min-w-0">
             <span class="text-sm font-medium text-destructive-text">{{ $t('components.SsoProviderForm.mode_unrestricted') }}</span>
             <p class="mt-0.5 text-xs text-muted-foreground">{{ $t('components.SsoProviderForm.mode_unrestricted_help') }}</p>
-            <div
+            <Notice
               v-if="provisioningMode === 'unrestricted'"
-              class="mt-2 rounded border border-destructive/50 bg-destructive/5 p-2 text-xs text-destructive-text"
-              role="alert"
+              variant="danger"
+              live="assertive"
+              :icon="false"
+              padding="xs"
+              class="mt-2 text-xs"
               data-testid="sso-unrestricted-warning"
             >
               {{ $t('components.SsoProviderForm.mode_unrestricted_warning') }}
-            </div>
+            </Notice>
           </div>
         </label>
       </div>
@@ -453,6 +459,7 @@ import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Select from './shared/AppSelect.vue'
+import Notice from './shared/Notice.vue'
 import SsoBrandMark from './SsoBrandMark.vue'
 
 export interface SsoPresetInfo {

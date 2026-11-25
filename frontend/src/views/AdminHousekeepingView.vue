@@ -55,14 +55,14 @@
           Without this the page could read as a clean scan (0 candidates) even
           though one or more scanners never completed.
         -->
-        <div
+        <ErrorAlert
           v-if="failedCategoryCount > 0"
-          role="alert"
-          class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive-text"
+          class="mb-4 text-sm"
+          :retryable="false"
         >
           <p class="font-medium">{{ $t('views.AdminHousekeepingView.scan_incomplete_title') }}</p>
           <p class="mt-1">{{ $t('views.AdminHousekeepingView.scan_incomplete_description', failedCategoryCount) }}</p>
-        </div>
+        </ErrorAlert>
 
         <DataCard class="mb-4" variant="bordered" padding="sm" elevation="sm">
           <div class="flex items-center gap-4">
@@ -133,16 +133,15 @@
           -->
           <div
             v-if="isFailed(cat)"
-            role="alert"
             class="px-4 py-3"
           >
-            <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive-text">
+            <ErrorAlert compact :retryable="false">
               <p class="font-medium">{{ $t('views.AdminHousekeepingView.scan_failed_title') }}</p>
               <p class="mt-1">{{ $t('views.AdminHousekeepingView.scan_failed_reason', { reason: failureReason(cat) }) }}</p>
               <p v-if="failureException(cat)" class="mt-1">
                 {{ $t('views.AdminHousekeepingView.scan_failed_exception', { exception: failureException(cat) }) }}
               </p>
-            </div>
+            </ErrorAlert>
           </div>
 
           <div v-else-if="cat.candidates.length === 0" class="px-4 py-3 text-sm text-muted-foreground">

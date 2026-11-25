@@ -45,10 +45,10 @@
           </div>
         </div>
 
-        <output v-if="hasPartialResults" data-testid="variant-batch-partial" aria-labelledby="variant-batch-partial-label" class="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-text">
+        <Notice v-if="hasPartialResults" variant="warning" live="polite" :icon="false" padding="none" aria-labelledby="variant-batch-partial-label" class="px-4 py-3 text-sm" data-testid="variant-batch-partial">
           <span class="sr-only" id="variant-batch-partial-label">{{ $t('views.variantBatch.aria_partial_results') }}</span>
           {{ $t('views.variantBatch.partialResults') }}
-        </output>
+        </Notice>
         <output v-if="batchFailed" data-testid="variant-batch-failed" aria-labelledby="variant-batch-failed-label" class="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive-text">
           <span class="sr-only" id="variant-batch-failed-label">{{ $t('views.variantBatch.aria_batch_failed') }}</span>
           {{ $t('views.variantBatch.batchFailed') }}
@@ -248,6 +248,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import Button from 'primevue/button'
