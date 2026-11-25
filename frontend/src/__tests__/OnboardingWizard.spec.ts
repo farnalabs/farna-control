@@ -152,6 +152,21 @@ beforeEach(() => {
 })
 
 describe('OnboardingWizard — navigation & gating', () => {
+  it('renders the step frame through the BaseCard primitive', async () => {
+    const wrapper = mountWizard()
+    await nextTick()
+
+    const stepTitle = wrapper.get('h2')
+    expect(stepTitle.text()).toContain('Welcome')
+    // The step frame is the element holding the step header. `card-base` exists
+    // only on BaseCard's own root (components/ui/BaseCard.vue); the hand-rolled
+    // <div> this replaced carried neither class, so this fails unless the frame
+    // is rendered by the primitive (FAR-2769).
+    const frame = stepTitle.element.closest('.card-base')
+    expect(frame).not.toBeNull()
+    expect(frame!.classList.contains('card')).toBe(true)
+  })
+
   it('renders the welcome step with the 6-step guide', async () => {
     const wrapper = mountWizard()
     await nextTick()
