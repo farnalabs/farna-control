@@ -171,24 +171,19 @@ def _write_client_shims(shims_dir: Path, docker: str) -> None:
     shims_dir.mkdir(parents=True, exist_ok=True)
     psql = """#!/usr/bin/env bash
 set -euo pipefail
-args=(); files=()
+args=(); file=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    -f) files+=("$2"); shift 2 ;;
+    -f) file="$2"; shift 2 ;;
     postgres://*|postgresql://*) shift ;;
     *) args+=("$1"); shift ;;
   esac
 done
-if [ ${#files[@]} -eq 0 ]; then echo "psql shim: no -f" >&2; exit 2; fi
-fargs=(); i=0
-for f in "${files[@]}"; do
-  i=$((i+1))
-  in_container="/tmp/farna-test-$$-$i-$(basename "$f")"
-  "$FARNA_TEST_DOCKER" cp "$f" "$FARNA_TEST_PG_CONTAINER:$in_container" >/dev/null
-  fargs+=(-f "$in_container")
-done
+if [ -z "$file" ]; then echo "psql shim: no -f" >&2; exit 2; fi
+in_container="/tmp/farna-test-$$-$(basename "$file")"
+"$FARNA_TEST_DOCKER" cp "$file" "$FARNA_TEST_PG_CONTAINER:$in_container" >/dev/null
 exec "$FARNA_TEST_DOCKER" exec -e PGPASSWORD "$FARNA_TEST_PG_CONTAINER" psql "${args[@]}" \
-  -h 127.0.0.1 -p 5432 -U "$FARNA_TEST_PG_USER" -d "$FARNA_TEST_PG_DB" "${fargs[@]}"
+  -h 127.0.0.1 -p 5432 -U "$FARNA_TEST_PG_USER" -d "$FARNA_TEST_PG_DB" -f "$in_container"
 """
     pg_dump = """#!/usr/bin/env bash
 set -euo pipefail
@@ -424,11 +419,7 @@ def test_a_snapshot_from_n_restores_over_a_database_at_n_plus_k(replay_env: _Clu
     _forward_migrate(cluster, database)
 
     with _target_database(database):
-        backup_mod._run_psql(
-            cluster.url(database),
-            dump_path,
-            preamble_sql=backup_mod._PUBLIC_SCHEMA_RESET_SQL,
-        )
+        backup_mod._run_psql(cluster.url(database), dump_path)
 
     tables = _table_names(cluster, database)
     assert "journey_facts_legacy" in tables
@@ -454,11 +445,7 @@ def test_a_failed_replay_rolls_the_schema_reset_back_too(replay_env: _Cluster, t
     broken_dump.write_bytes(dump_path.read_bytes() + b"\nSELECT 1/0;\n")
 
     with pytest.raises(RuntimeError, match="psql restore failed"), _target_database(database):
-        backup_mod._run_psql(
-            cluster.url(database),
-            broken_dump,
-            preamble_sql=backup_mod._PUBLIC_SCHEMA_RESET_SQL,
-        )
+        backup_mod._run_psql(cluster.url(database), broken_dump)
 
     tables = _table_names(cluster, database)
     assert "farna_journey_facts" in tables
