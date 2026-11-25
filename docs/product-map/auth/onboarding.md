@@ -11,7 +11,7 @@ bdd:
 depends-on:
   - feat-model-backends
   - feat-schemas
-status: covered
+status: partial
 ---
 
 # Onboarding
@@ -31,24 +31,31 @@ agent, pipeline) and create a starter pipeline.
 - [x] `GET /api/v1/onboarding/status` returns `is_first_run`, `progress_pct`,
       `completed_actions`, `skipped_actions`, `dismissed` and the ordered action list;
       the progress row is created lazily on first read
+      <!-- behaviour: onboarding-01 | tests: none -->
 - [x] Auto-completion: `login` is always completed, and `add_ai_model` /
       `create_first_agent` / `create_first_schema` / `create_first_pipeline` /
       `run_first_pipeline` auto-complete when the org actually has a model backend,
       agent, schema, pipeline or run respectively (`_check_auto_completion`)
+      <!-- behaviour: onboarding-02 | tests: none -->
 - [x] `POST /actions/{id}/complete` marks an action complete (idempotent, removes it
       from skipped) and `POST /actions/{id}/skip` marks it skipped; invalid ids reject
       with 422 and a list of valid ids; both recompute `progress_pct`
+      <!-- behaviour: onboarding-03 | tests: none -->
 - [x] `POST /dismiss` persists the dismissal so the wizard no longer shows as first-run
+      <!-- behaviour: onboarding-04 | tests: none -->
 - [x] `POST /seed-examples` creates the {name="Truth Classifier"} schema + v1.0
       published definition, a "Statement Input" schema + version, an executable agent
       bound to the org's first model backend, and an example pipeline interlinked with
       that agent; when the org has no model backend the seed refuses with a 409 and a
       message pointing at the "Add an AI Model" step instead of silently seeding a
       partial, agent-less example (no writes are performed on refusal)
+      <!-- behaviour: onboarding-05 | tests: none -->
 - [x] `POST /starter-pipeline` creates a starter pipeline for the org
+      <!-- behaviour: onboarding-06 | tests: none -->
 - [x] All mutations run under org RLS (`set_rls_org` / `set_rls_user_context`); the
       seed path requires `pipeline.create` + `agent.create` + `schema.create` permits
       (`test_onboarding.py`)
+      <!-- behaviour: onboarding-07 | tests: backend/tests/unit/api/test_onboarding.py -->
 - [x] Onboarding telemetry is wired into the wizard as a dedicated Telemetry
       Opt-In step (FAR-1131, manifest `feat-onboarding`): reaching the step loads
       `GET /api/v1/admin/telemetry` (a non-system-admin caller sees the softer
@@ -60,6 +67,7 @@ agent, pipeline) and create a starter pipeline.
       error envelope + retry, skip). No separate telemetry surface is required on
       the onboarding REST API – the opt-in preference is an instance-level
       deployment toggle, distinct from the org-level product-analytics consent.
+      <!-- behaviour: onboarding-08 | tests: none -->
 
 ## Known Gaps
 

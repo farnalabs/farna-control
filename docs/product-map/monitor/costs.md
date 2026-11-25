@@ -28,7 +28,7 @@ bdd:
   - backend/tests/bdd/features/costs/cost_controls.feature
 depends-on:
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Cost Tracking, Spend Limits & Cost Controls
@@ -49,6 +49,7 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       breakdown, refused/clamped annotations) plus Decimal-string reporting buckets
       (`org_total`, `legacy_total`, `org_unassigned_components`) and `has_more`
       (`test_costs.py::TestGetCostsReport`, `cost_controller/breakdown/*`)
+      <!-- behaviour: costs-01 | tests: backend/tests/unit/api/test_costs.py -->
 - [x] The `/admin/costs` "Per-Team Cost Breakdown" card is supported and reads the
       `group_by=team&period=month` report: it renders the team-attributed ledger
       rows, refused/clamped annotations and a client-computed average per run, and
@@ -57,6 +58,7 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       absent or corrupt – so the bucket is not silently omitted from the card
       (`AdminCostBreakdownView.vue`,
       `frontend/src/__tests__/AdminCostBreakdownView.spec.ts`)
+      <!-- behaviour: costs-02 | tests: none -->
 - [x] The four Costs pages are navigable from each other by CLICKING the page tabs
       (Overview / Spend Limits / Cost Components / Cost Controls) rendered by
       `PageHeader` from `useCostPageTabs`: each tab is a router-link to its own
@@ -69,24 +71,30 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       reloading in a loop (`frontend/tests/e2e/costs-tabs.spec.ts`,
       `frontend/src/__tests__/routerChunkRecovery.spec.ts`,
       `frontend/src/router/index.ts`)
+      <!-- behaviour: costs-03 | tests: none -->
 - [x] `GET/PUT /limits/org` and `PUT /limits/teams/{id}` read and set daily spend
       limits (null clears, negative rejected 422, cross-org team 404s untouched)
+      <!-- behaviour: costs-04 | tests: none -->
 - [x] `GET/PUT /controls` read/update the full cost-controls payload: budget,
       `max_run_cost` + `spend_ceiling` (explicit null clears a ceiling, 0 is a
       kill-switch that blocks all runs), cumulative spend, alert thresholds (written
       via a 1..100 validator, read through a corrupted-value-defensive fallback),
       circuit-breaker toggle, currency (USD/EUR/GBP), billing period
       (monthly/quarterly/annual)
+      <!-- behaviour: costs-05 | tests: none -->
 - [x] `GET/PUT /ceiling` expose the dedicated FAR-391 hard-ceiling surface with
       `remaining_budget_usd = max(spend_ceiling - cumulative, 0)`
+      <!-- behaviour: costs-06 | tests: none -->
 - [x] Terminal-only spend recording: `check_and_record_spend` (spec §9.3) records on
       terminal statuses and enforces refusal windows (spec §4.6) returning
       `daily_limit_exceeded: organisation` / `daily_limit_exceeded: team` reasons
       without incrementing the org run count (`cost_controller/__init__.py`,
       `cost_controls.feature`)
+      <!-- behaviour: costs-07 | tests: backend/tests/bdd/features/costs/cost_controls.feature -->
 - [x] Per-agent token budget: a run crossing its agent token budget transitions to the
       `budget_exceeded` terminal state with "This run exceeded its token budget."
       (`cost_controller/finalize.py`, `cost_controls.feature`)
+      <!-- behaviour: costs-08 | tests: backend/tests/bdd/features/costs/cost_controls.feature -->
 - [x] Declared (self-reported) agent cost is DISPLAYED but never billed (FAR-1780):
       a `self_reported` component carrying a report is rendered in the breakdown with
       `provenance: reported` + `billable: false`, and `build_cost_breakdown`'s total
@@ -103,6 +111,7 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       sparse-entry write-back (`build_cost_breakdown`, `finalize.py`,
       `node_runner.py`, `probe.py`; `test_sandbox_envelope_provenance.py`,
       `test_cost_finalize.py`, `test_cost_probe.py`, `test_cost_controller.py`)
+      <!-- behaviour: costs-09 | tests: backend/tests/unit/core/test_sandbox_envelope_provenance.py, backend/tests/unit/core/cost_controller/test_cost_finalize.py, backend/tests/unit/core/cost_controller/test_cost_probe.py, backend/tests/unit/core/cost_controller/test_cost_controller.py -->
 - [x] Pipeline cost circuit breaker (§8.10): a pipeline crossing its monthly spend
       threshold trips the breaker and permanently pauses triggers until an admin
       re-enables it via `POST /circuit-breaker/{pipeline_id}/reset`. Since FAR-1530 the
@@ -117,6 +126,7 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       a resume can never revive a tripped pipeline
       (`backend/tests/unit/core/cost_controller/test_circuit_breaker.py`,
       `backend/tests/unit/api/test_pipelines_routes_coverage.py`)
+      <!-- behaviour: costs-10 | tests: backend/tests/unit/core/cost_controller/test_circuit_breaker.py, backend/tests/unit/api/test_pipelines_routes_coverage.py -->
 - [x] The breaker threshold is user-configurable and Community-tier (FAR-1182):
       `circuit_breaker_threshold` (USD, `null` = disabled, `> 0` when set) is
       settable on pipeline create / `PATCH /api/v1/pipelines/{id}` and read back on
@@ -146,6 +156,7 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       idempotent (never auto-un-pauses; resuming stays the manual, audited admin
       toggle), and the whole step is fail-open. Toggle-off behavior is unchanged
       (test_org_auto_pause.py, test_cost_finalize_auto_pause.py).
+      <!-- behaviour: costs-11 | tests: backend/tests/unit/core/cost_controller/test_org_auto_pause.py, backend/tests/unit/core/cost_controller/test_cost_finalize_auto_pause.py -->
 - [x] `GET /export?period=this_month|last_month|7d|30d|90d&group_by=team|pipeline|model`
       streams a CSV attachment with a `costs-export-{period}.csv` disposition;
       `team` reuses the daily-ledger grouping (historical shape), `pipeline`
@@ -155,9 +166,11 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       spend sources; `cost_controller/_cost_export_by_model`). The pre-2026-09
       explicit-422 refusal for `pipeline`/`model` is retired - the enum values
       now stream real rows.
+      <!-- behaviour: costs-12 | tests: none -->
 - [x] Scheduled cost reports: `POST/GET/DELETE /reports` manage org-owned
       daily/weekly/monthly, team/org, csv/json, one-time/recurring reports with
       `recipients` (email) required (min 1)
+      <!-- behaviour: costs-13 | tests: none -->
 - [x] Rolling spend-anomaly detection: days whose org spend exceeds 2x the trailing
       7-day average are detected from `OrgDailyRunCount`, each fresh detection is
       persisted on first sight (`record_or_get_anomaly`, unique per detected
@@ -166,10 +179,13 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
       the saved dismissal state, and previously stored still-flagged rows are
       merged into the response (`test_costs_routes_coverage.py`,
       `test_spend_anomaly.py`)
+      <!-- behaviour: costs-14 | tests: backend/tests/unit/api/test_costs_routes_coverage.py, backend/tests/unit/db/crud/test_spend_anomaly.py -->
 - [x] Cost-component admin CRUD (attribution of spend to named components) in
       `api/routes/cost_components.py` + `cost_controller/test_cost_components_crud.py`
+      <!-- behaviour: costs-15 | tests: backend/tests/unit/core/cost_controller/test_cost_components_crud.py -->
 - [x] The verification canary (`cost_controller/probe.py`, spec §4.7) and system
       config are unit-covered alongside the gate itself
+      <!-- behaviour: costs-16 | tests: none -->
 
 ## Known Gaps
 

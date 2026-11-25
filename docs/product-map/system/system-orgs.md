@@ -15,7 +15,7 @@ bdd:
   - backend/tests/bdd/features/system_admin/system_admin_users.feature
 depends-on:
   - feat-teams
-status: covered
+status: partial
 ---
 
 # System Orgs
@@ -29,17 +29,21 @@ manage org-level licenses.
 - [x] POST `/api/v1/admin/orgs` creates a new org with slug uniqueness check and
       cost-component seeding; duplicate slug returns 409
       (`backend/tests/bdd/features/system_admin/system_admin_orgs.feature`)
+      <!-- behaviour: system-orgs-01 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature -->
 - [x] GET `/api/v1/admin/orgs` lists all orgs (hides the nil-UUID orphan org and
       the modulo-library registry org); regular admin receives 403
       (`system_admin_orgs.feature`)
+      <!-- behaviour: system-orgs-02 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature -->
 - [x] POST `/api/v1/admin/orgs/{org_id}/users` creates a user within an org with
       cross-tenant account takeover protection (email already a member → 409,
       local account holding a password in another org → 409) and boundary
       role/password validation (invalid role or weak password → 422), a missing
       org → 404, and regular admin → 403 (`system_admin_users.feature`)
+      <!-- behaviour: system-orgs-03 | tests: backend/tests/bdd/features/system_admin/system_admin_users.feature -->
 - [x] DELETE `/api/v1/admin/orgs/{org_id}` deletes an organization; returns 404
       if not found and 403 for a regular admin
       (`backend/tests/bdd/features/system_admin/system_admin_orgs.feature`)
+      <!-- behaviour: system-orgs-04 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature -->
 - [x] Hard-deleting an organization records a durable `org_deletion_completed`
       entry in the org-independent `system_audit_events` ledger before the org
       row is removed (FAR-1517) - the org-scoped `audit_events` chain cascades
@@ -48,28 +52,35 @@ manage org-level licenses.
       delete) and the row is immutable via append-only triggers
       (`core/system_audit_logger.py`,
       `tests/integration/test_system_audit_org_deletion.py`)
+      <!-- behaviour: system-orgs-05 | tests: backend/tests/integration/test_system_audit_org_deletion.py -->
 - [x] Org-level license management: GET/PUT/DELETE on
       `/api/v1/admin/orgs/{org_id}/license` with validation via
       `parse_and_verify` (`admin_orgs.py`)
+      <!-- behaviour: system-orgs-06 | tests: none -->
 - [x] GET `/api/v1/admin/orgs/{org_id}/license` resolves the effective org
       license - the org's own `settings_json.license_key` when it verifies,
       otherwise the system license; `has_license=false` only when neither
       exists, and a missing org is 404. BDD: system_admin_orgs.feature
       (org-key resolution, system fallback, invalid-stored-key fallback,
       missing org)
+      <!-- behaviour: system-orgs-07 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature -->
 - [x] PUT `/api/v1/admin/orgs/{org_id}/license` verifies the key via
       `parse_and_verify` (invalid key 422; missing org 404 before verification),
       then writes it in one FOR-UPDATE transaction preserving pre-existing
       settings keys. BDD: system_admin_orgs.feature
+      <!-- behaviour: system-orgs-08 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature -->
 - [x] DELETE `/api/v1/admin/orgs/{org_id}/license` clears the org key in the
       same locked read-modify-write and returns `has_license=false`; a missing
       org is 404. BDD: system_admin_orgs.feature
+      <!-- behaviour: system-orgs-09 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature -->
 - [x] License endpoints are role-gated via `require_target_org_role`:
       GET needs `org.license.view` (operator), PUT/DELETE need
       `org.license.manage` (admin); a regular org admin without the live role
       receives 403 on all three. BDD: system_admin_orgs.feature
+      <!-- behaviour: system-orgs-10 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature -->
 - [x] Regular admin receives 403 on org creation and user creation in other orgs
       (`system_admin_orgs.feature`, `system_admin_users.feature`)
+      <!-- behaviour: system-orgs-11 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature, backend/tests/bdd/features/system_admin/system_admin_users.feature -->
 
 ## QA History
 - 2026-10-06: **Improve Architecture product-map walk** - tracked the FAR-1517

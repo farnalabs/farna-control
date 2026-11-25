@@ -15,7 +15,7 @@ bdd:
 depends-on:
   - feat-evals
   - feat-runs
-status: covered
+status: partial
 ---
 
 # Feedback Inbox
@@ -34,8 +34,10 @@ also reachable), feed a review inbox and an eval
       status `pending`), 201 when the run exists, 404 when it does not, and it
       emits a `feedback_created` audit event without letting audit failure block
       creation (`test_feedback_endpoint.py`)
+      <!-- behaviour: feedback-01 | tests: backend/tests/unit/api/test_feedback_endpoint.py -->
 - [x] `GET /feedback` returns a paginated (page/page_size) list filterable by status;
       `GET /feedback/{record_id}` returns a single record (404 when missing)
+      <!-- behaviour: feedback-02 | tests: none -->
 - [x] Status updates enforce the transition machine (`VALID_STATUS_TRANSITIONS`:
       `pending`/`routing`/`correcting` → `resolved` or `dismissed`, plus
       `routing`/`correcting` → `escalated`), an unknown status value is 422 and an
@@ -44,19 +46,24 @@ also reachable), feed a review inbox and an eval
       audit event (the PATCH route also carries the coarse
       `feedback_status_updated` audited dependency); audit failure does not block
       the update
+      <!-- behaviour: feedback-03 | tests: none -->
 - [x] `GET /feedback/inbox` returns the paginated review queue filterable by type and
       status, with date-range filtering; `GET /feedback/inbox/{record_id}` and
       `POST /feedback/inbox/{record_id}/review` expose and advance the review workflow
+      <!-- behaviour: feedback-04 | tests: none -->
 - [x] `POST /feedback/{record_id}/detect-gap` runs eval-gap detection over the feedback
       record, producing an eval proposal (`FeedbackManager.detect_eval_gap`), and
       round-trips ORM eval definitions through the endpoint
+      <!-- behaviour: feedback-05 | tests: none -->
 - [x] Proposals: `GET /feedback/proposals` lists the eval proposals queue and
       `POST /feedback/proposals/{record_id}/publish` promotes a proposal to a live eval
       definition (PRD §8.20 "Eval suite growth #3")
+      <!-- behaviour: feedback-06 | tests: none -->
 - [x] Feedback records are org-scoped (every route sets the RLS context and the
       manager's queries carry an explicit `organisation_id` predicate), validators
       reject malformed inputs, and the state machine rejects out-of-order
       transitions (`feedback_system.feature`, `test_feedback_flow.py`)
+      <!-- behaviour: feedback-07 | tests: backend/tests/bdd/features/eval/feedback_system.feature, backend/tests/integration/feedback_manager/test_feedback_flow.py -->
 
 ## Known Gaps
 
