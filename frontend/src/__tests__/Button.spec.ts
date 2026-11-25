@@ -57,7 +57,7 @@ describe('Button', () => {
     expect(small.attributes('data-p')).toBe('small')
   })
 
-  it('keeps a loading button disabled and unclickable, and renders its loading icon', async () => {
+  it('keeps a loading button disabled and unclickable while rendering its loading icon', async () => {
     const wrapper = mount(Button, { props: { label: 'Save', loading: true } })
 
     expect(wrapper.attributes('data-p-disabled')).toBe('true')
