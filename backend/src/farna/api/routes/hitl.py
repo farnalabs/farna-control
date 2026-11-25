@@ -51,7 +51,12 @@ from sqlalchemy import func, nullslast, select, update
 from sqlalchemy.exc import PendingRollbackError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from farna.api.constants import MSG_DB_ERROR_PLEASE_TRY, MSG_FEATURE_NOT_AVAILABLE, MSG_UNEXPECTED_ERROR_NO_PERIOD
+from farna.api.constants import (
+    MSG_DB_ERROR_PLEASE_TRY,
+    MSG_FEATURE_NOT_AVAILABLE,
+    MSG_RUN_NOT_FOUND,
+    MSG_UNEXPECTED_ERROR_NO_PERIOD,
+)
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
 from farna.api.db_error_reporting import log_service_unavailable
 from farna.api.dependencies import (
@@ -1568,14 +1573,14 @@ async def _load_pending_run_data(
     # were misconfigured.
     run = await get_run(session, run_id, organisation_id=principal.organisation_id)
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
     viewer_account_id = _viewer_account_scope_id(principal)
     if viewer_account_id is not None and not await viewer_run_scope_visible(session, run_id, viewer_account_id):
         # Mirror the MCP ``get_hitl_review`` not-found mapping: the unclamped
         # existence check above would otherwise answer 200-with-empty-gates for
         # a foreign team-private run, i.e. a cross-team run-existence oracle.
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
     gate_stmt = select(HitlClaim).where(
         HitlClaim.run_id == run_id,
