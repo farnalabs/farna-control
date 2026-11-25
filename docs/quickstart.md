@@ -37,8 +37,15 @@ POSTGRES_PASSWORD=farna_control docker compose -f docker-compose.local.yml up -d
 <summary>Windows (PowerShell)</summary>
 
 ```powershell
-uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# write FERNET_KEY=<the value> to .env at the repo root
+# From the repository root.
+
+# Generate the Fernet key ONCE and export it. The same value is reused in
+# backend/.env in step 2.
+$env:FERNET_KEY = uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Start Postgres with the same password the backend .env uses.
+$env:POSTGRES_PASSWORD = "farna_control"
+docker compose -f docker-compose.local.yml up -d
 ```
 
 </details>
