@@ -36,7 +36,7 @@
       :description="$t('views.SettingsTriggersView.pause_all_triggers_description')"
     >
       <template #headerActions>
-        <Button data-testid="settings-triggers-pause-all" :severity="orgTriggersPaused ? 'secondary' : 'primary'" :outlined="orgTriggersPaused" :disabled="pauseToggling" :aria-pressed="orgTriggersPaused" @click="togglePauseAll">
+        <Button data-testid="settings-triggers-pause-all" :variant="orgTriggersPaused ? 'secondary' : 'primary'" :outlined="orgTriggersPaused" :disabled="pauseToggling" :aria-pressed="orgTriggersPaused" @click="togglePauseAll">
           {{ orgTriggersPaused ? $t('views.SettingsTriggersView.resume_triggers') : $t('views.SettingsTriggersView.pause_all_triggers_action') }}
         </Button>
       </template>
@@ -146,7 +146,7 @@
                     <span v-else class="text-xs text-muted-foreground">
                       {{ t.active ? $t('views.SettingsTriggersView.active') : $t('views.SettingsTriggersView.inactive') }}
                     </span>
-                    <Button v-if="isStreakDeactivated(t) && isOrgOperator" data-testid="settings-triggers-reenable" size="small" severity="secondary" outlined :disabled="triggerToggling[t.id]" @click="toggleActive(t)">
+                    <Button v-if="isStreakDeactivated(t) && isOrgOperator" data-testid="settings-triggers-reenable" size="sm" variant="secondary" :disabled="triggerToggling[t.id]" @click="toggleActive(t)">
                       {{ $t('views.SettingsTriggersView.re_enable') }}
                     </Button>
                   </div>
@@ -563,7 +563,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDataFetch } from '../composables/useDataFetch'
 import { useApi } from '../composables/useApi'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Dialog from 'primevue/dialog'
 import { api } from '../lib/api/client'
 import { useCurrentUser } from '../composables/useCurrentUser'

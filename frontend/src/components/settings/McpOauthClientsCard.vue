@@ -83,8 +83,8 @@
           </template>
           <template #cell-actions="{ row }">
             <Button
-              severity="danger"
-              size="small"
+              variant="danger"
+              size="sm"
               data-testid="settings-mcp-revoke-oauth-client"
               @click="confirmRevokeOauth(row.client as OAuthClientItem)"
             >
@@ -179,9 +179,8 @@
             aria-live="assertive"
           >{{ $t('views.SettingsMcpView.scopes_load_failed') }}</p>
           <Button
-            severity="secondary"
-            outlined
-            size="small"
+            variant="secondary"
+            size="sm"
             data-testid="settings-mcp-oauth-scopes-retry"
             @click="retryScopeLoad"
           >{{ $t('views.SettingsMcpView.scopes_retry') }}</Button>
@@ -271,7 +270,7 @@
             data-testid="settings-mcp-oauth-client-id"
             class="w-full rounded-lg border border-input bg-muted px-3 py-2 font-mono text-sm"
           />
-          <Button severity="secondary" outlined size="small" class="absolute right-1 top-1" data-testid="settings-mcp-copy-oauth-client-id" @click="copyToClipboard(createdOauthClientId, 'oauth-client-id')">
+          <Button variant="secondary" size="sm" class="absolute right-1 top-1" data-testid="settings-mcp-copy-oauth-client-id" @click="copyToClipboard(createdOauthClientId, 'oauth-client-id')">
             {{ copiedField === 'oauth-client-id' ? $t('views.SettingsMcpView.copied') : $t('views.SettingsMcpView.copy') }}
           </Button>
         </div>
@@ -292,7 +291,7 @@
             data-testid="settings-mcp-oauth-client-secret"
             class="w-full rounded-lg border border-input bg-muted px-3 py-2 font-mono text-sm"
           />
-          <Button severity="secondary" outlined size="small" class="absolute right-1 top-1" data-testid="settings-mcp-copy-oauth-client-secret" @click="copyToClipboard(createdOauthClientSecret, 'oauth-client-secret')">
+          <Button variant="secondary" size="sm" class="absolute right-1 top-1" data-testid="settings-mcp-copy-oauth-client-secret" @click="copyToClipboard(createdOauthClientSecret, 'oauth-client-secret')">
             {{ copiedField === 'oauth-client-secret' ? $t('views.SettingsMcpView.copied') : $t('views.SettingsMcpView.copy') }}
           </Button>
         </div>
@@ -337,7 +336,7 @@ import { ref, computed, onUnmounted } from 'vue'
 import { api } from '../../lib/api/client'
 import { formatApiError } from '../../lib/api/formatError'
 import type { components } from '../../lib/api/client'
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 import DataCard from '../ui/DataCard.vue'
 import { DataTable, type Column, type DataTableRow } from '../ui/data-table'
 import Dialog from 'primevue/dialog'

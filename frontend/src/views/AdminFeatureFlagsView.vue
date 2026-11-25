@@ -159,7 +159,7 @@
               <div class="border-b bg-muted/30 px-4 py-2">
                 <h3 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   {{ section.label }}
-                  <span class="ml-2 text-xs font-normal opacity-60">({{ section.flags.length }})</span>
+                  <span class="ml-2 text-xs font-normal">({{ section.flags.length }})</span>
                 </h3>
               </div>
               <table class="w-full" v-if="section.flags.length > 0">
@@ -211,7 +211,7 @@
                     </td>
                     <td class="table-cell text-muted-foreground">{{ flag.description || '—' }}</td>
                     <td class="table-cell-numeric">
-                      <Button severity="secondary" outlined size="small" :disabled="isFlagTierLocked(flag) && !flag.currently_active" :data-testid="'flag-override-' + flag.name" @click.stop="openOverrideDialog(flag)">
+                      <Button variant="secondary" size="sm" :disabled="isFlagTierLocked(flag) && !flag.currently_active" :data-testid="'flag-override-' + flag.name" @click.stop="openOverrideDialog(flag)">
                         {{ getCurrentOverride(flag.name) === null ? $t('views.AdminFeatureFlagsView.default') : (getCurrentOverride(flag.name) ? $t('common.enabled') : $t('common.disabled')) }}
                       </Button>
                     </td>
@@ -225,10 +225,10 @@
           <div v-if="totalPages > 1" class="flex items-center justify-center gap-4 py-4">
             <span class="text-sm text-muted-foreground">{{ $t('views.AdminFeatureFlagsView.page_of', { current: currentPage, total: totalPages }) }}</span>
             <div class="flex gap-2">
-              <Button severity="secondary" outlined size="small" :disabled="currentPage <= 1" data-testid="flags-prev-page" @click="currentPage = Math.max(1, currentPage - 1)">
+              <Button variant="secondary" size="sm" :disabled="currentPage <= 1" data-testid="flags-prev-page" @click="currentPage = Math.max(1, currentPage - 1)">
                 {{ $t('common.previous') }}
               </Button>
-              <Button severity="secondary" outlined size="small" :disabled="currentPage >= totalPages" data-testid="flags-next-page" @click="currentPage = Math.min(totalPages, currentPage + 1)">
+              <Button variant="secondary" size="sm" :disabled="currentPage >= totalPages" data-testid="flags-next-page" @click="currentPage = Math.min(totalPages, currentPage + 1)">
                 {{ $t('common.next') }}
               </Button>
             </div>
@@ -277,7 +277,7 @@ import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { Lock } from '@lucide/vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import Select from '../components/shared/AppSelect.vue'

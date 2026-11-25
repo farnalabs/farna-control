@@ -117,7 +117,7 @@ import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Field from '../components/ui/Field.vue'
 import Input from '../components/ui/Input.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 
 interface EmailForm {
   smtp_host: string

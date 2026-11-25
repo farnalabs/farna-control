@@ -83,7 +83,7 @@
               <Button data-testid="license-apply-btn" :disabled="!newLicenseKey.trim() || applying" @click="openApplyDialog">
                 {{ applying ? $t('views.SettingsLicenseView.applying') : $t('views.SettingsLicenseView.apply_key') }}
               </Button>
-              <Button v-if="licenseInfo.has_license" data-testid="license-remove-btn" severity="danger" :disabled="removing" @click="openRemoveDialog('org')">
+              <Button v-if="licenseInfo.has_license" data-testid="license-remove-btn" variant="danger" :disabled="removing" @click="openRemoveDialog('org')">
                 {{ removing ? $t('views.SettingsLicenseView.removing') : $t('views.SettingsLicenseView.remove_license') }}
               </Button>
             </div>
@@ -130,7 +130,7 @@
                 {{ applying ? $t('views.SettingsLicenseView.applying') : $t('views.SettingsLicenseView.install_system_license') }}
               </Button>
               <!-- FAR-2110: remove the INSTANCE-WIDE licence (system scope). -->
-              <Button v-if="licenseInfo.has_license" data-testid="license-remove-btn-system" severity="danger" :disabled="removing" @click="openRemoveDialog('system')">
+              <Button v-if="licenseInfo.has_license" data-testid="license-remove-btn-system" variant="danger" :disabled="removing" @click="openRemoveDialog('system')">
                 {{ removing ? $t('views.SettingsLicenseView.removing') : $t('views.SettingsLicenseView.remove_license') }}
               </Button>
             </div>
@@ -200,7 +200,7 @@ import { useI18n } from 'vue-i18n'
 import { useDataFetch } from '../composables/useDataFetch'
 import { useLicenceAccess } from '../composables/useLicenceAccess'
 import { useCurrentUser } from '../composables/useCurrentUser'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { decodeBase64Url } from '../lib/jwt'

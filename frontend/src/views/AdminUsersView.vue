@@ -182,7 +182,7 @@
                 {{ formatDateShort(inv.expires_at) }}
               </td>
               <td class="table-cell-numeric">
-                <Button severity="danger" outlined :disabled="actionLoading[inv.id]" data-testid="admin-invitations-revoke" @click="openRevoke(inv)">
+                <Button variant="danger" :outlined="true" :disabled="actionLoading[inv.id]" data-testid="admin-invitations-revoke" @click="openRevoke(inv)">
                   {{ $t('views.AdminUsersView.revoke_invitation') }}
                 </Button>
               </td>
@@ -236,7 +236,7 @@
           <label for="adminusersview-field-2" class="block text-sm font-medium mb-1">{{ $t('common.password') }}</label>
           <div class="flex gap-2">
             <input id="adminusersview-field-2" v-model="newUser.password" data-testid="admin-users-create-password" type="password" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" minlength="8" required />
-            <Button type="button" severity="secondary" outlined class="shrink-0 border-primary/30" data-testid="admin-users-generate-password" @click="generatePassword">
+            <Button type="button" variant="secondary" class="shrink-0 border-primary/30" data-testid="admin-users-generate-password" @click="generatePassword">
               {{ $t('views.AdminUsersView.generate_password') }}
             </Button>
           </div>
@@ -309,8 +309,7 @@
         <code class="flex-1 text-sm font-mono break-all select-all" data-testid="admin-users-credential-value">{{ credentialKind === 'password' && !credentialRevealed ? maskedCredential : credentialValue }}</code>
         <Button
           v-if="credentialKind === 'password'"
-          severity="secondary"
-          outlined
+          variant="secondary"
           class="shrink-0"
           data-testid="admin-users-reveal-password"
           :aria-label="credentialRevealed ? $t('views.AdminUsersView.hide_password') : $t('views.AdminUsersView.reveal_password')"
@@ -382,7 +381,7 @@ import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import Dialog from 'primevue/dialog'
