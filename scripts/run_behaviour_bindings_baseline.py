@@ -318,6 +318,17 @@ def _frontmatter(lines: list[str]) -> tuple[dict, int]:
     return (loaded if isinstance(loaded, dict) else {}), end
 
 
+def _flush_block(blocks: list[tuple[int, int]], current: int | None, last: int) -> None:
+    """Append ``(current, last)`` when a block is open."""
+    if current is not None:
+        blocks.append((current, last))
+
+
+def _continues_block(line: str) -> bool:
+    """True when *line* is blank or indented, so it stays inside the current block."""
+    return line.strip() == "" or line.startswith((" ", "\t"))
+
+
 def _behaviour_blocks(lines: list[str], start: int) -> list[tuple[int, int]]:
     """Return ``(first, last)`` inclusive line indexes of each behaviour bullet."""
     blocks: list[tuple[int, int]] = []
@@ -325,25 +336,17 @@ def _behaviour_blocks(lines: list[str], start: int) -> list[tuple[int, int]]:
     for index in range(start, len(lines)):
         line = lines[index]
         if _ANY_HEADING_RE.match(line):
-            if current is not None:
-                blocks.append((current, index - 1))
-            break
+            _flush_block(blocks, current, index - 1)
+            return blocks
         if _BULLET_RE.match(line):
-            if current is not None:
-                blocks.append((current, index - 1))
+            _flush_block(blocks, current, index - 1)
             current = index
             continue
-        if current is None:
-            continue
-        if line.strip() == "":
-            continue
-        if line.startswith((" ", "\t")):
+        if current is None or _continues_block(line):
             continue
         blocks.append((current, index - 1))
         current = None
-    else:
-        if current is not None:
-            blocks.append((current, len(lines) - 1))
+    _flush_block(blocks, current, len(lines) - 1)
     return blocks
 
 
@@ -447,7 +450,6 @@ def _load_module(root: Path, name: str, relpath: str) -> ModuleType:
         return _LOADED_MODULES[name]
     loader = SourceFileLoader(name, str(root / relpath))
     module = module_from_spec(spec_from_loader(name, loader))
-    assert module is not None
     sys.modules[name] = module
     try:
         loader.exec_module(module)
@@ -471,7 +473,6 @@ def _load_shared_script(name: str, filename: str) -> ModuleType:
         return _LOADED_MODULES[name]
     loader = SourceFileLoader(name, str(Path(__file__).resolve().parent / filename))
     module = module_from_spec(spec_from_loader(name, loader))
-    assert module is not None
     sys.modules[name] = module
     try:
         loader.exec_module(module)
@@ -846,6 +847,66 @@ def entry_hints(entry: Entry) -> tuple[str, ...]:
     return tuple(dict.fromkeys(hints))
 
 
+def _append_unique(refs: list[str], candidate: str) -> None:
+    """Append *candidate* to *refs* only when it is not already present."""
+    if candidate not in refs:
+        refs.append(candidate)
+
+
+def _bind_node(name: str, rel: str, index: TestIndex, refs: list[str], notes: list[str], node_modules: set[str]) -> None:
+    """Bind a ``test_*`` node citation that resolved to *rel*."""
+    if name in index.functions_in(rel):
+        _append_unique(refs, f"{rel}::{name}")
+        node_modules.add(rel)
+        return
+    if "*" not in name:
+        notes.append(f"cites {name!r}, which is not defined in {rel}")
+        return
+    matches = [f"{rel}::{candidate}" for candidate in index.functions_in(rel) if fnmatch.fnmatchcase(candidate, name)]
+    for match in matches[:6]:
+        _append_unique(refs, match)
+    if matches:
+        node_modules.add(rel)
+    else:
+        notes.append(f"cites {name!r}, which matches no test in {rel}")
+
+
+def _collect_node_refs(token: str, index: TestIndex, hints: tuple[str, ...], refs: list[str], notes: list[str], node_modules: set[str]) -> None:
+    """Collect ``<file>.py::<test>`` node citations from *token*."""
+    for node in _NODE_TOKEN_RE.finditer(token):
+        name = node.group("name")
+        if not name.startswith("test_") and "::" not in node.group(0):
+            continue
+        rel = _resolve_test_module(node.group("file"), index, hints)
+        if rel is None:
+            if _looks_like_test_module(node.group("file")):
+                notes.append(f"cites {node.group('file')}, which resolves to no test module under {TESTS_DIR}")
+            continue
+        _bind_node(name, rel, index, refs, notes, node_modules)
+
+
+def _collect_feature_refs(token: str, entry: Entry, index: TestIndex, refs: list[str]) -> None:
+    """Collect ``.feature`` citations from *token*."""
+    for feature in _FEATURE_TOKEN_RE.finditer(token):
+        resolved = _resolve_feature_path(feature.group("file"), entry, index)
+        if resolved is not None:
+            _append_unique(refs, resolved)
+
+
+def _collect_spec_refs(token: str, index: TestIndex, refs: list[str], notes: list[str]) -> None:
+    """Collect frontend ``.spec.ts::<title>`` citations from *token*."""
+    for spec in _SPEC_TOKEN_RE.finditer(token):
+        spec_rel = index.resolve_spec(spec.group("file"))
+        title = spec.group("name").strip()
+        if spec_rel is None:
+            notes.append(f"cites {spec.group('file')}, which is not a spec under {' or '.join(FRONTEND_TEST_ROOTS)}")
+            continue
+        if title in index.spec_titles(spec_rel):
+            _append_unique(refs, f"{spec_rel}::{title}")
+        else:
+            notes.append(f"cites {title!r}, which is not a test title in {spec_rel}")
+
+
 def derive_marker_refs(behaviour: Behaviour, entry: Entry, index: TestIndex, hints: tuple[str, ...] = ()) -> tuple[list[str], list[str]]:
     """Derive binding refs from a behaviour's prose; returns ``(refs, notes)``.
 
@@ -858,57 +919,19 @@ def derive_marker_refs(behaviour: Behaviour, entry: Entry, index: TestIndex, hin
     """
     refs: list[str] = []
     notes: list[str] = []
-
-    def _add(candidate: str) -> None:
-        if candidate not in refs:
-            refs.append(candidate)
-
     node_modules: set[str] = set()
     for token in _BACKTICK_RE.findall(behaviour.text) + [behaviour.text]:
-        for node in _NODE_TOKEN_RE.finditer(token):
-            name = node.group("name")
-            if not name.startswith("test_") and "::" not in node.group(0):
-                continue
-            rel = _resolve_test_module(node.group("file"), index, hints)
-            if rel is None:
-                if _looks_like_test_module(node.group("file")):
-                    notes.append(f"cites {node.group('file')}, which resolves to no test module under {TESTS_DIR}")
-                continue
-            if name in index.functions_in(rel):
-                _add(f"{rel}::{name}")
-                node_modules.add(rel)
-            elif "*" in name:
-                matches = [f"{rel}::{candidate}" for candidate in index.functions_in(rel) if fnmatch.fnmatchcase(candidate, name)]
-                for match in matches[:6]:
-                    _add(match)
-                if matches:
-                    node_modules.add(rel)
-                else:
-                    notes.append(f"cites {name!r}, which matches no test in {rel}")
-            else:
-                notes.append(f"cites {name!r}, which is not defined in {rel}")
-        for feature in _FEATURE_TOKEN_RE.finditer(token):
-            resolved = _resolve_feature_path(feature.group("file"), entry, index)
-            if resolved is not None:
-                _add(resolved)
-        for spec in _SPEC_TOKEN_RE.finditer(token):
-            spec_rel = index.resolve_spec(spec.group("file"))
-            title = spec.group("name").strip()
-            if spec_rel is None:
-                notes.append(f"cites {spec.group('file')}, which is not a spec under {' or '.join(FRONTEND_TEST_ROOTS)}")
-                continue
-            if title in index.spec_titles(spec_rel):
-                _add(f"{spec_rel}::{title}")
-            else:
-                notes.append(f"cites {title!r}, which is not a test title in {spec_rel}")
+        _collect_node_refs(token, index, hints, refs, notes, node_modules)
+        _collect_feature_refs(token, entry, index, refs)
+        _collect_spec_refs(token, index, refs, notes)
         for candidate in _candidate_modules(token, index, hints):
             if candidate not in node_modules:
-                _add(candidate)
+                _append_unique(refs, candidate)
 
     # Always attempt the bare-citation backfill: a behaviour can name both a
     # module and a resolvable bare ``test_<name>``, and the node binding is the
     # stronger proof. Appending (never replacing) keeps every other reference.
-    _add_bare_function_refs(behaviour.text, index, hints, _add)
+    _add_bare_function_refs(behaviour.text, index, hints, lambda candidate: _append_unique(refs, candidate))
 
     return refs, notes
 
@@ -1002,6 +1025,110 @@ def _allocate_marker_id(stem: str, used: set[str]) -> str:
         number += 1
 
 
+def _heading_index(lines: list[str], fm_end: int) -> int | None:
+    """The index of the first heading line at or after *fm_end*, else ``None``."""
+    return next((i for i in range(fm_end, len(lines)) if _HEADING_RE.match(lines[i])), None)
+
+
+def _first_marker(block: list[str]) -> re.Match[str] | None:
+    """The first ``<!-- behaviour: ... -->`` marker line in *block*."""
+    return next((match for line in block if (match := MARKER_RE.search(line)) is not None), None)
+
+
+def _marker_ids(lines: list[str], blocks: list[tuple[int, int]]) -> set[str]:
+    """Every behaviour-marker id carried by *blocks*."""
+    ids: set[str] = set()
+    for first, last in blocks:
+        for line in lines[first : last + 1]:
+            found = MARKER_RE.search(line)
+            if found is not None:
+                ids.add(found.group("id"))
+    return ids
+
+
+def _block_body(block: list[str]) -> str:
+    """The block text without its marker line."""
+    return "\n".join(line for line in block if not MARKER_RE.search(line))
+
+
+def _candidate_module_rels(refs: list[str]) -> set[str]:
+    """The ``.py`` module part of every node ref."""
+    return {ref.partition("::")[0] for ref in refs if ref.endswith(".py")}
+
+
+def _parse_entries_with_markers(entries: list[Entry]) -> tuple[list[tuple[Entry, list[str], list[tuple[int, int]]]], set[str]]:
+    """Parse every entry once and seed ``used_ids`` from every existing marker."""
+    parsed: list[tuple[Entry, list[str], list[tuple[int, int]]]] = []
+    used_ids: set[str] = set()
+    for entry in entries:
+        lines = entry.path.read_text(encoding="utf-8").splitlines()
+        _fm, fm_end = _frontmatter(lines)
+        heading = _heading_index(lines, fm_end)
+        if heading is None:
+            continue
+        blocks = _behaviour_blocks(lines, heading + 1)
+        parsed.append((entry, lines, blocks))
+        used_ids.update(_marker_ids(lines, blocks))
+    return parsed, used_ids
+
+
+def _marker_id_for(stem: str, found: re.Match[str] | None, used_ids: set[str]) -> str:
+    """The existing marker id, or a freshly allocated free one."""
+    if found is not None:
+        return found.group("id")
+    marker_id = _allocate_marker_id(stem, used_ids)
+    used_ids.add(marker_id)
+    return marker_id
+
+
+def _derive_entries(parsed: list[tuple[Entry, list[str], list[tuple[int, int]]]], index: TestIndex, used_ids: set[str]) -> tuple[dict[tuple[str, int], tuple[list[str], str, bool]], set[str]]:
+    """Derive refs for every behaviour block, allocating a marker id where missing."""
+    derived: dict[tuple[str, int], tuple[list[str], str, bool]] = {}
+    candidate_modules: set[str] = set()
+    for entry, lines, blocks in parsed:
+        stem = entry.path.stem
+        for ordinal, (first, last) in enumerate(blocks, start=1):
+            block = lines[first : last + 1]
+            found = _first_marker(block)
+            marker_id = _marker_id_for(stem, found, used_ids)
+            behaviour = Behaviour(id=marker_id, ticked=block[0][3].lower() == "x", text=_block_body(block), refs=(), start_line=first + 1, end_line=last + 1)
+            refs, _notes = derive_marker_refs(behaviour, entry, index, entry_hints(entry))
+            candidate_modules.update(_candidate_module_rels(refs))
+            derived[(entry.rel, ordinal)] = (refs, marker_id, found is not None)
+    return derived, candidate_modules
+
+
+def _marker_line(marker_id: str, kept: list[str]) -> str:
+    """The rendered marker comment for *marker_id*."""
+    refs_text = ", ".join(kept) if kept else NONE_TOKEN
+    return f"      <!-- behaviour: {marker_id} | tests: {refs_text} -->"
+
+
+def _write_missing_markers(entries: list[Entry], derived: dict[tuple[str, int], tuple[list[str], str, bool]], accepted: dict[str, list[str]]) -> dict[str, int]:
+    """Insert a marker into every behaviour block that lacks one; returns a per-entry count."""
+    written: dict[str, int] = {}
+    for entry in entries:
+        lines = entry.path.read_text(encoding="utf-8").splitlines()
+        _fm, fm_end = _frontmatter(lines)
+        heading = _heading_index(lines, fm_end)
+        if heading is None:
+            continue
+        affected = 0
+        # Insert bottom-up: an inserted marker shifts every later line index, so a
+        # top-down pass would address the wrong block after the first insertion.
+        for ordinal, (first, last) in reversed(list(enumerate(_behaviour_blocks(lines, heading + 1), start=1))):
+            _refs, marker_id, has_marker = derived[(entry.rel, ordinal)]
+            if has_marker:
+                continue
+            insert_at = _trimmed_block_end(lines, first, last) + 1
+            lines.insert(insert_at, _marker_line(marker_id, accepted.get(marker_id, [])))
+            affected += 1
+        if affected:
+            entry.path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+            written[entry.rel] = affected
+    return written
+
+
 def assign_markers(root: Path) -> dict[str, int]:
     """Add a marker to every behaviour that lacks one; returns a per-entry count.
 
@@ -1012,42 +1139,8 @@ def assign_markers(root: Path) -> dict[str, int]:
     """
     index = TestIndex.build(root)
     entries = load_entries(root)
-    derived: dict[tuple[str, int], tuple[list[str], str, bool]] = {}
-    candidate_modules: set[str] = set()
-
-    # Parse each entry once and seed ``used_ids`` from every marker already in the
-    # map (across entries, so two files sharing a stem cannot collide either).
-    parsed: list[tuple[Entry, list[str], list[tuple[int, int]]]] = []
-    used_ids: set[str] = set()
-    for entry in entries:
-        lines = entry.path.read_text(encoding="utf-8").splitlines()
-        _fm, fm_end = _frontmatter(lines)
-        heading = next((i for i in range(fm_end, len(lines)) if _HEADING_RE.match(lines[i])), None)
-        if heading is None:
-            continue
-        blocks = _behaviour_blocks(lines, heading + 1)
-        parsed.append((entry, lines, blocks))
-        for first, last in blocks:
-            for line in lines[first : last + 1]:
-                found = MARKER_RE.search(line)
-                if found is not None:
-                    used_ids.add(found.group("id"))
-
-    for entry, lines, blocks in parsed:
-        stem = entry.path.stem
-        for ordinal, (first, last) in enumerate(blocks, start=1):
-            block = lines[first : last + 1]
-            found = next((match for line in block if (match := MARKER_RE.search(line)) is not None), None)
-            if found is not None:
-                marker_id = found.group("id")
-            else:
-                marker_id = _allocate_marker_id(stem, used_ids)
-                used_ids.add(marker_id)
-            body = "\n".join(line for line in block if not MARKER_RE.search(line))
-            behaviour = Behaviour(id=marker_id, ticked=block[0][3].lower() == "x", text=body, refs=(), start_line=first + 1, end_line=last + 1)
-            refs, _notes = derive_marker_refs(behaviour, entry, index, entry_hints(entry))
-            candidate_modules.update(ref.partition("::")[0] for ref in refs if ref.endswith(".py"))
-            derived[(entry.rel, ordinal)] = (refs, marker_id, found is not None)
+    parsed, used_ids = _parse_entries_with_markers(entries)
+    derived, candidate_modules = _derive_entries(parsed, index, used_ids)
 
     modules = sorted(rel for rel in candidate_modules if index.has_module(rel))
     # The shared lenses run over every candidate module, so a derived node
@@ -1056,29 +1149,7 @@ def assign_markers(root: Path) -> dict[str, int]:
     flags = vacuity_flags(root, modules)
     accepted = _filter_vacuous(derived, index, flags)
 
-    written: dict[str, int] = {}
-    for entry in entries:
-        lines = entry.path.read_text(encoding="utf-8").splitlines()
-        _fm, fm_end = _frontmatter(lines)
-        heading = next((i for i in range(fm_end, len(lines)) if _HEADING_RE.match(lines[i])), None)
-        if heading is None:
-            continue
-        affected = 0
-        # Insert bottom-up: an inserted marker shifts every later line index, so a
-        # top-down pass would address the wrong block after the first insertion.
-        for ordinal, (first, last) in reversed(list(enumerate(_behaviour_blocks(lines, heading + 1), start=1))):
-            refs, marker_id, has_marker = derived[(entry.rel, ordinal)]
-            if has_marker:
-                continue
-            kept = accepted.get(marker_id, [])
-            marker = f"      <!-- behaviour: {marker_id} | tests: {', '.join(kept) if kept else NONE_TOKEN} -->"
-            insert_at = _trimmed_block_end(lines, first, last) + 1
-            lines.insert(insert_at, marker)
-            affected += 1
-        if affected:
-            entry.path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
-            written[entry.rel] = affected
-    return written
+    return _write_missing_markers(entries, derived, accepted)
 
 
 def _filter_vacuous(derived: dict[tuple[str, int], tuple[list[str], str, bool]], index: TestIndex, flags: VacuityFlags) -> dict[str, list[str]]:
@@ -1159,6 +1230,68 @@ def _strength(behaviour: Behaviour, resolutions: dict[str, list[Resolution]], va
     return None
 
 
+def _node_vacuity_reasons(ref: str, index: TestIndex, flags: VacuityFlags) -> list[str]:
+    """Vacuity reasons for a ``module::name`` (or glob) ref."""
+    rel, _, name = ref.partition("::")
+    if "*" not in name:
+        return flags.reasons_for(rel, name)
+    reasons: list[str] = []
+    for match in sibling_glob_matches(ref, index):
+        rel_match, _, name_match = match.partition("::")
+        reasons.extend(flags.reasons_for(rel_match, name_match))
+    return reasons
+
+
+def _ref_vacuity_reasons(ref: str, index: TestIndex, flags: VacuityFlags) -> list[str]:
+    """Vacuity reasons a single resolved ref carries."""
+    if "::" in ref:
+        return _node_vacuity_reasons(ref, index, flags)
+    if ref.endswith(".py") and flags.all_vacuous(ref, index.functions_in(ref)):
+        return [f"every test in {ref} is vacuous"]
+    return []
+
+
+def _record_behaviour(
+    behaviour: Behaviour,
+    index: TestIndex,
+    root: Path,
+    registered: set[str],
+    flags: VacuityFlags,
+    resolutions: dict[str, list[Resolution]],
+    vacuous_reasons: dict[str, list[str]],
+    strengths: dict[str, str],
+    weak_bindings: dict[str, list[str]],
+) -> None:
+    """Resolve one behaviour, record its vacuity and binding strength."""
+    resolved = [resolve_ref(ref, index, root, registered) for ref in behaviour.refs]
+    resolutions[behaviour.id] = resolved
+    reasons: list[str] = []
+    for resolution in resolved:
+        if resolution.ok:
+            reasons.extend(_ref_vacuity_reasons(resolution.ref, index, flags))
+    vacuous_reasons[behaviour.id] = reasons
+    strength = _strength(behaviour, resolutions, vacuous_reasons)
+    if strength:
+        strengths[behaviour.id] = strength
+    if strength == "module":
+        weak_bindings[behaviour.id] = _clean_refs(behaviour, resolutions, vacuous_reasons)
+
+
+def _record_unbound(
+    entry: Entry,
+    index: TestIndex,
+    root: Path,
+    resolutions: dict[str, list[Resolution]],
+    vacuous_reasons: dict[str, list[str]],
+    unbound: dict[str, dict[str, str]],
+) -> None:
+    """Record every ticked behaviour in *entry* that carries no usable binding."""
+    for behaviour in entry.behaviours:
+        if not behaviour.ticked or _clean_refs(behaviour, resolutions, vacuous_reasons):
+            continue
+        unbound[behaviour.id] = {"entry": entry.rel, "reason": _unbound_reason(behaviour, resolutions, vacuous_reasons, index, root)}
+
+
 def audit(root: Path) -> BindingAudit:
     """Resolve every behaviour, flag vacuity, and record what cannot be bound."""
     entries = load_entries(root)
@@ -1177,42 +1310,14 @@ def audit(root: Path) -> BindingAudit:
 
     for entry in entries:
         for behaviour in entry.behaviours:
-            resolutions[behaviour.id] = [resolve_ref(ref, index, root, registered) for ref in behaviour.refs]
-            reasons: list[str] = []
-            for resolution in resolutions[behaviour.id]:
-                if not resolution.ok:
-                    continue
-                if "::" in resolution.ref:
-                    rel, _, name = resolution.ref.partition("::")
-                    if "*" in name:
-                        for match in sibling_glob_matches(resolution.ref, index):
-                            rel_match, _, name_match = match.partition("::")
-                            reasons.extend(flags.reasons_for(rel_match, name_match))
-                    else:
-                        reasons.extend(flags.reasons_for(rel, name))
-                elif resolution.ref.endswith(".py"):
-                    functions = index.functions_in(resolution.ref)
-                    if flags.all_vacuous(resolution.ref, functions):
-                        reasons.append(f"every test in {resolution.ref} is vacuous")
-            vacuous_reasons[behaviour.id] = reasons
-            strength = _strength(behaviour, resolutions, vacuous_reasons)
-            if strength:
-                strengths[behaviour.id] = strength
-            if strength == "module":
-                weak_bindings[behaviour.id] = _clean_refs(behaviour, resolutions, vacuous_reasons)
-
+            _record_behaviour(behaviour, index, root, registered, flags, resolutions, vacuous_reasons, strengths, weak_bindings)
         derived[entry.rel] = derive_status(
             entry.behaviours,
             resolutions=resolutions,
             vacuous=vacuous_reasons,
             baselined_ids=baseline_ids,
         )
-        for behaviour in entry.behaviours:
-            if not behaviour.ticked:
-                continue
-            if _clean_refs(behaviour, resolutions, vacuous_reasons):
-                continue
-            unbound[behaviour.id] = {"entry": entry.rel, "reason": _unbound_reason(behaviour, resolutions, vacuous_reasons, index, root)}
+        _record_unbound(entry, index, root, resolutions, vacuous_reasons, unbound)
 
     return BindingAudit(
         entries=entries,
@@ -1325,6 +1430,35 @@ def write_outputs(root: Path, *, write_baseline: bool, write_report: bool) -> tu
     return audit_result.bound_count, len(audit_result.unbound)
 
 
+_STATUS_RE = re.compile(r"^status:\s*(?P<value>.*?)\s*$")
+
+
+def _status_update(entry: Entry, derived: str) -> tuple[list[str], str | None, str] | None:
+    """Rewrite *entry*'s frontmatter status; ``None`` when nothing changed.
+
+    Returns ``(lines, previous, derived)`` for a file that needs rewriting.
+    """
+    lines = entry.path.read_text(encoding="utf-8").splitlines()
+    _fm, fm_end = _frontmatter(lines)
+    if fm_end == 0:
+        return None
+    previous = entry.status
+    replaced = False
+    for index in range(1, fm_end):
+        match = _STATUS_RE.match(lines[index])
+        if match is None:
+            continue
+        replaced = True
+        if match.group("value") != derived:
+            lines[index] = f"status: {derived}"
+        break
+    if not replaced:
+        lines.insert(fm_end, f"status: {derived}")
+    if replaced and previous == derived:
+        return None
+    return lines, previous, derived
+
+
 def write_statuses(root: Path) -> dict[str, tuple[str, str]]:
     """Rewrite every entry's frontmatter ``status:`` to the derived value.
 
@@ -1335,31 +1469,16 @@ def write_statuses(root: Path) -> dict[str, tuple[str, str]]:
     """
     audit_result = audit(root)
     changed: dict[str, tuple[str, str]] = {}
-    status_re = re.compile(r"^status:\s*(?P<value>.*?)\s*$")
     for entry in audit_result.entries:
-        derived = audit_result.derived.get(entry.rel, "gap")
-        lines = entry.path.read_text(encoding="utf-8").splitlines()
-        _fm, fm_end = _frontmatter(lines)
-        if fm_end == 0:
+        updated = _status_update(entry, audit_result.derived.get(entry.rel, "gap"))
+        if updated is None:
             continue
-        previous = entry.status
-        replaced = False
-        for index in range(1, fm_end):
-            match = status_re.match(lines[index])
-            if match is None:
-                continue
-            replaced = True
-            if match.group("value") != derived:
-                lines[index] = f"status: {derived}"
-            break
-        if not replaced:
-            lines.insert(fm_end, f"status: {derived}")
-        if previous != derived or not replaced:
-            target = entry.path.resolve()
-            if not target.is_relative_to(root.resolve()):
-                raise ValueError(f"refusing to write {target} outside the repository root {root}")
-            target.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
-            changed[entry.rel] = (previous or "", derived)
+        lines, previous, derived = updated
+        target = entry.path.resolve()
+        if not target.is_relative_to(root.resolve()):
+            raise ValueError(f"refusing to write {target} outside the repository root {root}")
+        target.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+        changed[entry.rel] = (previous or "", derived)
     return changed
 
 
