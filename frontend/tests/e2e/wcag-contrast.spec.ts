@@ -685,6 +685,24 @@ test.describe('keyboard focus indicator on a formerly agent-themed page (FAR-276
     }
     expect(reached, 'Tab must reach the sidebar link on /settings/mcp').toBe(true)
 
+    // activeElement flips a frame before the browser finishes the
+    // `:focus-visible` style recalc, so a read taken immediately after the last
+    // Tab can catch the element's *initial* outline (none / 3px / currentColor)
+    // even though the base rule lands on the next frame. That race made this
+    // test flake on PR #3523 (run 45694368651: got an outline colour equal to
+    // the link's own `--muted-foreground`). Poll for the rule to land; deleting
+    // the base rule still times out and fails, so the guard keeps its teeth.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const el = document.activeElement as HTMLElement | null
+            return el ? getComputedStyle(el).outlineStyle : 'none'
+          }),
+        { timeout: 5000, message: 'the base :focus-visible outline must apply to the focused control' },
+      )
+      .toBe('solid')
+
     const indicator = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null
       if (!el) return null
