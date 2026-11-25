@@ -219,15 +219,19 @@
                         </template>
                       </Select>
                     </div>
-                    <div
+                    <Notice
                       v-if="typedDraft.verdictKind === 'derivation'"
+                      variant="danger"
+                      :icon="false"
+                      padding="xs"
+                      radius="sm"
                       role="alert"
                       aria-live="assertive"
                       data-testid="eval-editor-derivation-warning"
-                      class="rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive-text"
+                      class="text-xs"
                     >
                       {{ $t('views.EvalEditorView.judging.derivationWarning') }}
-                    </div>
+                    </Notice>
 
                     <div>
                       <label for="evaleditorview-field" class="mb-1 block text-sm font-medium">{{ $t('views.EvalEditorView.judging.judgedField') }}</label>
@@ -556,18 +560,22 @@
                     </div>
                   </div>
 
-                  <div
+                  <Notice
                     v-if="!legacyMode && clientErrors.length > 0"
+                    variant="danger"
+                    :icon="false"
+                    padding="xs"
+                    radius="sm"
                     aria-live="polite"
                     data-testid="eval-editor-client-errors"
-                    class="mt-3 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive-text"
+                    class="mt-3 text-xs"
                   >
                     <ul class="list-disc space-y-0.5 pl-4">
                       <li v-for="(error, errorIndex) in clientErrors" :key="`${error.path}-${errorIndex}`">
                         {{ $t('views.EvalEditorView.judging.errors.' + error.key, error.params ?? {}) }}
                       </li>
                     </ul>
-                  </div>
+                  </Notice>
                 </template>
 
                 <template v-else>
@@ -603,16 +611,20 @@
                   </div>
                 </template>
 
-                <div
+                <Notice
                   v-if="serverConfigError"
+                  variant="danger"
+                  :icon="false"
+                  padding="xs"
+                  radius="sm"
                   role="alert"
                   aria-live="assertive"
                   data-testid="eval-editor-server-error"
-                  class="mt-3 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive-text"
+                  class="mt-3 text-xs"
                 >
                   <p class="font-medium">{{ serverConfigErrorHeading }}</p>
                   <p class="mt-1">{{ serverConfigError.message }}</p>
-                </div>
+                </Notice>
               </DataCard>
 
               <div>
@@ -708,32 +720,40 @@
                     open
                     :aria-label="$t('views.EvalEditorView.policyGate.toggleDisableConfirm')"
                     data-testid="policy-gate-toggle-confirm-dialog"
-                    class="static m-0 flex w-full items-center gap-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-foreground"
+                    class="static m-0 w-full border-0 bg-transparent p-0"
                     @keydown="onGateToggleDialogKeydown"
                   >
-                    <span>
-                      {{ $t('views.EvalEditorView.policyGate.toggleDisableConfirm') }}
-                      <template v-if="policyGate.action === 'block'">
-                        {{ $t('views.EvalEditorView.policyGate.toggleDisableBlockWarning') }}
-                      </template>
-                    </span>
-                    <button
-                      type="button"
-                      data-testid="policy-gate-confirm-toggle-disable"
-                      class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
-                      @click="confirmToggleGate"
-                      ref="gateToggleConfirmBtnRef"
+                    <Notice
+                      variant="danger"
+                      :icon="false"
+                      padding="xs"
+                      radius="sm"
+                      class="flex w-full items-center gap-2 text-xs"
                     >
-                      {{ $t('views.EvalEditorView.policyGate.toggleConfirmDisable') }}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="policy-gate-cancel-toggle-disable"
-                      class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
-                      @click="cancelToggleGate"
-                    >
-                      {{ $t('common.no') }}
-                    </button>
+                      <span>
+                        {{ $t('views.EvalEditorView.policyGate.toggleDisableConfirm') }}
+                        <template v-if="policyGate.action === 'block'">
+                          {{ $t('views.EvalEditorView.policyGate.toggleDisableBlockWarning') }}
+                        </template>
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="policy-gate-confirm-toggle-disable"
+                        class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
+                        @click="confirmToggleGate"
+                        ref="gateToggleConfirmBtnRef"
+                      >
+                        {{ $t('views.EvalEditorView.policyGate.toggleConfirmDisable') }}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="policy-gate-cancel-toggle-disable"
+                        class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
+                        @click="cancelToggleGate"
+                      >
+                        {{ $t('common.no') }}
+                      </button>
+                    </Notice>
                   </dialog>
 
                   <!-- Delete gate button -->
@@ -755,43 +775,55 @@
                         open
                         :aria-label="$t('views.EvalEditorView.policyGate.deleteConfirm')"
                         data-testid="policy-gate-confirm-dialog"
-                        class="static m-0 flex w-full items-center gap-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-foreground"
+                        class="static m-0 w-full border-0 bg-transparent p-0"
                         @keydown="onGateDialogKeydown"
                       >
-                        <span>
-                          {{ $t('views.EvalEditorView.policyGate.deleteConfirm') }}
-                          <template v-if="policyGate.action === 'block'">
-                            {{ $t('views.EvalEditorView.policyGate.deleteConfirmBlockWarning') }}
-                          </template>
-                        </span>
-                        <button
-                          type="button"
-                          data-testid="policy-gate-confirm-delete"
-                          class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
-                          @click="deletePolicyGate"
-                          ref="gateDeleteConfirmBtnRef"
+                        <Notice
+                          variant="danger"
+                          :icon="false"
+                          padding="xs"
+                          radius="sm"
+                          class="flex w-full items-center gap-2 text-xs"
                         >
-                          {{ $t('common.confirm') }}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid="policy-gate-cancel-delete"
-                          class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
-                          @click="cancelGateDelete"
-                        >
-                          {{ $t('common.no') }}
-                        </button>
+                          <span>
+                            {{ $t('views.EvalEditorView.policyGate.deleteConfirm') }}
+                            <template v-if="policyGate.action === 'block'">
+                              {{ $t('views.EvalEditorView.policyGate.deleteConfirmBlockWarning') }}
+                            </template>
+                          </span>
+                          <button
+                            type="button"
+                            data-testid="policy-gate-confirm-delete"
+                            class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
+                            @click="deletePolicyGate"
+                            ref="gateDeleteConfirmBtnRef"
+                          >
+                            {{ $t('common.confirm') }}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid="policy-gate-cancel-delete"
+                            class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
+                            @click="cancelGateDelete"
+                          >
+                            {{ $t('common.no') }}
+                          </button>
+                        </Notice>
                       </dialog>
                     </template>
                   </div>
 
                   <!-- Gate error state -->
-                  <div
+                  <Notice
                     v-if="gateError"
+                    variant="danger"
+                    :icon="false"
+                    padding="xs"
+                    radius="sm"
                     role="alert"
                     aria-live="assertive"
                     data-testid="policy-gate-error"
-                    class="flex items-center gap-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive-text"
+                    class="flex items-center gap-2 text-xs"
                   >
                     <span>{{ $t('views.EvalEditorView.policyGate.errorState') }}</span>
                     <button
@@ -803,7 +835,7 @@
                     >
                       {{ $t('views.EvalEditorView.policyGate.retry') }}
                     </button>
-                  </div>
+                  </Notice>
                 </div>
               </div>
 
@@ -813,27 +845,35 @@
                 open
                 :aria-label="$t('views.EvalEditorView.policyGate.dirtyConfirmAriaLabel')"
                 data-testid="dirty-confirm-dialog"
-                class="static m-0 flex w-full items-center gap-2 rounded border border-destructive/30 bg-destructive/5 p-2 text-xs text-foreground"
+                class="static m-0 w-full border-0 bg-transparent p-0"
                 @keydown="onDirtyDialogKeydown"
               >
-                <span>{{ $t('views.EvalEditorView.policyGate.unsavedChangesConfirm') }}</span>
-                <button
-                  type="button"
-                  data-testid="dirty-confirm-proceed"
-                  class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
-                  @click="resolveDirtyConfirm(true)"
-                  ref="dirtyConfirmProceedBtnRef"
+                <Notice
+                  variant="danger"
+                  :icon="false"
+                  padding="xs"
+                  radius="sm"
+                  class="flex w-full items-center gap-2 text-xs"
                 >
-                  {{ $t('views.EvalEditorView.policyGate.dirtyConfirmProceed') }}
-                </button>
-                <button
-                  type="button"
-                  data-testid="dirty-confirm-stay"
-                  class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
-                  @click="resolveDirtyConfirm(false)"
-                >
-                  {{ $t('views.EvalEditorView.policyGate.dirtyConfirmStay') }}
-                </button>
+                  <span>{{ $t('views.EvalEditorView.policyGate.unsavedChangesConfirm') }}</span>
+                  <button
+                    type="button"
+                    data-testid="dirty-confirm-proceed"
+                    class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
+                    @click="resolveDirtyConfirm(true)"
+                    ref="dirtyConfirmProceedBtnRef"
+                  >
+                    {{ $t('views.EvalEditorView.policyGate.dirtyConfirmProceed') }}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="dirty-confirm-stay"
+                    class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
+                    @click="resolveDirtyConfirm(false)"
+                  >
+                    {{ $t('views.EvalEditorView.policyGate.dirtyConfirmStay') }}
+                  </button>
+                </Notice>
               </dialog>
 
               <div class="flex items-center gap-2 pt-2">
@@ -871,7 +911,7 @@
           </div>
 
           <div v-else-if="evalsLoading" class="space-y-2" data-testid="eval-editor-loading-skeleton">
-            <div v-for="n in 3" :key="`eval-editor-skeleton-${n}`" class="rounded-lg border bg-card p-4">
+            <div v-for="n in 3" :key="`eval-editor-skeleton-${n}`" class="border p-4">
               <SkeletonBlock height-class="h-5 w-1/3" />
               <SkeletonBlock class="mt-2" height-class="h-4 w-2/3" />
             </div>

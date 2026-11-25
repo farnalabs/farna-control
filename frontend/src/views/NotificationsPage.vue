@@ -81,7 +81,7 @@
         <div
           v-for="n in 3"
           :key="`notifications-skeleton-${n}`"
-          class="rounded-lg border bg-card p-4"
+          class="border p-4"
         >
           <div class="space-y-2">
             <SkeletonBlock height-class="h-4 w-48" />
