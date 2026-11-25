@@ -59,6 +59,11 @@ from pathlib import Path
 import pydantic.root_model  # noqa: F401
 
 import farna.core.ssrf as _ssrf
+from tests import _transport_strict
+
+# Opt-in strict respx transport policy (FAR-2702). ``install`` is a no-op
+# unless FARNA_STRICT_TRANSPORT=1, so the default suite is byte-identical.
+_transport_strict.install()
 
 #: The warning class the audited suites must treat as a HARD ERROR. Kept as the
 #: pytest ``-W`` spelling so every CI command that runs a gated suite can carry
@@ -443,3 +448,47 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     for item in items:
         if item.get_closest_marker(POSIX_ONLY_MARKER) is not None:
             item.add_marker(skip)
+
+
+# ---------------------------------------------------------------------------
+# Strict respx transport policy wiring (FAR-2702)
+# ---------------------------------------------------------------------------
+#
+# ``tests/_transport_strict.py`` instruments respx only when
+# ``FARNA_STRICT_TRANSPORT=1``. These hooks are inert otherwise: the
+# instrumentation never populates a bucket, so they cost nothing beyond a
+# list read.
+#
+# ``pytest_runtest_logstart`` owns the node id (not ``pytest_runtest_setup``,
+# which this file already defines for the unraisable-warning gate) so the two
+# concerns stay separate and neither hook has to know about the other.
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Open/truncate the strict-transport report file, if one is configured."""
+    _transport_strict.start_session()
+
+
+def pytest_runtest_logstart(nodeid: str, location: tuple[str, int, str]) -> None:
+    """Attribute any respx activity from here on to the test that owns it."""
+    _transport_strict.start_test(nodeid)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
+    """Fail a passing test whose respx usage broke the strict policy.
+
+    Runs at teardown (after every router the test stopped, including routers
+    a fixture tore down) and flips a green report to failed with the
+    collected violations, so the failure names the offending routes rather
+    than the test erroring on an opaque respx assertion.
+    """
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "teardown":
+        return
+    violations = _transport_strict.finish_test()
+    if not violations or report.outcome != "passed":
+        return
+    report.outcome = "failed"
+    report.longrepr = _transport_strict.format_failure(violations)

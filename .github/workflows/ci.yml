@@ -944,6 +944,124 @@ jobs:
           # pre-deploy gate and schemathesis-nightly.yml both set REDIS_URL.
           REDIS_URL: "redis://localhost:6379/0"
 
+  transport-policy:
+    # FAR-2702: the strict respx transport policy is a ratchet. It runs over the
+    # test modules THIS change touches (never the full 3,000-test respx surface)
+    # and fails on a violation the baseline does not already record:
+    #   * a request that matches no registered route (silently auto-mocked by
+    #     respx when assert_all_mocked is off), or
+    #   * a registered route that was never called.
+    # The baseline (backend/tests/architecture/transport_policy_baseline.json)
+    # is shrink-only. docs/testing/transport-policy.md is the reference.
+    if: needs.current-head-gate.outputs.current == 'true'
+    needs: [current-head-gate]
+    name: Strict transport policy (changed test modules)
+    runs-on: ubicloud-standard-2
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541: --frozen pins the source-archive deps (pytest-bdd) to exact revisions.
+      - name: Run strict transport policy over changed modules
+        # The runner writes its report to a stable path so the ratchet step
+        # below reads the SAME findings. Run from the repo root: the runner
+        # resolves `backend/tests/...` pathspecs against git.
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            # actions/checkout checks out the PR merge commit; its first parent
+            # is the base branch (same reasoning as integration-changed above).
+            if git rev-parse -q --verify "HEAD^2" >/dev/null 2>&1; then
+              BASE="HEAD^"
+            else
+              BASE="origin/$GITHUB_BASE_REF"
+            fi
+          else
+            BASE="HEAD^"
+          fi
+          python scripts/run_transport_strict.py \
+            --base-ref "$BASE" \
+            --timeout 300 \
+            --report "$RUNNER_TEMP/transport-strict-report.jsonl"
+      - name: Ratchet (architecture gate over the same report)
+        shell: bash
+        env:
+          FARNA_STRICT_TRANSPORT_REPORT: ${{ runner.temp }}/transport-strict-report.jsonl
+        run: |
+          if [ -s "$FARNA_STRICT_TRANSPORT_REPORT" ] || ls "$FARNA_STRICT_TRANSPORT_REPORT"* >/dev/null 2>&1; then
+            uv run --no-sync pytest tests/architecture/test_transport_policy.py -q --tb=short --timeout=300
+          else
+            echo "No strict report produced (no changed test module) - ratchet is a no-op."
+          fi
+
+  contract-roundtrip:
+    # FAR-2702: call a small, explicit sample of GET routes through the ASGI app
+    # against Postgres and check each LIVE response against the OpenAPI schema
+    # AND the generated frontend type (frontend/src/lib/api/schema.ts). This is
+    # the executable half of "a stub was never diffed against a real response".
+    # It cannot detect provider drift (see docs/testing/transport-policy.md).
+    if: needs.current-head-gate.outputs.current == 'true'
+    needs: [current-head-gate]
+    name: Contract round-trip (changed API routes)
+    runs-on: ubicloud-standard-2
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541: --frozen pins the source-archive deps (pytest-bdd) to exact revisions.
+      - name: Detect changed API route / schema files
+        id: changed
+        shell: bash
+        # Repo root: the pathspecs below are repo-relative (see integration-changed).
+        working-directory: .
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            if git rev-parse -q --verify "HEAD^2" >/dev/null 2>&1; then
+              BASE="HEAD^"
+            else
+              BASE="origin/$GITHUB_BASE_REF"
+            fi
+          else
+            BASE="HEAD^"
+          fi
+          CHANGED="$(git diff --name-only "$BASE" HEAD -- 'backend/src/farna/api/' 'frontend/src/lib/api/schema.ts' 'backend/tests/integration/test_contract_roundtrip.py' || true)"
+          if [ -n "$CHANGED" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Changed API contract files:"
+            printf '%s\n' "$CHANGED" | sed 's/^/  /'
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No API route/schema files changed - skipping."
+          fi
+      - name: Run contract round-trip
+        if: steps.changed.outputs.run == 'true'
+        shell: bash
+        run: |
+          uv run --no-build --no-sync pytest tests/integration/test_contract_roundtrip.py \
+            -q --tb=short --timeout=300 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+        env:
+          # Testcontainers provisions its own Postgres; the round-trip needs
+          # Docker only (available on these runners, like integration-changed).
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+
   tier1b-light:
     # Tier 1b connectors (FAR-934): container-hosted LIGHT set only.
     # Boots self-hostable connector servers + light local model servers via
