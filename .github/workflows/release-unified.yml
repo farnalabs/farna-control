@@ -2193,6 +2193,14 @@ jobs:
           # forced deploy that puts this RC into the production soak.
           echo "Dispatching Deploy: Staging + Prod for ${RC_TAG} (force_deploy=true)."
           RC_SHA="$(git rev-parse "${RC_TAG}^{commit}")"
+          # Capture this dispatch's identity before dispatching, so the deploy
+          # run it creates can be told apart from any earlier forced deploy.
+          STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          MAIN_SHA="$(git rev-parse HEAD)"
+          BEFORE_IDS="$(gh run list --workflow deploy.yml --event workflow_dispatch --limit 20 --json databaseId 2>/dev/null || echo '[]')"
+          if ! printf '%s' "$BEFORE_IDS" | jq -e . >/dev/null 2>&1; then
+            BEFORE_IDS='[]'
+          fi
           # Dispatch from main, NOT the RC tag: deploy.yml serialises on
           # `deploy-pipeline-${{ github.ref_name }}`, so a tag ref gives each
           # RC its own concurrency group and two forced deploys can race the
@@ -2203,12 +2211,42 @@ jobs:
             -f release_ref="${RC_TAG}" \
             -f release_sha="${RC_SHA}"
 
+          # FAR-2790: resolve the run this dispatch just created and tell
+          # rc-validate which deploy to watch. Without it, validation can only
+          # observe "the deployment SHA never matched" and cannot say whether
+          # the deploy shipped and mismatched or never shipped at all.
+          # Bounded (~60s): GitHub registers a dispatched run within seconds,
+          # and if it cannot be resolved the id is simply omitted - rc-validate
+          # discovers the run itself. This step must never fail the release
+          # because the id could not be observed.
+          DEPLOY_RUN_ID=""
+          for _ in $(seq 1 20); do
+            RUNS_JSON="$(gh run list --workflow deploy.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt,headSha 2>/dev/null || echo '[]')"
+            DEPLOY_RUN_ID="$(printf '%s' "$RUNS_JSON" | jq -r --arg since "$STARTED_AT" --arg sha "$MAIN_SHA" --argjson before "$BEFORE_IDS" '
+              [ .[]
+                | select(.createdAt >= $since)
+                | select(.databaseId as $id | ([ $before[]?.databaseId ] | index($id)) == null) ]
+              | sort_by(.createdAt) | reverse
+              | (map(select(.headSha == $sha)) + .) | .[0].databaseId // empty
+            ' 2>/dev/null || true)"
+            if [ -n "$DEPLOY_RUN_ID" ] && [ "$DEPLOY_RUN_ID" != "null" ]; then
+              break
+            fi
+            DEPLOY_RUN_ID=""
+            sleep 3
+          done
 
           # Dispatch validation only after GitHub has accepted the deploy
           # dispatch. rc-validate waits for /api/v1/deployment to report the RC
           # commit, then owns the validated/${RC_TAG} marker on success.
-          echo "Dispatching rc-validate.yml for ${RC_TAG}."
-          gh workflow run rc-validate.yml --ref "${RC_TAG}" -f rc_tag="${RC_TAG}"
+          if [ -n "$DEPLOY_RUN_ID" ]; then
+            echo "Resolved deploy run ${DEPLOY_RUN_ID} for ${RC_TAG} (dispatched from main at ${MAIN_SHA:0:12})."
+            echo "Dispatching rc-validate.yml for ${RC_TAG} (deploy_run_id=${DEPLOY_RUN_ID})."
+            gh workflow run rc-validate.yml --ref "${RC_TAG}" -f rc_tag="${RC_TAG}" -f deploy_run_id="${DEPLOY_RUN_ID}"
+          else
+            echo "::warning::Could not resolve the deploy run id for ${RC_TAG} within 60s; dispatching rc-validate.yml without deploy_run_id (it discovers the deploy run itself)."
+            gh workflow run rc-validate.yml --ref "${RC_TAG}" -f rc_tag="${RC_TAG}"
+          fi
 
           echo "Dispatched Deploy (force) and rc-validate for ${RC_TAG}."
 
