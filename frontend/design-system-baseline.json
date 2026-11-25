@@ -36,7 +36,7 @@
     "frontend/src/views/AdminSpendLimitsView.vue": 3,
     "frontend/src/views/AgentOutputDiffView.vue": 1,
     "frontend/src/views/CostComponentsView.vue": 1,
-    "frontend/src/views/EvalEditorView.vue": 11,
+    "frontend/src/views/EvalEditorView.vue": 7,
     "frontend/src/views/FeedbackInboxView.vue": 1,
     "frontend/src/views/ForceChangePasswordView.vue": 1,
     "frontend/src/views/GovernanceStackView.vue": 1,
