@@ -18,12 +18,15 @@ import { WCAG_TAGS, filterViolations } from './setup/wcag'
 // theme flip and audit the settled colours.
 const SUPPRESS_TRANSITIONS_CSS = '*, *::before, *::after { transition: none !important; }'
 
-// The authenticated route loops navigate and load the full SPA once per route.
-// The FIRST request against a cold Vite dev server pays the initial bundle
-// compile, which can exceed the 30 s local default and time out on
-// `page.goto('/login')` (observed locally: the first three routes of a filtered
-// run failed at 30.5 s, then every later route took 7-9 s once warm). Mirrors
-// json-viewer.spec.ts's `test.setTimeout(90_000)` for the same reason.
+// Cold-start budget for EVERY goto-based test in this file — not just the
+// authenticated route loops. The FIRST `page.goto` against a cold Vite dev
+// server pays the initial bundle compile, which can exceed the 30 s local
+// default and time out on `page.goto('/login')` (observed: the first test after
+// server start fails at ~30.5 s, then later navigations take 7-9 s once warm).
+// This bit the spec's `@regression` overlay test when the route loops were
+// already covered but the earlier describes were not. Mirrors
+// json-viewer.spec.ts's `test.setTimeout(90_000)` for the same reason. Applied
+// to every test here that calls `page.goto`.
 const ROUTE_AUDIT_TIMEOUT = 90_000
 
 /**
@@ -72,6 +75,7 @@ function logViolations(label: string, violations: LoggableViolation[]) {
 
 test.describe('PrimeVue Select overlay WCAG + keyboard nav', { tag: "@regression" }, () => {
   test('open filter-bar-status overlay has no unexpected WCAG AA violations', { tag: "@regression" }, async ({ page, env }) => {
+    test.setTimeout(ROUTE_AUDIT_TIMEOUT)
     test.skip(env.name !== 'local', 'Uses setupLocalMockApi — only runs locally')
     const { setupLocalMockApi, loginAsAdmin } = await import('./setup/fixtures')
     await setupLocalMockApi(page)
@@ -105,6 +109,7 @@ test.describe('PrimeVue Select overlay WCAG + keyboard nav', { tag: "@regression
   })
 
   test('PrimeVue Select supports keyboard navigation (arrow + escape)', { tag: "@regression" }, async ({ page, env }) => {
+    test.setTimeout(ROUTE_AUDIT_TIMEOUT)
     test.skip(env.name !== 'local', 'Uses setupLocalMockApi — only runs locally')
     const { setupLocalMockApi, loginAsAdmin } = await import('./setup/fixtures')
     await setupLocalMockApi(page)
@@ -144,6 +149,7 @@ test.describe('WCAG AA audit (CI — Vite dev server)', { tag: "@regression" }, 
 
   for (const { path, name } of pages) {
     test(`${name} — light mode has no unexpected WCAG AA violations`, { tag: "@regression" }, async ({ page }) => {
+      test.setTimeout(ROUTE_AUDIT_TIMEOUT)
       await page.goto(path)
 
       // Guard: storageState may redirect /login to / (dashboard)
@@ -187,6 +193,7 @@ test.describe('WCAG AA audit (CI — Vite dev server)', { tag: "@regression" }, 
     })
 
     test(`${name} — dark mode has no unexpected WCAG AA violations`, { tag: "@regression" }, async ({ page }) => {
+      test.setTimeout(ROUTE_AUDIT_TIMEOUT)
       await page.goto(path)
 
       // Guard: storageState may redirect /login to / (dashboard)
@@ -353,6 +360,7 @@ test('scanned route sets are unique and every light exclusion is dark-covered', 
 // declarative instead of leaving a runtime environment gate in the test body.
 test.describe('authenticated shell — sidebar profile links (FAR-1907)', { tag: "@local-mock" }, () => {
   test('profile link names contain the visible text for a UUID sub', { tag: "@local-mock" }, async ({ page, env }) => {
+    test.setTimeout(ROUTE_AUDIT_TIMEOUT)
     const { setupLocalMockApi, loginAsAdmin } = await import('./setup/fixtures')
     await setupLocalMockApi(page)
     await page.addInitScript(() => { try { localStorage.setItem('assistant-panel-state', 'closed') } catch (err) { console.warn(err) } })
@@ -594,6 +602,7 @@ test.describe('authenticated SYSTEM routes — light theme (FAR-2761)', { tag: "
 test.describe('light page with a stale .dark class — PrimeVue badges (FAR-2351)', { tag: "@regression" }, () => {
   for (const path of ['/admin/trigger-events', '/admin/audit']) {
     test(`${path} has no color-contrast violations when .light is added over .dark`, { tag: "@regression" }, async ({ page, env }) => {
+      test.setTimeout(ROUTE_AUDIT_TIMEOUT)
       const { setupLocalMockApi, loginAsAdmin } = await import('./setup/fixtures')
       await setupLocalMockApi(page)
       await page.addInitScript(() => { try { localStorage.setItem('assistant-panel-state', 'closed') } catch (err) { console.warn(err) } })
