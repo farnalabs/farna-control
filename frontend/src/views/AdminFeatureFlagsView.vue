@@ -159,7 +159,7 @@
               <div class="border-b bg-muted/30 px-4 py-2">
                 <h3 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   {{ section.label }}
-                  <span class="ml-2 text-xs font-normal opacity-60">({{ section.flags.length }})</span>
+                  <span class="ml-2 text-xs font-normal">({{ section.flags.length }})</span>
                 </h3>
               </div>
               <table class="w-full" v-if="section.flags.length > 0">
