@@ -72,6 +72,7 @@ from farna.db.models.run import (
     PIPELINE_CAPACITY_STATUSES,
     RUN_GROUP_KIND_RESUME,
     RUN_GROUP_KIND_VALUES,
+    RUN_STATUS_WHITELIST,
     TERMINAL_STATUSES,
     Run,
 )
@@ -158,31 +159,12 @@ def run_idempotency_key(run_ref: str) -> str:
 _is_unique_violation = is_unique_violation
 
 
-# The canonical whitelist of run statuses (subset of the ``ck_runs_status``
-# CHECK constraint). ``transition_run`` and ``update_run_status`` refuse any
-# status outside this set (a typo would otherwise silently violate the CHECK
+# The canonical whitelist of run statuses (the closed ``ck_runs_status``
+# vocabulary). FAR-2705: imported from the run-lifecycle single source of truth
+# via the model re-export — ``transition_run`` and ``update_run_status`` refuse
+# any status outside it (a typo would otherwise silently violate the CHECK
 # constraint at commit time, or worse write an unknown status on backends
 # without the constraint).
-RUN_STATUS_WHITELIST: frozenset[str] = frozenset(
-    {
-        "pending",
-        "running",
-        "awaiting_human",
-        "claimed",
-        "unknown",
-        "hitl_parked",
-        "complete",
-        "failed",
-        "cancelled",
-        "eval_failed",
-        "stalled",
-        "budget_exceeded",
-        "router_no_match",
-        "cost_ceiling_exceeded",
-        "compensation_failed",
-        "rejected",
-    }
-)
 
 # Trigger types exempt from the org-wide pause. A new trigger type defaults to
 # PAUSED (fail-closed) unless explicitly added here AND it passes trigger_id to

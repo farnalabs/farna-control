@@ -62,8 +62,8 @@ from farna.core.dispatch_phases import (
     PHASE_SPEND_CHECK,
     PHASE_STREAMING,
 )
+from farna.core.run_lifecycle import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.db.crud.run import get_run
-from farna.db.models.run import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.db.models.run_attempt import (
     ATTEMPT_TERMINAL_REASON_COMPLETED,
     ATTEMPT_TERMINAL_REASON_DEADLINE,

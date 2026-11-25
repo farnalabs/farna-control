@@ -74,13 +74,14 @@ from farna.core.analytics.service import (
     _guarded_session,
     _rate_limited,
 )
+from farna.core.run_lifecycle import EXECUTING_STATUSES, LIVE_STATUSES, PARKED_STATUSES
 from farna.db.crud.run import (
     ERROR_CODE_ORG_CAPACITY_LIMITED,
     ERROR_CODE_PIPELINE_CAPACITY,
     get_org_run_concurrency_limit,
 )
 from farna.db.models.pipeline import Pipeline
-from farna.db.models.run import ACTIVE_RUN_STATUSES, AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS, Run
+from farna.db.models.run import Run
 from farna.settings import Settings
 
 # Raw-row cap for the capacity scan. The window is short by design (minutes /
@@ -96,10 +97,11 @@ CAPACITY_MAX_RAW_ROWS = 50_000
 # interval or narrow the window (FAR-1343 M4). The default request is 12.
 MAX_CAPACITY_BUCKETS = 480
 
-EXECUTING_STATUSES: frozenset[str] = frozenset(ACTIVE_RUN_STATUSES - {"pending", AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS})
-PARKED_STATUSES: frozenset[str] = frozenset({AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS})
+# FAR-2705: EXECUTING_STATUSES (a run occupying a pipeline slot), PARKED_STATUSES
+# (stopped on a human) and LIVE_STATUSES (every non-terminal status) are imported
+# from the run-lifecycle single source of truth. GATE_STATUSES is the local union
+# of the two gate-relevant projections, so it cannot drift from them either.
 GATE_STATUSES: frozenset[str] = frozenset(EXECUTING_STATUSES | PARKED_STATUSES)
-LIVE_STATUSES: frozenset[str] = frozenset(ACTIVE_RUN_STATUSES)
 
 # Cause buckets. The raw DB markers are ``pipeline_capacity`` /
 # ``org_capacity_limited``; the executor's human detail distinguishes an org

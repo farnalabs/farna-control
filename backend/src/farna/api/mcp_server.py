@@ -230,6 +230,7 @@ from farna.core.mcp.scope_validator import (
 from farna.core.pipeline_engine.error_codes import map_legacy_code, present_error
 from farna.core.pipeline_engine.errors import ResumeClaimSupersededError
 from farna.core.rate_limiter import TokenBucketRegistry
+from farna.core.run_lifecycle import AWAITING_HUMAN_STATUS, HITL_ACTIONABLE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.core.run_provenance import run_provenance_fields
 from farna.core.runtime_config.key_bridge import public_url_is_configured
 from farna.core.secrets_backend import (
@@ -258,10 +259,7 @@ from farna.db.models.agent import Agent
 from farna.db.models.hitl_claim import HitlClaim
 from farna.db.models.pipeline_edge import PipelineEdge
 from farna.db.models.run import (
-    AWAITING_HUMAN_STATUS,
     CANCEL_REASON_AGENT_REQUESTED,
-    HITL_ACTIONABLE_RUN_STATUSES,
-    TERMINAL_STATUSES,
     Run,
 )
 from farna.db.rls import bootstrap_read, set_rls_org, set_rls_user_context

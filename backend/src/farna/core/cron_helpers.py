@@ -79,6 +79,7 @@ from farna.core.retry_budget import (
     retry_executions_consumed,
     retry_max_executions,
 )
+from farna.core.run_lifecycle import ONGOING_ACTIVE_STATUSES, TERMINAL_STATUSES
 from farna.core.runtime_config.telemetry_bridge import is_telemetry_enabled
 
 # FAR-190 streak engine lives in its own module (extracted so cron_helpers can
@@ -96,8 +97,6 @@ from farna.db.models.run import (
     CANCEL_REASON_HITL_REVIEW_EXPIRED,
     CANCEL_REASON_HITL_REVIEW_MISSING,
     CANCELLED_BY_SYSTEM,
-    ONGOING_ACTIVE_STATUSES,
-    TERMINAL_STATUSES,
     Run,
 )
 from farna.db.models.run_node_outputs import SENTINEL_NODE_ID_PREFIX

@@ -6,6 +6,7 @@ code:
   - backend/src/farna/api/routes/hitl.py
   - backend/src/farna/api/routes/admin.py
   - backend/src/farna/core/hitl_manager/__init__.py
+  - backend/src/farna/core/run_lifecycle.py
   - backend/src/farna/core/hitl_manager/deadline_warning.py
   - backend/src/farna/core/hitl_manager/expiry_job.py
   - backend/src/farna/core/hitl_manager/overdue_warning.py
@@ -68,6 +69,24 @@ org-wide pending queues (`/settings/hitl-review`), claims carry short-lived
 tokens so reviews are exclusive and safe, and every decision is audited.
 `human_only` and team-scoped gates constrain who – or what (MCP/automation) –
 may decide.
+
+## Gate status projections
+
+The run statuses a gate is actionable under, and the statuses a claim may acquire
+from, are projections of the run-lifecycle transition table
+(`backend/src/farna/core/run_lifecycle.py`), not hand-maintained sets:
+
+- `HITL_CLAIMABLE_RUN_STATUSES` — exactly the `from_status` of a `claim_gate`
+  transition (`awaiting_human`, `hitl_parked`); a parked run's gate stays open
+  and claimable because park is not decide.
+- `HITL_ACTIONABLE_RUN_STATUSES` — the claimable statuses plus where a claim
+  leaves the run (`claimed`, `hitl_parked`), so every pending-gate surface lists
+  the same population and an undecided gate on any other status is data rot.
+
+`PIPELINE_CAPACITY_STATUSES` excludes both parked statuses: a run waiting on a
+human does not execute. `backend/tests/unit/core/test_run_lifecycle.py` and the
+stateful integration test pin both projections, so a gate can never be listed as
+actionable while its run is terminal, and a decided gate always un-parks the run.
 
 ## Behaviors
 

@@ -87,6 +87,7 @@ from farna.core.hitl_manager import (
 )
 from farna.core.notifier import Notifier
 from farna.core.pipeline_engine.executor import PipelineExecutor, SandboxCapacityExceededError
+from farna.core.run_lifecycle import AWAITING_HUMAN_STATUS, HITL_ACTIONABLE_RUN_STATUSES
 from farna.db.crud.hitl_review_config import (
     EVENT_HUMAN_ONLY_DENIED,
     edge_source_or_target,
@@ -106,7 +107,7 @@ from farna.db.models.hitl_claim import HitlClaim
 from farna.db.models.pipeline import Pipeline
 from farna.db.models.pipeline_snapshot import PipelineSnapshot
 from farna.db.models.pipeline_snapshot import PipelineSnapshot as SnapModel
-from farna.db.models.run import AWAITING_HUMAN_STATUS, HITL_ACTIONABLE_RUN_STATUSES, Run
+from farna.db.models.run import Run
 from farna.db.rls import set_rls_org, set_rls_user_context
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
 from farna.settings import get_settings

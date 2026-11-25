@@ -35,6 +35,7 @@ from farna.connectors._safe_int import safe_int as _safe_int
 from farna.core.analytics import compute_delta
 from farna.core.assistant.config_service import AssistantConfigService
 from farna.core.feature_flags import PlanContext
+from farna.core.run_lifecycle import ACTIVE_RUN_STATUSES, SUCCESS_STATUSES, TERMINAL_STATUSES
 from farna.core.run_provenance import run_provenance_fields
 from farna.db.crud.daily_run_count import org_level_predicate
 from farna.db.crud.eval_run import non_guardrail_eval_results_clause
@@ -44,7 +45,7 @@ from farna.db.models.feedback_record import FeedbackRecord
 from farna.db.models.hitl_claim import HitlClaim
 from farna.db.models.model_backend import ModelBackend
 from farna.db.models.pipeline import Pipeline
-from farna.db.models.run import ACTIVE_RUN_STATUSES, SUCCESS_STATUSES, TERMINAL_STATUSES, Run
+from farna.db.models.run import Run
 from farna.db.models.run_daily_facts import RunDailyFact
 from farna.db.models.team import Team
 from farna.db.rls import set_rls_org, set_rls_user_context

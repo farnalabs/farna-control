@@ -22,7 +22,37 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.compiler import SQLCompiler
 
+from farna.core.run_lifecycle import (
+    ACTIVE_RUN_STATUSES,
+    AWAITING_HUMAN_STATUS,
+    HITL_ACTIONABLE_RUN_STATUSES,
+    HITL_CLAIMABLE_RUN_STATUSES,
+    HITL_PARKED_STATUS,
+    ONGOING_ACTIVE_STATUSES,
+    PIPELINE_CAPACITY_STATUSES,
+    RUN_STATUS_WHITELIST,
+    SUCCESS_STATUSES,
+    TERMINAL_STATUSES,
+)
 from farna.db.models.base import JSONB_COL, JSONB_COL_NONE_AS_NULL, ONDELETE_SET_NULL, OrgScoped
+
+# FAR-2705: the run-status vocabulary and every derived projection now live in
+# the dependency-free leaf ``farna.core.run_lifecycle`` (the transition table is
+# the single source of truth). The names are re-exported here because this model
+# module is the historical import site for every consumer, and ``__all__`` marks
+# them as intentional re-exports (never dead imports).
+__all__ = [
+    "ACTIVE_RUN_STATUSES",
+    "AWAITING_HUMAN_STATUS",
+    "HITL_ACTIONABLE_RUN_STATUSES",
+    "HITL_CLAIMABLE_RUN_STATUSES",
+    "HITL_PARKED_STATUS",
+    "ONGOING_ACTIVE_STATUSES",
+    "PIPELINE_CAPACITY_STATUSES",
+    "RUN_STATUS_WHITELIST",
+    "SUCCESS_STATUSES",
+    "TERMINAL_STATUSES",
+]
 
 if TYPE_CHECKING:
     from farna.db.models.organisation import Organisation
@@ -31,56 +61,18 @@ if TYPE_CHECKING:
     from farna.db.models.team import Team
 
 
-# Single source of truth for run status sets (ADR 020 / dist/runtime-core A1).
-# Both are subsets of the ``ck_runs_status`` CHECK-constraint values. The
-# never-entered ``waiting_for_lock`` sub-state was excised in migration 0074/0075
-# (rows backfilled to ``pending``); it MUST NOT appear in either set. Consumers
-# across the codebase (crud/run, cron_helpers, analytics) import these instead
-# of re-declaring their own tuples.
-TERMINAL_STATUSES: frozenset[str] = frozenset(
-    {
-        "complete",
-        "failed",
-        "cancelled",
-        "eval_failed",
-        "stalled",
-        "budget_exceeded",
-        "router_no_match",
-        "cost_ceiling_exceeded",
-        "compensation_failed",
-        # FAR-1487: a HITL rejection with no reject route ENDS the run here
-        # (neither ``failed`` — nothing broke — nor ``cancelled`` — no operator
-        # stopped it). Also the home of coalesced-supersede system rejections
-        # (error_code ``hitl.superseded``).
-        "rejected",
-    }
-)
-
-# The terminal statuses that represent a DELIVERED run — the single source of
-# truth for "did this run succeed", so consumer code never spells its own
-# ``status == "complete"`` test (enforced by the ``raw-status-complete`` semgrep
-# rule). It is deliberately a vocabulary entry here, where the status literals
-# live, rather than a predicate duplicated across consumers.
+# TERMINAL_STATUSES / SUCCESS_STATUSES / ACTIVE_RUN_STATUSES are imported above
+# from ``farna.core.run_lifecycle`` — the transition table there is the single
+# source of truth (FAR-2705). The vocabulary is a subset of the
+# ``ck_runs_status`` CHECK constraint below; the never-entered
+# ``waiting_for_lock`` sub-state was excised in migration 0074/0075 (rows
+# backfilled to ``pending``) and MUST NOT reappear.
 #
-# FAR-146 (accept-as-complete) will WIDEN this set (an accepted outcome becomes
-# success) and every consumer that reads it follows automatically. Until then
-# it is exactly ``complete``, matching ``analytics/builder.py``'s
-# ``_COMPLETE_STATUS`` filter, which is what /analytics' success_rate counts.
-SUCCESS_STATUSES: frozenset[str] = frozenset({"complete"})
-
-# Non-terminal (active) run statuses — a run that still holds a slot. A pending
-# run is active but does not hold capacity (see crud.run._active_run_statuses).
-# ``unknown`` (adopted from FAR-410) is a NON-TERMINAL recovery status: the run's
-# outcome could not be determined (e.g. the sandbox was lost) but it is not
-# finalised; it holds a slot until an operator re-runs it with the SAME persisted
-# run-level ``idempotency_key``, reconciling it to a terminal outcome.
-# ``hitl_parked`` (FAR-604 D2) is a NON-TERMINAL parked state: the run's HITL
-# gate expired unanswered past the grace window and the park sweep moved it out
-# of ``awaiting_human`` so it stops occupying review state. It is deliberately
-# kept in this set (not a terminal status) so every existing consumer that
-# treats ``awaiting_human`` as in-flight treats a parked run identically — the
-# ONE exception is the pipeline capacity gate below, which excludes both.
-ACTIVE_RUN_STATUSES: frozenset[str] = frozenset({"pending", "running", "awaiting_human", "claimed", "unknown", "hitl_parked"})
+# ``unknown`` is a non-terminal recovery status (outcome indeterminate, still
+# holds its slot until an operator reconciles it). ``hitl_parked`` is a
+# non-terminal parked state (gate expired unanswered; the run is out of review
+# state but not finalised). Both are active; only the pipeline-capacity
+# projection excludes parked runs.
 
 # ---------------------------------------------------------------------------
 # FAR-1233 — WHY a run was cancelled. The CLOSED vocabulary behind
@@ -165,62 +157,29 @@ RUN_GROUP_KIND_RESUME: Final[str] = "resume"
 RUN_GROUP_KIND_VALUES: frozenset[str] = frozenset({RUN_GROUP_KIND_RETRY, RUN_GROUP_KIND_RESUME})
 
 
-# The canonical status literal (FAR-604 qa F15): every write site that names the
-# parked status binds/compares against this constant so a rename or a typo can
-# never desynchronise the park sweep, the un-park transitions, and the guard.
-HITL_PARKED_STATUS: Final[str] = "hitl_parked"
-AWAITING_HUMAN_STATUS: Final[str] = "awaiting_human"
-
-# FAR-604 D1 (HITL capacity): statuses that hold a PIPELINE execution slot —
-# the set the pipeline-level ``max_concurrent_runs`` admission gate counts
-# (``count_active_runs_for_pipeline(..., include_pending=False)``).
-# ``awaiting_human`` and ``hitl_parked`` are DELIBERATELY EXCLUDED: a run parked
-# on a human decision is not executing (the 2026-09-04 incident: 20
-# awaiting_human runs consumed a 20-cap pipeline for 26h). The ORG-level
-# ``run_concurrency_limit`` gate still counts them (it uses
-# ``ACTIVE_RUN_STATUSES - {'pending'}``), so parked runs remain org-bounded.
-# Derived (qa F15): subtracting from ACTIVE_RUN_STATUSES keeps the two sets from
-# drifting apart when a status is added to the active vocabulary.
-PIPELINE_CAPACITY_STATUSES: frozenset[str] = frozenset(ACTIVE_RUN_STATUSES - {"pending", AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS})
-
-# Run statuses under which an undecided HITL gate is actionable work (FAR-612).
-# ``awaiting_human`` gates are claimable now; ``claimed`` gates are held by a
-# reviewer and legitimately render as claimed. ``hitl_parked`` is a non-terminal
-# parked state (FAR-604 D2) whose gate stays OPEN AND CLAIMABLE — park != decide,
-# so a parked run's gate remains undecided work until a decision un-parks it via
-# ``dispatcher_reconcile``. Every other status makes an undecided gate data rot
-# (e.g. orphaned rows left by the since-fixed auto-approve bug), so both
-# pending-gate surfaces (REST org-wide queue and MCP ``list_pending_hitl``) filter
-# to this exact set.
-HITL_ACTIONABLE_RUN_STATUSES: frozenset[str] = frozenset({"awaiting_human", "claimed", HITL_PARKED_STATUS})
-
-# Run statuses under which a claim may atomically ACQUIRE a gate (FAR-645).
-# Single source of truth for ``HITLManager.claim()``: the claimable set is
-# ``awaiting_human`` (claimable now) and ``hitl_parked`` (stays claimable per
-# FAR-604 D2 — park != decide, a parked run's gate remains undecided work until
-# a decision un-parks it). Deliberately distinct from
-# ``HITL_ACTIONABLE_RUN_STATUSES`` (which also contains ``claimed`` for listing
-# semantics): a claimed gate is HELD by a reviewer — claim() extends this set
-# with ``claimed`` ONLY for the same-account re-claim arm (FAR-686 token
-# recovery), mirrored atomically in the UPDATE's ``runs`` EXISTS predicate.
-# claim() uses the base set in its fast-fail pre-check AND in the atomic
-# UPDATE's ``runs`` EXISTS predicate, so a run that goes terminal between the
-# pre-check and the write can never be claimed.
-HITL_CLAIMABLE_RUN_STATUSES: frozenset[str] = frozenset({AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS})
-
-# In-flight run statuses for the ``ongoing`` trigger type (FAR-158). An ongoing
-# trigger keeps its pipeline topped up to ``max_concurrent_runs`` runs whose
-# status is in this set. pending = "queued" (the user-facing semantics — a
-# queued run counts toward the target because it will claim a slot shortly).
-# ``awaiting_human`` is DELIBERATELY EXCLUDED: a never-answered HITL gate must
-# not permanently starve the pool (verified: claim expiry resets the claim but
-# the run stays ``awaiting_human``; dispatcher_reconcile only resumes an
-# ``awaiting_human`` run when a committed decision exists), so a run parked on a
-# human must not count against the target. This set is what separates the
-# ongoing top-up count (``cron_helpers._count_ongoing_runs``) from the general
-# ``_count_active_runs``. ``unknown`` is deliberately EXCLUDED: a stuck UNKNOWN
-# run must not trigger an ongoing top-up (it is not a fresh unit of work).
-ONGOING_ACTIVE_STATUSES: frozenset[str] = frozenset({"pending", "running", "claimed"})
+# HITL_PARKED_STATUS / AWAITING_HUMAN_STATUS, PIPELINE_CAPACITY_STATUSES,
+# HITL_ACTIONABLE_RUN_STATUSES, HITL_CLAIMABLE_RUN_STATUSES and
+# ONGOING_ACTIVE_STATUSES are all imported above from
+# ``farna.core.run_lifecycle`` (FAR-2705). Their derivation:
+#
+# * PIPELINE_CAPACITY_STATUSES is the executing projection: a run parked on a
+#   human decision is not executing (the 2026-09-04 incident: 20
+#   awaiting_human runs consumed a 20-cap pipeline for 26h). The ORG-level
+#   ``run_concurrency_limit`` gate still counts parked runs (it uses
+#   ``ACTIVE_RUN_STATUSES - {'pending'}``), so they remain org-bounded.
+# * HITL_ACTIONABLE_RUN_STATUSES is the gate-claim endpoints: every status a
+#   gate can be claimed from (``awaiting_human``, ``hitl_parked``) plus every
+#   status a claim leaves the run in (``claimed``, ``hitl_parked``). An
+#   undecided gate on any other status is data rot.
+# * HITL_CLAIMABLE_RUN_STATUSES is exactly the claim sources (``awaiting_human``
+#   and ``hitl_parked`` — park != decide, so a parked run's gate stays
+#   claimable). ``claimed`` is accepted only for the same-account re-claim arm
+#   (FAR-686), never by the base set.
+# * ONGOING_ACTIVE_STATUSES (FAR-158) is queued plus in-flight runs: an ongoing
+#   trigger tops its pipeline up to ``max_concurrent_runs`` of them. Parked runs
+#   are excluded so a never-answered gate cannot starve the pool, and
+#   ``unknown`` is excluded so a stuck recovery never triggers a top-up (it is
+#   not a fresh unit of work).
 
 
 class _GenRandomUuid(expression.FunctionElement[str]):

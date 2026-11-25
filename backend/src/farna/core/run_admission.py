@@ -41,7 +41,8 @@ from sqlalchemy import DateTime, and_, bindparam, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from farna.core.dispatch_phases import PHASE_FIRST_NODE_DISPATCHED
-from farna.db.models.run import ACTIVE_RUN_STATUSES, AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS, Run
+from farna.core.run_lifecycle import ACTIVE_RUN_STATUSES, AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS, TRIGGER_SLOT_HOLDING_STATUSES
+from farna.db.models.run import Run
 from farna.db.sqlstates import is_row_lock_timeout
 from farna.settings import get_settings
 
@@ -53,12 +54,11 @@ _log = logging.getLogger(__name__)
 _SQL_SET_ORG_ID = "SELECT set_config('app.organisation_id', :val, true)"
 
 # FAR-1999: statuses that hold a TRIGGER concurrency slot regardless of age.
-# ``pending`` is deliberately absent — it is handled by the grace window in
-# :func:`trigger_slot_count_predicate` because a run that has not been
-# dispatched is not executing. Every other active status (running/claimed/
+# FAR-2705: imported from the run-lifecycle single source of truth — the active
+# projection minus the unclaimed ``pending`` status (a run that has not been
+# dispatched is not executing). Every other active status (running/claimed/
 # unknown/awaiting_human/hitl_parked) is genuinely in flight or held and stays
-# counted at any age, exactly as before this change.
-TRIGGER_SLOT_HOLDING_STATUSES: frozenset[str] = ACTIVE_RUN_STATUSES - {"pending"}
+# counted at any age.
 
 #: FAR-1999: how long a ``pending`` run may occupy one of its trigger's
 #: concurrency slots. A run accepted but not yet dispatched (queued, or
