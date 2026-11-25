@@ -10,8 +10,8 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 461 of 896 ticked behaviours (84 node, 137 feature, 240 module strength).
-Weak bindings (module-only): 240. This count is ratcheted shrink-only in the baseline.
+Bound today: 472 of 909 ticked behaviours (92 node, 137 feature, 243 module strength).
+Weak bindings (module-only): 243. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
 
@@ -759,6 +759,15 @@ Derived status: `partial`
 - `container-deployment-18` - The Kubernetes conformance gate lints the Helm chart on every chart
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
+## docs/product-map/infra/deployment-drain.md
+
+Derived status: `partial`
+
+- `deployment-drain-10` - The refusal is mapped to a typed outcome by the origins that catch it:
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+- `deployment-drain-11` - The production deploy composes the control: it enters the drain before
+  - why: behaviour text names no test; only code paths (or nothing) are cited
+
 ## docs/product-map/infra/health-checks.md
 
 Derived status: `partial`
@@ -1181,7 +1190,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 84  Feature: 137  Module (weak): 240
+Node: 92  Feature: 137  Module (weak): 243
 
 ### Weak (module-only) bindings
 
@@ -1306,6 +1315,8 @@ test. The list is ratcheted shrink-only in the baseline: it may not grow.
   - refs: backend/tests/unit/api/test_daily_run_counts.py
 - `db-abstraction-core-07` - Multi-backend conformance is exercised by the `multi_backend` BDD feature and
   - refs: backend/tests/unit/db/test_multi_backend_bdd.py
+- `deployment-drain-07` - Run admission enforces the flag. `create_run` calls
+  - refs: backend/tests/unit/db/test_journey_create_run.py
 - `environments-01` - A profile is createable with a name, description, provider_type, image_ref,
   - refs: backend/tests/integration/crud/test_environment_profiles.py
 - `environments-06` - The GraphValidator resolves a snapshot's `environment_profile_id` into the
@@ -1530,6 +1541,10 @@ test. The list is ratcheted shrink-only in the baseline: it may not grow.
   - refs: backend/tests/unit/api/routes/test_product_analytics_transparency.py
 - `product-analytics-13` - Staged frontend events are consumed and purged end to end (FAR-1717): the
   - refs: backend/tests/unit/product_analytics/test_metrics_staging_consumer.py, backend/tests/unit/product_analytics/test_routes.py
+- `product-analytics-15` - A failed dump is durable and alertable (FAR-2740): the attempt writes
+  - refs: backend/tests/unit/product_analytics/test_metrics_dump.py, backend/tests/unit/core/test_health_alerts.py
+- `product-analytics-16` - `/admin/product-analytics` warns when an opted-in instance is not
+  - refs: backend/tests/unit/api/routes/test_product_analytics_transparency.py
 - `runs-01` - `POST /api/v1/runs` triggers a run (202) carrying `thread_id`; 404 for a missing
   - refs: backend/tests/unit/api/test_runs_endpoint.py
 - `runs-03` - Viewer run reads are team-membership bounded (PR #2552): `run.list` floors at

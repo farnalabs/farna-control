@@ -229,6 +229,14 @@
       "entry": "docs/product-map/core/db-abstraction-core.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
+    "deployment-drain-10": {
+      "entry": "docs/product-map/infra/deployment-drain.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
+    "deployment-drain-11": {
+      "entry": "docs/product-map/infra/deployment-drain.md",
+      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
+    },
     "determination-01": {
       "entry": "docs/product-map/build/determination.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
@@ -1806,6 +1814,7 @@
     "dashboard-01",
     "dashboard-03",
     "db-abstraction-core-07",
+    "deployment-drain-07",
     "environments-01",
     "environments-06",
     "environments-07",
@@ -1918,6 +1927,8 @@
     "product-analytics-08",
     "product-analytics-10",
     "product-analytics-13",
+    "product-analytics-15",
+    "product-analytics-16",
     "runs-01",
     "runs-03",
     "runs-04",
@@ -2177,6 +2188,17 @@
     "db-abstraction-core-05": "a053bc7cae9d625d",
     "db-abstraction-core-06": "24b254b8c051745a",
     "db-abstraction-core-07": "f2731cc07262cfb7",
+    "deployment-drain-01": "62df1d21ca350d05",
+    "deployment-drain-02": "6f456fee4541b95b",
+    "deployment-drain-03": "b3142f8569b54bb4",
+    "deployment-drain-04": "7d86f4fbac2505ae",
+    "deployment-drain-05": "94ee3a67ac6f0369",
+    "deployment-drain-06": "e55ad28b4345868d",
+    "deployment-drain-07": "431976757673be85",
+    "deployment-drain-08": "1991295d5c2ef620",
+    "deployment-drain-09": "5fe98a26c5eab7d1",
+    "deployment-drain-10": "7cc8c117139077f5",
+    "deployment-drain-11": "633e21cc8dabd583",
     "determination-01": "9a0bef87f79bfa01",
     "determination-02": "6489a8a6414ee0d5",
     "determination-03": "ef4d9b93a07a4a56",
@@ -2604,6 +2626,8 @@
     "product-analytics-12": "a763789c7d22b1f5",
     "product-analytics-13": "7bc2d8c674258506",
     "product-analytics-14": "e00aa8c0294cf781",
+    "product-analytics-15": "b1d6b08e5fecd9e8",
+    "product-analytics-16": "57a15bd4b4a32594",
     "risk-assessment-01": "72b09e8b7a83db48",
     "risk-assessment-02": "8dfb17e59bc0813c",
     "risk-assessment-03": "c92f93d1f32cdd57",

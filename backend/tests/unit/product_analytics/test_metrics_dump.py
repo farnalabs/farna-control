@@ -17,6 +17,8 @@ import pytest
 from farna.core.product_analytics.consent import apply_consent_action, default_consent_state
 from farna.core.product_analytics.constants import (
     DUMP_COUNT_KEY,
+    DUMP_LAST_FAILURE_AT_KEY,
+    DUMP_LAST_FAILURE_SUMMARY_KEY,
     DUMP_WATERMARK_KEY,
     coerce_dump_count,
 )
@@ -24,18 +26,22 @@ from farna.core.product_analytics.metrics_dump import (
     _BACKFILL_MAX_DAYS,
     _DUMP_EXECUTION_WINDOW_MINUTES,
     _DUMP_WINDOW_MINUTES,
+    _MAX_FAILURE_SUMMARY_LEN,
     _OFFSET_KEY,
     SCHEMA_VERSION,
     _build_instance_metadata,
     _build_payload,
     _check_instance_switch,
+    _clear_dump_failure,
     _dump_date_range,
     _get_consenting_orgs,
     _get_or_create_instance_id,
     _get_or_create_system_config,
     _parse_iso_date,
+    _record_dump_failure,
     _resolve_start_date,
     _should_dump_now,
+    _summarise_dump_failure,
     metrics_dump,
 )
 from farna.core.product_analytics.vendor_client import (
@@ -587,6 +593,17 @@ class TestMetricsDumpSkipConditions:
                 "farna.core.product_analytics.metrics_dump.read_system_config",
                 new_callable=AsyncMock,
                 return_value=None,
+            ),
+            # The skip now also records the failure and alerts (FAR-2740); the
+            # detailed assertions live in TestDumpFailureObservability, so stub
+            # the durable/alert side here to keep this test about the skip gate.
+            patch(
+                "farna.core.product_analytics.metrics_dump._record_dump_failure",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._raise_dump_failure_alert",
+                new_callable=AsyncMock,
             ),
             patch(
                 "farna.settings.get_settings",
@@ -1435,6 +1452,101 @@ class TestDumpDateRange:
         assert result == [date(2026, 8, 10), date(2026, 8, 11), date(2026, 8, 12)]
 
     @pytest.mark.asyncio
+    async def test_failed_run_notifies_once_per_run_not_per_vendor_attempt(self) -> None:
+        """One failure notification per run, not one per internal retry.
+
+        ``VendorClient.post_batch`` retries internally (``MAX_ATTEMPTS``) and
+        returns a single terminal failure, and ``_dump_date_range`` stops on the
+        first failed day. The sink must therefore fire exactly once even when the
+        range spans several days and the client retried each POST.
+        """
+        factory = _FakeSessionFactory()
+        orgs = [{"id": "org-1", "level_changed_at": None}]
+        sink = MagicMock()
+        with (
+            patch(
+                "farna.core.product_analytics.metrics_dump._build_payload",
+                new_callable=AsyncMock,
+                return_value={"schema_version": 1},
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.VendorClient",
+            ) as mock_client_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post_batch = AsyncMock(return_value=(False, 500, "HTTP 500: boom"))
+            mock_client.close = AsyncMock()
+            mock_client_cls.return_value = mock_client
+            result = await _dump_date_range(
+                factory,
+                orgs,
+                date(2026, 8, 10),
+                date(2026, 8, 12),
+                "https://vendor.example.com",
+                "secret",
+                on_failure=sink,
+            )
+
+        assert result == []
+        assert mock_client.post_batch.await_count == 1
+        sink.assert_called_once_with(500, "HTTP 500: boom")
+
+    @pytest.mark.asyncio
+    async def test_vendor_error_echoing_secret_is_redacted_in_log_and_sink(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The failed-POST warning must not log the secret the vendor echoed.
+
+        The vendor client's error text carries the response body verbatim
+        (``HTTP <code>: <body>``), and a rejection body can quote the secret it
+        refused. ``_dump_date_range`` logs that error and hands it to the
+        failure sink, so it is redacted on both paths — not only inside the
+        persisted summary (FAR-2740).
+        """
+        factory = _FakeSessionFactory()
+        orgs = [{"id": "org-1", "level_changed_at": None}]
+        secret = "shh-secret"
+        sink = MagicMock()
+        with (
+            patch(
+                "farna.core.product_analytics.metrics_dump._build_payload",
+                new_callable=AsyncMock,
+                return_value={"schema_version": 1},
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.VendorClient",
+            ) as mock_client_cls,
+        ):
+            mock_client = AsyncMock()
+            mock_client.post_batch = AsyncMock(return_value=(False, 500, f"HTTP 500: secret rejected {secret}"))
+            mock_client.close = AsyncMock()
+            mock_client_cls.return_value = mock_client
+            with caplog.at_level(logging.WARNING, logger="farna.core.product_analytics.metrics_dump"):
+                result = await _dump_date_range(
+                    factory,
+                    orgs,
+                    date(2026, 8, 10),
+                    date(2026, 8, 10),
+                    "https://vendor.example.com",
+                    secret,
+                    on_failure=sink,
+                )
+
+        assert result == []
+        sink.assert_called_once()
+        status_code, error = sink.call_args.args
+        assert status_code == 500
+        assert secret not in error
+        assert "[redacted]" in error
+        assert "secret rejected" in error
+
+        failed = [record for record in caplog.records if record.message == "product_analytics.dump_failed"]
+        assert len(failed) == 1
+        # ``caplog.text`` renders only the message, so inspect the record's own
+        # attributes (the body is attached via ``extra=``) to prove it is clean.
+        for value in failed[0].__dict__.values():
+            assert secret not in str(value)
+        assert "[redacted]" in failed[0].error
+
+    @pytest.mark.asyncio
     async def test_raising_close_logged_and_swallowed(self, caplog: pytest.LogCaptureFixture) -> None:
         """A ``close()`` that raises never escapes ``_dump_date_range``.
 
@@ -1747,6 +1859,10 @@ class TestMetricsDumpSuccess:
                 return_value=[date(2026, 8, 10)],
             ),
             patch(
+                "farna.core.product_analytics.metrics_dump._clear_dump_failure",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "farna.core.product_analytics.metrics_dump.acquire_kv_lock",
                 new_callable=AsyncMock,
             ),
@@ -1882,6 +1998,93 @@ class TestMetricsDumpSuccess:
         assert not result["dumped_dates"]
         write_cfg.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_partial_success_records_failure_and_does_not_clear_it(self) -> None:
+        """Delivered days AND a failure in one run: the failure record wins.
+
+        A run that delivered earlier days but stopped on a later one did NOT
+        fully succeed: the watermark advances for what was delivered, yet the
+        transparency page must still show why the run stopped, so the failure is
+        recorded and the previous failure is NOT cleared (FAR-2740).
+        """
+        factory = _FakeSessionFactory()
+        orgs = [{"id": "org-1", "level_changed_at": None}]
+        delivered = date(2026, 8, 10)
+
+        async def _fake_dump_range(*_args: object, on_failure=None, **_kwargs: object) -> list[date]:
+            assert on_failure is not None
+            on_failure(500, "vendor boom")
+            return [delivered]
+
+        with (
+            patch(
+                "farna.core.product_analytics.metrics_dump._should_dump_now",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._check_instance_switch",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._get_consenting_orgs",
+                new_callable=AsyncMock,
+                return_value=orgs,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.read_system_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._dump_date_range",
+                new=_fake_dump_range,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._record_dump_failure",
+                new_callable=AsyncMock,
+            ) as record_cfg,
+            patch(
+                "farna.core.product_analytics.metrics_dump._clear_dump_failure",
+                new_callable=AsyncMock,
+            ) as clear_cfg,
+            patch(
+                "farna.core.health_alerts.send_operator_alert",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.write_system_config",
+                new_callable=AsyncMock,
+            ) as write_cfg,
+            patch(
+                "farna.core.product_analytics.metrics_dump.acquire_kv_lock",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "farna.core.saq_worker._make_system_session_factory",
+                return_value=factory,
+            ),
+            patch(
+                "farna.settings.get_settings",
+                return_value=MagicMock(
+                    product_analytics_endpoint_url="https://vendor.example.com",
+                    product_analytics_instance_secret="secret",
+                ),
+            ),
+        ):
+            result = await metrics_dump({})
+
+        assert result["dumped_dates"] == [delivered.isoformat()]
+        # The failure is recorded with the vendor's status and message...
+        record_cfg.assert_awaited_once()
+        assert record_cfg.await_args.args[1:] == (500, "vendor boom")
+        # ...and the pre-existing failure record is NOT cleared.
+        clear_cfg.assert_not_awaited()
+        # The days that did deliver still advance the watermark and count.
+        written = {call.args[1]: call.args[2] for call in write_cfg.await_args_list}
+        assert written[DUMP_WATERMARK_KEY] == delivered.isoformat()
+
 
 # --- Dump counter ---
 
@@ -1922,6 +2125,10 @@ class TestDumpCount:
                 "farna.core.product_analytics.metrics_dump._dump_date_range",
                 new_callable=AsyncMock,
                 return_value=[date(2026, 8, 10)],
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._clear_dump_failure",
+                new_callable=AsyncMock,
             ),
             patch(
                 "farna.core.product_analytics.metrics_dump.acquire_kv_lock",
@@ -1982,6 +2189,10 @@ class TestDumpCount:
                 "farna.core.product_analytics.metrics_dump._dump_date_range",
                 new_callable=AsyncMock,
                 return_value=[date(2026, 8, 10)],
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._clear_dump_failure",
+                new_callable=AsyncMock,
             ),
             patch(
                 "farna.core.product_analytics.metrics_dump.acquire_kv_lock",
@@ -2317,3 +2528,336 @@ class TestBuildIntegrationInventory:
         assert not result["model_providers"]
         assert not result["connector_types"]
         assert not result["trigger_types"]
+
+
+# --- FAR-2740: durable failure record + operator alert ---
+
+
+class TestDumpFailureObservability:
+    """A failed dump must be durable and alertable, not just a log line.
+
+    Before FAR-2740 a failed POST emitted ``product_analytics.dump_failed`` and
+    nothing else: no durable record, no operator alert, and the transparency
+    page could not tell that an opted-in instance had never delivered anything.
+    """
+
+    def test_summary_is_status_and_truncated_message(self) -> None:
+        summary = _summarise_dump_failure(422, "detail: " + "x" * 2000)
+        assert summary.startswith("status=422: detail: ")
+        assert len(summary) == _MAX_FAILURE_SUMMARY_LEN
+
+    def test_summary_handles_missing_status_and_error(self) -> None:
+        assert _summarise_dump_failure(None, None) == "status=no_status: unknown error"
+
+    def test_summary_redacts_a_response_body_echoing_the_secret(self) -> None:
+        """The vendor error text can echo the response body verbatim.
+
+        That text reaches ``system_config``, the log, the transparency API and
+        the operator email, so the instance secret must be scrubbed before any
+        of them (FAR-2740).
+        """
+        summary = _summarise_dump_failure(500, "HTTP 500: token=secret rejected", secret="secret")
+
+        assert "secret" not in summary
+        assert "[redacted]" in summary
+
+    def test_summary_is_unchanged_without_a_secret(self) -> None:
+        assert _summarise_dump_failure(500, "boom", secret=None) == "status=500: boom"
+
+    @pytest.mark.asyncio
+    async def test_record_writes_timestamp_and_summary_keys(self) -> None:
+        factory = _FakeSessionFactory()
+        with patch(
+            "farna.core.product_analytics.metrics_dump.write_system_config",
+            new_callable=AsyncMock,
+        ) as write_cfg:
+            await _record_dump_failure(factory, 503, "upstream unavailable")
+
+        written = {call.args[1]: call.args[2] for call in write_cfg.await_args_list}
+        assert set(written) == {DUMP_LAST_FAILURE_AT_KEY, DUMP_LAST_FAILURE_SUMMARY_KEY}
+        assert written[DUMP_LAST_FAILURE_SUMMARY_KEY] == "status=503: upstream unavailable"
+        # A parseable ISO-8601 UTC timestamp, not a bare string.
+        parsed = datetime.fromisoformat(written[DUMP_LAST_FAILURE_AT_KEY])
+        assert parsed.tzinfo is not None
+
+    @pytest.mark.asyncio
+    async def test_clear_deletes_both_failure_keys(self) -> None:
+        factory = _FakeSessionFactory()
+        with patch(
+            "farna.db.crud.system_config.delete_config",
+            new_callable=AsyncMock,
+        ) as delete_cfg:
+            await _clear_dump_failure(factory)
+
+        deleted = [call.args[1] for call in delete_cfg.await_args_list]
+        assert set(deleted) == {DUMP_LAST_FAILURE_AT_KEY, DUMP_LAST_FAILURE_SUMMARY_KEY}
+
+    @pytest.mark.asyncio
+    async def test_failed_dump_records_failure_and_raises_operator_alert(self) -> None:
+        factory = _FakeSessionFactory()
+        orgs = [{"id": "org-1", "level_changed_at": None}]
+
+        async def _fake_dump_range(*_args: object, on_failure=None, **_kwargs: object) -> list[date]:
+            assert on_failure is not None
+            on_failure(500, "vendor boom")
+            return []
+
+        with (
+            patch(
+                "farna.core.product_analytics.metrics_dump._should_dump_now",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._check_instance_switch",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._get_consenting_orgs",
+                new_callable=AsyncMock,
+                return_value=orgs,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.read_system_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._dump_date_range",
+                new=_fake_dump_range,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._record_dump_failure",
+                new_callable=AsyncMock,
+            ) as record_cfg,
+            patch(
+                "farna.core.product_analytics.metrics_dump._clear_dump_failure",
+                new_callable=AsyncMock,
+            ) as clear_cfg,
+            patch(
+                "farna.core.health_alerts.send_operator_alert",
+                new_callable=AsyncMock,
+            ) as alert_cfg,
+            patch(
+                "farna.core.saq_worker._make_system_session_factory",
+                return_value=factory,
+            ),
+            patch(
+                "farna.settings.get_settings",
+                return_value=MagicMock(
+                    product_analytics_endpoint_url="https://vendor.example.com",
+                    product_analytics_instance_secret="secret",
+                ),
+            ),
+        ):
+            await metrics_dump({})
+
+        record_cfg.assert_awaited_once()
+        assert record_cfg.await_args.args[1:] == (500, "vendor boom")
+        assert record_cfg.await_args.kwargs["secret"] == "secret"
+        alert_cfg.assert_awaited_once()
+        clear_cfg.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_missing_vendor_config_is_recorded_and_alerted(self) -> None:
+        """An instance that can never deliver must be visible to the operator.
+
+        Previously the missing endpoint/secret skip recorded nothing and
+        alerted nobody, so a never-configured instance looked healthy forever.
+        """
+        factory = _FakeSessionFactory()
+        orgs = [{"id": "org-1", "level_changed_at": None}]
+        with (
+            patch(
+                "farna.core.product_analytics.metrics_dump._should_dump_now",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._check_instance_switch",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._get_consenting_orgs",
+                new_callable=AsyncMock,
+                return_value=orgs,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.read_system_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._record_dump_failure",
+                new_callable=AsyncMock,
+            ) as record_cfg,
+            patch(
+                "farna.core.product_analytics.metrics_dump._raise_dump_failure_alert",
+                new_callable=AsyncMock,
+            ) as alert_cfg,
+            patch(
+                "farna.core.product_analytics.metrics_dump._dump_date_range",
+                new_callable=AsyncMock,
+            ) as dump_cfg,
+            patch(
+                "farna.core.saq_worker._make_system_session_factory",
+                return_value=factory,
+            ),
+            patch(
+                "farna.settings.get_settings",
+                return_value=MagicMock(
+                    product_analytics_endpoint_url=None,
+                    product_analytics_instance_secret=None,
+                ),
+            ),
+        ):
+            result = await metrics_dump({})
+
+        assert result["skipped"] == "missing_vendor_config"
+        record_cfg.assert_awaited_once()
+        status_code, error = record_cfg.await_args.args[1], record_cfg.await_args.args[2]
+        assert status_code is None
+        assert "missing_vendor_config" in error
+        # The fixed reason carries no configuration values.
+        assert "None" not in error
+        alert_cfg.assert_awaited_once()
+        dump_cfg.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_failed_run_alerts_once_and_never_leaks_the_secret(self) -> None:
+        factory = _FakeSessionFactory()
+        orgs = [{"id": "org-1", "level_changed_at": None}]
+        with (
+            patch(
+                "farna.core.product_analytics.metrics_dump._should_dump_now",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._check_instance_switch",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._get_consenting_orgs",
+                new_callable=AsyncMock,
+                return_value=orgs,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.read_system_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._build_payload",
+                new_callable=AsyncMock,
+                return_value={"schema_version": 1},
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.write_system_config",
+                new_callable=AsyncMock,
+            ) as write_cfg,
+            patch(
+                "farna.core.product_analytics.metrics_dump.VendorClient",
+            ) as mock_client_cls,
+            patch(
+                "farna.core.health_alerts.send_operator_alert",
+                new_callable=AsyncMock,
+            ) as alert_cfg,
+            patch(
+                "farna.core.saq_worker._make_system_session_factory",
+                return_value=factory,
+            ),
+            patch(
+                "farna.settings.get_settings",
+                return_value=MagicMock(
+                    product_analytics_endpoint_url="https://vendor.example.com",
+                    product_analytics_instance_secret="secret",
+                ),
+            ),
+        ):
+            mock_client = AsyncMock()
+            # A vendor body that echoes the instance secret back at us.
+            mock_client.post_batch = AsyncMock(return_value=(False, 500, "HTTP 500: secret rejected"))
+            mock_client.close = AsyncMock()
+            mock_client_cls.return_value = mock_client
+            await metrics_dump({})
+
+        assert alert_cfg.await_count == 1
+        alert_kwargs = alert_cfg.await_args.kwargs
+        assert "secret" not in alert_kwargs["body_text"]
+        assert "secret" not in alert_kwargs["body_html"]
+        written = {call.args[1]: call.args[2] for call in write_cfg.await_args_list}
+        summary = written[DUMP_LAST_FAILURE_SUMMARY_KEY]
+        assert "secret" not in summary
+        assert "[redacted]" in summary
+
+    @pytest.mark.asyncio
+    async def test_successful_dump_clears_record_and_does_not_alert(self) -> None:
+        factory = _FakeSessionFactory()
+        orgs = [{"id": "org-1", "level_changed_at": None}]
+        with (
+            patch(
+                "farna.core.product_analytics.metrics_dump._should_dump_now",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._check_instance_switch",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._get_consenting_orgs",
+                new_callable=AsyncMock,
+                return_value=orgs,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.read_system_config",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._dump_date_range",
+                new_callable=AsyncMock,
+                return_value=[date(2026, 8, 10)],
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.acquire_kv_lock",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump.write_system_config",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "farna.core.product_analytics.metrics_dump._record_dump_failure",
+                new_callable=AsyncMock,
+            ) as record_cfg,
+            patch(
+                "farna.core.product_analytics.metrics_dump._clear_dump_failure",
+                new_callable=AsyncMock,
+            ) as clear_cfg,
+            patch(
+                "farna.core.health_alerts.send_operator_alert",
+                new_callable=AsyncMock,
+            ) as alert_cfg,
+            patch(
+                "farna.core.saq_worker._make_system_session_factory",
+                return_value=factory,
+            ),
+            patch(
+                "farna.settings.get_settings",
+                return_value=MagicMock(
+                    product_analytics_endpoint_url="https://vendor.example.com",
+                    product_analytics_instance_secret="secret",
+                ),
+            ),
+        ):
+            await metrics_dump({})
+
+        record_cfg.assert_not_awaited()
+        alert_cfg.assert_not_awaited()
+        clear_cfg.assert_awaited_once()

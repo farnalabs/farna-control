@@ -1182,11 +1182,21 @@ def _artifact_pointer(stream: str = "stdout") -> dict[str, object]:
     }
 
 
+def _run_then(*results: MagicMock) -> list[MagicMock]:
+    """Prefix the artifact queue with the org-scoped run load (ADR 070 §4).
+
+    The download endpoint resolves the run through the shared per-run clamp
+    before it reads any side-car pointer, so its run SELECT is the first query
+    the queue must answer.
+    """
+    return [_result(scalar_one_or_none=_make_run()), *results]
+
+
 def test_get_run_artifact_returns_decompressed_content(client) -> None:
     """The endpoint decompresses the stored pointer and returns it as text/plain."""
     http, _session = client
     row = _result(scalar_one_or_none=MagicMock(artifacts_json=[_artifact_pointer("stdout")]))
-    _queue_execute(_session, [row])
+    _queue_execute(_session, _run_then(row))
     store = MagicMock()
     store.read_bytes = MagicMock(return_value=b"hello world")
     with patch("farna.core.artifacts.store.get_store", return_value=store):
@@ -1198,7 +1208,7 @@ def test_get_run_artifact_returns_decompressed_content(client) -> None:
 
 def test_get_run_artifact_404_when_row_missing(client) -> None:
     http, _session = client
-    _queue_execute(_session, [_result(scalar_one_or_none=None)])
+    _queue_execute(_session, _run_then(_result(scalar_one_or_none=None)))
     with patch("farna.core.artifacts.store.get_store", return_value=MagicMock()):
         resp = http.get(f"/api/v1/runs/{_RUN_ID}/nodes/{_RUN_ID}/attempts/{_RUN_ID}/artifacts/stdout")
     assert resp.status_code == 404
@@ -1208,7 +1218,7 @@ def test_get_run_artifact_404_when_stream_missing(client) -> None:
     """A node with artifacts but not the requested stream yields 404."""
     http, _session = client
     row = _result(scalar_one_or_none=MagicMock(artifacts_json=[_artifact_pointer("stderr")]))
-    _queue_execute(_session, [row])
+    _queue_execute(_session, _run_then(row))
     store = MagicMock()
     store.read_bytes = MagicMock(return_value=b"should-not-be-read")
     with patch("farna.core.artifacts.store.get_store", return_value=store):
@@ -1220,7 +1230,7 @@ def test_get_run_artifact_404_when_file_missing(client) -> None:
     """read_bytes raising FileNotFoundError maps to 404."""
     http, _session = client
     row = _result(scalar_one_or_none=MagicMock(artifacts_json=[_artifact_pointer("stdout")]))
-    _queue_execute(_session, [row])
+    _queue_execute(_session, _run_then(row))
     store = MagicMock()
     store.read_bytes = MagicMock(side_effect=FileNotFoundError("Artifact not found: x"))
     with patch("farna.core.artifacts.store.get_store", return_value=store):
@@ -1244,7 +1254,7 @@ def test_get_run_artifact_resolves_synthetic_full_attempt_key(client) -> None:
     http, _session = client
     # No row exists for the synthetic `:full:` key — the transcript lives only
     # in the artifact store, addressed through the telemetry pointer.
-    _queue_execute(_session, [_result(scalar_one_or_none=None)])
+    _queue_execute(_session, _run_then(_result(scalar_one_or_none=None)))
     store = MagicMock()
     store.read_bytes = MagicMock(return_value=b"full stdout transcript")
     blobs = RunBlobs(
@@ -1268,7 +1278,7 @@ def test_get_run_artifact_resolves_synthetic_full_attempt_key_stderr(client) -> 
     http, _session = client
     # No row exists for the synthetic `:full:` key — the transcript lives only
     # in the artifact store, addressed through the telemetry pointer.
-    _queue_execute(_session, [_result(scalar_one_or_none=None)])
+    _queue_execute(_session, _run_then(_result(scalar_one_or_none=None)))
     store = MagicMock()
     store.read_bytes = MagicMock(return_value=b"full stderr transcript")
     blobs = RunBlobs(

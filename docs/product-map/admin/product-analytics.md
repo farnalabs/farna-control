@@ -8,6 +8,7 @@ code:
   - backend/src/farna/api/routes/product_analytics_transparency.py
   - backend/src/farna/api/routes/metrics_ingest.py
   - backend/src/farna/core/product_analytics
+  - backend/src/farna/core/health_alerts.py
   - frontend/src/composables/useProductAnalytics.ts
   - frontend/src/composables/productAnalyticsEvents.ts
   - frontend/src/stores/productAnalyticsStore.ts
@@ -21,6 +22,7 @@ unit-tests:
   - backend/tests/unit/product_analytics/test_metrics_staging_consumer.py
   - backend/tests/unit/product_analytics/test_routes.py
   - backend/tests/unit/api/routes/test_product_analytics_transparency.py
+  - backend/tests/unit/core/test_health_alerts.py
   - backend/tests/unit/api/test_product_analytics_identity_hardening.py
   - backend/tests/integration/test_product_analytics_identity.py
   - frontend/src/__tests__/composables/useProductAnalytics.spec.ts
@@ -174,6 +176,37 @@ organization's plan or tier.
       (`tests/unit/product_analytics/test_metrics_staging_consumer.py`,
       `test_routes.py`)
       <!-- behaviour: product-analytics-13 | tests: backend/tests/unit/product_analytics/test_metrics_staging_consumer.py, backend/tests/unit/product_analytics/test_routes.py -->
+- [x] A failed dump is durable and alertable (FAR-2740): the attempt writes
+      `product_analytics_last_dump_failure_at` plus a truncated
+      `product_analytics_last_dump_failure_summary` into `system_config` (status
+      code and the vendor error text, with the instance secret redacted before
+      it is persisted, logged, returned by the transparency API or emailed) and
+      raises `core.health_alerts.send_operator_alert` on the shared readiness
+      channel - the same SMTP config, recipients, `ALERT_ENVIRONMENTS` allowlist
+      and deployment-context footer. The next fully successful dump deletes the
+      record; a partial-success run still records the failure because the
+      watermark and dump count already cover the days it delivered, and a
+      missing vendor endpoint/secret is recorded as a fixed-reason failure and
+      alerted too (it previously recorded and alerted nothing)
+      (`core/product_analytics/metrics_dump.py`, `core/health_alerts.py`,
+      `tests/unit/product_analytics/test_metrics_dump.py`,
+      `tests/unit/core/test_health_alerts.py`)
+      <!-- behaviour: product-analytics-15 | tests: backend/tests/unit/product_analytics/test_metrics_dump.py, backend/tests/unit/core/test_health_alerts.py -->
+- [x] `/admin/product-analytics` warns when an opted-in instance is not
+      delivering (FAR-2740): `never_reached_farnalabs` when the instance switch
+      is ON, consent is `all`, no successful dump exists and the consent has been
+      in place longer than the 3-day stale threshold - the consent timestamp is a
+      grace window so a freshly enabled instance is not alarmed before its first
+      daily dump; `not_reaching_farnalabs` when the last success is stale. BOTH
+      are silenced when the instance switch is OFF, so turning analytics off
+      does not leave a warning forever. The page renders the recorded failure
+      timestamp and summary under the warning
+      (`api/routes/product_analytics_transparency.py`,
+      `frontend/src/views/AdminProductAnalyticsView.vue`,
+      `frontend/src/stores/productAnalyticsStore.ts`,
+      `tests/unit/api/routes/test_product_analytics_transparency.py`,
+      `frontend/src/__tests__/AdminProductAnalyticsView.spec.ts`)
+      <!-- behaviour: product-analytics-16 | tests: backend/tests/unit/api/routes/test_product_analytics_transparency.py -->
 - [x] The frontend event-capture composable is initialized in the app root
       (FAR-1718): `App.vue` calls `initProductAnalytics` with
       `productAnalyticsStore.isOptedIn` as the live consent function, and
@@ -290,8 +323,8 @@ intentional, not an open question:
   tracked as the remaining unchecked behavior.
 - 2026-10-12: **FAR-1717 + FAR-1718 (staging consumer + capture init)** - closed
   both unwired halves of the frontend ingest path. Backend: `_build_payload`
-  now folds `metrics_staging` into the payload (`_aggregate_staged_events` →
-  the new `event_counts` section; `SCHEMA_VERSION` bumped 1 → 2 per the module
+  now folds `metrics_staging` into the payload (`_aggregate_staged_events` â†’
+  the new `event_counts` section; `SCHEMA_VERSION` bumped 1 â†’ 2 per the module
   contract that it changes when the payload shape changes); every
   `metrics_dump` tick purges consumed + expired staging rows (`_purge_staging`,
   bounded by the watermark and a 30-day retention cap) with the supporting
@@ -309,7 +342,7 @@ intentional, not an open question:
   both fail against the pre-change code (missing functions / no DELETE executed).
 - 2026-10-12: **Improve Architecture product-map walk** - documented the
   event-ingest path and found its two unwired halves (both feature completion, not
-  QA fixes). (1) `POST /api/v1/metrics/events` → `metrics_staging` has no consumer
+  QA fixes). (1) `POST /api/v1/metrics/events` â†’ `metrics_staging` has no consumer
   and no purge: `metrics_dump._build_payload` reads only aggregate tables
   (`RunDailyFact`, `ErrorGroup`, entity counts) and never `MetricsStaging`, while
   `db/models/metrics_staging.py` and migration 0121 both claim the dump consumes
