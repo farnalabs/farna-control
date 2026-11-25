@@ -424,11 +424,7 @@ def test_a_snapshot_from_n_restores_over_a_database_at_n_plus_k(replay_env: _Clu
     _forward_migrate(cluster, database)
 
     with _target_database(database):
-        backup_mod._run_psql(
-            cluster.url(database),
-            dump_path,
-            preamble_sql=backup_mod._PUBLIC_SCHEMA_RESET_SQL,
-        )
+        backup_mod._run_psql(cluster.url(database), dump_path)
 
     tables = _table_names(cluster, database)
     assert "journey_facts_legacy" in tables
@@ -454,11 +450,7 @@ def test_a_failed_replay_rolls_the_schema_reset_back_too(replay_env: _Cluster, t
     broken_dump.write_bytes(dump_path.read_bytes() + b"\nSELECT 1/0;\n")
 
     with pytest.raises(RuntimeError, match="psql restore failed"), _target_database(database):
-        backup_mod._run_psql(
-            cluster.url(database),
-            broken_dump,
-            preamble_sql=backup_mod._PUBLIC_SCHEMA_RESET_SQL,
-        )
+        backup_mod._run_psql(cluster.url(database), broken_dump)
 
     tables = _table_names(cluster, database)
     assert "farna_journey_facts" in tables

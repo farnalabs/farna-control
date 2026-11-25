@@ -1749,7 +1749,7 @@ class TestTheReplayResetsPublicFirst:
     """
 
     def test_the_reset_drops_and_recreates_public_with_pristine_defaults(self) -> None:
-        sql = backup_mod._PUBLIC_SCHEMA_RESET_SQL
+        sql = backup_mod._REPLAY_SCHEMA_RESET_SQL
         assert "DROP SCHEMA IF EXISTS public CASCADE" in sql
         # pg_dump never recreates public (it is a system schema), so the reset
         # must, with the PostgreSQL 15+ defaults a fresh database carries.
@@ -1759,91 +1759,27 @@ class TestTheReplayResetsPublicFirst:
         # DROP SCHEMA IF EXISTS + CREATE SCHEMA and needs no help here.
         assert "farna_internal" not in sql
 
-    def test_psql_replays_the_reset_then_the_dump_in_one_transaction(self, tmp_path: Path) -> None:
-        """Two separate -f files, one psql invocation, so -1 spans both."""
+    def test_psql_runs_the_reset_before_the_dump_in_one_transaction(self, tmp_path: Path) -> None:
+        """The reset is a -c action ahead of the dump's -f, in ONE psql call,
+        so -1 wraps the reset and the whole dump in a single transaction."""
         dump = tmp_path / "database.sql"
         dump.write_text("-- dump\n", encoding="utf-8")
         seen: dict[str, Any] = {}
 
         def _capture(argv: list[str], **kwargs: Any) -> Any:
-            paths = [Path(argv[index + 1]) for index, value in enumerate(argv) if value == "-f"]
             seen["argv"] = argv
-            seen["files"] = [(path.name, path.read_text(encoding="utf-8")) for path in paths]
-            seen["paths"] = paths
             return MagicMock(returncode=0, stderr=b"")
 
         with contextlib.ExitStack() as stack:
             stack.enter_context(patch("farna.cli.backup.shutil.which", return_value="/usr/bin/psql"))
             run = stack.enter_context(patch("farna.cli.backup.subprocess.run", side_effect=_capture))
-            backup_mod._run_psql(
-                "postgresql://user:pw@host:5432/farna_control",
-                dump,
-                preamble_sql=backup_mod._PUBLIC_SCHEMA_RESET_SQL,
-            )
+            backup_mod._run_psql("postgresql://user:pw@host:5432/farna_control", dump)
+
         assert run.call_count == 1, "the reset and the dump must be ONE psql invocation"
-        assert seen["argv"].count("-1") == 1, "single-transaction mode must span both files"
-        assert seen["argv"].count("-f") == 2
-        assert seen["files"][0][1] == backup_mod._PUBLIC_SCHEMA_RESET_SQL
-        assert "DROP SCHEMA IF EXISTS public CASCADE;" in seen["files"][0][1]
-        assert seen["files"][1] == ("database.sql", "-- dump\n")
-        # The reset lives in its own file, so a multi-GB dump is never copied.
-        assert seen["files"][0][0] != "database.sql"
-        # ... and it does not outlive the replay.
-        assert not [path for path in seen["paths"] if path.name.startswith(".farna-restore-reset.") and path.exists()]
-
-    def test_without_a_preamble_psql_gets_the_dump_alone(self, tmp_path: Path) -> None:
-        dump = tmp_path / "database.sql"
-        dump.write_text("-- dump\n", encoding="utf-8")
-        seen: dict[str, Any] = {}
-
-        def _capture(argv: list[str], **kwargs: Any) -> Any:
-            seen["argv"] = argv
-            return MagicMock(returncode=0, stderr=b"")
-
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("farna.cli.backup.shutil.which", return_value="/usr/bin/psql"))
-            stack.enter_context(patch("farna.cli.backup.subprocess.run", side_effect=_capture))
-            backup_mod._run_psql("postgresql://x", dump)
-        assert seen["argv"].count("-f") == 1
-
-    def test_the_restore_command_wires_the_reset_into_the_replay(self, tmp_path: Path) -> None:
-        """Prove-the-fix at the command boundary: the shipped `restore` path
-        passes the reset to psql. Without the fix the replay is the bare dump."""
-        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
-        with contextlib.ExitStack() as stack:
-            _enter_restore_patches(stack)
-            psql = stack.enter_context(patch("farna.cli.backup._run_psql"))
-            result = _restore_runner(archive)
-        assert result.exit_code == 0, result.output
-        psql.assert_called_once()
-        assert psql.call_args.kwargs["preamble_sql"] == backup_mod._PUBLIC_SCHEMA_RESET_SQL
-
-    def test_a_failed_replay_leaves_no_reset_file_behind(self, tmp_path: Path) -> None:
-        dump = tmp_path / "database.sql"
-        dump.write_text("-- dump\n", encoding="utf-8")
-        seen: dict[str, Any] = {}
-
-        def _capture(argv: list[str], **kwargs: Any) -> Any:
-            seen["paths"] = [Path(argv[index + 1]) for index, value in enumerate(argv) if value == "-f"]
-            return MagicMock(returncode=3, stderr=b"boom")
-
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("farna.cli.backup.shutil.which", return_value="/usr/bin/psql"))
-            stack.enter_context(patch("farna.cli.backup.subprocess.run", side_effect=_capture))
-            with pytest.raises(RuntimeError, match="psql restore failed"):
-                backup_mod._run_psql("postgresql://x", dump, preamble_sql=backup_mod._PUBLIC_SCHEMA_RESET_SQL)
-        assert not [path for path in seen["paths"] if path.name.startswith(".farna-restore-reset.") and path.exists()]
-
-    def test_an_unwritable_preamble_file_never_leaks(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A write failure must remove the half-written reset file, not leak it,
-        and must surface the WRITE error rather than a cleanup error."""
-        target = tmp_path / ".farna-restore-reset.failed.sql"
-        target.write_text("", encoding="utf-8")  # a half-written file exists on disk
-        # os.fdopen is patched to raise, so the descriptor is never dereferenced.
-        monkeypatch.setattr(backup_mod.tempfile, "mkstemp", lambda **_kwargs: (-1, str(target)))
-        with (
-            patch("farna.cli.backup.os.fdopen", side_effect=OSError("no space left on device")),
-            pytest.raises(OSError, match="no space left"),
-        ):
-            backup_mod._write_restore_preamble("SELECT 1;")
-        assert not target.exists(), "a half-written preamble file must be removed"
+        cmd = seen["argv"]
+        assert cmd.count("-1") == 1, "single-transaction mode must span the reset and the dump"
+        reset_index = cmd.index("-c")
+        dump_index = cmd.index("-f")
+        assert reset_index < dump_index, "psql runs -c/-f in argv order; the reset must precede the dump"
+        assert cmd[reset_index + 1] == backup_mod._REPLAY_SCHEMA_RESET_SQL
+        assert cmd[dump_index + 1] == str(dump)

@@ -26,7 +26,6 @@ from click.testing import CliRunner
 from psycopg.types.json import Jsonb
 
 from farna.cli.backup import (
-    _PUBLIC_SCHEMA_RESET_SQL,
     _db_has_modulo_tables,
     _export_checkpoint_blobs_sync,
     _export_checkpoint_writes_sync,
@@ -519,34 +518,24 @@ class TestRunPsql:
         replay therefore recreates ``public`` FIRST, in the SAME single
         transaction (``-1``), so every dump drop is an ``--if-exists`` no-op and
         a failed replay rolls the reset back with it.
-
-        The reset travels as its own ``-f`` file ahead of the dump's ``-f`` (see
-        ``_write_restore_preamble``) — one psql invocation, so ``-1`` spans both,
-        and argv order puts the reset first.
         """
         mock_which.return_value = "psql"
-        seen: dict[str, Any] = {}
-
-        def _capture(argv: list[str], **_kwargs: Any) -> MagicMock:
-            seen["argv"] = argv
-            seen["files"] = [(Path(argv[index + 1]).name, Path(argv[index + 1]).read_text(encoding="utf-8")) for index, value in enumerate(argv) if value == "-f"]
-            return MagicMock(returncode=0, stderr=b"")
-
-        mock_run.side_effect = _capture
+        mock_run.return_value = MagicMock(returncode=0, stderr=b"")
 
         input_path = tmp_path / "restore.sql"
         input_path.write_text("RESTORE;")
 
-        _run_psql("postgresql://user:pass@localhost/db", input_path, preamble_sql=_PUBLIC_SCHEMA_RESET_SQL)
+        _run_psql("postgresql://user:pass@localhost/db", input_path)
 
-        assert mock_run.call_count == 1, "the reset and the dump must be ONE psql invocation"
-        cmd = seen["argv"]
+        cmd = mock_run.call_args[0][0]
         assert "-1" in cmd, "the reset and the dump must share ONE transaction"
-        assert cmd.count("-f") == 2, "the reset is a second -f file in the same invocation"
-        reset_sql, dump_sql = seen["files"]
-        assert "DROP SCHEMA IF EXISTS public CASCADE" in reset_sql[1]
-        assert "CREATE SCHEMA public" in reset_sql[1]
-        assert dump_sql == ("restore.sql", "RESTORE;"), "the dump must follow the reset"
+        reset_index = cmd.index("-c")
+        dump_index = cmd.index("-f")
+        assert reset_index < dump_index, "psql runs -c/-f in argv order; the reset must precede the dump"
+        reset_sql = cmd[reset_index + 1]
+        assert "DROP SCHEMA IF EXISTS public CASCADE" in reset_sql
+        assert "CREATE SCHEMA public" in reset_sql
+        assert cmd[dump_index + 1] == str(input_path)
         # The dump is replayed from -f, never inherited stdin.
         assert "stdin" not in mock_run.call_args[1]
 
@@ -2204,7 +2193,7 @@ class TestRestoreIntegrity:
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
         assert "DRY RUN" in result.output
-        assert "WOULD reset the public schema, then restore schema and data via psql" in result.output
+        assert "WOULD restore database schema and data via psql" in result.output
         assert "WOULD restore 2 checkpoint blob records" in result.output
         assert "WOULD restore 1 checkpoint records" in result.output
         assert "WOULD restore 0 checkpoint write records" in result.output
