@@ -132,10 +132,13 @@
         entry: uv run --project backend --no-sync --frozen python scripts/run_frontend_npm.py lint
         language: system
         # Match the CI lint command's scope (frontend/package.json):
-        # `eslint src tests/visual-baseline`.  A repo-wide pattern would also
-        # match docs examples and the rest of frontend/tests, whose pre-existing
-        # no-console violations the CI lint gate does not enforce.
-        files: ^frontend/(src/.*\.(vue|ts|js)|tests/visual-baseline/.*\.mjs)$
+        # `eslint src tests/visual-baseline tests/e2e`. tests/e2e is included so
+        # the e2e specs are actually gated (they carry a scoped `no-console`
+        # override in eslint.config.mjs; without this scope that override would
+        # enforce nothing and violations silently accumulate - FAR-2761). The
+        # pattern stays narrowed to those three roots rather than repo-wide, so
+        # generated/doc examples outside them are not swept in.
+        files: ^frontend/(src/.*\.(vue|ts|js)|tests/visual-baseline/.*\.mjs|tests/e2e/.*\.ts)$
         pass_filenames: true
       - id: vue-tsc
         name: vue-tsc type check

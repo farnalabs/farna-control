@@ -70,28 +70,6 @@ function logViolations(label: string, violations: LoggableViolation[]) {
   }
 }
 
-/**
- * FAR-2761: correct the ONE endpoint the shared local mock models with the wrong
- * shape, so /settings/mcp renders the page axe is meant to audit instead of a
- * page-fatal error.
- *
- * `SETTINGS_MCP`'s loader reads `GET /api/v1/api-keys` as a BARE ARRAY
- * (`Array.isArray(keysResp.data)` in SettingsMcpView.vue) — which is what the
- * real backend returns — but the mock's generic GET catch-all answers the
- * `{items,total}` envelope, which the view treats as an unexpected response and
- * turns into a fatal page error. This stubs the endpoint to its real contract
- * with an empty list (a legitimate not-yet-created-any-keys state).
- *
- * Registered AFTER `loginAsAdmin` (which itself re-registers the general mock),
- * so Playwright's last-registered-wins ordering makes this specific handler
- * take precedence. Fixtures.ts is out of this change's scope.
- */
-async function stubBareApiKeyList(page: import('@playwright/test').Page) {
-  await page.route('**/api/v1/api-keys', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
-  )
-}
-
 test.describe('PrimeVue Select overlay WCAG + keyboard nav', { tag: "@regression" }, () => {
   test('open filter-bar-status overlay has no unexpected WCAG AA violations', { tag: "@regression" }, async ({ page, env }) => {
     test.skip(env.name !== 'local', 'Uses setupLocalMockApi — only runs locally')
@@ -263,8 +241,9 @@ test.describe('WCAG AA audit (CI — Vite dev server)', { tag: "@regression" }, 
 // scanned; they are added below and split by the identity their router gate
 // requires.
 //
-// Plain org-admin routes — reachable with `loginAsAdmin` (a non-system org
-// admin, `is_system_admin: false`). The first eight predate FAR-2761.
+// Plain org-admin routes for the DARK scan — reachable with `loginAsAdmin` (a
+// non-system org admin, `is_system_admin: false`). The first eight predate
+// FAR-2761.
 const AUTHENTICATED_ROUTES = [
   // pre-existing coverage
   '/runs', '/', '/pipelines', '/admin/my-profile', '/settings/triggers', '/admin/users', '/admin/trigger-events', '/admin/audit',
@@ -272,10 +251,7 @@ const AUTHENTICATED_ROUTES = [
   '/admin/assistant',
   '/admin/costs', '/admin/costs/limits', '/admin/costs/controls', '/admin/costs/components',
   '/admin/org',
-  '/settings/assistant', '/settings/email', '/settings/guardrails', '/settings/license', '/settings/notifications',
-  // '/settings/mcp' is deliberately excluded from the axe loops — see
-  // EXCLUDED_ROUTES for the measured reason. It is still exercised by the
-  // keyboard focus test below.
+  '/settings/assistant', '/settings/email', '/settings/guardrails', '/settings/license', '/settings/mcp', '/settings/notifications',
 ] as const
 
 // SYSTEM sidebar-group routes (and the two with `system_admin_only: true`). The
@@ -292,33 +268,78 @@ const SYSTEM_ADMIN_ROUTES = [
   '/settings/rate-limits',
 ] as const
 
-// Routes deliberately NOT scanned, each with the concrete reason, so the gap is
-// visible in the code rather than invisible. Add an entry ONLY when a route
-// genuinely cannot pass, naming the observed finding — never because it is
-// awkward.
-const EXCLUDED_ROUTES: readonly string[] = [
+// Routes withheld from the LIGHT-theme scan only, each with the concrete reason,
+// so the gap is visible in the code rather than invisible. These are still
+// DARK-scanned (they must be in AUTHENTICATED_ROUTES/SYSTEM_ADMIN_ROUTES — the
+// integrity test enforces that). Add an entry ONLY for a route with a measured
+// light-theme finding, never because it is awkward.
+const LIGHT_EXCLUDED_ROUTES: readonly string[] = [
   // /settings/mcp — REAL light-theme WCAG AA failure, blocked on a shared
-  // PrimeVue token/design decision (not hacks around here):
+  // PrimeVue token/design decision (not hacked around here):
   //   rule: color-contrast, impact serious, 1 node
   //   target: button[data-testid="settings-mcp-copy-url"]
-  //   fg #64748b (PrimeVue secondary-outlined button label) on bg #f4f6f8
-  //   (the card's `bg-muted/30` surface): measured 4.39:1, AA floor 4.5:1.
-  // The label colour comes from PrimeVue's secondary-button token, shared by
-  // every secondary outlined button in the app — a global token change needs a
-  // design decision and a full-suite re-verification. The route still renders
-  // its real page via stubBareApiKeyList() and is covered by the keyboard focus
-  // test below; only the axe colour audit is withheld until the token is fixed.
+  //   fg #64748b (PrimeVue secondary-outlined label = colorScheme.light
+  //   .outlined.secondary.color, surface.500) on bg #f4f6f8 (the card's
+  //   `bg-muted/30` surface): measured 4.39:1, AA floor 4.5:1.
+  // LIGHT-ONLY by construction: the dark counterpart is a different pair
+  // (surface.400 on a dark surface), which the DARK scan covers and passes. The
+  // label colour is a shared PrimeVue secondary-button token, so a global
+  // change needs a design decision and a full-suite re-verification.
   '/settings/mcp',
 ]
 
-// Integrity guard for the two route sets: a route must not be scanned twice (a
-// duplicate would run the same page twice and read as extra coverage), and no
-// route may be both scanned and excluded. Cheap and env-independent.
-test('scanned route sets are unique and disjoint from the exclusion list', { tag: "@local-mock" }, () => {
-  const scanned = [...AUTHENTICATED_ROUTES, ...SYSTEM_ADMIN_ROUTES]
-  expect(new Set(scanned).size, 'a route must not be scanned twice').toBe(scanned.length)
-  for (const path of EXCLUDED_ROUTES) {
-    expect(scanned, `${path} is both scanned and excluded`).not.toContain(path)
+const LIGHT_AUTHENTICATED_ROUTES = AUTHENTICATED_ROUTES.filter((p) => !LIGHT_EXCLUDED_ROUTES.includes(p))
+
+/**
+ * FAR-2761 anti-vacuous guard. A Vue render crash (a `TypeError` thrown while
+ * rendering the route's subtree) leaves the page as a bare shell: the URL is
+ * right and axe sees no violations, so a `pathname` guard alone passes while
+ * the actual content never rendered. That is exactly how /admin/feature-flags
+ * and /admin/assistant once slipped through (a wrong mock response, not a
+ * layout problem). Attach this BEFORE the navigation and assert it is empty
+ * afterwards so a crashed render FAILS the route instead of passing vacuously.
+ *
+ * Signals captured:
+ *  - every `pageerror` (uncaught exception / rejection) — always a failure;
+ *  - `console.error` messages that carry a crash signature (Vue render errors,
+ *    `TypeError`/`ReferenceError`/`Cannot read propert…`/`is not iterable`).
+ *
+ * Deliberately NOT captured (measured on this fixture): `console.warn` (the Vue
+ * devtools notice, i18n fallbacks) and resource-load `console.error`s such as
+ * "Failed to load resource: … 502 (Bad Gateway)". Those 502s are the fixture's
+ * own `route.fallback()` auth probing hitting the Vite proxy with no backend
+ * attached — benign noise present on otherwise-healthy routes, not a crash.
+ */
+const RENDER_CRASH_CONSOLE = /\[vue\]|render function|\b(TypeError|ReferenceError|RangeError|SyntaxError)\b|is not iterable|is not a function|Cannot read propert/i
+
+function collectRenderErrors(page: import('@playwright/test').Page) {
+  const errors: string[] = []
+  const onPageError = (err: Error) => errors.push(`pageerror: ${err.message}`)
+  const onConsole = (msg: import('@playwright/test').ConsoleMessage) => {
+    if (msg.type() !== 'error') return
+    const text = msg.text()
+    if (RENDER_CRASH_CONSOLE.test(text)) errors.push(`console.error: ${text}`)
+  }
+  page.on('pageerror', onPageError)
+  page.on('console', onConsole)
+  return {
+    errors,
+    dispose: () => {
+      page.off('pageerror', onPageError)
+      page.off('console', onConsole)
+    },
+  }
+}
+
+// Integrity guard for the route sets: a route must not be scanned twice (a
+// duplicate would run the same page twice and read as extra coverage), and a
+// LIGHT exclusion must still be DARK-scanned (otherwise it is not a light-only
+// gap, it is an untested route). Cheap and env-independent.
+test('scanned route sets are unique and every light exclusion is dark-covered', { tag: "@local-mock" }, () => {
+  const darkScanned = [...AUTHENTICATED_ROUTES, ...SYSTEM_ADMIN_ROUTES]
+  expect(new Set(darkScanned).size, 'a route must not be scanned twice').toBe(darkScanned.length)
+  for (const path of LIGHT_EXCLUDED_ROUTES) {
+    expect(darkScanned, `${path} is light-excluded but must still be dark-scanned`).toContain(path)
   }
 })
 
@@ -382,6 +403,7 @@ test.describe('authenticated shell — sidebar profile links (FAR-1907)', { tag:
       await page.addInitScript(() => { try { localStorage.setItem('assistant-panel-state', 'closed') } catch (err) { console.warn(err) } })
       await loginAsAdmin(page, env)
 
+      const guard = collectRenderErrors(page)
       await page.goto(path)
       await page.waitForFunction(() => (document.querySelector('#app')?.children.length ?? 0) > 0)
 
@@ -399,6 +421,10 @@ test.describe('authenticated shell — sidebar profile links (FAR-1907)', { tag:
         }
       }
       expect(violations).toEqual([])
+      // A crashed render leaves the shell in place with zero axe violations; the
+      // collector is what makes that fail instead of pass vacuously.
+      expect(guard.errors, `${path} must render without a render crash`).toEqual([])
+      guard.dispose()
     })
   }
 })
@@ -418,6 +444,7 @@ test.describe('authenticated SYSTEM routes — dark theme (FAR-2761)', { tag: "@
       const canRender = await loginForSystemRoute(page, env)
       test.skip(!canRender, 'SYSTEM routes need is_system_admin; the deployed target cannot grant it')
 
+      const guard = collectRenderErrors(page)
       await page.goto(path)
       await page.waitForFunction(() => (document.querySelector('#app')?.children.length ?? 0) > 0)
 
@@ -429,6 +456,9 @@ test.describe('authenticated SYSTEM routes — dark theme (FAR-2761)', { tag: "@
       const violations = filterViolations(results.violations)
       logViolations(`${path} (authenticated, system admin)`, violations)
       expect(violations).toEqual([])
+      // Anti-vacuous: a crashed subtree passes axe on the shell; this fails it.
+      expect(guard.errors, `${path} must render without a render crash`).toEqual([])
+      guard.dispose()
     })
   }
 })
@@ -447,7 +477,7 @@ test.describe('authenticated SYSTEM routes — dark theme (FAR-2761)', { tag: "@
 // `Frontend and WCAG` job, which selects this file by name). The mock API only
 // supplies data; the colours under audit come from the deployed stylesheet.
 test.describe('authenticated light-theme contrast (FAR-1938)', { tag: "@regression" }, () => {
-  for (const path of AUTHENTICATED_ROUTES) {
+  for (const path of LIGHT_AUTHENTICATED_ROUTES) {
     test(`authenticated ${path} has no unexpected WCAG AA violations (light theme)`, { tag: "@regression" }, async ({ page, env }) => {
       test.setTimeout(ROUTE_AUDIT_TIMEOUT)
       const { setupLocalMockApi, loginAsAdmin } = await import('./setup/fixtures')
@@ -455,6 +485,7 @@ test.describe('authenticated light-theme contrast (FAR-1938)', { tag: "@regressi
       await page.addInitScript(() => { try { localStorage.setItem('assistant-panel-state', 'closed') } catch (err) { console.warn(err) } })
       await loginAsAdmin(page, env)
 
+      const guard = collectRenderErrors(page)
       await page.goto(path)
       await page.waitForFunction(() => (document.querySelector('#app')?.children.length ?? 0) > 0)
 
@@ -475,16 +506,25 @@ test.describe('authenticated light-theme contrast (FAR-1938)', { tag: "@regressi
       const violations = filterViolations(results.violations)
       logViolations(`${path} (authenticated, light)`, violations)
       expect(violations).toEqual([])
+      // Anti-vacuous: a crashed subtree passes axe on the shell; this fails it.
+      expect(guard.errors, `${path} must render without a render crash`).toEqual([])
+      guard.dispose()
     })
   }
+})
 
-  // FAR-2761 — light-theme counterpart for the SYSTEM routes, mirroring the
-  // dark-theme loop in the FAR-2761 describe above. Tagged @regression so the
-  // deployed light-theme gate still runs it; a non-local target cannot grant
-  // `is_system_admin`, so the test skips there rather than auditing the locked
-  // page (the skip is the honest state, not a hole in the local gate).
+// FAR-2761 — light-theme counterpart for the SYSTEM routes, mirroring the
+// dark-theme loop in the FAR-2761 describe above. Its OWN @local-mock describe
+// (not nested in the @regression light describe above) is deliberate: Playwright
+// ORs describe + test tags into the title, so a test inside the @regression
+// describe would still be selected by `--grep @regression` on staging. A SYSTEM
+// route needs `is_system_admin`, which the deployed staging identity cannot
+// hold, so running it there would do a real UI login and skip anyway — wasted
+// logins for no coverage. Local runs (the per-PR `Frontend and WCAG` job selects
+// this file by name) cover it.
+test.describe('authenticated SYSTEM routes — light theme (FAR-2761)', { tag: "@local-mock" }, () => {
   for (const path of SYSTEM_ADMIN_ROUTES) {
-    test(`authenticated ${path} has no unexpected WCAG AA violations (light theme)`, { tag: "@regression" }, async ({ page, env }) => {
+    test(`authenticated ${path} has no unexpected WCAG AA violations (light theme)`, { tag: "@local-mock" }, async ({ page, env }) => {
       test.setTimeout(ROUTE_AUDIT_TIMEOUT)
       const { setupLocalMockApi, loginForSystemRoute } = await import('./setup/fixtures')
       await setupLocalMockApi(page)
@@ -492,6 +532,7 @@ test.describe('authenticated light-theme contrast (FAR-1938)', { tag: "@regressi
       const canRender = await loginForSystemRoute(page, env)
       test.skip(!canRender, 'SYSTEM routes need is_system_admin; the deployed target cannot grant it')
 
+      const guard = collectRenderErrors(page)
       await page.goto(path)
       await page.waitForFunction(() => (document.querySelector('#app')?.children.length ?? 0) > 0)
 
@@ -508,6 +549,9 @@ test.describe('authenticated light-theme contrast (FAR-1938)', { tag: "@regressi
       const violations = filterViolations(results.violations)
       logViolations(`${path} (authenticated, light, system admin)`, violations)
       expect(violations).toEqual([])
+      // Anti-vacuous: a crashed subtree passes axe on the shell; this fails it.
+      expect(guard.errors, `${path} must render without a render crash`).toEqual([])
+      guard.dispose()
     })
   }
 })
@@ -572,30 +616,37 @@ test.describe('light page with a stale .dark class — PrimeVue badges (FAR-2351
 // FAR-2761 — guard the focus ring the deleted per-view rule used to supply. The
 // retired `[data-theme="agent"] :where(:not(html)):focus-visible` rule was
 // UNLAYERED, so it beat `outline-none` utilities on the formerly agent-themed
-// pages. Those pages now rely solely on the layered base rule at style.css:10-13
-// (`:where(:root :not(html)):focus-visible { outline: 2px solid ... }`), which a
-// utility layer CAN override. axe cannot see a keyboard focus ring, so this one
-// test — not one per route — drives real keyboard focus onto a real control on a
-// formerly agent-themed page (/settings/mcp) and asserts a visible indicator is
-// still painted.
+// pages. Those pages now rely on the layered base rule at style.css:10-13
+// (`:where(:root :not(html)):focus-visible { outline: 2px solid ... }`). axe
+// cannot see a keyboard focus ring, so this one test — not one per route —
+// drives real keyboard focus and asserts the BASE RULE'S signature survives.
+//
+// Target choice (measured, see the comment inside): a sidebar nav link on
+// /settings/mcp. It has no `outline-none` utility and no component ring, so the
+// base rule is its ONLY focus indicator — deleting the base rule removes it and
+// this test fails (verified: focused gives `outline: solid / 2px /
+// rgba(0,255,208,0.8)`; injecting `:where(:root :not(html)):focus-visible{
+// outline:0 !important }` drops it to `none / 0px`). An `outline-none` element
+// is NOT usable for this assertion: `outline-none` sets `outline-style: none`
+// (measured on the command-palette input: `outline-width 2px` but
+// `outline-style none` => no visible outline), so it could never satisfy the
+// base-rule signature.
 test.describe('keyboard focus indicator on a formerly agent-themed page (FAR-2761)', { tag: "@local-mock" }, () => {
-  test('/settings/mcp — a keyboard-focused control keeps a visible focus indicator', { tag: "@local-mock" }, async ({ page, env }) => {
+  test('/settings/mcp — a keyboard-focused control keeps the base focus outline', { tag: "@local-mock" }, async ({ page, env }) => {
     test.setTimeout(ROUTE_AUDIT_TIMEOUT)
     const { setupLocalMockApi, loginAsAdmin } = await import('./setup/fixtures')
     await setupLocalMockApi(page)
     await page.addInitScript(() => { try { localStorage.setItem('assistant-panel-state', 'closed') } catch (err) { console.warn(err) } })
     await loginAsAdmin(page, env)
-    await stubBareApiKeyList(page)
 
     await page.goto('/settings/mcp')
     await page.waitForFunction(() => (document.querySelector('#app')?.children.length ?? 0) > 0)
 
-    // A real interactive control near the top of the page content. The view is
-    // lazy-loaded and gated on its data fetch, so allow the cold-start budget
-    // before it renders.
-    const control = page.getByTestId('settings-mcp-copy-url')
+    // A real interactive control: the sidebar nav link. It carries no
+    // `outline-none` utility and no component ring, so its focus outline is
+    // painted solely by the layered base rule (the regression this guards).
+    const control = page.locator('a.sidebar-link').first()
     await expect(control).toBeVisible({ timeout: ROUTE_AUDIT_TIMEOUT })
-    await control.scrollIntoViewIfNeeded()
 
     // Drive focus the way a keyboard user does: press Tab until the control
     // holds focus, so the browser applies `:focus-visible`. A programmatic
@@ -606,7 +657,7 @@ test.describe('keyboard focus indicator on a formerly agent-themed page (FAR-276
       await page.keyboard.press('Tab')
       reached = await control.evaluate((el) => document.activeElement === el)
     }
-    expect(reached, 'Tab must reach the copy-URL control on /settings/mcp').toBe(true)
+    expect(reached, 'Tab must reach the sidebar link on /settings/mcp').toBe(true)
 
     const indicator = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null
@@ -616,17 +667,21 @@ test.describe('keyboard focus indicator on a formerly agent-themed page (FAR-276
         tag: el.tagName,
         outlineStyle: cs.outlineStyle,
         outlineWidthPx: Number.parseFloat(cs.outlineWidth) || 0,
+        outlineColor: cs.outlineColor,
         boxShadow: cs.boxShadow,
       }
     })
     expect(indicator, 'an element must hold focus').not.toBeNull()
-    // Either the layered base `outline` rule or a component ring (box-shadow)
-    // counts as a visible focus indicator; `outline: none` with no ring does not.
-    const hasOutline = !!indicator && indicator.outlineStyle !== 'none' && indicator.outlineWidthPx > 0
-    const hasRing = !!indicator && indicator.boxShadow !== 'none' && indicator.boxShadow !== ''
+    // The base rule's signature: a >=2px solid outline. This is exactly what
+    // disappears if style.css:10-13 is removed, so the test can fail for the
+    // regression it documents (a 1px library outline would not satisfy it).
     expect(
-      hasOutline || hasRing,
-      `keyboard-focused ${indicator?.tag} must paint a visible focus indicator; got ${JSON.stringify(indicator)}`,
-    ).toBe(true)
+      indicator!.outlineStyle,
+      `keyboard-focused ${indicator?.tag} must use a solid outline; got ${JSON.stringify(indicator)}`,
+    ).toBe('solid')
+    expect(
+      indicator!.outlineWidthPx,
+      `keyboard-focused ${indicator?.tag} must paint the base rule's >=2px outline; got ${JSON.stringify(indicator)}`,
+    ).toBeGreaterThanOrEqual(2)
   })
 })
