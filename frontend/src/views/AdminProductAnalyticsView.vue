@@ -8,9 +8,10 @@
 
     <template v-else-if="store.transparency">
       <div class="space-y-6">
-        <!-- Warning banner -->
-        <div v-if="store.transparency.warning === 'not_reaching_farnalabs'" class="rounded-lg border border-warning/40 bg-warning/10 p-4 text-warning-text">
-          <p class="text-sm font-medium">{{ $t('views.AdminProductAnalyticsView.warning_not_reaching') }}</p>
+        <!-- Warning banner: one shell, content chosen by the warning value so
+             the two cases stay distinct without a second hand-rolled card. -->
+        <div v-if="warningMessage" class="rounded-lg border border-warning/40 bg-warning/10 p-4 text-warning-text">
+          <p class="text-sm font-medium">{{ warningMessage }}</p>
         </div>
 
         <!-- Transparency data -->
@@ -28,6 +29,20 @@
                 {{ store.transparency.dump_count_total }}
               </p>
             </div>
+          </div>
+          <!-- Recorded failure detail: rendered even when no warning fires
+               (e.g. consent is off but the last attempt still failed). -->
+          <div
+            v-if="store.transparency.last_failed_dump_at || store.transparency.last_dump_failure"
+            class="mt-4 space-y-1 text-sm text-amber-700 dark:text-amber-300"
+            data-testid="last-dump-failure-detail"
+          >
+            <p v-if="store.transparency.last_failed_dump_at" data-testid="last-failed-dump">
+              {{ $t('views.AdminProductAnalyticsView.last_failed_dump', { when: formatDate(store.transparency.last_failed_dump_at) }) }}
+            </p>
+            <p v-if="store.transparency.last_dump_failure" class="break-words" data-testid="last-dump-failure">
+              {{ store.transparency.last_dump_failure }}
+            </p>
           </div>
         </DataCard>
 
@@ -132,6 +147,8 @@ interface TransparencyView {
   instance_switch_source: SwitchSource
   licence_requires_analytics: boolean
   egress_allowed: boolean
+  last_failed_dump_at: string | null
+  last_dump_failure: string | null
 }
 
 const store = useProductAnalyticsStore()
@@ -168,6 +185,20 @@ const hasExplicitOperatorValue = computed(
 const switchSourceCopy = computed(() => {
   const source = view.value?.instance_switch_source ?? 'default'
   return t(`views.AdminProductAnalyticsView.switch_source_${source}`)
+})
+
+// The backend distinguishes a stale previous success (`not_reaching_farnalabs`)
+// from an opted-in instance that has NEVER delivered (`never_reached_farnalabs`).
+// Both must surface; the messages differ so the operator can tell them apart.
+const warningMessage = computed(() => {
+  const warning = store.transparency?.warning
+  if (warning === 'not_reaching_farnalabs') {
+    return t('views.AdminProductAnalyticsView.warning_not_reaching')
+  }
+  if (warning === 'never_reached_farnalabs') {
+    return t('views.AdminProductAnalyticsView.warning_never_reached')
+  }
+  return ''
 })
 
 // `:checked` only patches the DOM when the bound value CHANGES. A user-flipped

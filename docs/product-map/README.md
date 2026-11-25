@@ -1283,6 +1283,18 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > resume/cancel, no failure audit event, no UI, instance-wide scope).
 > `_ORPHANED_BDD_FEATURES` stays empty.
 
+> **Closed this walk (2026-11-24):** tracked one shipped but untracked
+> operational surface: the deploy drain control plane
+> (`infra/deployment-drain.md`). `GET /api/v1/deployment` (public readout) and
+> `POST /api/v1/deployment/drain` (bearer-token admission freeze) ship REST-only
+> and are consumed by `.github/workflows/deploy.yml`; neither product-map layer
+> described them. The entry records the public-safe readout, the constant-time
+> token guard, the advisory-lock plus audit write, the `sandbox_agent`-scoped
+> `create_run` gate and its fail-closed flag read, and keeps the honest gaps
+> (CI-only control, no cancel-on-drain, reused `TriggersPausedError`, fail-open
+> malformed-graph scan, instance-wide scope). `_ORPHANED_BDD_FEATURES` stays
+> empty.
+
 ### Admin
 - [feat-product-analytics](admin/product-analytics.md) => PRD N/A
 - [feat-plugins](admin/plugins.md) => PRD N/A
@@ -1342,6 +1354,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-apt-distribution](infra/apt-distribution.md) => PRD N/A
 - [feat-backup-restore](infra/backup-restore.md) => PRD N/A
 - [feat-container-deployment](infra/container-deployment.md) => PRD N/A
+- [feat-deployment-drain](infra/deployment-drain.md) => PRD N/A
 - [feat-infra-health](infra/health-checks.md) => PRD N/A
 - [feat-native-single-install](infra/native-single-install.md) => PRD N/A
 - [feat-support](infra/support-diagnostics.md) => PRD N/A
