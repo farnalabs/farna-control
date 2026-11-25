@@ -10,7 +10,7 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 472 of 909 ticked behaviours (92 node, 137 feature, 243 module strength).
+Bound today: 485 of 922 ticked behaviours (105 node, 137 feature, 243 module strength).
 Weak bindings (module-only): 243. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
@@ -1190,7 +1190,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 92  Feature: 137  Module (weak): 243
+Node: 105  Feature: 137  Module (weak): 243
 
 ### Weak (module-only) bindings
 
