@@ -226,6 +226,55 @@ def test_create_user_weak_password_422(api: tuple[TestClient, AsyncMock]) -> Non
     assert "entropy" in resp.json()["detail"]
 
 
+def test_create_user_binds_org_rls_before_membership_insert(
+    api: tuple[TestClient, AsyncMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The create-user route must bind the org GUC before inserting a membership.
+
+    Migration 0367 fail-closes ``org_memberships``: its ``FOR ALL USING`` clause
+    is also the INSERT WITH CHECK, so a membership INSERT with no
+    ``app.organisation_id`` GUC raises ``InsufficientPrivilege`` (surfaced as a
+    ``ProgrammingError`` -> HTTP 501 ``migration_required``). This proves the
+    tenant ``POST /admin/users`` route sets the org scope BEFORE the INSERT;
+    without the ``set_rls_org`` call at the top of the transaction the only call
+    happens in the audit block AFTER ``create_membership`` and this ordering
+    assertion fails.
+    """
+    client, _ = api
+    account = _account(id=uuid.uuid4(), email="new@test", display_name="New")
+    membership = _membership(role="runner")
+    monkeypatch.setattr(admin, "get_account_by_email", AsyncMock(return_value=None))
+    monkeypatch.setattr(admin.account_crud, "create_account", AsyncMock(return_value=account))
+    monkeypatch.setattr(admin, "append_audit_event", AsyncMock())
+
+    events: list[tuple[str, Any]] = []
+    real_set_rls_org = admin.set_rls_org
+
+    async def _spy_set_rls_org(sess: Any, org_id: uuid.UUID) -> None:
+        events.append(("set_rls_org", org_id))
+        await real_set_rls_org(sess, org_id)
+
+    async def _spy_create_membership(*args: Any, **kwargs: Any) -> Any:
+        events.append(("create_membership", kwargs.get("org_id")))
+        return membership
+
+    monkeypatch.setattr(admin, "set_rls_org", _spy_set_rls_org)
+    monkeypatch.setattr(admin, "create_membership", _spy_create_membership)
+
+    resp = client.post(
+        "/api/v1/admin/users",
+        json={"email": "new@test", "display_name": "New", "password": "Sup3r-Secret!", "org_role": "runner"},
+    )
+
+    assert resp.status_code == 201, resp.text
+    kinds = [name for name, _ in events]
+    assert "create_membership" in kinds
+    first_rls = next(index for index, (name, _) in enumerate(events) if name == "set_rls_org")
+    assert first_rls < kinds.index("create_membership")
+    assert all(org_id == _ORG_ID for name, org_id in events if name == "set_rls_org")
+
+
 # NOTE: admin_create_user catches IntegrityError itself (TOCTOU race guard:
 # concurrent duplicate email) and maps it to 409.  ProgrammingError → 501,
 # generic SQLAlchemyError → 503.
