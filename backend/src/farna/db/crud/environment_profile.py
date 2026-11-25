@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.db.crud.base import PageResult, apply_updates
 from farna.db.crud.pagination import CursorPaginator
+from farna.db.crud.team_scope import team_scope_clause
 from farna.db.models.environment_profile import EnvironmentProfile
 from farna.db.soft_delete import include_soft_deleted
 from farna.util import validate_workspace_network
@@ -127,6 +128,7 @@ async def list_environment_profiles(
     page_size: int = 20,
     cursor: str | None = None,
     include_deleted: bool = False,
+    team_id: uuid.UUID | None = None,
 ) -> PageResult[EnvironmentProfile]:
     # FAR-2686: explicit organisation predicate, shared by the COUNT, the item
     # page and the cursor base so every statement is clamped. ``organisation_id``
@@ -134,6 +136,10 @@ async def list_environment_profiles(
     # org, so there is no cross-org shared profile the clamp would hide.
     # REQUIRED so a future caller cannot fall back to the RLS-only shape.
     count_where = [EnvironmentProfile.organisation_id == org_id]
+    # ADR 070 §5: a team-scoped credential's own team boundary (the DB policy
+    # filters on the KEY OWNER's memberships). Org-level rows stay visible.
+    if team_id is not None:
+        count_where.append(team_scope_clause(EnvironmentProfile.owner_team_id, team_id))
     if not include_deleted:
         count_where.append(EnvironmentProfile.deleted_at.is_(None))
     if cursor is not None:

@@ -35,6 +35,7 @@ from farna.api.dependencies import (
     require_permission_any_credential,
 )
 from farna.api.models.team_visibility import TeamVisibilityMixin
+from farna.api.run_scope import team_boundary_blocked
 from farna.auth.dependencies import get_current_tenant_user, get_current_tenant_user_or_api_key
 from farna.auth.jwt import TenantPrincipal
 from farna.auth.secret_storage import decode_stored_secret_scoped
@@ -696,6 +697,8 @@ async def list_model_backends_endpoint(
                 page=page,
                 page_size=page_size,
                 excluded_tiers=[] if include_in_dev else None,
+                # ADR 070 §5 / FAR-681: a team-scoped key's own team boundary.
+                team_id=getattr(principal, "team_id", None),
             )
             base_urls = await _base_urls_for_backends(session, settings, result.items)
     except IntegrityError:
@@ -1330,6 +1333,21 @@ class _EndpointUpdate:
     changed: bool
 
 
+def _assert_backend_team_scope(principal: TenantPrincipal, backend: ModelBackend) -> None:
+    """404 a team-scoped credential that targets another team's backend.
+
+    ADR 070 §5 / FAR-681: a team-scoped ``mk_`` key carries a HARD team
+    boundary of its own. ``rls_team_isolation`` filters on the KEY OWNER's
+    memberships, so without this predicate a team-A-scoped key whose owner is
+    also in team B could rotate team B's credential, repoint its endpoint or
+    trigger a health check against it. Org-wide credentials (``team_id=None``)
+    and org-level backends (no owner team) are unaffected, and the refusal is a
+    404 so a backend outside the boundary is indistinguishable from a missing one.
+    """
+    if team_boundary_blocked(getattr(principal, "team_id", None), backend.owner_team_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_NOT_FOUND)
+
+
 async def _load_update_state(
     session: AsyncSession,
     backend_id: uuid.UUID,
@@ -1342,6 +1360,7 @@ async def _load_update_state(
     existing = await get_model_backend(session, backend_id)
     if existing is None or existing.organisation_id != principal.organisation_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_NOT_FOUND)
+    _assert_backend_team_scope(principal, existing)
 
     if req.default_params is not None:
         # Never persist the legacy endpoint key; it is migrated into the
@@ -1785,6 +1804,10 @@ async def recheck_model_backend_health_endpoint(
             mb = await get_model_backend(session, backend_id)
             if mb is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model backend not found")
+            # ADR 070 §5: the health check decrypts the stored credential and
+            # sends it to the provider, so a team-scoped credential must not
+            # reach another team's backend.
+            _assert_backend_team_scope(principal, mb)
             secrets_backend = create_secrets_backend(fernet_key=settings.fernet_key, session=session)
             payload = await _read_secret_payload(secrets_backend, backend_id)
             base_url = _effective_base_url(payload, mb.default_params, mb.provider)

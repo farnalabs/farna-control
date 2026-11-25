@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.db.crud.base import PageResult, apply_updates
 from farna.db.crud.pagination import CursorPaginator
+from farna.db.crud.team_scope import team_scope_clause
 from farna.db.models.connector_instance import ConnectorInstance
 
 # Matches the hub's _SKIP_SUMMARY_LIMIT / _record_skip sanitization (FAR-495):
@@ -77,16 +78,22 @@ async def list_connector_instances(
     page_size: int = 20,
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
+    team_id: uuid.UUID | None = None,
 ) -> PageResult[ConnectorInstance]:
     if excluded_tiers is None:
         excluded_tiers = ["in_dev"]
 
     org_filter = ConnectorInstance.organisation_id == organisation_id if organisation_id else None
+    # ADR 070 §5: a team-scoped credential's own team boundary (the DB policy
+    # filters on the KEY OWNER's memberships). Org-level rows stay visible.
+    team_filter = team_scope_clause(ConnectorInstance.owner_team_id, team_id) if team_id is not None else None
 
     if cursor is not None:
         stmt = select(ConnectorInstance)
         if org_filter is not None:
             stmt = stmt.where(org_filter)
+        if team_filter is not None:
+            stmt = stmt.where(team_filter)
         if excluded_tiers:
             stmt = stmt.where(~ConnectorInstance.tier.in_(excluded_tiers))
         paginator = CursorPaginator()
@@ -111,6 +118,8 @@ async def list_connector_instances(
     total_query = select(func.count()).select_from(ConnectorInstance)
     if org_filter is not None:
         total_query = total_query.where(org_filter)
+    if team_filter is not None:
+        total_query = total_query.where(team_filter)
     if excluded_tiers:
         total_query = total_query.where(~ConnectorInstance.tier.in_(excluded_tiers))
     try:
@@ -121,6 +130,8 @@ async def list_connector_instances(
         items_stmt = select(ConnectorInstance).order_by(ConnectorInstance.created_at.desc()).offset(offset).limit(page_size)
         if org_filter is not None:
             items_stmt = items_stmt.where(org_filter)
+        if team_filter is not None:
+            items_stmt = items_stmt.where(team_filter)
         if excluded_tiers:
             items_stmt = items_stmt.where(~ConnectorInstance.tier.in_(excluded_tiers))
         items = list((await session.execute(items_stmt)).scalars())

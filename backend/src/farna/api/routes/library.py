@@ -25,6 +25,7 @@ from farna.api.dependencies import (
 from farna.api.middleware.sensitive_mask import mask_pipeline_graph_node, resolve_and_reject_mask_sentinels
 from farna.api.models.team_visibility import TeamVisibilityMixin
 from farna.api.routes.lifecycle_maps import LifecycleMapResponse
+from farna.api.run_scope import team_boundary_blocked
 from farna.api.team_scope import validate_owner_team_for_create
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
@@ -200,7 +201,17 @@ def _primitive_visible_to(
     if primitive is None:
         return False
     owner = primitive.organisation_id
-    return owner in (principal.organisation_id, _BUILTIN_ORG_ID)
+    if owner not in (principal.organisation_id, _BUILTIN_ORG_ID):
+        return False
+    # ADR 070 §5 / FAR-681: ``library_primitives`` carries
+    # ``rls_team_isolation`` keyed on the KEY OWNER's memberships, not on the
+    # key's own team. A team-A-scoped key whose owner is also in team B must
+    # not read team B's team-private primitive, so the request applies the same
+    # credential boundary the run surfaces share (org-level rows stay visible).
+    return not team_boundary_blocked(
+        getattr(principal, "team_id", None),
+        primitive.owner_team_id,
+    )
 
 
 async def _require_readable_primitive(
