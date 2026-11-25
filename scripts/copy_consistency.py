@@ -4,9 +4,9 @@
 """Check customer-facing copy for defects that have shipped more than once.
 
 Usage:
-    python harness/tools/copy_consistency.py --customer-copy <paths...>
-    python harness/tools/copy_consistency.py <paths...> [--allow-modulo-run]
-    python harness/tools/copy_consistency.py --self-test
+    python scripts/copy_consistency.py --customer-copy <paths...>
+    python scripts/copy_consistency.py <paths...> [--allow-modulo-run]
+    python scripts/copy_consistency.py --self-test
 
 Intended invocations:
     website customer copy:  --customer-copy src
