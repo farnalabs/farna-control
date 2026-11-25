@@ -877,6 +877,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the release
+          # tag commit = the built source), not the workflow dispatch ref, as the
+          # manifest provenance field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required to republish a stapled DMG'; exit 1; }
 
           cd release-assets
@@ -920,7 +925,7 @@ jobs:
           body = m.build_release_manifest(
               release=f"bundle-v{version}",
               platform="multi-platform",
-              generated_at=os.environ.get("GITHUB_SHA", ""),
+              generated_at=os.environ["SOURCE_COMMIT"],
               components=components,
               artifacts=[
                   {"name": n, "sha256": hashlib.sha256((root / n).read_bytes()).hexdigest(), "version": version}

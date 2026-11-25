@@ -2796,6 +2796,11 @@ jobs:
           INCLUDE_WINDOWS: ${{ inputs.include_windows }}
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the build
+          # source), not the workflow dispatch ref, as the manifest provenance
+          # field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required'; exit 1; }
           cd release-artefacts
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
@@ -2832,7 +2837,7 @@ jobs:
               # a single chunk regardless of how large the installers are.
               with path.open("rb") as handle:
                   return hashlib.file_digest(handle, "sha256").hexdigest()
-          body = m.build_release_manifest(release=f"bundle-v{version}", platform="multi-platform", generated_at=os.environ.get("GITHUB_SHA", ""), components=components, artifacts=[{"name": n, "sha256": digest(root / n), "version": version} for n in names])
+          body = m.build_release_manifest(release=f"bundle-v{version}", platform="multi-platform", generated_at=os.environ["SOURCE_COMMIT"], components=components, artifacts=[{"name": n, "sha256": digest(root / n), "version": version} for n in names])
           payload = json.dumps(body, indent=2, sort_keys=True).encode()
           signing_key = os.environ["MANIFEST_SIGNING_KEY"]
           if len(signing_key) != 64:
@@ -3756,6 +3761,11 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the GA tag
+          # commit = the built source), not the workflow dispatch ref, as the
+          # manifest provenance field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required'; exit 1; }
           cd release-artefacts
           sha256sum "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
@@ -3772,7 +3782,7 @@ jobs:
           body = m.build_release_manifest(
               release=f"bundle-v{version}",
               platform="compose",
-              generated_at=os.environ.get("GITHUB_SHA", ""),
+              generated_at=os.environ["SOURCE_COMMIT"],
               components={"compose": "production"},
               artifacts=[{"name": name, "sha256": hashlib.sha256((root / name).read_bytes()).hexdigest(), "version": version}],
           )

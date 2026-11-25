@@ -848,6 +848,11 @@ jobs:
           MANIFEST_SIGNING_KEY: ${{ secrets.BUNDLE_MANIFEST_SIGNING_KEY }}
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the build
+          # source), not the workflow dispatch ref, as the manifest provenance
+          # field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           if [ -z "${MANIFEST_SIGNING_KEY}" ]; then
             echo "::error::BUNDLE_MANIFEST_SIGNING_KEY is NOT set - refusing to publish an UNSIGNED release manifest."
             echo "::error::Provisioning is the ONE-TIME owner task (Duncan): generate an ed25519 keypair; add the private key's hex as the repo secret BUNDLE_MANIFEST_SIGNING_KEY; paste the public half into backend/src/farna/launcher/manifest.py (_TRUST_ROWS) and scripts/install.sh (TRUST_KEY_CURRENT_B64/NEXT_B64). Rotation per ADR 031 Decision 3."
@@ -880,7 +885,7 @@ jobs:
           manifest = manifest_module.build_release_manifest(
               release=f"bundle-v{version}",
               platform=f"linux-{arch}",
-              generated_at=os.environ.get("GITHUB_SHA", ""),
+              generated_at=os.environ["SOURCE_COMMIT"],
               components={"postgres": pg_version, "redis": redis_version, "python": "3.12"},
               artifacts=artifacts,
           )
