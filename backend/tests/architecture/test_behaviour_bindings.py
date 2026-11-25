@@ -288,13 +288,22 @@ def test_baseline_review_date_is_current():
 
 
 def test_baseline_file_is_the_canonical_rendering():
-    """The baseline on disk is exactly what the regenerator emits."""
+    """The baseline on disk is exactly what the regenerator emits.
+
+    Governance metadata (``ticket``/``review_by``) is rendered from the payload
+    itself, matching ``write_outputs``: a reviewer moves ``review_by`` forward by
+    editing the baseline, not the script constant, and the file must stay
+    canonical afterwards.
+    """
     current = (REPO_ROOT / _bindings.BASELINE_RELPATH).read_text(encoding="utf-8")
+    payload = _baseline_payload()
     expected = _bindings.render_baseline(
         _baseline(),
         fingerprints=_bindings.id_fingerprints(_entries()),
         weak_bindings=sorted(_audit().weak_bindings),
-        approved_removals=_baseline_payload().get(_bindings.BASELINE_APPROVED_REMOVALS_KEY) or [],
+        approved_removals=payload.get(_bindings.BASELINE_APPROVED_REMOVALS_KEY) or [],
+        ticket=payload.get("ticket") or _bindings.BASELINE_TICKET,
+        review_by=payload.get("review_by") or _bindings.BASELINE_REVIEW_BY,
     )
     assert current == expected, "backend/tests/architecture/behaviour_bindings_baseline.json is not in canonical form - regenerate it with `uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --write-baseline --write-report`"
 
@@ -365,6 +374,34 @@ def test_frontend_spec_bindings_resolve():
     assert not traversal.ok, "a '..' traversal must not resolve to a spec outside the test roots"
 
 
+def test_frontend_spec_bindings_ignore_skipped_and_describe_titles(tmp_path: Path):
+    """A skipped/fixme/todo test or a suite ``describe`` title is not proof.
+
+    ``_TS_TEST_CALL_RE`` matches every test call and the ``describe`` wrapper
+    alike, so without filtering a behaviour could be "covered" by a test that
+    never runs (`it.skip`), a parked test (`it.fixme`/`test.todo`), a test inside
+    a ``describe.skip`` block, or a Playwright ``test.describe`` suite title.
+    """
+    spec_rel = "frontend/src/__tests__/Probe.spec.ts"
+    path = tmp_path / spec_rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "import { describe, it, test } from 'vitest'\n\ndescribe('Group', () => {\n  it('runs', () => {})\n  it.skip('skipped one', () => {})\n  it.fixme('fixme one', () => {})\n  test.todo('todo one')\n})\n\ndescribe.skip('Disabled', () => {\n  it('inside disabled describe', () => {})\n})\n",
+        encoding="utf-8",
+    )
+    index = _bindings.TestIndex(root=tmp_path)
+    index.specs[spec_rel] = spec_rel
+
+    titles = index.spec_titles(spec_rel)
+    assert titles == ("runs",), f"only the runnable test title may be indexed, got {titles!r}"
+
+    ok = _bindings.resolve_ref(f"{spec_rel}::runs", index, tmp_path, set())
+    assert ok.ok, f"a runnable spec test title must resolve, got {ok.detail}"
+    for rejected in ("Group", "skipped one", "fixme one", "todo one", "inside disabled describe"):
+        resolution = _bindings.resolve_ref(f"{spec_rel}::{rejected}", index, tmp_path, set())
+        assert not resolution.ok, f"a skipped/describe title ({rejected!r}) must not resolve as proof"
+
+
 def test_behaviour_ok_requires_at_least_one_resolving_ref():
     """A non-empty ref list is not enough: one reference must actually resolve."""
     behaviour = _bindings.Behaviour(
@@ -383,36 +420,39 @@ def test_behaviour_ok_requires_at_least_one_resolving_ref():
     assert not _bindings._behaviour_ok(behaviour, live, {}, frozenset({"probe-01"})), "a baselined-unbound behaviour must count as unbound for status purposes"
 
 
-def test_git_show_distinguishes_absent_path_from_git_failure(monkeypatch):
-    """``_git_show`` returns ``None`` only for a genuinely absent path.
+def test_shared_git_show_distinguishes_absent_path_from_git_failure(monkeypatch):
+    """The shared base reader returns ``None`` only for a genuinely absent path.
 
-    A transient git failure must fail closed: treating it as "the path did not
-    exist at the base revision" would silently disable the shrink-only ratchet
-    for that run.
+    ``--check-base`` now reuses ``run_check_ratchet_baseline.read_baseline_at_rev``
+    instead of a second bespoke git helper. A transient git failure must still
+    fail closed: treating it as "the path did not exist at the base revision"
+    would silently disable the shrink-only ratchet for that run.
     """
     import subprocess
     from types import SimpleNamespace
 
+    ratchet = _bindings._load_shared_script("run_check_ratchet_baseline", "run_check_ratchet_baseline.py")
+
     def fake_run(args, **_kwargs):
-        if args[:2] == ["git", "rev-parse"]:
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if args[:2] == ["git", "cat-file"]:
+        if args[1] == "rev-parse":
+            return SimpleNamespace(returncode=0, stdout="deadbeef\n", stderr="")
+        if args[1] == "cat-file":
             return SimpleNamespace(returncode=1, stdout="", stderr="")
         raise AssertionError(f"git show must not be attempted for an absent path: {args}")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    assert _bindings._git_show(REPO_ROOT, "HEAD", "no/such/path.json") is None
+    assert ratchet.read_baseline_at_rev(REPO_ROOT, "HEAD", "no/such/path.json") is None
 
     def failing_show(args, **_kwargs):
-        if args[:2] == ["git", "rev-parse"]:
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if args[:2] == ["git", "cat-file"]:
+        if args[1] == "rev-parse":
+            return SimpleNamespace(returncode=0, stdout="deadbeef\n", stderr="")
+        if args[1] == "cat-file":
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         return SimpleNamespace(returncode=128, stdout="", stderr="fatal: unable to read tree")
 
     monkeypatch.setattr(subprocess, "run", failing_show)
-    with pytest.raises(ValueError, match="could not read"):
-        _bindings._git_show(REPO_ROOT, "HEAD", "backend/tests/architecture/behaviour_bindings_baseline.json")
+    with pytest.raises(ratchet.RatchetError, match="could not read"):
+        ratchet.read_baseline_at_rev(REPO_ROOT, "HEAD", "backend/tests/architecture/behaviour_bindings_baseline.json")
 
 
 def _probe_product_map(root: Path) -> Path:
@@ -635,6 +675,35 @@ def test_write_baseline_preserves_an_approved_removal(tmp_path: Path):
     assert completed.returncode == 0, f"--write-baseline exited {completed.returncode}\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
     regenerated = json.loads(baseline_path.read_text(encoding="utf-8"))
     assert regenerated[_bindings.BASELINE_APPROVED_REMOVALS_KEY] == ["probe-99"], "regenerating the baseline dropped the approved-removal exemption"
+
+
+def test_write_baseline_preserves_ticket_and_review_by(tmp_path: Path):
+    """Regenerating the baseline must not reset its governance metadata.
+
+    ``docs/product-map/README.md`` tells a reviewer to move ``review_by`` forward;
+    a regenerator that always emitted the script constants would silently undo
+    that (reproduced: FAR-9999/2030-12-31 reverted to FAR-2701/2027-06-30).
+    """
+    _probe_product_map(tmp_path)
+    baseline_path = tmp_path / _bindings.BASELINE_RELPATH
+    payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    payload["ticket"] = "FAR-9999"
+    payload["review_by"] = "2030-12-31"
+    baseline_path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8", newline="\n")
+
+    completed = subprocess.run(  # noqa: S603 - fixed argv; the repo's own script, no shell
+        [sys.executable, str(REPO_ROOT / "scripts" / "run_behaviour_bindings_baseline.py"), "--root", str(tmp_path), "--write-baseline"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert completed.returncode == 0, f"--write-baseline exited {completed.returncode}\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+    regenerated = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert regenerated["ticket"] == "FAR-9999", "regenerating the baseline reset its owning ticket"
+    assert regenerated["review_by"] == "2030-12-31", "regenerating the baseline reset its review-by date"
 
 
 # ---------------------------------------------------------------------------

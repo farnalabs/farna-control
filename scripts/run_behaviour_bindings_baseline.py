@@ -93,7 +93,6 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from importlib.machinery import SourceFileLoader
@@ -138,10 +137,6 @@ _FEATURE_TOKEN_RE = re.compile(r"(?P<file>[A-Za-z0-9_./-]+\.feature)\b")
 #: ``frontend/.../X.spec.ts::<test title>`` - a Vitest or Playwright test node.
 _SPEC_TOKEN_RE = re.compile(r"(?P<file>[A-Za-z0-9_./-]+\.spec\.ts)::(?P<name>[^,`\n]+)")
 _FUNC_NAME_RE = re.compile(r"^\s*(?:async\s+)?def\s+(?P<name>test_[A-Za-z0-9_]+)", re.MULTILINE)
-#: A JS/TS test call whose first string argument is the test title. Handles the
-#: modifiers Vitest and Playwright support (``it.skip(``, ``it.each([...])(``,
-#: ``test.describe(``): the modifier chain is consumed before the title.
-_TS_TEST_CALL_RE = re.compile(r"\b(?:it|test)(?:\.[A-Za-z_$][\w$]*(?:\s*\((?:[^()]|\([^()]*\))*\))?)*\s*\(\s*(?P<quote>['\"`])(?P<name>(?:\\.|(?!\1).)*)\1")
 #: Any citation shaped like a test artefact, in either language (a ``.py::`` node
 #: id, a ``.feature`` file, a ``.spec.ts`` spec, or a ``test_*`` name). Plain
 #: ``.py`` only counts when it is part of one of those - a source path is a code
@@ -241,13 +236,20 @@ class TestIndex:
         return None
 
     def spec_titles(self, rel: str) -> tuple[str, ...]:
-        """Every test title a Vitest/Playwright spec declares (cached)."""
+        """Every runnable test title a Vitest/Playwright spec declares (cached).
+
+        Reuses the prove-the-fix checker's title extraction so a ``describe(...)``
+        suite title, a ``.skip``/``.fixme``/``.todo`` test, or a test inside a
+        ``describe.skip`` block never resolves as a node-strength binding: those
+        do not run, so they cannot prove a behaviour.
+        """
         if rel not in self._titles:
             try:
                 text = (self.root / rel).read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 text = ""
-            self._titles[rel] = tuple(match.group("name") for match in _TS_TEST_CALL_RE.finditer(text))
+            checker = _load_shared_script("run_check_prove_the_fix", "run_check_prove_the_fix.py")
+            self._titles[rel] = tuple(sorted(checker.runnable_spec_titles(text)))
         return self._titles[rel]
 
     def functions_in(self, rel: str) -> tuple[str, ...]:
@@ -456,6 +458,30 @@ def _load_module(root: Path, name: str, relpath: str) -> ModuleType:
     return module
 
 
+def _load_shared_script(name: str, filename: str) -> ModuleType:
+    """Import a sibling script from THIS module's directory, once per process.
+
+    A shared helper (the frontend spec-title extraction, the base-revision
+    git-show reader) must come from the checked-out ``scripts/`` tree, not from a
+    caller-supplied root: ``--check-base`` runs against throwaway probe repos that
+    carry no scripts of their own. Registered in ``sys.modules`` before execution
+    for the same dataclass-annotation reason as :func:`_load_module`.
+    """
+    if name in _LOADED_MODULES:
+        return _LOADED_MODULES[name]
+    loader = SourceFileLoader(name, str(Path(__file__).resolve().parent / filename))
+    module = module_from_spec(spec_from_loader(name, loader))
+    assert module is not None
+    sys.modules[name] = module
+    try:
+        loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
+    _LOADED_MODULES[name] = module
+    return module
+
+
 def resolve_ref(ref: str, index: TestIndex, root: Path, registered_features: set[str] | None = None) -> Resolution:
     """Resolve one binding reference to a concrete test artefact."""
     ref = ref.strip()
@@ -611,23 +637,25 @@ def vacuity_flags(root: Path, modules: list[str]) -> VacuityFlags:
     """
     scope = sorted(set(modules))
     lens = load_quality_lenses(root, scope)
-    # A ``@then``/``@given`` step decorator can only exist in a module that
-    # imports pytest_bdd, so the two BDD lenses are skipped for the rest (they
-    # walk every node of the module for nothing).
-    scanned = sorted({rel for rel in scope if _imports_pytest_bdd(root, rel)} | set(scope))
     noop: dict[str, frozenset[str]] = {}
     asserting: dict[str, frozenset[str]] = {}
     duplicates: dict[str, frozenset[str]] = {}
-    for rel in scanned:
+    for rel in scope:
         tree = lens._parse(root / rel)
         if tree is None:
             continue
-        noop_names = _noop_step_function_names(lens, tree)
-        if noop_names:
-            noop[rel] = frozenset(noop_names)
-        asserting_names = {name for name, _line, _detail in lens._self_asserting_bdd_step_violation_functions(tree)}
-        if asserting_names:
-            asserting[rel] = frozenset(asserting_names)
+        # A ``@then``/``@given`` step decorator can only exist in a module that
+        # imports pytest_bdd, so the two BDD lenses skip the rest: they would walk
+        # every node of a module that cannot carry a step decorator.
+        if _imports_pytest_bdd(root, rel):
+            noop_names = _noop_step_function_names(lens, tree)
+            if noop_names:
+                noop[rel] = frozenset(noop_names)
+            asserting_names = {name for name, _line, _detail in lens._self_asserting_bdd_step_violation_functions(tree)}
+            if asserting_names:
+                asserting[rel] = frozenset(asserting_names)
+        # The duplicate-body lens applies to every bound module: a module-bound
+        # behaviour must not rest on a copy-paste twin of another test.
         duplicate_names = {name for _scope_name, first, second, _line in lens._duplicate_test_body_functions(tree) for name in (first, second)}
         if duplicate_names:
             duplicates[rel] = frozenset(duplicate_names)
@@ -1282,11 +1310,14 @@ def write_outputs(root: Path, *, write_baseline: bool, write_report: bool) -> tu
     """Regenerate the baseline and/or report; returns ``(bound, unbound)``."""
     audit_result = audit(root)
     if write_baseline:
+        ticket, review_by = baseline_governance(root)
         text = render_baseline(
             audit_result.unbound,
             fingerprints=id_fingerprints(audit_result.entries),
             weak_bindings=sorted(audit_result.weak_bindings),
             approved_removals=approved_removals(root),
+            ticket=ticket,
+            review_by=review_by,
         )
         (root / BASELINE_RELPATH).write_text(text, encoding="utf-8", newline="\n")
     if write_report:
@@ -1365,6 +1396,30 @@ def approved_removals(root: Path) -> list[str]:
     return [value for value in approvals if isinstance(value, str)]
 
 
+def baseline_governance(root: Path) -> tuple[str, str]:
+    """The owning ticket and review-by date recorded in the baseline document.
+
+    Read rather than defaulted so regenerating the baseline never silently resets
+    the governance metadata: ``docs/product-map/README.md`` tells a reviewer to
+    move ``review_by`` forward, which must be possible by editing the baseline
+    rather than the script constant.
+    """
+    path = root / BASELINE_RELPATH
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return BASELINE_TICKET, BASELINE_REVIEW_BY
+    if not isinstance(payload, dict):
+        return BASELINE_TICKET, BASELINE_REVIEW_BY
+    ticket = payload.get("ticket")
+    review_by = payload.get("review_by")
+    if not isinstance(ticket, str) or not ticket.strip():
+        ticket = BASELINE_TICKET
+    if not isinstance(review_by, str) or not review_by.strip():
+        review_by = BASELINE_REVIEW_BY
+    return ticket, review_by
+
+
 def payload_id_set(payload: dict) -> set[str]:
     """Every behaviour id the baseline document at that revision describes.
 
@@ -1377,46 +1432,6 @@ def payload_id_set(payload: dict) -> set[str]:
     if isinstance(fingerprints, dict) and fingerprints:
         return set(fingerprints)
     return set(payload.get("entries") or {}) | set(payload.get("weak_bindings") or [])
-
-
-def _git_show(root: Path, rev: str, relpath: str) -> str | None:
-    """The file at *rev*; ``None`` only when the path is GENUINELY absent there.
-
-    A transient git failure must never look like "the file did not exist" - that
-    would silently disable the shrink-only ratchet. ``git cat-file -e`` is the
-    only probe allowed to answer "absent"; a failed ``git show`` on a path that
-    ``cat-file`` says exists is a hard error (fail closed).
-    """
-    if not rev or rev.startswith("-"):
-        raise ValueError(f"refusing to pass {rev!r} to git as a revision")
-    resolved = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if resolved.returncode != 0:
-        raise ValueError(f"base revision {rev!r} does not resolve to a commit")
-    present = subprocess.run(
-        ["git", "cat-file", "-e", f"{rev}:{relpath}"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if present.returncode != 0:
-        return None
-    shown = subprocess.run(
-        ["git", "show", f"{rev}:{relpath}"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if shown.returncode != 0:
-        raise ValueError(f"git could not read {relpath} at {rev} even though the path exists: {shown.stderr.strip() or 'unknown git error'}")
-    return shown.stdout
 
 
 def check_base(root: Path, rev: str) -> int:
@@ -1437,9 +1452,10 @@ def check_base(root: Path, rev: str) -> int:
     enforced in the same pass.
     """
     relpath = BASELINE_RELPATH
+    ratchet = _load_shared_script("run_check_ratchet_baseline", "run_check_ratchet_baseline.py")
     try:
-        base_text = _git_show(root, rev, relpath)
-    except ValueError as exc:
+        base_text = ratchet.read_baseline_at_rev(root, rev, relpath)
+    except ratchet.RatchetError as exc:
         print(f"behaviour-bindings baseline: FAILED CLOSED - {exc}", file=sys.stderr)
         return 1
     if base_text is None:

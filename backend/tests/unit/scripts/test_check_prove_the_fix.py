@@ -434,6 +434,19 @@ def test_a_clean_test_in_a_class_passes(tmp_path: Path):
     assert problem is None
 
 
+def test_a_class_member_requires_its_owner_in_the_node_id(tmp_path: Path):
+    """A bare ``module.py::test_member`` must not resolve a class member.
+
+    pytest collects ``TestGroup::test_plain_member``, not
+    ``test_plain_member``. Searching class bodies when no owner is given made a
+    node id pytest cannot collect resolve as proof.
+    """
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(f"{_PROBE_MODULE}::test_plain_member", root, _changed(_PROBE_MODULE))
+    assert problem is not None
+    assert "not defined" in problem
+
+
 # --- frontend spec refs -----------------------------------------------------
 
 

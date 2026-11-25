@@ -46,6 +46,7 @@ import argparse
 import ast
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 #: A change to these trees changes product behaviour and needs a proving test.
@@ -78,6 +79,11 @@ _TS_TEST_CALL_RE = re.compile(r"\b(?:it|test)(?:\.[A-Za-z_$][\w$]*(?:\s*\((?:[^(
 #: test inside it, so a test call inside one proves nothing even though the call
 #: itself carries no ``.skip`` modifier.
 _DESCRIBE_SKIP_RE = re.compile(r"\bdescribe\s*\.\s*(?:skip|skipIf)\s*\(")
+
+#: A test-call modifier that tells Vitest/Playwright not to run the test. The
+#: prove-the-fix gate and the product-map binding resolver share this so neither
+#: can treat a skipped/fixme/todo test as proof.
+_SPEC_SKIP_MODIFIER_RE = re.compile(r"\.(?:skip|fixme|todo)\b")
 
 #: Fenced markdown code blocks and HTML comments: documenting the convention
 #: must not satisfy it.
@@ -187,9 +193,15 @@ def _find_test(tree: ast.Module, name: str, owner: str | None) -> tuple[ast.Func
     skips every method in it, so the caller must see the class decorators.
     """
     for node in tree.body:
-        if owner is None and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
-            return node, None
-        if isinstance(node, ast.ClassDef) and (owner is None or node.name == owner):
+        if owner is None:
+            # A bare node id (``module.py::test_name``) only names a module-level
+            # function. A class member requires its owner (``::Class::test_name``),
+            # exactly as pytest collects it - otherwise a node id pytest cannot
+            # collect would resolve as proof.
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+                return node, None
+            continue
+        if isinstance(node, ast.ClassDef) and node.name == owner:
             for child in node.body:
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == name:
                     return child, node
@@ -391,26 +403,47 @@ def _skipped_describe_ranges(source: str) -> list[tuple[int, int]]:
     return ranges
 
 
+def iter_spec_test_calls(source: str) -> Iterator[tuple[str, str | None]]:
+    """Yield ``(title, skip_reason)`` for every spec test call in *source*.
+
+    ``describe(...)`` calls are suite titles, not tests, so they are skipped
+    entirely. ``skip_reason`` is ``None`` when the test actually runs, otherwise a
+    short description of why it cannot prove anything. The prove-the-fix gate and
+    the product-map binding resolver both consume this so a skipped/fixme/todo
+    test, or a test inside a ``describe.skip`` block, can never resolve as proof.
+    """
+    skipped_ranges = _skipped_describe_ranges(source)
+    for call in _TS_TEST_CALL_RE.finditer(source):
+        text = call.group(0)
+        prefix = text[: text.index(call.group("quote"))]
+        if "describe" in prefix:
+            continue
+        reason: str | None = None
+        if _SPEC_SKIP_MODIFIER_RE.search(prefix):
+            reason = "it is marked skipped/fixme/todo"
+        elif any(start <= call.start() <= end for start, end in skipped_ranges):
+            reason = "it sits inside a describe.skip block"
+        yield call.group("name"), reason
+
+
+def runnable_spec_titles(source: str) -> set[str]:
+    """Titles of spec tests that can actually run (never skipped/describe titles)."""
+    return {title for title, reason in iter_spec_test_calls(source) if reason is None}
+
+
 def _verify_spec_ref(ref: str, match: re.Match[str], module: Path) -> str | None:
     try:
         source = module.read_text(encoding="utf-8")
     except OSError as exc:
         return f"{ref!r} names a spec that cannot be read: {exc}"
     name = match.group("name").strip()
-    skipped_ranges = _skipped_describe_ranges(source)
     found = False
-    for call in _TS_TEST_CALL_RE.finditer(source):
-        text = call.group(0)
-        prefix = text[: text.index(call.group("quote"))]
-        if "describe" in prefix:
-            continue
-        if call.group("name") != name:
+    for title, reason in iter_spec_test_calls(source):
+        if title != name:
             continue
         found = True
-        if re.search(r"\.(?:skip|fixme|todo)\b", prefix):
-            return f"{ref!r} names a spec test that cannot prove anything: it is marked skipped/fixme/todo"
-        if any(start <= call.start() <= end for start, end in skipped_ranges):
-            return f"{ref!r} names a spec test that cannot prove anything: it sits inside a describe.skip block"
+        if reason is not None:
+            return f"{ref!r} names a spec test that cannot prove anything: {reason}"
     if not found:
         return f"{ref!r} names a test title that is not defined in {match.group('file')}"
     return None
