@@ -119,7 +119,7 @@ function openingTags(text: string, names: readonly string[]): string[] {
   const tags: string[] = []
   const pattern = new RegExp(`<(?:${names.join('|')})(?=[\\s/>])`, 'gi')
   for (const match of text.matchAll(pattern)) {
-    let index = (match.index ?? 0) + match[0].length
+    let index = match.index + match[0].length
     let quote: string | null = null
     while (index < text.length) {
       const char = text[index]

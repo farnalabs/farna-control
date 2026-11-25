@@ -90,6 +90,8 @@ import {
   PATTERNS,
   countPatterns,
   emptyCounts,
+  stripHtmlComments,
+  stripNonTemplateBlocks,
   titledCardsWithoutPadding,
   type Counts,
 } from '../test-utils/design-system-detectors'
@@ -386,6 +388,28 @@ describe('design-system conformance guard (FAR-2710)', () => {
     expect(counts.raw_button).toBe(1)
     expect(counts.raw_input).toBe(1)
     expect(counts.primevue_badge).toBe(1)
+  })
+
+  it('reads both double- and single-quoted class attributes', () => {
+    // Both quote styles are valid SFC markup, so a card shell or header written
+    // with single quotes must still be tokenized and counted.
+    expect(countPatterns("<template><div class='card'></div></template>").card_container).toBe(1)
+    expect(countPatterns("<template><h2 class='text-lg font-semibold'>T</h2></template>").card_header).toBe(1)
+  })
+
+  it('strips comments and non-template blocks, optionally preserving line numbers', () => {
+    const source = '<template>\n<div />\n</template>\n<!-- note -->\n<style>.a { color: red }</style>'
+    // Default drops the stripped regions entirely.
+    expect(stripNonTemplateBlocks(source)).not.toContain('note')
+    expect(stripNonTemplateBlocks(source)).not.toContain('color: red')
+    // preserveLines keeps the newlines so line numbers computed from the result stay true.
+    const preserved = stripNonTemplateBlocks(source, { preserveLines: true })
+    expect(preserved.split('\n')).toHaveLength(source.split('\n').length)
+    expect(preserved).not.toContain('note')
+    // stripHtmlComments honours the same preserveLines flag.
+    const commented = '<p>a</p>\n<!-- x -->\n<p>b</p>'
+    expect(stripHtmlComments(commented)).not.toContain('x')
+    expect(stripHtmlComments(commented, true).split('\n')).toHaveLength(commented.split('\n').length)
   })
 
   it('has no DataCard/SectionCard that combines a title with padding="none"', () => {
