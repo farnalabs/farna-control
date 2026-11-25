@@ -166,56 +166,56 @@ class CredentialPin:
 #: The credential set of every provider id, pinned IN CODE. ``_validate_env_vars``
 #: only proves that what is USED is DECLARED, which a merged config edit can
 #: satisfy while declaring ANOTHER provider's secret (a ``github`` probe with
-#: ``auth.env: MODULO_PROBE_SLACK_TOKEN`` would load it and send Slack's token to
+#: ``auth.env: FARNA_PROBE_SLACK_TOKEN`` would load it and send Slack's token to
 #: api.github.com). This pin makes the credential set a property of the provider
 #: id instead of the config: every env var, header name and query-param name the
 #: probe touches must be listed here. Adding a credential is a reviewed code
 #: change, never a config-only edit.
 PROVIDER_CREDENTIAL_PINS: dict[str, CredentialPin] = {
     # connectors
-    "asana": CredentialPin(env_vars=frozenset({"MODULO_PROBE_ASANA_TOKEN"})),
-    "bitbucket": CredentialPin(env_vars=frozenset({"MODULO_PROBE_BITBUCKET_TOKEN"})),
-    "buildkite": CredentialPin(env_vars=frozenset({"MODULO_PROBE_BUILDKITE_TOKEN"})),
-    "circleci": CredentialPin(env_vars=frozenset({"MODULO_PROBE_CIRCLECI_TOKEN"}), headers=frozenset({"Circle-Token"})),
-    "codeclimate": CredentialPin(env_vars=frozenset({"MODULO_PROBE_CODECLIMATE_TOKEN"})),
+    "asana": CredentialPin(env_vars=frozenset({"FARNA_PROBE_ASANA_TOKEN"})),
+    "bitbucket": CredentialPin(env_vars=frozenset({"FARNA_PROBE_BITBUCKET_TOKEN"})),
+    "buildkite": CredentialPin(env_vars=frozenset({"FARNA_PROBE_BUILDKITE_TOKEN"})),
+    "circleci": CredentialPin(env_vars=frozenset({"FARNA_PROBE_CIRCLECI_TOKEN"}), headers=frozenset({"Circle-Token"})),
+    "codeclimate": CredentialPin(env_vars=frozenset({"FARNA_PROBE_CODECLIMATE_TOKEN"})),
     "datadog": CredentialPin(
-        env_vars=frozenset({"MODULO_PROBE_DATADOG_API_KEY", "MODULO_PROBE_DATADOG_APP_KEY"}),
+        env_vars=frozenset({"FARNA_PROBE_DATADOG_API_KEY", "FARNA_PROBE_DATADOG_APP_KEY"}),
         headers=frozenset({"DD-API-KEY", "DD-APPLICATION-KEY"}),
     ),
-    "discord": CredentialPin(env_vars=frozenset({"MODULO_PROBE_DISCORD_TOKEN"}), headers=frozenset({"Authorization"})),
-    "dropbox_paper": CredentialPin(env_vars=frozenset({"MODULO_PROBE_DROPBOX_TOKEN"})),
-    "github": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GITHUB_TOKEN"})),
-    "gitlab": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GITLAB_TOKEN"}), headers=frozenset({"PRIVATE-TOKEN"})),
-    "linear": CredentialPin(env_vars=frozenset({"MODULO_PROBE_LINEAR_TOKEN"}), headers=frozenset({"Authorization"})),
-    "microsoft_teams": CredentialPin(env_vars=frozenset({"MODULO_PROBE_MICROSOFT_TEAMS_TOKEN"})),
-    "monday": CredentialPin(env_vars=frozenset({"MODULO_PROBE_MONDAY_TOKEN"})),
-    "notion": CredentialPin(env_vars=frozenset({"MODULO_PROBE_NOTION_TOKEN"})),
-    "npm": CredentialPin(env_vars=frozenset({"MODULO_PROBE_NPM_TOKEN"})),
-    "opsgenie": CredentialPin(env_vars=frozenset({"MODULO_PROBE_OPSGENIE_TOKEN"}), headers=frozenset({"Authorization"})),
-    "pagerduty": CredentialPin(env_vars=frozenset({"MODULO_PROBE_PAGERDUTY_TOKEN"}), headers=frozenset({"Authorization"})),
+    "discord": CredentialPin(env_vars=frozenset({"FARNA_PROBE_DISCORD_TOKEN"}), headers=frozenset({"Authorization"})),
+    "dropbox_paper": CredentialPin(env_vars=frozenset({"FARNA_PROBE_DROPBOX_TOKEN"})),
+    "github": CredentialPin(env_vars=frozenset({"FARNA_PROBE_GITHUB_TOKEN"})),
+    "gitlab": CredentialPin(env_vars=frozenset({"FARNA_PROBE_GITLAB_TOKEN"}), headers=frozenset({"PRIVATE-TOKEN"})),
+    "linear": CredentialPin(env_vars=frozenset({"FARNA_PROBE_LINEAR_TOKEN"}), headers=frozenset({"Authorization"})),
+    "microsoft_teams": CredentialPin(env_vars=frozenset({"FARNA_PROBE_MICROSOFT_TEAMS_TOKEN"})),
+    "monday": CredentialPin(env_vars=frozenset({"FARNA_PROBE_MONDAY_TOKEN"})),
+    "notion": CredentialPin(env_vars=frozenset({"FARNA_PROBE_NOTION_TOKEN"})),
+    "npm": CredentialPin(env_vars=frozenset({"FARNA_PROBE_NPM_TOKEN"})),
+    "opsgenie": CredentialPin(env_vars=frozenset({"FARNA_PROBE_OPSGENIE_TOKEN"}), headers=frozenset({"Authorization"})),
+    "pagerduty": CredentialPin(env_vars=frozenset({"FARNA_PROBE_PAGERDUTY_TOKEN"}), headers=frozenset({"Authorization"})),
     "pypi": CredentialPin(),
-    "sentry": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SENTRY_TOKEN"})),
-    "shortcut": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SHORTCUT_TOKEN"}), headers=frozenset({"Shortcut-Token"})),
-    "slack": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SLACK_TOKEN"})),
-    "snyk": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SNYK_TOKEN"}), headers=frozenset({"Authorization"})),
-    "sonarqube": CredentialPin(env_vars=frozenset({"MODULO_PROBE_SONARQUBE_TOKEN"})),
+    "sentry": CredentialPin(env_vars=frozenset({"FARNA_PROBE_SENTRY_TOKEN"})),
+    "shortcut": CredentialPin(env_vars=frozenset({"FARNA_PROBE_SHORTCUT_TOKEN"}), headers=frozenset({"Shortcut-Token"})),
+    "slack": CredentialPin(env_vars=frozenset({"FARNA_PROBE_SLACK_TOKEN"})),
+    "snyk": CredentialPin(env_vars=frozenset({"FARNA_PROBE_SNYK_TOKEN"}), headers=frozenset({"Authorization"})),
+    "sonarqube": CredentialPin(env_vars=frozenset({"FARNA_PROBE_SONARQUBE_TOKEN"})),
     "trello": CredentialPin(
-        env_vars=frozenset({"MODULO_PROBE_TRELLO_KEY", "MODULO_PROBE_TRELLO_TOKEN"}),
+        env_vars=frozenset({"FARNA_PROBE_TRELLO_KEY", "FARNA_PROBE_TRELLO_TOKEN"}),
         params=frozenset({"key", "token"}),
     ),
     # model backends
-    "anthropic": CredentialPin(env_vars=frozenset({"MODULO_PROBE_ANTHROPIC_TOKEN"}), headers=frozenset({"x-api-key"})),
-    "cohere": CredentialPin(env_vars=frozenset({"MODULO_PROBE_COHERE_TOKEN"})),
-    "deepseek": CredentialPin(env_vars=frozenset({"MODULO_PROBE_DEEPSEEK_TOKEN"})),
-    "fireworks": CredentialPin(env_vars=frozenset({"MODULO_PROBE_FIREWORKS_TOKEN"})),
-    "gemini": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GEMINI_TOKEN"}), params=frozenset({"key"})),
-    "grok": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GROK_TOKEN"})),
-    "groq": CredentialPin(env_vars=frozenset({"MODULO_PROBE_GROQ_TOKEN"})),
-    "mistral": CredentialPin(env_vars=frozenset({"MODULO_PROBE_MISTRAL_TOKEN"})),
-    "openai": CredentialPin(env_vars=frozenset({"MODULO_PROBE_OPENAI_TOKEN"})),
-    "openrouter": CredentialPin(env_vars=frozenset({"MODULO_PROBE_OPENROUTER_TOKEN"})),
-    "qwen": CredentialPin(env_vars=frozenset({"MODULO_PROBE_QWEN_TOKEN"})),
-    "togetherai": CredentialPin(env_vars=frozenset({"MODULO_PROBE_TOGETHERAI_TOKEN"})),
+    "anthropic": CredentialPin(env_vars=frozenset({"FARNA_PROBE_ANTHROPIC_TOKEN"}), headers=frozenset({"x-api-key"})),
+    "cohere": CredentialPin(env_vars=frozenset({"FARNA_PROBE_COHERE_TOKEN"})),
+    "deepseek": CredentialPin(env_vars=frozenset({"FARNA_PROBE_DEEPSEEK_TOKEN"})),
+    "fireworks": CredentialPin(env_vars=frozenset({"FARNA_PROBE_FIREWORKS_TOKEN"})),
+    "gemini": CredentialPin(env_vars=frozenset({"FARNA_PROBE_GEMINI_TOKEN"}), params=frozenset({"key"})),
+    "grok": CredentialPin(env_vars=frozenset({"FARNA_PROBE_GROK_TOKEN"})),
+    "groq": CredentialPin(env_vars=frozenset({"FARNA_PROBE_GROQ_TOKEN"})),
+    "mistral": CredentialPin(env_vars=frozenset({"FARNA_PROBE_MISTRAL_TOKEN"})),
+    "openai": CredentialPin(env_vars=frozenset({"FARNA_PROBE_OPENAI_TOKEN"})),
+    "openrouter": CredentialPin(env_vars=frozenset({"FARNA_PROBE_OPENROUTER_TOKEN"})),
+    "qwen": CredentialPin(env_vars=frozenset({"FARNA_PROBE_QWEN_TOKEN"})),
+    "togetherai": CredentialPin(env_vars=frozenset({"FARNA_PROBE_TOGETHERAI_TOKEN"})),
 }
 
 #: A 429 or any 5xx means "cannot verify right now", never "the contract

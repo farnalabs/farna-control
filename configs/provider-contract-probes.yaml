@@ -80,7 +80,7 @@
 # config edit alone cannot redirect a credential. The credential SET is pinned
 # per provider id too (PROVIDER_CREDENTIAL_PINS): every env var, header name and
 # query-param name the probe reads must be in that pin, so a `github` probe
-# cannot be edited to read MODULO_PROBE_SLACK_TOKEN and send it to
+# cannot be edited to read FARNA_PROBE_SLACK_TOKEN and send it to
 # api.github.com. The few read-only POSTs are pinned to their exact URL and body
 # in the same script (READ_ONLY_POST_ENDPOINTS); any other POST is rejected, so
 # a config edit cannot turn a probe into a write.
@@ -115,9 +115,9 @@ providers:
     allowed_host: app.asana.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_ASANA_TOKEN
+      env: FARNA_PROBE_ASANA_TOKEN
     env_vars:
-      - MODULO_PROBE_ASANA_TOKEN
+      - FARNA_PROBE_ASANA_TOKEN
     max_depth: 2
     normalise:
       - path: data.gid
@@ -133,9 +133,9 @@ providers:
     allowed_host: api.bitbucket.org
     auth:
       kind: bearer
-      env: MODULO_PROBE_BITBUCKET_TOKEN
+      env: FARNA_PROBE_BITBUCKET_TOKEN
     env_vars:
-      - MODULO_PROBE_BITBUCKET_TOKEN
+      - FARNA_PROBE_BITBUCKET_TOKEN
 
   - id: buildkite
     kind: connector
@@ -147,9 +147,9 @@ providers:
     allowed_host: api.buildkite.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_BUILDKITE_TOKEN
+      env: FARNA_PROBE_BUILDKITE_TOKEN
     env_vars:
-      - MODULO_PROBE_BUILDKITE_TOKEN
+      - FARNA_PROBE_BUILDKITE_TOKEN
 
   - id: circleci
     kind: connector
@@ -161,10 +161,10 @@ providers:
     allowed_host: circleci.com
     auth:
       kind: header
-      env: MODULO_PROBE_CIRCLECI_TOKEN
+      env: FARNA_PROBE_CIRCLECI_TOKEN
       header: Circle-Token
     env_vars:
-      - MODULO_PROBE_CIRCLECI_TOKEN
+      - FARNA_PROBE_CIRCLECI_TOKEN
 
   - id: codeclimate
     kind: connector
@@ -176,9 +176,9 @@ providers:
     allowed_host: api.codeclimate.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_CODECLIMATE_TOKEN
+      env: FARNA_PROBE_CODECLIMATE_TOKEN
     env_vars:
-      - MODULO_PROBE_CODECLIMATE_TOKEN
+      - FARNA_PROBE_CODECLIMATE_TOKEN
 
   - id: datadog
     kind: connector
@@ -190,13 +190,13 @@ providers:
     allowed_host: api.datadoghq.com
     auth:
       kind: header
-      env: MODULO_PROBE_DATADOG_API_KEY
+      env: FARNA_PROBE_DATADOG_API_KEY
       header: DD-API-KEY
     env_vars:
-      - MODULO_PROBE_DATADOG_API_KEY
-      - MODULO_PROBE_DATADOG_APP_KEY
+      - FARNA_PROBE_DATADOG_API_KEY
+      - FARNA_PROBE_DATADOG_APP_KEY
     extra_headers:
-      DD-APPLICATION-KEY: MODULO_PROBE_DATADOG_APP_KEY
+      DD-APPLICATION-KEY: FARNA_PROBE_DATADOG_APP_KEY
 
   - id: discord
     kind: connector
@@ -208,11 +208,11 @@ providers:
     allowed_host: discord.com
     auth:
       kind: header
-      env: MODULO_PROBE_DISCORD_TOKEN
+      env: FARNA_PROBE_DISCORD_TOKEN
       header: Authorization
       template: "Bot {token}"
     env_vars:
-      - MODULO_PROBE_DISCORD_TOKEN
+      - FARNA_PROBE_DISCORD_TOKEN
     normalise:
       - path: id
         rule: volatile
@@ -230,9 +230,9 @@ providers:
     allowed_host: api.dropboxapi.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_DROPBOX_TOKEN
+      env: FARNA_PROBE_DROPBOX_TOKEN
     env_vars:
-      - MODULO_PROBE_DROPBOX_TOKEN
+      - FARNA_PROBE_DROPBOX_TOKEN
     max_depth: 2
     normalise:
       - path: account_id
@@ -248,9 +248,9 @@ providers:
     allowed_host: api.github.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_GITHUB_TOKEN
+      env: FARNA_PROBE_GITHUB_TOKEN
     env_vars:
-      - MODULO_PROBE_GITHUB_TOKEN
+      - FARNA_PROBE_GITHUB_TOKEN
 
   - id: gitlab
     kind: connector
@@ -262,10 +262,10 @@ providers:
     allowed_host: gitlab.com
     auth:
       kind: header
-      env: MODULO_PROBE_GITLAB_TOKEN
+      env: FARNA_PROBE_GITLAB_TOKEN
       header: PRIVATE-TOKEN
     env_vars:
-      - MODULO_PROBE_GITLAB_TOKEN
+      - FARNA_PROBE_GITLAB_TOKEN
 
   - id: linear
     kind: connector
@@ -279,10 +279,10 @@ providers:
     allowed_host: api.linear.app
     auth:
       kind: header
-      env: MODULO_PROBE_LINEAR_TOKEN
+      env: FARNA_PROBE_LINEAR_TOKEN
       header: Authorization
     env_vars:
-      - MODULO_PROBE_LINEAR_TOKEN
+      - FARNA_PROBE_LINEAR_TOKEN
     max_depth: 3
     normalise:
       - path: data.viewer.id
@@ -298,9 +298,9 @@ providers:
     allowed_host: graph.microsoft.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_MICROSOFT_TEAMS_TOKEN
+      env: FARNA_PROBE_MICROSOFT_TEAMS_TOKEN
     env_vars:
-      - MODULO_PROBE_MICROSOFT_TEAMS_TOKEN
+      - FARNA_PROBE_MICROSOFT_TEAMS_TOKEN
 
   - id: monday
     kind: connector
@@ -314,9 +314,9 @@ providers:
     allowed_host: api.monday.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_MONDAY_TOKEN
+      env: FARNA_PROBE_MONDAY_TOKEN
     env_vars:
-      - MODULO_PROBE_MONDAY_TOKEN
+      - FARNA_PROBE_MONDAY_TOKEN
     max_depth: 3
     normalise:
       - path: data.me.id
@@ -332,9 +332,9 @@ providers:
     allowed_host: api.notion.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_NOTION_TOKEN
+      env: FARNA_PROBE_NOTION_TOKEN
     env_vars:
-      - MODULO_PROBE_NOTION_TOKEN
+      - FARNA_PROBE_NOTION_TOKEN
     static_headers:
       Notion-Version: "2022-06-28"
     normalise:
@@ -351,9 +351,9 @@ providers:
     allowed_host: registry.npmjs.org
     auth:
       kind: bearer
-      env: MODULO_PROBE_NPM_TOKEN
+      env: FARNA_PROBE_NPM_TOKEN
     env_vars:
-      - MODULO_PROBE_NPM_TOKEN
+      - FARNA_PROBE_NPM_TOKEN
 
   - id: opsgenie
     kind: connector
@@ -365,11 +365,11 @@ providers:
     allowed_host: api.opsgenie.com
     auth:
       kind: header
-      env: MODULO_PROBE_OPSGENIE_TOKEN
+      env: FARNA_PROBE_OPSGENIE_TOKEN
       header: Authorization
       template: "GenieKey {token}"
     env_vars:
-      - MODULO_PROBE_OPSGENIE_TOKEN
+      - FARNA_PROBE_OPSGENIE_TOKEN
     max_depth: 2
 
   - id: pagerduty
@@ -382,11 +382,11 @@ providers:
     allowed_host: api.pagerduty.com
     auth:
       kind: header
-      env: MODULO_PROBE_PAGERDUTY_TOKEN
+      env: FARNA_PROBE_PAGERDUTY_TOKEN
       header: Authorization
       template: "Token token={token}"
     env_vars:
-      - MODULO_PROBE_PAGERDUTY_TOKEN
+      - FARNA_PROBE_PAGERDUTY_TOKEN
     max_depth: 2
 
   - id: pypi
@@ -418,9 +418,9 @@ providers:
     allowed_host: sentry.io
     auth:
       kind: bearer
-      env: MODULO_PROBE_SENTRY_TOKEN
+      env: FARNA_PROBE_SENTRY_TOKEN
     env_vars:
-      - MODULO_PROBE_SENTRY_TOKEN
+      - FARNA_PROBE_SENTRY_TOKEN
 
   - id: shortcut
     kind: connector
@@ -432,10 +432,10 @@ providers:
     allowed_host: api.app.shortcut.com
     auth:
       kind: header
-      env: MODULO_PROBE_SHORTCUT_TOKEN
+      env: FARNA_PROBE_SHORTCUT_TOKEN
       header: Shortcut-Token
     env_vars:
-      - MODULO_PROBE_SHORTCUT_TOKEN
+      - FARNA_PROBE_SHORTCUT_TOKEN
     normalise:
       - path: id
         rule: volatile
@@ -450,9 +450,9 @@ providers:
     allowed_host: slack.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_SLACK_TOKEN
+      env: FARNA_PROBE_SLACK_TOKEN
     env_vars:
-      - MODULO_PROBE_SLACK_TOKEN
+      - FARNA_PROBE_SLACK_TOKEN
 
   - id: snyk
     kind: connector
@@ -464,11 +464,11 @@ providers:
     allowed_host: api.snyk.io
     auth:
       kind: header
-      env: MODULO_PROBE_SNYK_TOKEN
+      env: FARNA_PROBE_SNYK_TOKEN
       header: Authorization
       template: "token {token}"
     env_vars:
-      - MODULO_PROBE_SNYK_TOKEN
+      - FARNA_PROBE_SNYK_TOKEN
 
   - id: sonarqube
     kind: connector
@@ -480,9 +480,9 @@ providers:
     allowed_host: sonarcloud.io
     auth:
       kind: bearer
-      env: MODULO_PROBE_SONARQUBE_TOKEN
+      env: FARNA_PROBE_SONARQUBE_TOKEN
     env_vars:
-      - MODULO_PROBE_SONARQUBE_TOKEN
+      - FARNA_PROBE_SONARQUBE_TOKEN
 
   - id: trello
     kind: connector
@@ -495,11 +495,11 @@ providers:
     auth:
       kind: query
       params:
-        key: MODULO_PROBE_TRELLO_KEY
-        token: MODULO_PROBE_TRELLO_TOKEN
+        key: FARNA_PROBE_TRELLO_KEY
+        token: FARNA_PROBE_TRELLO_TOKEN
     env_vars:
-      - MODULO_PROBE_TRELLO_KEY
-      - MODULO_PROBE_TRELLO_TOKEN
+      - FARNA_PROBE_TRELLO_KEY
+      - FARNA_PROBE_TRELLO_TOKEN
     normalise:
       - path: id
         rule: volatile
@@ -517,10 +517,10 @@ providers:
     allowed_host: api.anthropic.com
     auth:
       kind: header
-      env: MODULO_PROBE_ANTHROPIC_TOKEN
+      env: FARNA_PROBE_ANTHROPIC_TOKEN
       header: x-api-key
     env_vars:
-      - MODULO_PROBE_ANTHROPIC_TOKEN
+      - FARNA_PROBE_ANTHROPIC_TOKEN
     static_headers:
       anthropic-version: "2023-06-01"
 
@@ -534,9 +534,9 @@ providers:
     allowed_host: api.cohere.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_COHERE_TOKEN
+      env: FARNA_PROBE_COHERE_TOKEN
     env_vars:
-      - MODULO_PROBE_COHERE_TOKEN
+      - FARNA_PROBE_COHERE_TOKEN
 
   - id: deepseek
     kind: model_backend
@@ -548,9 +548,9 @@ providers:
     allowed_host: api.deepseek.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_DEEPSEEK_TOKEN
+      env: FARNA_PROBE_DEEPSEEK_TOKEN
     env_vars:
-      - MODULO_PROBE_DEEPSEEK_TOKEN
+      - FARNA_PROBE_DEEPSEEK_TOKEN
 
   - id: fireworks
     kind: model_backend
@@ -562,9 +562,9 @@ providers:
     allowed_host: api.fireworks.ai
     auth:
       kind: bearer
-      env: MODULO_PROBE_FIREWORKS_TOKEN
+      env: FARNA_PROBE_FIREWORKS_TOKEN
     env_vars:
-      - MODULO_PROBE_FIREWORKS_TOKEN
+      - FARNA_PROBE_FIREWORKS_TOKEN
 
   - id: gemini
     kind: model_backend
@@ -577,9 +577,9 @@ providers:
     auth:
       kind: query
       params:
-        key: MODULO_PROBE_GEMINI_TOKEN
+        key: FARNA_PROBE_GEMINI_TOKEN
     env_vars:
-      - MODULO_PROBE_GEMINI_TOKEN
+      - FARNA_PROBE_GEMINI_TOKEN
 
   - id: grok
     kind: model_backend
@@ -591,9 +591,9 @@ providers:
     allowed_host: api.x.ai
     auth:
       kind: bearer
-      env: MODULO_PROBE_GROK_TOKEN
+      env: FARNA_PROBE_GROK_TOKEN
     env_vars:
-      - MODULO_PROBE_GROK_TOKEN
+      - FARNA_PROBE_GROK_TOKEN
 
   - id: groq
     kind: model_backend
@@ -605,9 +605,9 @@ providers:
     allowed_host: api.groq.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_GROQ_TOKEN
+      env: FARNA_PROBE_GROQ_TOKEN
     env_vars:
-      - MODULO_PROBE_GROQ_TOKEN
+      - FARNA_PROBE_GROQ_TOKEN
 
   - id: mistral
     kind: model_backend
@@ -619,9 +619,9 @@ providers:
     allowed_host: api.mistral.ai
     auth:
       kind: bearer
-      env: MODULO_PROBE_MISTRAL_TOKEN
+      env: FARNA_PROBE_MISTRAL_TOKEN
     env_vars:
-      - MODULO_PROBE_MISTRAL_TOKEN
+      - FARNA_PROBE_MISTRAL_TOKEN
 
   - id: openai
     kind: model_backend
@@ -633,9 +633,9 @@ providers:
     allowed_host: api.openai.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_OPENAI_TOKEN
+      env: FARNA_PROBE_OPENAI_TOKEN
     env_vars:
-      - MODULO_PROBE_OPENAI_TOKEN
+      - FARNA_PROBE_OPENAI_TOKEN
 
   - id: openrouter
     kind: model_backend
@@ -647,9 +647,9 @@ providers:
     allowed_host: openrouter.ai
     auth:
       kind: bearer
-      env: MODULO_PROBE_OPENROUTER_TOKEN
+      env: FARNA_PROBE_OPENROUTER_TOKEN
     env_vars:
-      - MODULO_PROBE_OPENROUTER_TOKEN
+      - FARNA_PROBE_OPENROUTER_TOKEN
 
   - id: qwen
     kind: model_backend
@@ -661,9 +661,9 @@ providers:
     allowed_host: dashscope.aliyuncs.com
     auth:
       kind: bearer
-      env: MODULO_PROBE_QWEN_TOKEN
+      env: FARNA_PROBE_QWEN_TOKEN
     env_vars:
-      - MODULO_PROBE_QWEN_TOKEN
+      - FARNA_PROBE_QWEN_TOKEN
 
   - id: togetherai
     kind: model_backend
@@ -675,9 +675,9 @@ providers:
     allowed_host: api.together.xyz
     auth:
       kind: bearer
-      env: MODULO_PROBE_TOGETHERAI_TOKEN
+      env: FARNA_PROBE_TOGETHERAI_TOKEN
     env_vars:
-      - MODULO_PROBE_TOGETHERAI_TOKEN
+      - FARNA_PROBE_TOGETHERAI_TOKEN
 
 # ---------------------------------------------------------------------------
 # Fail-closed exceptions. An entry needs a reason. Nothing is excused here:

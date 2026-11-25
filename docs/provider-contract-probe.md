@@ -1,6 +1,6 @@
 # Provider contract probe
 
-A nightly, read-only check that the third-party APIs Modulo depends on still
+A nightly, read-only check that the third-party APIs Farna Control depends on still
 return the response **shape** our code expects. Mocks and cassettes prove our
 code against a frozen assumption; nothing in the test suite notices when a
 provider changes. This probe does.
@@ -159,7 +159,7 @@ a config edit alone cannot widen them:
 - **Credential pin.** `PROVIDER_CREDENTIAL_PINS` in the script maps every
   provider id to the credential env vars, header names and query-param names it
   may read. Used-vs-declared alone is not enough: a `github` probe declaring
-  `auth.env: MODULO_PROBE_SLACK_TOKEN` is internally consistent and would send
+  `auth.env: FARNA_PROBE_SLACK_TOKEN` is internally consistent and would send
   Slack's token to api.github.com. Every used env var, every `env_vars` entry,
   every header name and every query-param name must fall inside the provider's
   pin, or the config is rejected at load.
@@ -220,9 +220,9 @@ the in-script deadline.
      allowed_host: api.example.com   # must equal the code pin
      auth:
        kind: bearer             # none | bearer | header | query
-       env: MODULO_PROBE_EXAMPLE_TOKEN
+       env: FARNA_PROBE_EXAMPLE_TOKEN
      env_vars:                  # the ONLY env vars this probe may read
-       - MODULO_PROBE_EXAMPLE_TOKEN
+       - FARNA_PROBE_EXAMPLE_TOKEN
      max_depth: 1               # shape levels recorded into the golden
      normalise:                 # volatile handling lives HERE, not in code
        - path: data.id
@@ -285,7 +285,7 @@ golden. When a provider legitimately changes shape:
 2. Record with a credential for that provider only:
 
    ```bash
-   MODULO_PROBE_GITHUB_TOKEN=... \
+   FARNA_PROBE_GITHUB_TOKEN=... \
      python scripts/provider_contract_probe.py --mode record --provider github --operation rate_limit
    ```
 
@@ -356,28 +356,28 @@ HTTP.
 
 Connectors:
 
-`MODULO_PROBE_ASANA_TOKEN`, `MODULO_PROBE_BITBUCKET_TOKEN`,
-`MODULO_PROBE_BUILDKITE_TOKEN`, `MODULO_PROBE_CIRCLECI_TOKEN`,
-`MODULO_PROBE_CODECLIMATE_TOKEN`, `MODULO_PROBE_DATADOG_API_KEY`,
-`MODULO_PROBE_DATADOG_APP_KEY`, `MODULO_PROBE_DISCORD_TOKEN`,
-`MODULO_PROBE_DROPBOX_TOKEN`, `MODULO_PROBE_GITHUB_TOKEN`,
-`MODULO_PROBE_GITLAB_TOKEN`, `MODULO_PROBE_LINEAR_TOKEN`,
-`MODULO_PROBE_MICROSOFT_TEAMS_TOKEN`, `MODULO_PROBE_MONDAY_TOKEN`,
-`MODULO_PROBE_NOTION_TOKEN`, `MODULO_PROBE_NPM_TOKEN`,
-`MODULO_PROBE_OPSGENIE_TOKEN`, `MODULO_PROBE_PAGERDUTY_TOKEN`,
-`MODULO_PROBE_SENTRY_TOKEN`, `MODULO_PROBE_SHORTCUT_TOKEN`,
-`MODULO_PROBE_SLACK_TOKEN`, `MODULO_PROBE_SNYK_TOKEN`,
-`MODULO_PROBE_SONARQUBE_TOKEN`, `MODULO_PROBE_TRELLO_KEY`,
-`MODULO_PROBE_TRELLO_TOKEN`.
+`FARNA_PROBE_ASANA_TOKEN`, `FARNA_PROBE_BITBUCKET_TOKEN`,
+`FARNA_PROBE_BUILDKITE_TOKEN`, `FARNA_PROBE_CIRCLECI_TOKEN`,
+`FARNA_PROBE_CODECLIMATE_TOKEN`, `FARNA_PROBE_DATADOG_API_KEY`,
+`FARNA_PROBE_DATADOG_APP_KEY`, `FARNA_PROBE_DISCORD_TOKEN`,
+`FARNA_PROBE_DROPBOX_TOKEN`, `FARNA_PROBE_GITHUB_TOKEN`,
+`FARNA_PROBE_GITLAB_TOKEN`, `FARNA_PROBE_LINEAR_TOKEN`,
+`FARNA_PROBE_MICROSOFT_TEAMS_TOKEN`, `FARNA_PROBE_MONDAY_TOKEN`,
+`FARNA_PROBE_NOTION_TOKEN`, `FARNA_PROBE_NPM_TOKEN`,
+`FARNA_PROBE_OPSGENIE_TOKEN`, `FARNA_PROBE_PAGERDUTY_TOKEN`,
+`FARNA_PROBE_SENTRY_TOKEN`, `FARNA_PROBE_SHORTCUT_TOKEN`,
+`FARNA_PROBE_SLACK_TOKEN`, `FARNA_PROBE_SNYK_TOKEN`,
+`FARNA_PROBE_SONARQUBE_TOKEN`, `FARNA_PROBE_TRELLO_KEY`,
+`FARNA_PROBE_TRELLO_TOKEN`.
 
 Model backends:
 
-`MODULO_PROBE_ANTHROPIC_TOKEN`, `MODULO_PROBE_COHERE_TOKEN`,
-`MODULO_PROBE_DEEPSEEK_TOKEN`, `MODULO_PROBE_FIREWORKS_TOKEN`,
-`MODULO_PROBE_GEMINI_TOKEN`, `MODULO_PROBE_GROK_TOKEN`,
-`MODULO_PROBE_GROQ_TOKEN`, `MODULO_PROBE_MISTRAL_TOKEN`,
-`MODULO_PROBE_OPENAI_TOKEN`, `MODULO_PROBE_OPENROUTER_TOKEN`,
-`MODULO_PROBE_QWEN_TOKEN`, `MODULO_PROBE_TOGETHERAI_TOKEN`.
+`FARNA_PROBE_ANTHROPIC_TOKEN`, `FARNA_PROBE_COHERE_TOKEN`,
+`FARNA_PROBE_DEEPSEEK_TOKEN`, `FARNA_PROBE_FIREWORKS_TOKEN`,
+`FARNA_PROBE_GEMINI_TOKEN`, `FARNA_PROBE_GROK_TOKEN`,
+`FARNA_PROBE_GROQ_TOKEN`, `FARNA_PROBE_MISTRAL_TOKEN`,
+`FARNA_PROBE_OPENAI_TOKEN`, `FARNA_PROBE_OPENROUTER_TOKEN`,
+`FARNA_PROBE_QWEN_TOKEN`, `FARNA_PROBE_TOGETHERAI_TOKEN`.
 
 `pypi` is public and needs no credential. A missing credential on a probe that
 **should** run fails the run unless the provider is explicitly allow-listed.
@@ -440,7 +440,7 @@ config that changes the URL and `allowed_host` together to a new host, an
 unpinned provider id, embedded URL credentials, an undeclared header env var,
 and any credential env var / header name / query-param name outside the
 provider's credential pin (including a `github` probe reading
-`MODULO_PROBE_SLACK_TOKEN`); one probe's exception does not abort the run and
+`FARNA_PROBE_SLACK_TOKEN`); one probe's exception does not abort the run and
 still writes the report; record mode rewrites only the selected provider in the
 committed format.
 

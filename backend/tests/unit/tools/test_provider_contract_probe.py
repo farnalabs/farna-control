@@ -610,8 +610,8 @@ def test_posting_provider_cannot_be_renamed_onto_a_write_endpoint(tmp_path: Path
         id="slack",
         request={"method": "POST", "url": "https://slack.com/api/chat.delete", "json": {"channel": "C1", "ts": "1"}},
         allowed_host="slack.com",
-        auth={"kind": "bearer", "env": "MODULO_PROBE_SLACK_TOKEN"},
-        env_vars=["MODULO_PROBE_SLACK_TOKEN"],
+        auth={"kind": "bearer", "env": "FARNA_PROBE_SLACK_TOKEN"},
+        env_vars=["FARNA_PROBE_SLACK_TOKEN"],
     )
     config = _write_config(tmp_path, [slack])
     with pytest.raises(probe.ProbeConfigError, match="does not match the endpoint pinned in code"):
@@ -623,8 +623,8 @@ def test_pinned_post_body_must_match_exactly(tmp_path: Path) -> None:
         id="slack",
         request={"method": "POST", "url": "https://slack.com/api/auth.test", "json": {"channel": "C1"}},
         allowed_host="slack.com",
-        auth={"kind": "bearer", "env": "MODULO_PROBE_SLACK_TOKEN"},
-        env_vars=["MODULO_PROBE_SLACK_TOKEN"],
+        auth={"kind": "bearer", "env": "FARNA_PROBE_SLACK_TOKEN"},
+        env_vars=["FARNA_PROBE_SLACK_TOKEN"],
     )
     config = _write_config(tmp_path, [slack])
     with pytest.raises(probe.ProbeConfigError, match="body"):
@@ -645,8 +645,8 @@ def test_config_cannot_redirect_a_credential_to_a_new_host(tmp_path: Path) -> No
         id="github",
         request={"method": "GET", "url": "https://evil.test/rate_limit"},
         allowed_host="evil.test",
-        auth={"kind": "bearer", "env": "MODULO_PROBE_GITHUB_TOKEN"},
-        env_vars=["MODULO_PROBE_GITHUB_TOKEN"],
+        auth={"kind": "bearer", "env": "FARNA_PROBE_GITHUB_TOKEN"},
+        env_vars=["FARNA_PROBE_GITHUB_TOKEN"],
     )
     config = _write_config(tmp_path, [github])
     with pytest.raises(probe.ProbeConfigError, match="pinned in code"):
@@ -682,8 +682,8 @@ def test_credential_pin_rejects_another_providers_env_var(tmp_path: Path) -> Non
         id="github",
         request={"method": "GET", "url": "https://api.github.com/rate_limit"},
         allowed_host="api.github.com",
-        auth={"kind": "bearer", "env": "MODULO_PROBE_SLACK_TOKEN"},
-        env_vars=["MODULO_PROBE_SLACK_TOKEN"],
+        auth={"kind": "bearer", "env": "FARNA_PROBE_SLACK_TOKEN"},
+        env_vars=["FARNA_PROBE_SLACK_TOKEN"],
     )
     config = _write_config(tmp_path, [github])
     with pytest.raises(probe.ProbeConfigError, match="not permitted for this provider"):
@@ -701,8 +701,8 @@ def test_credential_pin_rejects_an_unpinned_header_name(tmp_path: Path) -> None:
         id="github",
         request={"method": "GET", "url": "https://api.github.com/rate_limit"},
         allowed_host="api.github.com",
-        auth={"kind": "header", "env": "MODULO_PROBE_GITHUB_TOKEN", "header": "X-Slack-Only"},
-        env_vars=["MODULO_PROBE_GITHUB_TOKEN"],
+        auth={"kind": "header", "env": "FARNA_PROBE_GITHUB_TOKEN", "header": "X-Slack-Only"},
+        env_vars=["FARNA_PROBE_GITHUB_TOKEN"],
     )
     config = _write_config(tmp_path, [github])
     with pytest.raises(probe.ProbeConfigError, match="not permitted for this provider"):
@@ -714,8 +714,8 @@ def test_credential_pin_rejects_an_unpinned_query_param_name(tmp_path: Path) -> 
         id="trello",
         request={"method": "GET", "url": "https://api.trello.com/1/members/me"},
         allowed_host="api.trello.com",
-        auth={"kind": "query", "params": {"org": "MODULO_PROBE_TRELLO_KEY"}},
-        env_vars=["MODULO_PROBE_TRELLO_KEY"],
+        auth={"kind": "query", "params": {"org": "FARNA_PROBE_TRELLO_KEY"}},
+        env_vars=["FARNA_PROBE_TRELLO_KEY"],
     )
     config = _write_config(tmp_path, [trello])
     with pytest.raises(probe.ProbeConfigError, match="not permitted for this provider"):
@@ -729,7 +729,7 @@ def test_bad_header_template_is_rejected_at_load(tmp_path: Path) -> None:
 
 
 def test_form_body_is_sent(tmp_path: Path, monkeypatch: Any) -> None:
-    monkeypatch.setenv("MODULO_PROBE_MONDAY_TOKEN", "test-token")
+    monkeypatch.setenv("FARNA_PROBE_MONDAY_TOKEN", "test-token")
     # The real monday pin is a JSON body; pin a form body here so the transport
     # path for ``form`` is exercised without weakening the production pin. The
     # credential names are monday's real ones, because the credential pin is
@@ -743,8 +743,8 @@ def test_form_body_is_sent(tmp_path: Path, monkeypatch: Any) -> None:
         id="monday",
         request={"method": "POST", "url": "https://api.monday.com/v2", "form": {"query": "{ me { id } }"}},
         allowed_host="api.monday.com",
-        auth={"kind": "bearer", "env": "MODULO_PROBE_MONDAY_TOKEN"},
-        env_vars=["MODULO_PROBE_MONDAY_TOKEN"],
+        auth={"kind": "bearer", "env": "FARNA_PROBE_MONDAY_TOKEN"},
+        env_vars=["FARNA_PROBE_MONDAY_TOKEN"],
     )
     config = _write_config(tmp_path, [form_probe])
     goldens = tmp_path / "goldens.json"
@@ -974,7 +974,7 @@ def test_real_config_check_is_red_until_goldens_are_recorded(tmp_path: Path, mon
     allow list - which made this run green while probing nothing - must never
     come back.
     """
-    for name in [key for key in os.environ if key.startswith("MODULO_PROBE_")]:
+    for name in [key for key in os.environ if key.startswith("FARNA_PROBE_")]:
         monkeypatch.delenv(name)
     report = tmp_path / "report.json"
 
