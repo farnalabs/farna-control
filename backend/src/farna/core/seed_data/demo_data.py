@@ -240,7 +240,7 @@ async def seed_demo_org(
     org = await _seed_demo_org_entity(session, slug)
     # The boot seeder runs outside any request/RLS-bound session, and
     # ``org_memberships`` no longer carries a fail-open NULL arm (ADR 070 §2,
-    # migration 0365). Both steps below are pinned to (account, org), so they
+    # migration 0367). Both steps below are pinned to (account, org), so they
     # ride the explicit pre-auth bootstrap grant rather than a table-wide scan.
     async with bootstrap_read(session):
         account = await _seed_demo_admin_account(session, admin_email=admin_email, admin_password=admin_password, org=org)

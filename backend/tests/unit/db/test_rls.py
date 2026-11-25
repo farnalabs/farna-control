@@ -182,7 +182,7 @@ class TestCheckoutResetListener:
             "app.user_id",
             "app.org_role",
             "app.execution_context",
-            # ADR 070 §2 / migration 0365: the pre-auth bootstrap grant must never
+            # ADR 070 §2 / migration 0367: the pre-auth bootstrap grant must never
             # survive a pool checkout, or a later request sharing the connection
             # would inherit a four-table widening.
             "app.bootstrap_context",

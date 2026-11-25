@@ -41,7 +41,7 @@ SQLite (test-only, ADR 068) has no RLS policies at all, so both directions are a
 documented no-op there.
 
 Revision ID: 0367_scoped_bootstrap_pre_auth_policies
-Revises: 0364_rewrite_legacy_persisted_values
+Revises: 0366_onboarding_progress_rls_setting
 Create Date: 2026-11-24
 """
 

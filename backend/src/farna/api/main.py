@@ -488,7 +488,7 @@ async def _assert_no_owner_rows(settings: Settings) -> None:
     async with factory() as session, session.begin(), bootstrap_read(session):
         # A GLOBAL invariant check: it must see org_memberships rows of every
         # org, so it cannot be org-scoped. It rides the explicit pre-auth
-        # bootstrap grant (ADR 070 §2, migration 0365) — without it the guard
+        # bootstrap grant (ADR 070 §2, migration 0367) — without it the guard
         # would see zero rows and silently pass, which is exactly the fail-open
         # it exists to prevent.
         result = await session.execute(select(OrgMembership).where(OrgMembership.role == _OWNER_ROLE_LEGACY))

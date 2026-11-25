@@ -438,7 +438,7 @@ async def _run_login_transaction(
         #
         # RLS (ADR 070 §2): this read is PRE-ORG by definition — it is what
         # resolves the org — so it rides the explicit bootstrap grant around a
-        # lookup pinned to the authenticated account. Before migration 0365 the
+        # lookup pinned to the authenticated account. Before migration 0367 the
         # table's fail-open NULL arm made it work by accident.
         async with bootstrap_read(session):
             memberships = await list_memberships_for_account(session, account.id, active_only=True)

@@ -15,7 +15,7 @@ Part 1 (structural) — every table in ``pg_class`` with ``relrowsecurity`` and 
     (organisation_id = current_setting('app.organisation_id')) AND (<rest>)
 
 or the single-clause form ``organisation_id = current_setting(...)``, or — since
-migration 0365 — the scoped pre-auth form::
+migration 0367 — the scoped pre-auth form::
 
     (organisation_id = current_setting('app.organisation_id')) OR
     (current_setting('app.bootstrap_context', true) = 'true')
@@ -30,7 +30,7 @@ unless they are on the checked-in exception list.
 
 The four pre-auth tables (``oauth_clients``, ``oauth_consent_states``,
 ``org_memberships``, ``token_families``) were exceptions while their NULL arm
-stood. Migration 0365 replaced that arm with the bootstrap grant, so they left the
+stood. Migration 0367 replaced that arm with the bootstrap grant, so they left the
 exception list and are now pinned by ``_BOOTSTRAP_GRANT_TABLES``: the gate fails if
 one of them regains *any* ``IS NULL`` arm
 (``test_no_policy_regains_an_org_context_is_null_arm``), and
@@ -94,10 +94,10 @@ _EXEMPTIONS: dict[str, Exemption] = {
     "assistant_skills": Exemption(reason=_GLOBAL_ASSET, adr="ADR 070 §6 (global asset catalogue)", arm="organisation_id_is_null"),
 }
 
-# ── The four pre-auth tables that LEFT the exception list in migration 0365 ──
+# ── The four pre-auth tables that LEFT the exception list in migration 0367 ──
 # They used to carry ``(... = current_org) OR (current_org IS NULL)``, which the
 # pool-checkout reset turned into an accidental god-mode ("no context" meant
-# "every row"). 0365 replaced that arm with an explicit, transaction-scoped
+# "every row"). 0367 replaced that arm with an explicit, transaction-scoped
 # ``app.bootstrap_context = 'true'`` grant, so they are no longer exempt — they
 # are pinned here instead, and the gate fails if any of them regains an IS NULL
 # arm (``test_no_policy_regains_an_org_context_is_null_arm``).
@@ -277,7 +277,7 @@ def is_bootstrap_grant(expr: str) -> bool:
     """True when *expr* is ``current_setting('app.bootstrap_context', true) = 'true'``.
 
     This is the ONLY arm allowed to widen a pre-auth policy (ADR 070 §2,
-    migration 0365). It is an equality against the literal ``'true'``, so an
+    migration 0367). It is an equality against the literal ``'true'``, so an
     unset GUC (NULL) or the post-checkout reset value ``''`` fails closed —
     unlike an ``IS NULL`` arm, which widens precisely when no context exists.
     """
@@ -463,21 +463,38 @@ def test_every_tenant_table_policy_is_org_first(tenant_policy_census: dict[str, 
     assert not failures, "RLS policy shape gate failed:\n" + "\n".join(failures)
 
 
-def _widened_arm(predicate: str) -> str | None:
-    """Which widening arm a top-level-OR predicate carries, or None.
+def _widened_arms(predicate: str) -> set[str]:
+    """Every widening arm a top-level-OR predicate carries, order-independently.
 
-    ``bootstrap_grant`` is a named, scoped widening (migration 0365) and is
+    ``bootstrap_grant`` is a named, scoped widening (migration 0367) and is
     legitimate on ``_BOOTSTRAP_GRANT_TABLES``; the two ``*_is_null`` arms are the
     fail-open shapes this gate exists to keep out.
+
+    Every top-level OR operand is inspected, not just the trailing one: an arm in
+    a non-trailing position is still accepted by :meth:`PredicateShape.is_acceptable`
+    (it checks the whole conjunct set), so a tail-only reading would let it slip
+    past the bootstrap-grant register unrecorded.
     """
     if parse_predicate(predicate).operator != "OR":
-        return None
-    tail = _split_on_operator(_unwrap(predicate), "OR")[-1]
-    if has_is_null_arm(tail):
-        return "org_context_is_null" if _ORG_GUC.search(tail) else "organisation_id_is_null"
-    if is_bootstrap_grant(tail):
-        return "bootstrap_grant"
-    return None
+        return set()
+    arms: set[str] = set()
+    for conjunct in _split_on_operator(_unwrap(predicate), "OR"):
+        if is_org_equality(conjunct):
+            continue
+        if has_is_null_arm(conjunct):
+            arms.add("org_context_is_null" if _ORG_GUC.search(conjunct) else "organisation_id_is_null")
+        elif is_bootstrap_grant(conjunct):
+            arms.add("bootstrap_grant")
+    return arms
+
+
+def _table_widening_arms(policies: TablePolicies) -> set[str]:
+    """Union of widening arms across every predicate of every policy on a table."""
+    arms: set[str] = set()
+    for policy in policies.policies:
+        for predicate in policy.predicates():
+            arms |= _widened_arms(predicate)
+    return arms
 
 
 def test_exemptions_are_real_and_current(tenant_policy_census: dict[str, TablePolicies]) -> None:
@@ -497,11 +514,11 @@ def test_exemptions_are_real_and_current(tenant_policy_census: dict[str, TablePo
         if policies is None:
             problems.append(f"{table}: exempted but not an RLS tenant table")
             continue
-        found = {_widened_arm(predicate) for policy in policies.policies for predicate in policy.predicates()}
+        found = _table_widening_arms(policies)
         if not found:
             problems.append(f"{table}: exempted but has no policy predicate at all")
         elif exemption.arm not in found:
-            problems.append(f"{table}: exemption arm {exemption.arm!r} is no longer present (found {sorted(arm for arm in found if arm)}); the exemption is stale — remove it")
+            problems.append(f"{table}: exemption arm {exemption.arm!r} is no longer present (found {sorted(found)}); the exemption is stale — remove it")
     assert not problems, "exception list is out of date:\n" + "\n".join(problems)
 
 
@@ -515,9 +532,9 @@ def test_global_asset_tables_keep_their_named_null_arm(tenant_policy_census: dic
     """
     offenders: dict[str, list[str]] = {}
     for table, policies in sorted(tenant_policy_census.items()):
-        arms = {_widened_arm(predicate) for policy in policies.policies for predicate in policy.predicates()}
+        arms = _table_widening_arms(policies)
         if "organisation_id_is_null" in arms and table not in _REQUIRED_EXEMPTIONS:
-            offenders[table] = sorted(arm for arm in arms if arm)
+            offenders[table] = sorted(arms)
     assert not offenders, f"only the named global-asset catalogue may carry an organisation_id IS NULL arm; found {offenders}"
 
 
@@ -534,7 +551,7 @@ def test_no_policy_regains_an_org_context_is_null_arm(tenant_policy_census: dict
 
     The pool-checkout reset writes ``app.organisation_id = ''`` and
     ``NULLIF('','')`` is NULL, so that arm means "any unbound session reads every
-    row". Migration 0365 removed the last four (and with them the four exception
+    row". Migration 0367 removed the last four (and with them the four exception
     entries); this test is the tripwire that fails if any of them — or any other
     table — regains it, whatever the exemption list says.
 
@@ -547,7 +564,7 @@ def test_no_policy_regains_an_org_context_is_null_arm(tenant_policy_census: dict
     for table, policies in sorted(tenant_policy_census.items()):
         for policy in policies.policies:
             for predicate in policy.predicates():
-                if _widened_arm(predicate) == "org_context_is_null":
+                if "org_context_is_null" in _widened_arms(predicate):
                     offenders.setdefault(table, []).append(f"{policy.name}: {predicate}")
     assert not offenders, "fail-open org-context arm regained (ADR 070 §2 forbids it; use app.bootstrap_context instead):\n" + "\n".join(f"{table}: {rows}" for table, rows in offenders.items())
 
@@ -562,7 +579,7 @@ def test_bootstrap_grant_tables_use_the_scoped_arm(tenant_policy_census: dict[st
     problems: list[str] = []
     carrying: set[str] = set()
     for table, policies in sorted(tenant_policy_census.items()):
-        arms = {_widened_arm(predicate) for policy in policies.policies for predicate in policy.predicates()}
+        arms = _table_widening_arms(policies)
         if "bootstrap_grant" in arms:
             carrying.add(table)
         expected = table in _BOOTSTRAP_GRANT_TABLES
@@ -637,7 +654,7 @@ _BOOTSTRAP_ARM = "(current_setting('app.bootstrap_context'::text, true) = 'true'
 @pytest.mark.parametrize(
     ("predicate", "acceptable", "bootstrap_grant"),
     [
-        # The 0365 scoped pre-auth shape — the ONLY widening this gate allows.
+        # The 0367 scoped pre-auth shape — the ONLY widening this gate allows.
         (f"({_ORG_ARM} OR {_BOOTSTRAP_ARM})", True, True),
         # Operand order is irrelevant to the invariant.
         (f"({_ORG_ARM} OR ('true'::text = current_setting('app.bootstrap_context'::text, true)))", True, True),
@@ -677,6 +694,51 @@ def test_parser_accepts_only_the_scoped_bootstrap_widening(predicate: str, accep
     shape = parse_predicate(predicate)
     assert shape.is_acceptable() is acceptable
     assert shape.bootstrap_grant is bootstrap_grant
+
+
+@pytest.mark.parametrize(
+    ("predicate", "expected_arms"),
+    [
+        # Bootstrap arm in the TRAILING position (the shape the schema ships).
+        (f"({_ORG_ARM} OR {_BOOTSTRAP_ARM})", {"bootstrap_grant"}),
+        # Bootstrap arm in the LEADING position: still acceptable, so a tail-only
+        # reading would accept it yet fail to record the grant.
+        (f"({_BOOTSTRAP_ARM} OR {_ORG_ARM})", {"bootstrap_grant"}),
+        # Bootstrap arm in a non-trailing position of a three-arm OR.
+        (f"({_ORG_ARM} OR {_BOOTSTRAP_ARM} OR {_BOOTSTRAP_ARM})", {"bootstrap_grant"}),
+        # Fail-open arms are recorded wherever they sit.
+        (
+            f"({_ORG_ARM} OR (NULLIF(current_setting('app.organisation_id'::text, true), ''::text) IS NULL) OR {_ORG_ARM})",
+            {"org_context_is_null"},
+        ),
+        (f"({_ORG_ARM} OR (organisation_id IS NULL))", {"organisation_id_is_null"}),
+        # An arm that is neither the org equality, an IS NULL test nor a bootstrap
+        # grant contributes no widening arm (it is rejected elsewhere).
+        (f"({_ORG_ARM} OR true)", set()),
+        # The plain org-scoped form carries no widening arm.
+        (_ORG_ARM, set()),
+        # A non-OR predicate carries no widening arm.
+        (f"({_ORG_ARM} AND {_BOOTSTRAP_ARM})", set()),
+    ],
+    ids=[
+        "bootstrap-trailing",
+        "bootstrap-leading",
+        "bootstrap-middle",
+        "org-context-is-null-middle",
+        "organisation-id-is-null-trailing",
+        "always-true-arm-no-widening",
+        "plain-org-equality",
+        "and-predicate",
+    ],
+)
+def test_widened_arms_are_recorded_order_independently(predicate: str, expected_arms: set[str]) -> None:
+    """Every widening arm is recorded, not just the trailing OR operand.
+
+    The bootstrap-grant register in ``test_bootstrap_grant_tables_use_the_scoped_arm``
+    relies on this: an arm in a non-trailing position must still be seen, or a
+    table outside the reviewed list could carry the grant undetected.
+    """
+    assert _widened_arms(predicate) == expected_arms
 
 
 # ---------------------------------------------------------------------------

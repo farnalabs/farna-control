@@ -32,7 +32,7 @@ _TENANT_COLUMN = "organisation_id"
 # The RLS GUC names the pool-checkout reset hook clears. Module-level constant
 # so any consumer of the hook is validated against one authoritative set.
 #
-# ``app.bootstrap_context`` (ADR 070 §2/§3, migration 0365) is the pre-auth
+# ``app.bootstrap_context`` (ADR 070 §2/§3, migration 0367) is the pre-auth
 # grant for the four tables a legitimate flow must read BEFORE any organisation
 # is known (oauth_clients, oauth_consent_states, org_memberships,
 # token_families). It lives here for the same reason as
@@ -309,7 +309,7 @@ async def set_rls_bootstrap_context(session: AsyncSession) -> None:
     pool-checkout reset turns into ``NULLIF('','') IS NULL`` — i.e. *any*
     unbound session read *every* row. "No context" must not mean "everything".
 
-    Migration 0365 replaces that NULL arm with an explicit arm on THIS GUC, so
+    Migration 0367 replaces that NULL arm with an explicit arm on THIS GUC, so
     a pre-context read only succeeds when the caller has said, in so many
     words, that it is performing a pinned bootstrap lookup.
 

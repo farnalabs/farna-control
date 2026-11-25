@@ -155,7 +155,7 @@ async def _get_membership_role(
     org_id: uuid.UUID,
 ) -> str | None:
     # ``org_memberships`` is org-scoped and carries no NULL-context arm since
-    # ADR 070 §2 / migration 0365, so this verification read must bind the org it
+    # ADR 070 §2 / migration 0367, so this verification read must bind the org it
     # is asking about (the JIT write itself is already org-scoped). Without the
     # binding an unbound NON-superuser session reads zero rows — which is the
     # fail-closed behaviour this suite's ``app_engine`` now enforces.

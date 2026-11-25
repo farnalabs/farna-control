@@ -523,7 +523,7 @@ async def _verify_identity(principal: AuthenticatedPrincipal) -> str | None:
             # context exists yet; the claim is signed (and the org row was just
             # proved to exist), so scoping to it is strictly NARROWER than the
             # fail-open NULL arm the table used to carry — and it keeps the
-            # live-role read working after migration 0365 removes that arm.
+            # live-role read working after migration 0367 removes that arm.
             await set_rls_org(session, principal.organisation_id)
             live_role = await resolve_role_from_membership(
                 session,

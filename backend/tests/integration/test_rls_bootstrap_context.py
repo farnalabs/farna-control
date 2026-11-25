@@ -9,7 +9,7 @@ pool-checkout reset writes ``app.organisation_id = ''`` — so ``NULLIF('','')``
 NULL and **any unbound session read every row of all four tables**. That is an
 accidental god-mode, not a scoped read.
 
-Migration 0365 replaces the NULL arm with an explicit arm on
+Migration 0367 replaces the NULL arm with an explicit arm on
 ``app.bootstrap_context``. This module proves, against real Postgres as a
 NON-superuser role (RLS does not apply to superusers), that:
 
@@ -48,7 +48,7 @@ from farna.db.rls import (
 
 pytestmark = pytest.mark.integration
 
-#: The four tables migration 0365 re-scoped, with the exact primary key each
+#: The four tables migration 0367 re-scoped, with the exact primary key each
 #: pre-auth lookup pins (``test_rls_policy_gate._BOOTSTRAP_GRANT_TABLES``).
 _TABLES: dict[str, str] = {
     "oauth_clients": "client_id",
@@ -188,7 +188,7 @@ async def test_no_context_reads_zero_rows(
 ) -> None:
     """An unbound session must see NOTHING in any of the four tables.
 
-    Before migration 0365 this same probe returned all four rows (both orgs): the
+    Before migration 0367 this same probe returned all four rows (both orgs): the
     fail-open ``current_setting(...) IS NULL`` arm matched once the pool-checkout
     reset had written ``''``. This is the assertion that flips.
     """

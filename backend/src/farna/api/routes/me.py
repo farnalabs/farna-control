@@ -269,7 +269,7 @@ async def change_password(
             # leave cross-org families live, a token-invalidation gap. That
             # cross-org access is now an EXPLICIT, narrow grant: the reads and
             # writes are pinned to ``account_id`` and wrapped in the pre-auth
-            # bootstrap context (ADR 070 §2, migration 0365). Before 0365 the
+            # bootstrap context (ADR 070 §2, migration 0367). Before 0367 the
             # same behaviour came from the table's fail-open NULL arm.
             account_record = await get_account_by_id(session, current_user.account_id)
             account = _require_human_account(account_record)

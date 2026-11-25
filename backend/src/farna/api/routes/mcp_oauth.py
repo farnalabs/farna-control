@@ -653,7 +653,7 @@ async def _query_pending_consent_state(session: AsyncSession, state: str) -> OAu
     Deliberately a plain SELECT (no ``consume`` side effect) so the browser can
     render the grant set before the human decides. RLS note: this read runs
     BEFORE any org context is known (the org is a column OF this row), so it
-    rides the explicit bootstrap grant (ADR 070 §2, migration 0365) around the
+    rides the explicit bootstrap grant (ADR 070 §2, migration 0367) around the
     exact-key (``state``) lookup — never a table-wide scan. Until that migration
     the table relied on the fail-open ``current_setting(...) IS NULL`` arm.
     """

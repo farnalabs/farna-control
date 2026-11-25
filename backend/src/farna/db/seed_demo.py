@@ -3241,7 +3241,7 @@ async def seed_demo(session: AsyncSession) -> str | None:
     # Org/account/membership writes follow the boot-seed pattern (system
     # context, no org RLS) used by _seed_modulo_users / seed_demo_org. The
     # ``org_memberships`` touches therefore ride the explicit pre-auth bootstrap
-    # grant (ADR 070 §2, migration 0365) — the demo org is not bound yet, and the
+    # grant (ADR 070 §2, migration 0367) — the demo org is not bound yet, and the
     # stray-membership scan below is deliberately CROSS-ORG. Both are pinned to
     # ``account_id`` (+ the demo org), never a table-wide scan.
     async with bootstrap_read(session):
