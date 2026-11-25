@@ -109,14 +109,12 @@ const primeSize = computed(() => (props.size === 'sm' ? 'small' : undefined))
 const hasDefaultSlot = computed(() => !!slots.default)
 const isIconOnly = computed(() => !!props.icon && !props.label && !hasDefaultSlot.value)
 
-// A caller may pass `aria-label` directly (several pre-adoption sites do); it
-// must survive adoption, so resolve it here rather than overwriting it with an
-// undefined prop.
-const resolvedAriaLabel = computed(() => {
-  if (props.ariaLabel) return props.ariaLabel
-  const passthrough = attrs['aria-label']
-  return typeof passthrough === 'string' ? passthrough : undefined
-})
+// A caller may pass `aria-label` directly (several pre-adoption sites do). Vue
+// matches that kebab-case attribute to this camelCase `ariaLabel` prop, so it
+// always arrives as `props.ariaLabel` - there is no separate attrs fallback, and
+// binding it here stops an undefined value from overwriting the name PrimeVue
+// derives from `label`.
+const resolvedAriaLabel = computed(() => props.ariaLabel)
 
 // Bind `type` and `aria-label` only when they have a value. Passing an explicit
 // `undefined` to PrimeVue would overwrite the defaults it renders itself

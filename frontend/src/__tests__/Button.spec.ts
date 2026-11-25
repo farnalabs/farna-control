@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { defineComponent } from 'vue'
 
 import Button from '../components/ui/Button.vue'
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
 })
 
@@ -104,12 +106,23 @@ describe('Button', () => {
   })
 
   it('honours an aria-label passed directly by a call site', () => {
-    const wrapper = mount(Button, {
-      props: { label: 'Copy' },
-      attrs: { 'aria-label': 'Copy password' },
+    const CallSite = defineComponent({
+      components: { UiButton: Button },
+      template: '<UiButton label="Copy" aria-label="Copy password" />',
     })
 
-    expect(wrapper.attributes('aria-label')).toBe('Copy password')
+    const wrapper = mount(CallSite)
+
+    expect(wrapper.findComponent(Button).attributes('aria-label')).toBe('Copy password')
+  })
+
+  it('does not warn in a production build, even for an unnamed icon-only button', () => {
+    vi.stubEnv('DEV', false)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    mount(Button, { props: { icon: 'pi pi-plus' } })
+
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it('keeps the PrimeVue type behaviour: a plain button is type="button" and submit passes through', () => {
