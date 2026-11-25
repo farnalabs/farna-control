@@ -158,7 +158,14 @@ operator-facing contract lives in `docs/operations/backup.md`.
       `farna-control restore` into a second empty database, asserts the seeded
       rows and checkpoint rows survived, re-asserts the app role is
       `NOBYPASSRLS` with its grants, then proves `alembic downgrade -1` moves off
-      head and `alembic upgrade heads` returns to head with the data intact.
+      head and `alembic upgrade heads` returns to head with the data intact. It
+      also restores a pre-upgrade snapshot over a FORWARD-migrated schema: the
+      source is stepped back one revision and snapshotted there (so the dump's
+      schema state is one revision behind the head this binary declares),
+      migrated forward again and given the object a later release's migration
+      would add (an FK onto the existing `organisations` primary key), and the
+      restore must replay, return the snapshot's revision and data, and drop the
+      drift (FAR-2763).
       The script refuses a cluster-wide role reset unless its target is provably
       scratch or `--allow-role-reset` is passed
       (`scripts/verify_backup_restore.py`, `.github/workflows/backup-restore-nightly.yml`).
