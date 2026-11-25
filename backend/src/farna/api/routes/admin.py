@@ -1720,8 +1720,13 @@ async def admin_deactivate_user(
     # expire_on_commit off) a plain re-SELECT would return the same stale
     # identity-map instance. is_active must reflect the caller's-org tombstone
     # (gh-1794/FAR-533). With autobegin=False (production session config),
-    # explicitly begin a transaction for the refresh.
+    # explicitly begin a transaction for the refresh. That new transaction
+    # starts WITHOUT the org GUC (set_config is transaction-local), and 0367
+    # fail-closes org_memberships with no context — so re-establish the org
+    # scope or the refresh SELECT matches zero rows and raises
+    # InvalidRequestError.
     async with session.begin():
+        await set_rls_org(session, current_user.organisation_id)
         await session.refresh(membership)
     return _to_user_list_item(account, org_role, org_membership=membership)
 
@@ -1823,8 +1828,13 @@ async def admin_reactivate_user(
     # UPDATE does not refresh the in-session ORM object (same identity-map
     # caveat as the deactivate route). is_active must reflect the caller's-org
     # state (gh-1794/FAR-533). With autobegin=False (production session config),
-    # explicitly begin a transaction for the refresh.
+    # explicitly begin a transaction for the refresh. That new transaction
+    # starts WITHOUT the org GUC (set_config is transaction-local), and 0367
+    # fail-closes org_memberships with no context — so re-establish the org
+    # scope or the refresh SELECT matches zero rows and raises
+    # InvalidRequestError.
     async with session.begin():
+        await set_rls_org(session, current_user.organisation_id)
         await session.refresh(membership)
     return _to_user_list_item(account, org_role, org_membership=membership)
 
