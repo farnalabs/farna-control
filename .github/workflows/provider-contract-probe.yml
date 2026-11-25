@@ -1,0 +1,175 @@
+name: "Provider contract probe (nightly)"
+
+# FAR-2703. Mocks and cassettes prove our code against a frozen assumption;
+# nothing else in the suite detects that a PROVIDER changed. This nightly job
+# makes a cheap, read-only call to every *recorded* connector / model backend
+# and diffs the response SHAPE against the committed golden in
+# contract-goldens/provider-shapes.json. Drift fails the job before a customer
+# notices.
+#
+# Read-only: scripts/provider_contract_probe.py never issues a write (GET/HEAD,
+# plus read-only POSTs pinned in code to their exact URL and body). Each
+# provider id is pinned in code to its host (PROVIDER_HOST_PINS) and to the
+# exact credential env vars / header / query-param names it may read
+# (PROVIDER_CREDENTIAL_PINS), so a config edit can neither redirect a credential
+# nor make one provider's probe read another provider's secret.
+#
+# Fail-closed: a golden that has not been recorded live, a missing golden, or a
+# missing credential FAILS the run. Nothing is excused in the committed config -
+# the goldens are hand-authored and not yet recorded - so this job is
+# DELIBERATELY RED until each golden is recorded live behind review. That red
+# state is the honest one: a shape nobody has verified against the live provider
+# proves nothing. A run that attempts zero probes also fails, so an all-skipped
+# run can never look green.
+#
+# The JSON report is uploaded as an artifact on every run, including failures,
+# so a drift can be triaged without re-running.
+
+on:
+  schedule:
+    - cron: "15 4 * * *" # 04:15 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-contract-probe-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Live provider contract probe
+    runs-on: ubicloud-standard-2
+    # 25-minute in-script deadline (defaults.deadline_seconds) plus install and
+    # report upload. The step budget must exceed the script's own deadline, or
+    # the runner kills the job before the probe can write its failure report.
+    timeout-minutes: 35
+    # Minimal for the job: checkout reads the tree, and the drift step below
+    # needs to open/comment on an issue with the workflow token.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install backend dependencies
+        # The backend lockfile pins source-archive deps (pytest-bdd, ibm-cos-sdk),
+        # so `--no-build` would hard-fail the sync. `--frozen` pins exact
+        # revisions, so the build is deterministic and trusted. The shared
+        # wrapper retries the codeload CDN flake those archives hit.
+        #
+        # GITHUB_TOKEN is scoped to THIS STEP ONLY: it authenticates the git
+        # fetches `uv sync --frozen` makes for git-pinned deps. It is never in
+        # workflow-level env, so no later step or third-party action can read
+        # it, and the step-scoped env is discarded when the step ends.
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/.insteadOf'
+          GIT_CONFIG_VALUE_0: "https://github.com/"
+        run: bash scripts/uv_sync_with_retry.sh --frozen --project backend  # NOSONAR githubactions:S8541: backend lockfile pins source-archive deps; --frozen pins exact revisions so builds are deterministic.
+
+      - name: Probe live provider contracts
+        timeout-minutes: 30
+        env:
+          FARNA_PROBE_ASANA_TOKEN: ${{ secrets.FARNA_PROBE_ASANA_TOKEN }}
+          FARNA_PROBE_BITBUCKET_TOKEN: ${{ secrets.FARNA_PROBE_BITBUCKET_TOKEN }}
+          FARNA_PROBE_BUILDKITE_TOKEN: ${{ secrets.FARNA_PROBE_BUILDKITE_TOKEN }}
+          FARNA_PROBE_CIRCLECI_TOKEN: ${{ secrets.FARNA_PROBE_CIRCLECI_TOKEN }}
+          FARNA_PROBE_CODECLIMATE_TOKEN: ${{ secrets.FARNA_PROBE_CODECLIMATE_TOKEN }}
+          FARNA_PROBE_DATADOG_API_KEY: ${{ secrets.FARNA_PROBE_DATADOG_API_KEY }}
+          FARNA_PROBE_DATADOG_APP_KEY: ${{ secrets.FARNA_PROBE_DATADOG_APP_KEY }}
+          FARNA_PROBE_DISCORD_TOKEN: ${{ secrets.FARNA_PROBE_DISCORD_TOKEN }}
+          FARNA_PROBE_DROPBOX_TOKEN: ${{ secrets.FARNA_PROBE_DROPBOX_TOKEN }}
+          FARNA_PROBE_GITHUB_TOKEN: ${{ secrets.FARNA_PROBE_GITHUB_TOKEN }}
+          FARNA_PROBE_GITLAB_TOKEN: ${{ secrets.FARNA_PROBE_GITLAB_TOKEN }}
+          FARNA_PROBE_LINEAR_TOKEN: ${{ secrets.FARNA_PROBE_LINEAR_TOKEN }}
+          FARNA_PROBE_MICROSOFT_TEAMS_TOKEN: ${{ secrets.FARNA_PROBE_MICROSOFT_TEAMS_TOKEN }}
+          FARNA_PROBE_MONDAY_TOKEN: ${{ secrets.FARNA_PROBE_MONDAY_TOKEN }}
+          FARNA_PROBE_NOTION_TOKEN: ${{ secrets.FARNA_PROBE_NOTION_TOKEN }}
+          FARNA_PROBE_NPM_TOKEN: ${{ secrets.FARNA_PROBE_NPM_TOKEN }}
+          FARNA_PROBE_OPSGENIE_TOKEN: ${{ secrets.FARNA_PROBE_OPSGENIE_TOKEN }}
+          FARNA_PROBE_PAGERDUTY_TOKEN: ${{ secrets.FARNA_PROBE_PAGERDUTY_TOKEN }}
+          FARNA_PROBE_SENTRY_TOKEN: ${{ secrets.FARNA_PROBE_SENTRY_TOKEN }}
+          FARNA_PROBE_SHORTCUT_TOKEN: ${{ secrets.FARNA_PROBE_SHORTCUT_TOKEN }}
+          FARNA_PROBE_SLACK_TOKEN: ${{ secrets.FARNA_PROBE_SLACK_TOKEN }}
+          FARNA_PROBE_SNYK_TOKEN: ${{ secrets.FARNA_PROBE_SNYK_TOKEN }}
+          FARNA_PROBE_SONARQUBE_TOKEN: ${{ secrets.FARNA_PROBE_SONARQUBE_TOKEN }}
+          FARNA_PROBE_TRELLO_KEY: ${{ secrets.FARNA_PROBE_TRELLO_KEY }}
+          FARNA_PROBE_TRELLO_TOKEN: ${{ secrets.FARNA_PROBE_TRELLO_TOKEN }}
+          FARNA_PROBE_ANTHROPIC_TOKEN: ${{ secrets.FARNA_PROBE_ANTHROPIC_TOKEN }}
+          FARNA_PROBE_COHERE_TOKEN: ${{ secrets.FARNA_PROBE_COHERE_TOKEN }}
+          FARNA_PROBE_DEEPSEEK_TOKEN: ${{ secrets.FARNA_PROBE_DEEPSEEK_TOKEN }}
+          FARNA_PROBE_FIREWORKS_TOKEN: ${{ secrets.FARNA_PROBE_FIREWORKS_TOKEN }}
+          FARNA_PROBE_GEMINI_TOKEN: ${{ secrets.FARNA_PROBE_GEMINI_TOKEN }}
+          FARNA_PROBE_GROK_TOKEN: ${{ secrets.FARNA_PROBE_GROK_TOKEN }}
+          FARNA_PROBE_GROQ_TOKEN: ${{ secrets.FARNA_PROBE_GROQ_TOKEN }}
+          FARNA_PROBE_MISTRAL_TOKEN: ${{ secrets.FARNA_PROBE_MISTRAL_TOKEN }}
+          FARNA_PROBE_OPENAI_TOKEN: ${{ secrets.FARNA_PROBE_OPENAI_TOKEN }}
+          FARNA_PROBE_OPENROUTER_TOKEN: ${{ secrets.FARNA_PROBE_OPENROUTER_TOKEN }}
+          FARNA_PROBE_QWEN_TOKEN: ${{ secrets.FARNA_PROBE_QWEN_TOKEN }}
+          FARNA_PROBE_TOGETHERAI_TOKEN: ${{ secrets.FARNA_PROBE_TOGETHERAI_TOKEN }}
+        run: >-
+          uv run --project backend --no-sync --no-build
+          python scripts/provider_contract_probe.py
+          --mode check
+          --report contract-goldens/report.json
+
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: provider-contract-report
+          path: contract-goldens/report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      # A real drift otherwise surfaces only as a red scheduled run and an
+      # artifact nobody opens. Raise a de-duplicated issue carrying the report
+      # summary, and refresh that same issue on every later failing night.
+      #
+      # The body is built by scripts/provider_contract_probe_report.py, not by an
+      # inline heredoc: the heredoc's bootstrap predicate once classified a real
+      # `error` row (a probe that errored without issuing a request, e.g. a
+      # malformed golden) as the expected bootstrap red and suppressed the issue.
+      # As a module it is unit-tested; a heredoc cannot be.
+      #
+      # The deliberate bootstrap state still raises nothing: with no golden
+      # recorded yet the run has zero attempts, no errors and no unavailable
+      # probes, and every skip is "not yet recorded", so the red is expected and
+      # must not page every night until goldens are recorded behind review. The
+      # script answers with an empty body file in exactly that state and with a
+      # body for every other failure.
+      - name: Open or refresh the drift issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPORT: contract-goldens/report.json
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body_file="$(mktemp)"
+          python3 scripts/provider_contract_probe_report.py "${REPORT}" "${body_file}" "${RUN_URL}"
+          if [ ! -s "${body_file}" ]; then
+            echo "no golden recorded yet (expected bootstrap red) - not raising an issue"
+            exit 0
+          fi
+          title="[provider-contract-probe] nightly drift"
+          existing="$(gh issue list --search "in:title provider-contract-probe" --state open --json number --jq '.[0].number // ""')"
+          if [ -n "${existing}" ]; then
+            gh issue comment "${existing}" --body-file "${body_file}"
+            echo "refreshed existing drift issue #${existing}"
+          else
+            gh issue create --title "${title}" --body-file "${body_file}" --label "bug"
+            echo "opened a new drift issue"
+          fi

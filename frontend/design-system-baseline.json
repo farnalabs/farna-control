@@ -46,7 +46,7 @@
     "frontend/src/views/OnboardingWizard.vue": 4,
     "frontend/src/views/ParameterSchemasView.vue": 5,
     "frontend/src/views/PipelineEditorView.vue": 6,
-    "frontend/src/views/RunDetailView.vue": 12,
+    "frontend/src/views/RunDetailView.vue": 10,
     "frontend/src/views/SettingsGuardrailsView.vue": 1,
     "frontend/src/views/SettingsHitlReviewView.vue": 3,
     "frontend/src/views/SettingsMcpView.vue": 1,
