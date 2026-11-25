@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import AssistantOnlyView from '../views/AssistantOnlyView.vue'
+import StateTabs from '../components/shared/StateTabs.vue'
 import { useAssistantStore } from '../composables/useAssistantStore'
 import { useAssistantTabsStore } from '../composables/useAssistantTabsStore'
 import { api } from '@/lib/api/client'
@@ -327,5 +328,39 @@ describe('AssistantOnlyView', () => {
     await nextTick()
 
     expect(wrapper.find('[data-testid="assistant-only-tab-tab-1"]').text()).toContain('Session #1')
+  })
+
+  it('ignores sub-tab and session-tab ids that are not in the current state', async () => {
+    localStorage.setItem('assistant-active-session', 'session-1')
+    ;(api.GET as any).mockResolvedValue({ error: null, data: { items: [makeSession('session-1', 'Alpha')], total: 1 } })
+    const tabsStore = useAssistantTabsStore()
+    tabsStore.tabs.push({ tabId: 'tab-1', sessionId: 'session-1' })
+    const wrapper = mount(AssistantOnlyView)
+    await flushPromises()
+    await nextTick()
+
+    const resumeSpy = vi.spyOn(tabsStore, 'resumeTab').mockResolvedValue(undefined)
+    const closeSpy = vi.spyOn(tabsStore, 'closeTab')
+    const vm = wrapper.vm as unknown as { subTab: string }
+    vm.subTab = 'skills'
+    await nextTick()
+
+    const [sessionBar, subBar] = wrapper.findAllComponents(StateTabs)
+
+    // An unknown sub-tab id is not a declared key, so the selection is ignored.
+    subBar.vm.$emit('update:modelValue', 'not-a-sub-tab')
+    await nextTick()
+    expect(vm.subTab).toBe('skills')
+
+    // An unknown session-tab id matches no open tab, so nothing is resumed.
+    sessionBar.vm.$emit('update:modelValue', 'tab-unknown')
+    await nextTick()
+    expect(resumeSpy).not.toHaveBeenCalled()
+
+    // A close for a tab that has already left the store is ignored.
+    const closeButton = wrapper.get('[data-testid="assistant-only-tab-close-tab-1"]')
+    tabsStore.tabs.splice(0, tabsStore.tabs.length)
+    await closeButton.trigger('click')
+    expect(closeSpy).not.toHaveBeenCalled()
   })
 })
