@@ -3263,15 +3263,22 @@ jobs:
             fi
           } >> "$NOTES_FILE"
 
+          # Two inventories, and the split is the replacement order for a recut:
+          # ASSETS holds every portable/binary artefact (openapi.json included),
+          # MANIFEST_ASSETS holds the checksum + manifest + signature trio, so
+          # the trio is written LAST: the manifest after every artefact it
+          # covers and its signature after the manifest, so a VERIFIABLE
+          # manifest can only exist once the replacement of every covered asset
+          # has landed. RELEASE_MANIFEST.json is built before this step and
+          # excludes openapi.json (generated later in the publish job), so
+          # openapi.json is covered by neither the manifest nor SHA256SUMS; the
+          # verification step proves it by published byte size only.
           ASSETS=(
               "release-artefacts/farna-control-${VERSION}-linux-amd64.tar.gz"
              "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg"
              "release-artefacts/FarnaControl-${VERSION}-macos-x86_64.dmg"
              "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
             "release-artefacts/farna-control_${VERSION}_amd64.deb"
-            "release-artefacts/SHA256SUMS"
-            "release-artefacts/RELEASE_MANIFEST.json"
-            "release-artefacts/RELEASE_MANIFEST.json.sig"
             "release-artefacts/openapi.json"
           )
           # RELEASE_MANIFEST.json + .sig are required by native-release-smoke.yml
@@ -3279,7 +3286,20 @@ jobs:
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
             ASSETS+=("release-artefacts/farna-control-${VERSION}-windows-amd64.exe")
           fi
-          for asset in "${ASSETS[@]}"; do
+          MANIFEST_ASSETS=(
+            "release-artefacts/SHA256SUMS"
+            "release-artefacts/RELEASE_MANIFEST.json"
+            "release-artefacts/RELEASE_MANIFEST.json.sig"
+          )
+          # The post-upload verification reads this exact inventory, so it proves
+          # what THIS run uploaded rather than a second, hand-maintained list
+          # that could drift away from the upload.
+          EXPECTED_ASSETS_FILE="${RUNNER_TEMP}/expected-release-assets.txt"
+          : > "$EXPECTED_ASSETS_FILE"
+          for asset in "${ASSETS[@]}" "${MANIFEST_ASSETS[@]}"; do
+            basename "$asset" >> "$EXPECTED_ASSETS_FILE"
+          done
+          for asset in "${ASSETS[@]}" "${MANIFEST_ASSETS[@]}"; do
             if [ ! -f "$asset" ]; then
               echo "::error::Expected release asset ${asset} is missing - refusing to publish an incomplete release."
               exit 1
@@ -3311,15 +3331,51 @@ jobs:
             PUBLISH_ARGS=(--prerelease=false --latest=false)
           fi
 
-          # NEVER --clobber an existing asset: a replaced release artifact
-          # invalidates every verify-against-the-manifest already downloaded.
-          # An existing release gets an upload (which fails loudly on an
-          # existing asset); a new one is created with its assets atomically.
+          # A first publish never clobbers: `gh release create` writes every
+          # asset exactly once, atomically, so there is no window where the
+          # public artefact is missing or stale.
+          #
+          # A recut of a version that already published a bundle must REPLACE
+          # its assets instead of refusing (FAR-2789): publication is idempotent
+          # so the documented recovery path needs no manual deletion. The
+          # release is never deleted or hidden - the public artefact stays
+          # visible throughout - and assets are replaced in the same order the
+          # create uploads them: the portable/binary set, then SHA256SUMS, then
+          # RELEASE_MANIFEST.json, then its signature LAST. The manifest covers
+          # every asset except openapi.json (which it predates and which the
+          # verification step checks by byte size only), and the signature
+          # covers the manifest, so a verifiable manifest can only exist once
+          # the replacement of every manifest-covered asset has landed - an
+          # interrupted recut fails verification rather than certifying a
+          # half-replaced release - and the verification step after this one
+          # proves the published assets and signature before the job passes.
+          #
+          # The replaced comment ("NEVER --clobber an existing asset") was right
+          # for a first publish and wrong for a same-version recut, where
+          # refusing left deleting the published release as the only way out.
           RELEASE_TITLE="Farna Control ${RC_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::warning::release ${TAG} already exists - uploading assets without clobbering"
+            echo "::warning::release ${TAG} already exists - replacing its assets in place (idempotent recut)"
             gh release edit "$TAG" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" "${PUBLISH_ARGS[@]}"
-            gh release upload "$TAG" "${ASSETS[@]}"
+            # A recut can SHRINK the inventory: the Windows installer is the
+            # only conditional asset, so a recut with INCLUDE_WINDOWS=false of a
+            # version first published with Windows support would otherwise leave
+            # the stale .exe behind and fail the post-upload "unexpected asset"
+            # check with no way forward. Reconcile the one known-dropped asset
+            # explicitly by removing it before the replacement upload. Any other
+            # asset not in this run's inventory stays a hard failure.
+            WINDOWS_ASSET="farna-control-${VERSION}-windows-amd64.exe"
+            if [ "$INCLUDE_WINDOWS" != "true" ] \
+              && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
+                | grep -qxF "$WINDOWS_ASSET"; then
+              gh release delete-asset "$TAG" "$WINDOWS_ASSET" --repo "$GITHUB_REPOSITORY" --yes
+              echo "::warning::removed ${WINDOWS_ASSET} from ${TAG}: this recut was built without Windows support"
+            fi
+            gh release upload "$TAG" "${ASSETS[@]}" \
+              --clobber
+            for manifest_asset in "${MANIFEST_ASSETS[@]}"; do
+              gh release upload "$TAG" "$manifest_asset" --clobber
+            done
           else
             # --target pins the tag to the checked-out RC commit instead of
             # relying on the repository default branch happening to be there.
@@ -3328,7 +3384,125 @@ jobs:
               --notes-file "$NOTES_FILE" \
               --target "$(git rev-parse HEAD)" \
               "${PUBLISH_ARGS[@]}" \
-              "${ASSETS[@]}"
+              "${ASSETS[@]}" \
+              "${MANIFEST_ASSETS[@]}"
+          fi
+
+      - name: Verify the published release assets and manifest signature
+        # FAR-2789: a recut replaces assets in place, so the publication must be
+        # proven, not assumed. Every asset this run intended to publish must be
+        # on the release with the local byte size, and the PUBLISHED manifest
+        # and signature must verify under the checked-in trust store against
+        # those local bytes. This runs for a first publish too: the check that
+        # makes a recut safe also proves a create dropped nothing.
+        # Every asset this run uploaded must be present. The published set is
+        # also checked for assets that are NOT in this run's inventory: a stale
+        # extra asset left by an older naming scheme is a loud failure rather
+        # than something an installer or /releases/latest could pick up. The one
+        # asset whose inventory legitimately shrinks - the conditional Windows
+        # installer - is removed by the publication step when this recut sets
+        # INCLUDE_WINDOWS=false, so it never reaches this check as unexpected.
+        #
+        # One auxiliary asset is expected and must NOT fail the check:
+        # MACOS_STAPLED.json is a staple marker WRITTEN BY macos-staple-retry.yml
+        # (its check_staple_marker records each DMG's sha256), never uploaded by
+        # this step. On a recut it is already on the release, so an exact-count
+        # equality would reject a perfectly valid release on a N-vs-(N+1)
+        # difference. The marker is safe to leave in place: macos-staple-retry.yml
+        # treats it as stale when a DMG digest no longer matches and re-staples.
+        # The exact basename is permitted; any OTHER unexpected asset is fatal.
+        if: steps.ticket-gate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          TAG: bundle-v${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED_ASSETS_FILE="${RUNNER_TEMP}/expected-release-assets.txt"
+          if [ ! -s "$EXPECTED_ASSETS_FILE" ]; then
+            echo "::error::The publication step recorded no expected asset set - refusing to accept ${TAG} as complete."
+            exit 1
+          fi
+
+          PUBLISHED_ASSETS="${RUNNER_TEMP}/published-release-assets.txt"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[] | "\(.name) \(.size)"' > "$PUBLISHED_ASSETS"
+
+          while IFS= read -r asset; do
+            [ -n "$asset" ] || continue
+            published_size="$(awk -v name="$asset" '$1 == name {print $2}' "$PUBLISHED_ASSETS")"
+            if [ -z "$published_size" ]; then
+              echo "::error::Expected asset ${asset} is missing from release ${TAG}."
+              exit 1
+            fi
+            local_size="$(stat -c %s "release-artefacts/${asset}")"
+            if [ "$published_size" != "$local_size" ]; then
+              echo "::error::Asset ${asset} is ${published_size} bytes on release ${TAG}, but the local file is ${local_size} bytes."
+              exit 1
+            fi
+          done < "$EXPECTED_ASSETS_FILE"
+          echo "Every published asset is present on ${TAG} with its local byte size."
+
+          # Reject anything on the release that this run did not upload, except
+          # the single known auxiliary staple marker. The comparison is on the
+          # exact basename, so a name that merely CONTAINS MACOS_STAPLED is not
+          # excused.
+          STAPLE_MARKER="MACOS_STAPLED.json"
+          unexpected_asset=0
+          while IFS= read -r published_name; do
+            [ -n "$published_name" ] || continue
+            if grep -qxF "$published_name" "$EXPECTED_ASSETS_FILE"; then
+              continue
+            fi
+            if [ "$published_name" = "$STAPLE_MARKER" ]; then
+              echo "::notice::${TAG} carries ${STAPLE_MARKER}, the staple marker owned by macos-staple-retry.yml; it is re-validated by DMG digest there and is not part of this run's inventory."
+              continue
+            fi
+            echo "::error::release ${TAG} publishes unexpected asset ${published_name}, which this run did not upload - refusing to leave an unexplained asset on the release."
+            unexpected_asset=1
+          done < <(awk '{print $1}' "$PUBLISHED_ASSETS")
+          if [ "$unexpected_asset" -ne 0 ]; then
+            exit 1
+          fi
+
+          MANIFEST_DIR="${RUNNER_TEMP}/published-manifest"
+          mkdir -p "$MANIFEST_DIR"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'RELEASE_MANIFEST.json' \
+            --pattern 'RELEASE_MANIFEST.json.sig' \
+            --dir "$MANIFEST_DIR" --clobber
+
+          if ! uv run --project backend --no-build --no-sync python - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "backend/src")
+          from farna.launcher import manifest as m
+
+          published = Path(os.environ["RUNNER_TEMP"]) / "published-manifest"
+          signature = m.read_signature_file(published / "RELEASE_MANIFEST.json.sig")
+          expected_key_id = m._KEY_ID_CURRENT
+          if signature["key_id"] != expected_key_id:
+              raise SystemExit(
+                  f"published manifest signature key_id {signature['key_id']!r} does not match expected {expected_key_id!r}"
+              )
+          verified_manifest = m.verify_release_from_files(
+              manifest_path=published / "RELEASE_MANIFEST.json",
+              signature_path=published / "RELEASE_MANIFEST.json.sig",
+              artifacts_root=Path("release-artefacts"),
+          )
+          if verified_manifest.release != f"bundle-v{os.environ['VERSION']}":
+              raise SystemExit(
+                  f"published manifest release is {verified_manifest.release!r}, not the requested version"
+              )
+          print(f"published manifest signature verified under checked-in key_id {signature['key_id']}")
+          PY
+          then
+            echo "::error::The RELEASE_MANIFEST.json / RELEASE_MANIFEST.json.sig pair published on ${TAG} does not verify against the checked-in trust store."
+            exit 1
           fi
 
       - name: Push the bundle tag
@@ -3336,6 +3510,7 @@ jobs:
         # downloads the GitHub Release assets, so the release must already exist.
         if: steps.ticket-gate.outputs.publish == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         shell: bash
         run: |
@@ -3343,12 +3518,26 @@ jobs:
           BUNDLE_TAG="bundle-v${VERSION}"
           RELEASE_SHA="$(git rev-parse HEAD)"
 
-          # gh release create publishes the tag itself. Treat an existing remote
-          # tag as success only when it resolves to this exact release checkout;
-          # never overwrite a published tag or collapse an unknown query failure
-          # into "absent".
-          # The peel/rc-2 discrimination below is mirrored by the post-push
+          # gh release create publishes the tag itself, so this step is the one
+          # place a bundle tag is created; a recut only replaces the release
+          # assets. The bundle tag is IMMUTABLE: the repository ruleset
+          # `release-tag-protection` (refs/tags/bundle-v*, deletion + update
+          # rules, enforcement active) forbids moving or deleting it, so this
+          # step never does either.
+          #
+          # Remote-tag states:
+          #   0 + SHA == this checkout  -> already published, nothing to push
+          #   0 + SHA != this checkout  -> a recut of an already-published
+          #       version: converge on the protected tag (proved below to be an
+          #       ancestor of this checkout, and refused once the version is
+          #       promoted), emit a notice, and leave the tag where it is
+          #   2 (absent)                -> create and push the tag
+          #   anything else             -> UNKNOWN, fail closed
+          #
+          # The peel/rc-2 discrimination is mirrored by the post-push
           # verification at the end of this step; keep the two in sync.
+          tag_action=""
+          expected_tag_sha=""
           remote_tag_line=""
           tag_rc=0
           remote_tag_line="$(git ls-remote --exit-code origin "refs/tags/${BUNDLE_TAG}")" || tag_rc=$?
@@ -3368,20 +3557,73 @@ jobs:
               esac
               if [ "$remote_tag_sha" = "$RELEASE_SHA" ]; then
                 echo "${BUNDLE_TAG} already published by the release step at ${RELEASE_SHA}; nothing to push."
-                exit 0
+                tag_action="existing"
+                expected_tag_sha="$RELEASE_SHA"
+              else
+                # FAR-2789: a recut of a version whose bundle tag is immutable.
+                # Converge only when the version is not yet promoted AND the
+                # existing tag commit is an ancestor of this release checkout;
+                # otherwise fail closed.
+                ga_rc=0
+                git ls-remote --exit-code origin "refs/tags/v${VERSION}" >/dev/null 2>&1 || ga_rc=$?
+                case "$ga_rc" in
+                  0)
+                    echo "::error::version ${VERSION} is already promoted (tag v${VERSION} exists); refusing to republish its bundle"
+                    echo "refusing to overwrite the published ${BUNDLE_TAG} tag; a promoted version's bundle is immutable."
+                    exit 1
+                    ;;
+                  2) : ;; # the GA tag is absent, so this version is not promoted
+                  *)
+                    echo "::error::Could not confirm whether v${VERSION} already exists (git ls-remote exit ${ga_rc}) - state UNKNOWN, refusing to republish."
+                    exit 1
+                    ;;
+                esac
+
+                # The release job's checkout may be shallow, so prove ancestry
+                # with the compare API rather than local history. `ahead` means
+                # RELEASE_SHA is ahead of the tag commit (the tag is an ancestor);
+                # `identical` means they are the same commit. `behind`/`diverged`
+                # mean the tag points at a commit unrelated to this release.
+                compare_status=""
+                compare_rc=0
+                compare_status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${remote_tag_sha}...${RELEASE_SHA}" --jq '.status')" || compare_rc=$?
+                if [ "$compare_rc" -ne 0 ]; then
+                  echo "::error::Could not compare ${remote_tag_sha} to ${RELEASE_SHA} (gh api exit ${compare_rc}) - state UNKNOWN, refusing to republish."
+                  exit 1
+                fi
+                case "$compare_status" in
+                  ahead|identical) : ;;
+                  behind|diverged)
+                    echo "::error::bundle tag points at a commit unrelated to this release target"
+                    exit 1
+                    ;;
+                  *)
+                    echo "::error::Unexpected compare status '${compare_status}' for ${remote_tag_sha}...${RELEASE_SHA} - state UNKNOWN, refusing to republish."
+                    exit 1
+                    ;;
+                esac
+
+                echo "::notice::${BUNDLE_TAG} stays at ${remote_tag_sha} (the first published commit for this version) because the release-tag-protection ruleset forbids updating it; this recut published its assets and its signed manifest, which name the exact built commit ${RELEASE_SHA}."
+                tag_action="converged"
+                expected_tag_sha="$remote_tag_sha"
               fi
-              echo "::error::${BUNDLE_TAG} already exists and points at ${remote_tag_sha}, not release target ${RELEASE_SHA} - refusing to overwrite."
-              exit 1
               ;;
             2)
               git tag -a "$BUNDLE_TAG" -m "Bundle release $BUNDLE_TAG"
               git push origin "$BUNDLE_TAG"
+              tag_action="pushed"
+              expected_tag_sha="$RELEASE_SHA"
               ;;
             *)
               echo "::error::Could not query remote tag ${BUNDLE_TAG} (git ls-remote exit ${tag_rc}) - state UNKNOWN, refusing to publish."
               exit 1
               ;;
           esac
+
+          if [ -z "$expected_tag_sha" ]; then
+            echo "::error::Internal error: no expected ${BUNDLE_TAG} SHA was recorded for the ${tag_action:-unknown} path - refusing to verify blindly."
+            exit 1
+          fi
 
           verified_line=""
           verify_rc=0
@@ -3398,11 +3640,19 @@ jobs:
             exit 1
           fi
           verified_sha="${verified_line%%$'\t'*}"
-          if [ "$verified_sha" != "$RELEASE_SHA" ]; then
-            echo "::error::${BUNDLE_TAG} resolved to ${verified_sha} after push, not release target ${RELEASE_SHA}."
+          if [ "$verified_sha" != "$expected_tag_sha" ]; then
+            if [ "$tag_action" = "pushed" ]; then
+              echo "::error::${BUNDLE_TAG} resolved to ${verified_sha} after push, not release target ${expected_tag_sha}."
+            else
+              echo "::error::${BUNDLE_TAG} resolved to ${verified_sha}, not the expected immutable tag SHA ${expected_tag_sha}."
+            fi
             exit 1
           fi
-          echo "Pushed and verified $BUNDLE_TAG at $RELEASE_SHA"
+          if [ "$tag_action" = "pushed" ]; then
+            echo "Pushed and verified $BUNDLE_TAG at $expected_tag_sha"
+          else
+            echo "Verified $BUNDLE_TAG at $expected_tag_sha (${tag_action} tag)"
+          fi
 
       # ---------------------------------------------------------------------
       # FAR-2573: no verified ticket, no publication. Nothing has been created
