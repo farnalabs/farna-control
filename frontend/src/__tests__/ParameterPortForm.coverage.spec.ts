@@ -77,6 +77,14 @@ describe('ParameterPortForm resolveDefaultFallback (SonarCloud coverage)', () =>
     expect(mount(ParameterPortForm, { props: { port: makePort('schema_ref'), modelValue: null } }).text()).toContain('Schema picker')
   })
 
+  it('labels a boolean port by its committed on or off state', () => {
+    const enabled = mount(ParameterPortForm, { props: { port: makePort('boolean'), modelValue: true } })
+    expect(enabled.text()).toContain('Enabled')
+
+    const disabled = mount(ParameterPortForm, { props: { port: makePort('boolean'), modelValue: false } })
+    expect(disabled.text()).toContain('Disabled')
+  })
+
   it('falls back to the i18n label and an empty option list for a select port with neither', () => {
     // A select port can arrive with no label (use the placeholder copy) and no
     // options array (treat as empty). Both are the fallback arms of the AppSelect

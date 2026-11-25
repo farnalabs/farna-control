@@ -127,6 +127,24 @@ describe('Checkbox', () => {
     expect(wrapper.get('[data-testid="control"]').attributes('aria-invalid')).toBe('true')
   })
 
+  it('honours an explicit string aria-invalid attribute over the Field state', () => {
+    const wrapper = mountHarness(
+      '<UiCheckbox v-model="on" label="On" aria-invalid="grammar" data-testid="control" />',
+      { on: ref(false) },
+    )
+
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-invalid')).toBe('grammar')
+  })
+
+  it('honours an explicit boolean aria-invalid attribute over the Field state', () => {
+    const wrapper = mountHarness(
+      '<UiCheckbox v-model="on" label="On" :aria-invalid="true" data-testid="control" />',
+      { on: ref(false) },
+    )
+
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-invalid')).toBe('true')
+  })
+
   it('puts the caller class on the label wrapper and the control classes on the control', () => {
     const wrapper = mountHarness(
       '<UiCheckbox v-model="on" label="On" class="flex items-center gap-2" control-class="h-4 w-4" data-testid="control" />',

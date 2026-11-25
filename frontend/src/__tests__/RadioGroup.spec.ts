@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 
 import RadioGroup from '../components/ui/RadioGroup.vue'
+import Field from '../components/ui/Field.vue'
 
 const OPTIONS = [
   { value: 'existing', label: 'Link to existing pipeline', id: 'radio-existing' },
@@ -11,7 +12,7 @@ const OPTIONS = [
 
 function mountHarness(template: string, setupState: Record<string, unknown> = {}) {
   const Host = defineComponent({
-    components: { RadioGroup },
+    components: { RadioGroup, Field },
     setup() {
       return setupState
     },
@@ -115,6 +116,53 @@ describe('RadioGroup', () => {
       ],
     })
 
+    expect(wrapper.text()).toContain('AI assisted')
+    expect(wrapper.text()).toContain('Beta')
+    expect(wrapper.text()).toContain('Uses a model backend')
+  })
+
+  it('honours an explicit string aria-invalid attribute', () => {
+    const wrapper = mountHarness('<RadioGroup v-model="mode" aria-label="Target" :options="options" aria-invalid="grammar" />', {
+      mode: ref('existing'),
+      options: OPTIONS,
+    })
+
+    expect(wrapper.get('[role="radiogroup"]').attributes('aria-invalid')).toBe('grammar')
+  })
+
+  it('honours an explicit boolean aria-invalid attribute', () => {
+    const wrapper = mountHarness('<RadioGroup v-model="mode" aria-label="Target" :options="options" :aria-invalid="true" />', {
+      mode: ref('existing'),
+      options: OPTIONS,
+    })
+
+    expect(wrapper.get('[role="radiogroup"]').attributes('aria-invalid')).toBe('true')
+  })
+
+  it('takes its invalid state from an enclosing Field with an error', () => {
+    const wrapper = mountHarness(
+      `<Field label="Target" error="Required">
+        <RadioGroup v-model="mode" aria-label="Target" :options="options" />
+      </Field>`,
+      { mode: ref('existing'), options: OPTIONS },
+    )
+
+    expect(wrapper.get('[role="radiogroup"]').attributes('aria-invalid')).toBe('true')
+  })
+
+  it('renders a description and a badge per option in the wrapped option-after form', () => {
+    const wrapper = mountHarness(
+      `<RadioGroup v-model="mode" aria-label="Target" :options="richOptions">
+        <template #option-after><span data-testid="follow-up" /></template>
+      </RadioGroup>`,
+      {
+        mode: ref('ai'),
+        richOptions: [{ value: 'ai', label: 'AI assisted', badge: 'Beta', description: 'Uses a model backend' }],
+      },
+    )
+
+    // The option-after slot is present, so the wrapped (block-level) form renders.
+    expect(wrapper.find('[data-testid="follow-up"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('AI assisted')
     expect(wrapper.text()).toContain('Beta')
     expect(wrapper.text()).toContain('Uses a model backend')
