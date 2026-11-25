@@ -1355,7 +1355,10 @@ def write_statuses(root: Path) -> dict[str, tuple[str, str]]:
         if not replaced:
             lines.insert(fm_end, f"status: {derived}")
         if previous != derived or not replaced:
-            entry.path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+            target = entry.path.resolve()
+            if not target.is_relative_to(root.resolve()):
+                raise ValueError(f"refusing to write {target} outside the repository root {root}")
+            target.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
             changed[entry.rel] = (previous or "", derived)
     return changed
 
