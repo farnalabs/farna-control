@@ -1,4 +1,4 @@
-"""Team-boundary enforcement across the per-run MUTATION family (ADR 070 ��4).
+"""Team-boundary enforcement across the per-run MUTATION family (ADR 070 §4).
 
 ``runs`` carries only the org-isolation RLS policy and no ``visibility``
 column, so a run's team boundary is application-layer. #3442 clamped the

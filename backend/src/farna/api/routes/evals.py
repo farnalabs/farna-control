@@ -41,6 +41,7 @@ from farna.api.constants import (
     MSG_FEATURE_NOT_AVAILABLE,
     MSG_PIPELINE_NOT_FOUND,
     MSG_RESOURCE_ALREADY_EXISTS,
+    MSG_RUN_NOT_FOUND,
 )
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
 from farna.api.dependencies import (
@@ -149,7 +150,6 @@ _CODE_EVALS_RESOLVE_FINDING = _CODE_EVAL_DEFINITION_UPDATE
 _CODE_EVALS_GET_ACCEPTANCE_RATE = "eval.list"
 _CODE_EVALS_MUTE_POLICY = _CODE_EVAL_DEFINITION_UPDATE
 _MSG_FINDING_NOT_FOUND = "Finding not found"
-_MSG_RUN_NOT_FOUND = "Run not found"
 _VISIBILITY_PATTERN = "^(org|team)$"
 
 _MSG_POLICY_GATE_CASCADE_CONFLICT = "Cannot delete this eval: it has policy gate decision records. Remove the associated pipeline run(s) or wait for decision retention cleanup before deleting."
@@ -3025,7 +3025,7 @@ async def list_run_evals(
             )
             run = run_result.scalar_one_or_none()
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_RUN_NOT_FOUND)
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
             from sqlalchemy import func as sa_func
 
@@ -3954,13 +3954,13 @@ async def _load_eval_source_run(session: AsyncSession, principal: TenantPrincipa
         )
     ).scalar_one_or_none()
     if run is None:
-        raise HTTPException(status_code=404, detail=_MSG_RUN_NOT_FOUND)
+        raise HTTPException(status_code=404, detail=MSG_RUN_NOT_FOUND)
     # ADR 070 §4: the same shared per-run clamp as the run-detail family. An
     # eval definition may not be authored from a run outside the principal's
     # team boundary; a refusal is NOT FOUND so run existence is not confirmed.
     # The predicate is the leaf implementation, never a local team comparison.
     if not await run_visible_to_principal(session, principal, run):
-        raise HTTPException(status_code=404, detail=_MSG_RUN_NOT_FOUND)
+        raise HTTPException(status_code=404, detail=MSG_RUN_NOT_FOUND)
     return run
 
 
