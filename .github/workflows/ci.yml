@@ -1893,7 +1893,18 @@ jobs:
           # skip the (non-essential) artifact upload that returns Forbidden.
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
-
+  copy-consistency:
+    name: Copy consistency
+    runs-on: ubicloud-standard-2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Self-test the checker
+        run: python scripts/copy_consistency.py --self-test
+      - name: Customer copy
+        run: python scripts/copy_consistency.py --customer-copy README.md CONTRIBUTING.md SECURITY.md
 
   migration-heads-check:
     name: Check migration heads
