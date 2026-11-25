@@ -654,7 +654,7 @@ deploy/compose/runner.yml	4
 deploy/docker/runner-opencode.Dockerfile	1
 deploy/fly/entrypoint.sh	2
 deploy/fly/fly.staging.toml	9
-deploy/helm/farna-control/README.md	10
+deploy/helm/farna-control/README.md	14
 deploy/helm/farna-control/templates/_helpers.tpl	2
 deploy/helm/farna-control/templates/networkpolicy.yaml	2
 deploy/helm/farna-control/values.eks.example.yaml	7
