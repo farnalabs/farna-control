@@ -154,7 +154,7 @@
             <h2 v-else class="text-base font-semibold text-foreground">{{ $t('views.PipelineListView.all_pipelines') }}</h2>
           </div>
           <!-- Table / Tree view -->
-          <TableCard class="rounded-lg border border-border overflow-hidden">
+          <DataCard padding="none" class="rounded-lg border border-border overflow-hidden">
             <p id="pipeline-list-table-scroll-instructions" class="sr-only">
               {{ $t('views.PipelineListView.table_scroll_instructions') }}
             </p>
@@ -278,7 +278,7 @@
               </table>
               </CardTable>
             </div>
-          </TableCard>
+          </DataCard>
         </div>
 
       </div>
@@ -407,8 +407,8 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
-import TableCard from '../components/ui/TableCard.vue'
 import CardTable from '../components/ui/CardTable.vue'
+import DataCard from '../components/ui/DataCard.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import FolderTree from '../components/pipelines/FolderTree.vue'

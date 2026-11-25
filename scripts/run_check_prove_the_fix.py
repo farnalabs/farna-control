@@ -5,7 +5,7 @@ A PR that touches ``backend/src/**`` or ``frontend/src/**`` must name at least
 one test that proves the change, in its body::
 
     Proves: backend/tests/unit/api/test_health.py::test_liveness_ok
-    Proves: frontend/src/__tests__/ActionRow.spec.ts::stacks below sm and becomes a row at sm
+    Proves: frontend/src/__tests__/Badge.spec.ts::defaults to the neutral variant
 
 The check is deterministic and uses no model: it reads the PR body and the
 changed-file list, then verifies each named reference resolves to a test that
