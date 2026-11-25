@@ -4417,6 +4417,15 @@ def _bundle_tag_harness(
     *,
     scenario: str,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """Execute the bundle-tag step against a git/gh stub.
+
+    The step now distinguishes the immutable ``bundle-v*`` ref from the GA
+    ``v*`` tag and proves ancestry through the compare API, so the stub models
+    each ref separately and answers ``gh api .../compare``. Scenarios with an
+    existing ``bundle-v`` tag that points elsewhere (``different``, ``behind``,
+    ``converge``, ``converge-identical``, ``promoted``) take the recut path and
+    differ only in the GA-tag and compare answers.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     calls = tmp_path / "calls.log"
@@ -4432,56 +4441,69 @@ case "$*" in
   'rev-parse HEAD') printf '%s\\n' {target} ;;
   'ls-remote --exit-code origin refs/tags/bundle-v0.1.0')
     case "$SCENARIO" in
-      annotated|lightweight|different|lightweight-fallback)
-        if [[ "$SCENARIO" == lightweight-fallback && ! -f {shlex.quote(str(state))} ]]; then
-          exit 2
-        fi
-        tag_sha={target}
-        [[ "$SCENARIO" == different ]] && tag_sha={other}
-        printf '%s\\trefs/tags/bundle-v0.1.0\\n' "$tag_sha"
-        exit 0
+      annotated|lightweight) printf '%s\\trefs/tags/bundle-v0.1.0\\n' {target}; exit 0 ;;
+      different|behind|converge|converge-identical|promoted)
+        printf '%s\\trefs/tags/bundle-v0.1.0\\n' {other}; exit 0
         ;;
       absent|push-mismatch|push-unknown|push-lightweight)
-        if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == push-lightweight ]]; then
-          printf '%s\\trefs/tags/bundle-v0.1.0\\n' {target}; exit 0
+        if [[ -f {shlex.quote(str(state))} ]]; then
+          if [[ "$SCENARIO" == push-mismatch ]]; then
+            printf '%s\\trefs/tags/bundle-v0.1.0\\n' {other}
+          else
+            printf '%s\\trefs/tags/bundle-v0.1.0\\n' {target}
+          fi
+          exit 0
         fi
-        if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == push-mismatch ]]; then
-          printf '%s\\trefs/tags/bundle-v0.1.0\\n' {other}; exit 0
-        fi
-        if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == push-lightweight ]]; then
-          printf '%s\\trefs/tags/bundle-v0.1.0\\n' {target}; exit 0
-        fi
-        if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == push-unknown ]]; then exit 128; fi
         exit 2
         ;;
       unknown) exit 128 ;;
     esac
     ;;
-      'ls-remote --exit-code origin refs/tags/bundle-v0.1.0^{{}}')
+  'ls-remote --exit-code origin refs/tags/bundle-v0.1.0^{{}}')
     case "$SCENARIO" in
       annotated) printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {target}; exit 0 ;;
-      different) printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {other}; exit 0 ;;
-      push-lightweight) exit 2 ;;
+      lightweight|push-lightweight|push-mismatch) exit 2 ;;
+      different|behind|converge|converge-identical|promoted)
+        printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {other}; exit 0
+        ;;
       absent)
         if [[ -f {shlex.quote(str(state))} ]]; then printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {target}; exit 0; fi
         exit 2
         ;;
-      push-mismatch) exit 2 ;;
       push-unknown) exit 128 ;;
+      *) exit 2 ;;
+    esac
+    ;;
+  'ls-remote --exit-code origin refs/tags/v0.1.0'*)
+    case "$SCENARIO" in
+      promoted) exit 0 ;;
+      ga-unknown) exit 128 ;;
       *) exit 2 ;;
     esac
     ;;
   'tag -a bundle-v0.1.0 -m Bundle release bundle-v0.1.0') exit 0 ;;
   'push origin bundle-v0.1.0') touch {shlex.quote(str(state))}; exit 0 ;;
-  *)
-    if [[ "$*" == 'ls-remote --exit-code origin refs/tags/bundle-v0.1.0^{{}}' ]]; then
-      if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == absent ]]; then
-        printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {target}; exit 0
-      fi
-      exit 2
-    fi
-    exit 0
+  *) exit 0 ;;
+esac
+""",
+    )
+    _write_executable(
+        bin_dir / "gh",
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> {shlex.quote(str(calls))}
+case "$*" in
+  api*compare*)
+    case "$SCENARIO" in
+      different) printf 'diverged\\n' ;;
+      behind) printf 'behind\\n' ;;
+      converge-identical) printf 'identical\\n' ;;
+      compare-unknown) exit 1 ;;
+      compare-weird) printf 'unexpected-status\\n' ;;
+      *) printf 'ahead\\n' ;;
+    esac
     ;;
+  *) exit 0 ;;
 esac
 """,
     )
@@ -4490,6 +4512,7 @@ esac
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "VERSION": "0.1.0",
         "SCENARIO": scenario,
+        "GITHUB_REPOSITORY": "farnalabs/farna-control",
     }
     result = _run_bash(_bundle_tag_script(), cwd=tmp_path, env=env)
     return result, calls
@@ -4512,10 +4535,61 @@ def test_bundle_tag_existing_exact_lightweight_target_is_idempotent(tmp_path: Pa
 
 
 @pytest.mark.posix_only
-def test_bundle_tag_existing_different_target_fails_without_push(tmp_path: Path) -> None:
-    result, calls = _bundle_tag_harness(tmp_path, scenario="different")
+@pytest.mark.parametrize("scenario", ["different", "behind"])
+def test_bundle_tag_unrelated_recut_target_fails_without_push(tmp_path: Path, scenario: str) -> None:
+    """A recut whose existing tag is not an ancestor is refused.
+
+    This is the genuine recut refusal: the bundle tag exists at another commit,
+    the GA tag is absent, and the compare status is ``diverged``/``behind``, so
+    the step must not push or repoint the immutable tag.
+    """
+    result, calls = _bundle_tag_harness(tmp_path, scenario=scenario)
     assert result.returncode != 0
-    assert "refusing to overwrite" in result.stdout
+    assert "bundle tag points at a commit unrelated to this release target" in result.stdout
+    assert "push origin bundle-v0.1.0" not in calls.read_text(encoding="utf-8")
+    assert "api" in calls.read_text(encoding="utf-8")
+
+
+@pytest.mark.posix_only
+@pytest.mark.parametrize("scenario", ["converge", "converge-identical"])
+def test_bundle_tag_recut_converges_on_an_ancestor_tag(tmp_path: Path, scenario: str) -> None:
+    """GA absent + compare ahead/identical converges without moving the tag."""
+    result, calls = _bundle_tag_harness(tmp_path, scenario=scenario)
+    assert result.returncode == 0, result.stderr
+    assert f"stays at {'b' * 40}" in result.stdout
+    assert "first published commit for this version" in result.stdout
+    assert f"Verified bundle-v0.1.0 at {'b' * 40} (converged tag)" in result.stdout
+    log = calls.read_text(encoding="utf-8")
+    assert "push origin bundle-v0.1.0" not in log
+    assert "api" in log
+    assert "compare" in log
+
+
+@pytest.mark.posix_only
+def test_bundle_tag_recut_refuses_once_the_ga_tag_is_promoted(tmp_path: Path) -> None:
+    """A recut of an already-promoted version is refused before any compare."""
+    result, calls = _bundle_tag_harness(tmp_path, scenario="promoted")
+    assert result.returncode != 0
+    assert "is already promoted (tag v0.1.0 exists); refusing to republish its bundle" in result.stdout
+    assert "refusing to overwrite the published bundle-v0.1.0 tag" in result.stdout
+    log = calls.read_text(encoding="utf-8")
+    assert "push origin bundle-v0.1.0" not in log
+    assert "compare" not in log
+
+
+@pytest.mark.posix_only
+def test_bundle_tag_recut_fails_when_the_compare_is_unknown(tmp_path: Path) -> None:
+    result, calls = _bundle_tag_harness(tmp_path, scenario="compare-unknown")
+    assert result.returncode != 0
+    assert "state UNKNOWN, refusing to republish" in result.stdout
+    assert "push origin bundle-v0.1.0" not in calls.read_text(encoding="utf-8")
+
+
+@pytest.mark.posix_only
+def test_bundle_tag_recut_fails_on_an_unexpected_compare_status(tmp_path: Path) -> None:
+    result, calls = _bundle_tag_harness(tmp_path, scenario="compare-weird")
+    assert result.returncode != 0
+    assert "Unexpected compare status 'unexpected-status'" in result.stdout
     assert "push origin bundle-v0.1.0" not in calls.read_text(encoding="utf-8")
 
 

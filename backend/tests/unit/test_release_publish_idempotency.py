@@ -178,7 +178,35 @@ def test_latest_decision_is_unchanged() -> None:
 
 def test_recut_never_deletes_the_published_release() -> None:
     script = _single_step(UPLOAD_STEP)["run"]
-    assert "gh release delete" not in script
+    # ``gh release delete <tag>`` (the release itself) is never used; only the
+    # ``delete-asset`` subcommand removes a dropped asset from it.
+    assert "gh release delete " not in script
+    assert "gh release delete-asset" in script
+
+
+def test_recut_reconciles_a_dropped_windows_asset_before_replacing() -> None:
+    """A recut that shrinks the inventory must not strand on the stale asset.
+
+    The Windows installer is the only conditional asset. A recut with
+    ``include_windows`` false of a version first published with it must remove
+    it from the release before the replacement upload, or the post-upload
+    "unexpected asset" check would fail with no documented recovery.
+    """
+    script = _single_step(UPLOAD_STEP)["run"]
+    existing, _ = _publication_arms(script)
+    logical = _logical_lines(existing)
+
+    windows_line = next(line for line in logical if "windows-amd64.exe" in line)
+    assert 'WINDOWS_ASSET="farna-control-${VERSION}-windows-amd64.exe"' in windows_line
+
+    guard_line = next(line for line in logical if '"$INCLUDE_WINDOWS" != "true"' in line)
+    assert guard_line.startswith("if ")
+    assert "gh release view" in guard_line
+    assert 'grep -qxF "$WINDOWS_ASSET"' in guard_line
+
+    delete_index = next(i for i, line in enumerate(logical) if line.startswith("gh release delete-asset"))
+    upload_index = next(i for i, line in enumerate(logical) if line.startswith("gh release upload"))
+    assert delete_index < upload_index, "the dropped Windows asset must be removed before the replacement upload"
 
 
 def test_the_pre_fix_refusal_is_gone_and_replacement_is_used() -> None:

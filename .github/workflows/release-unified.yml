@@ -3228,9 +3228,13 @@ jobs:
           # Two inventories, and the split is the replacement order for a recut:
           # ASSETS holds every portable/binary artefact (openapi.json included),
           # MANIFEST_ASSETS holds the checksum + manifest + signature trio, so
-          # the trio is written LAST: the manifest after every byte it covers and
-          # its signature after the manifest, so a VERIFIABLE manifest can only
-          # exist once the whole replacement has landed.
+          # the trio is written LAST: the manifest after every artefact it
+          # covers and its signature after the manifest, so a VERIFIABLE
+          # manifest can only exist once the replacement of every covered asset
+          # has landed. RELEASE_MANIFEST.json is built before this step and
+          # excludes openapi.json (generated later in the publish job), so
+          # openapi.json is covered by neither the manifest nor SHA256SUMS; the
+          # verification step proves it by published byte size only.
           ASSETS=(
               "release-artefacts/farna-control-${VERSION}-linux-amd64.tar.gz"
              "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg"
@@ -3300,12 +3304,13 @@ jobs:
           # visible throughout - and assets are replaced in the same order the
           # create uploads them: the portable/binary set, then SHA256SUMS, then
           # RELEASE_MANIFEST.json, then its signature LAST. The manifest covers
-          # every other asset and the signature covers the manifest, so a
-          # verifiable manifest can only exist once the whole replacement has
-          # landed - an interrupted recut fails verification rather than
-          # certifying a half-replaced release - and the verification step after
-          # this one proves the published assets and signature before the job
-          # passes.
+          # every asset except openapi.json (which it predates and which the
+          # verification step checks by byte size only), and the signature
+          # covers the manifest, so a verifiable manifest can only exist once
+          # the replacement of every manifest-covered asset has landed - an
+          # interrupted recut fails verification rather than certifying a
+          # half-replaced release - and the verification step after this one
+          # proves the published assets and signature before the job passes.
           #
           # The replaced comment ("NEVER --clobber an existing asset") was right
           # for a first publish and wrong for a same-version recut, where
@@ -3314,6 +3319,20 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::warning::release ${TAG} already exists - replacing its assets in place (idempotent recut)"
             gh release edit "$TAG" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" "${PUBLISH_ARGS[@]}"
+            # A recut can SHRINK the inventory: the Windows installer is the
+            # only conditional asset, so a recut with INCLUDE_WINDOWS=false of a
+            # version first published with Windows support would otherwise leave
+            # the stale .exe behind and fail the post-upload "unexpected asset"
+            # check with no way forward. Reconcile the one known-dropped asset
+            # explicitly by removing it before the replacement upload. Any other
+            # asset not in this run's inventory stays a hard failure.
+            WINDOWS_ASSET="farna-control-${VERSION}-windows-amd64.exe"
+            if [ "$INCLUDE_WINDOWS" != "true" ] \
+              && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
+                | grep -qxF "$WINDOWS_ASSET"; then
+              gh release delete-asset "$TAG" "$WINDOWS_ASSET" --repo "$GITHUB_REPOSITORY" --yes
+              echo "::warning::removed ${WINDOWS_ASSET} from ${TAG}: this recut was built without Windows support"
+            fi
             gh release upload "$TAG" "${ASSETS[@]}" \
               --clobber
             for manifest_asset in "${MANIFEST_ASSETS[@]}"; do
@@ -3341,7 +3360,10 @@ jobs:
         # Every asset this run uploaded must be present. The published set is
         # also checked for assets that are NOT in this run's inventory: a stale
         # extra asset left by an older naming scheme is a loud failure rather
-        # than something an installer or /releases/latest could pick up.
+        # than something an installer or /releases/latest could pick up. The one
+        # asset whose inventory legitimately shrinks - the conditional Windows
+        # installer - is removed by the publication step when this recut sets
+        # INCLUDE_WINDOWS=false, so it never reaches this check as unexpected.
         #
         # One auxiliary asset is expected and must NOT fail the check:
         # MACOS_STAPLED.json is a staple marker WRITTEN BY macos-staple-retry.yml
