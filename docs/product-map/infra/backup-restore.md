@@ -102,10 +102,14 @@ operator-facing contract lives in `docs/operations/backup.md`.
 - [x] Restore takes an automatic pre-restore safety dump of the target before
       the `psql` import (skippable only with the loud `--no-safety-dump`); a
       safety-dump failure refuses before the wipe, and the import runs as a
-      single transaction without putting a password in argv
+      single transaction without putting a password in argv. The import resets
+      the `public` schema inside that same transaction before replaying, so an
+      archive written at revision N replays over a database a later release
+      migrated to N+k instead of failing on a constraint the dump cannot drop
       (`backup.py`; `test_backup_restore_semantics.py::test_restore_writes_pre_restore_safety_dump_before_psql`,
       `::test_restore_safety_dump_failure_refuses_before_the_wipe`,
-      `::test_restore_psql_single_transaction_and_no_password_argv`).
+      `::test_restore_psql_single_transaction_and_no_password_argv`,
+      `TestTheReplayResetsPublicFirst`).
       <!-- behaviour: backup-restore-06 | tests: backend/tests/unit/cli/test_backup_restore_semantics.py::test_restore_writes_pre_restore_safety_dump_before_psql -->
 - [x] After the database restore, restore re-inserts the checkpoint JSON
       exports, re-encrypts credentials when `FERNET_KEY` changed (using
@@ -325,10 +329,13 @@ operator-facing contract lives in `docs/operations/backup.md`.
       <!-- behaviour: backup-restore-24 | tests: backend/tests/unit/cli/test_backup_restore_semantics.py -->
 - [x] The compose path's recovery VERIFIES before it destroys: the helper
       requires an explicit `--confirm` argument, verifies the archive with a
-      side-effect-free `restore --dry-run`, and refuses unless the TARGET
-      database records exactly the schema revisions the snapshot was taken from
-      (`--verify-target-schema`) — the stand-in for the data-dir instance
-      identity guard, which the old no-`--data-dir` invocation skipped
+      side-effect-free `restore --dry-run`, and refuses a TARGET database whose
+      recorded revision is not in the snapshot's lineage (a different release
+      train, or not a Farna Control database at all). A target the newer
+      release has migrated PAST the snapshot is accepted, because that is the
+      rollback the archive exists for (`--verify-target-schema`) — the stand-in
+      for the data-dir instance identity guard, which the old no-`--data-dir`
+      invocation skipped
       entirely. Every one-off container overrides the image ENTRYPOINT with
       `--entrypoint farna-control`, because the all-in-one image's
       `/entrypoint.sh` ignores its arguments, migrates and execs supervisord —

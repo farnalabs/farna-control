@@ -79,7 +79,7 @@
     </div>
 
     <div class="p-3 border-t flex items-center justify-between gap-2 flex-wrap">
-      <Button severity="secondary" outlined size="small" class="text-xs" :disabled="resetting" @click="resetToDefaults">
+      <Button variant="secondary" size="sm" class="text-xs" :disabled="resetting" @click="resetToDefaults">
         {{ $t('components.assistant.AssistantContextSources.reset_to_defaults') }}
       </Button>
       <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -96,7 +96,7 @@ import { computed, ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { api } from "@/lib/api/client";
 import { formatApiError } from "@/lib/api/formatError";
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 import AppSelect from "../shared/AppSelect.vue";
 import type { ContextSourceItem, ContextSourceMode, ContextSourceUpdate } from "@/types/assistant";
 

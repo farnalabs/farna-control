@@ -1,14 +1,25 @@
-"""Verify docker-compose wiring for the alembic_version widening step.
+"""Verify the docker-compose database-credential wiring shared by the app services.
 
-`backend/entrypoint.sh` widens `alembic_version.version_num` to VARCHAR(64)
-using `PGPASSWORD=${POSTGRES_PASSWORD:-modulo}`. That password must match the
-one configured on the `db` service, otherwise the ALTER silently fails (the
-step is swallowed by `|| true`) and a later `alembic upgrade heads` fails on
-revision IDs longer than 32 chars.
+`docker-compose.yml` creates the `db` cluster with
+`POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}`. Every app service
+(`backend`, `saq-runner`, `saq-system`) reaches that cluster through a
+`DATABASE_URL` (plus `DATABASE_ADMIN_URL` / `FARNA_CONTROL_SYSTEM_DATABASE_URL`
+where present) that interpolates the SAME project-level `${POSTGRES_PASSWORD}`
+variable.
 
-Any service that builds from `./backend` (and therefore runs entrypoint.sh —
-`backend`, `saq-runner`, `saq-system`) must declare `POSTGRES_PASSWORD` so it
-sees the same value as the `db` service.
+The interpolation happens at ``docker compose`` parse time from the project
+environment (the ``.env`` file or the host shell), never from a service's own
+``environment:`` block. What matters is therefore that the URL references the
+same variable the `db` service uses: if one side hardcodes a different value, or
+drops the default, the URL credential and the cluster credential drift apart and
+every connection is rejected.
+
+Nothing in ``backend/src`` reads ``POSTGRES_PASSWORD`` at runtime: ``Settings``
+consumes the already-interpolated ``DATABASE_URL``-family values, and the retired
+psql ``alembic_version`` widening (removed in FAR-2777: ``migrations/env.py``
+pre-widens the column) is the only code that ever read it. The app services
+therefore do not declare ``POSTGRES_PASSWORD`` themselves; this test guards the
+URL/cluster contract across the compose file rather than a per-service env var.
 """
 
 from __future__ import annotations
@@ -21,8 +32,14 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _COMPOSE_PATH = _REPO_ROOT / "docker-compose.yml"
 
-# Services built from ./backend run entrypoint.sh and must carry POSTGRES_PASSWORD.
+#: The project-environment interpolation the cluster and the URL must share.
+_PASSWORD_INTERPOLATION = "${POSTGRES_PASSWORD:-changeme}"
+
+# Services built from ./backend that reach the `db` cluster.
 _APP_SERVICES = ("backend", "saq-runner", "saq-system")
+
+#: Database URL keys an app service may declare (at least DATABASE_URL).
+_DATABASE_URL_KEYS = ("DATABASE_URL", "DATABASE_ADMIN_URL", "FARNA_CONTROL_SYSTEM_DATABASE_URL")
 
 
 @pytest.mark.skipif(
@@ -42,16 +59,21 @@ def _load_compose() -> dict:
     not _COMPOSE_PATH.exists(),
     reason="docker-compose.yml not found (running outside repo checkout)",
 )
-def test_app_services_declare_postgres_password():
+def test_app_services_database_urls_share_the_db_service_password():
     compose = _load_compose()
     services = compose.get("services", {})
 
     db_env = services["db"].get("environment", {})
     db_password = db_env.get("POSTGRES_PASSWORD")
-    assert db_password, "db service must declare POSTGRES_PASSWORD"
+    assert db_password == _PASSWORD_INTERPOLATION, f"db service must create the cluster with the shared {_PASSWORD_INTERPOLATION} interpolation so the app URLs can reference the same credential, got {db_password!r}"
 
     for service in _APP_SERVICES:
         assert service in services, f"missing service {service} in compose file"
         env = services[service].get("environment", {})
-        assert "POSTGRES_PASSWORD" in env, f"{service} must declare POSTGRES_PASSWORD so entrypoint.sh uses the same password as the db service"
-        assert env["POSTGRES_PASSWORD"] == db_password, f"{service} POSTGRES_PASSWORD ({env['POSTGRES_PASSWORD']}) must match the db service value ({db_password})"
+
+        url_keys = [key for key in _DATABASE_URL_KEYS if key in env]
+        assert "DATABASE_URL" in url_keys, f"{service} must declare DATABASE_URL"
+
+        for key in url_keys:
+            value = env[key]
+            assert _PASSWORD_INTERPOLATION in value, f"{service} {key} must interpolate the same {_PASSWORD_INTERPOLATION} the db service uses, so the URL credential and the cluster credential can never disagree, got {value!r}"

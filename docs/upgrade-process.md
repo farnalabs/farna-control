@@ -309,9 +309,15 @@ destroys:
    image's own `ENTRYPOINT` is `/entrypoint.sh`, which ignores its arguments,
    takes a snapshot, migrates and execs supervisord, so it must be overridden or
    the "dry run" would MIGRATE the live database.
-2. **Verify the target** — `--verify-target-schema` refuses unless the target
-   database records exactly the schema revisions the snapshot was taken from,
-   so a wrong target cannot wipe an unrelated cluster.
+2. **Verify the target** — `--verify-target-schema` refuses an unrelated target,
+   so a wrong target cannot wipe a cluster the snapshot did not come from. The
+   target it refuses is one whose recorded revision is not in the snapshot's
+   lineage (a different release train, or no Farna Control database at all). A
+   target the NEW release has migrated PAST the snapshot — the actual rollback
+   case — is accepted, and the restore rolls those migrations back with the
+   data: the archive replays over the later schema because the restore resets
+   the `public` schema first (FAR-2763), so a dump taken at revision N cannot
+   fail on a constraint a N+k migration added.
 3. **No URL, no password.** The helper never reads or passes a database URL: the
    one-off container inherits `DATABASE_ADMIN_URL` from the service environment
    and the CLI resolves it there. Nothing needs exporting in the operator's
