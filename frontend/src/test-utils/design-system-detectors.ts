@@ -42,6 +42,7 @@ export type Counts = Record<Pattern, Record<string, number>>
 const HTML_COMMENT = /<!--[\s\S]*?-->/g
 const SCRIPT_BLOCK = /<script\b[\s\S]*?<\/script>/gi
 const STYLE_BLOCK = /<style\b[\s\S]*?<\/style>/gi
+const JS_BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g
 
 const CLASS_ATTR = /(?<![-\w])(?::class|class)\s*=\s*(?:"([^"]*)"|'([^']*)')/gs
 const CLASS_TOKEN_SEPARATORS = /[\s,]+/
@@ -54,11 +55,50 @@ const PADDING_NONE = /(?<![-\w])padding\s*=\s*(?:"none"|'none'|"'none'"|'"none'"
 const RAW_BUTTON_TAG = /<button(?=[\s>/])/g
 /** A raw HTML `<input>` opening tag (case-sensitive: `<InputText>` is a component). */
 const RAW_INPUT_TAG = /<input(?=[\s>/])/g
-const RAW_DIALOG_IMPORT = /^\s*import\s+(?:[^\n]*?\bfrom\s+)?["']primevue\/dialog["']/gm
-const PRIMEVUE_BADGE_IMPORT = /^\s*import\s+(?:[^\n]*?\bfrom\s+)?["']primevue\/badge["']/gm
+/**
+ * An `import` statement whose module specifier is `module`.
+ *
+ * Anchored to a line start and allowed to span newlines, so a multi-line
+ * default/named/namespace import matches. The `from` form is required when the
+ * statement has bindings, which keeps the specifier anchored to the module the
+ * statement actually imports (a later string on the line is not a match). The
+ * negative lookahead stops the body from consuming the start of the NEXT
+ * `import` statement, so two adjacent imports are counted separately. The bare
+ * side-effect form (`import 'module'`) is the first alternative.
+ */
+function importStatement(module: string): RegExp {
+  const quoted = `["']${module}["']`
+  return new RegExp(
+    `^[ \\t]*import(?:[ \\t]+${quoted}|\\s+(?:(?!^[ \\t]*import\\b)[\\s\\S])*?\\bfrom\\s+${quoted})`,
+    'gm',
+  )
+}
 
-export function stripHtmlComments(text: string): string {
-  return text.replace(HTML_COMMENT, '')
+const RAW_DIALOG_IMPORT = importStatement('primevue/dialog')
+const PRIMEVUE_BADGE_IMPORT = importStatement('primevue/badge')
+
+/** Replace a matched region with spaces, or drop it, preserving line numbers. */
+function stripRegions(text: string, pattern: RegExp, preserveLines: boolean): string {
+  if (!preserveLines) return text.replace(pattern, '')
+  return text.replace(pattern, (match) => match.replace(/[^\n]/g, ' '))
+}
+
+export function stripHtmlComments(text: string, preserveLines = false): string {
+  return stripRegions(text, HTML_COMMENT, preserveLines)
+}
+
+/** Remove JavaScript block comments (`/* ... *\/`), leaving line comments to the anchors. */
+export function stripJsBlockComments(text: string): string {
+  return text.replace(JS_BLOCK_COMMENT, '')
+}
+
+export interface StripNonTemplateOptions {
+  /**
+   * Replace each stripped region with spaces while keeping newlines, so line
+   * numbers computed from the result stay true. Defaults to false (drop the
+   * region).
+   */
+  preserveLines?: boolean
 }
 
 /**
@@ -67,8 +107,11 @@ export function stripHtmlComments(text: string): string {
  * script cannot confuse the style pass (and vice versa is impossible in valid
  * SFC markup).
  */
-export function stripNonTemplateBlocks(text: string): string {
-  return stripHtmlComments(text.replace(SCRIPT_BLOCK, '').replace(STYLE_BLOCK, ''))
+export function stripNonTemplateBlocks(text: string, options: StripNonTemplateOptions = {}): string {
+  const preserveLines = options.preserveLines ?? false
+  const withoutScripts = stripRegions(text, SCRIPT_BLOCK, preserveLines)
+  const withoutStyles = stripRegions(withoutScripts, STYLE_BLOCK, preserveLines)
+  return stripHtmlComments(withoutStyles, preserveLines)
 }
 
 /** Return every `<name ...>` opening tag, quote-aware so `>` in a value is safe. */
@@ -150,13 +193,14 @@ export function titledCardsWithoutPadding(text: string): string[] {
 export function countPatterns(source: string): Record<Pattern, number> {
   const commented = stripHtmlComments(source)
   const template = stripNonTemplateBlocks(source)
+  const script = stripJsBlockComments(commented)
   return {
-    card_container: openingTags(commented, ['div']).filter(isCardContainer).length,
-    card_header: openingTags(commented, ['h2', 'h3']).filter(isCardHeader).length,
-    raw_dialog: (commented.match(RAW_DIALOG_IMPORT) ?? []).length,
+    card_container: openingTags(template, ['div']).filter(isCardContainer).length,
+    card_header: openingTags(template, ['h2', 'h3']).filter(isCardHeader).length,
+    raw_dialog: (script.match(RAW_DIALOG_IMPORT) ?? []).length,
     raw_button: countRawButtons(template),
     raw_input: countRawInputs(template),
-    primevue_badge: countPrimeVueBadgeImports(commented),
+    primevue_badge: countPrimeVueBadgeImports(script),
   }
 }
 

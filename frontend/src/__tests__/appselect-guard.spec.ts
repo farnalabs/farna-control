@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'fs'
 import { join, relative, extname, sep } from 'path'
+import { stripNonTemplateBlocks } from '../test-utils/design-system-detectors'
 
 const SRC_DIR = join(__dirname, '..')
 const ALLOWED_FILE = 'AppSelect.vue'
@@ -78,13 +79,6 @@ const NATIVE_SELECT_ALLOWLIST: Record<string, string> = {
 
 /** A `<select>` element opening tag, in any of its authored spellings. */
 const NATIVE_SELECT_TAG = /<select(?=[\s>/])/
-
-function stripNonTemplateBlocks(content: string): string {
-  return content
-    .replace(/<script[\s\S]*?<\/script>/g, '')
-    .replace(/<style[\s\S]*?<\/style>/g, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-}
 
 /** The template text of a single-file component, with non-markup blocks removed. */
 function templateOf(content: string): string {

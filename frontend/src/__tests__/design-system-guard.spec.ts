@@ -249,7 +249,20 @@ describe('design-system conformance guard (FAR-2710)', () => {
     expect(countPatterns("import Dialog from 'primevue/dialog'").raw_dialog).toBe(1)
     expect(countPatterns("import * as Dialog from 'primevue/dialog'").raw_dialog).toBe(1)
     expect(countPatterns("import { Dialog } from 'primevue/dialog'").raw_dialog).toBe(1)
+    expect(countPatterns("import 'primevue/dialog'").raw_dialog).toBe(1)
+    // A multi-line import is still an import: default, named and namespace forms.
+    expect(countPatterns("import Dialog\n  from 'primevue/dialog'").raw_dialog).toBe(1)
+    expect(countPatterns("import {\n  Dialog,\n} from 'primevue/dialog'").raw_dialog).toBe(1)
+    expect(countPatterns("import *\n  as Dialog from 'primevue/dialog'").raw_dialog).toBe(1)
+    expect(countPatterns("import { Dialog as D } from 'primevue/dialog'").raw_dialog).toBe(1)
+    // Two adjacent imports stay separately counted.
+    expect(countPatterns("import Dialog from 'primevue/dialog'\nimport Dialog2 from 'primevue/dialog'").raw_dialog).toBe(2)
     expect(countPatterns("import Dialog from 'primevue/dialog'\nimport X from 'primevue/confirmdialog'").raw_dialog).toBe(1)
+    // A block-commented import is not an import.
+    expect(countPatterns("<script>\n/*\nimport Dialog from 'primevue/dialog'\n*/\n</script>").raw_dialog).toBe(0)
+    expect(countPatterns("<script>\n/* import Dialog from 'primevue/dialog' */\n</script>").raw_dialog).toBe(0)
+    // ...but a real import after a block comment still counts.
+    expect(countPatterns("/* header */\nimport Dialog from 'primevue/dialog'").raw_dialog).toBe(1)
     expect(countPatterns("<script>import X from 'primevue/button'</script>").raw_dialog).toBe(0)
   })
 
@@ -261,14 +274,49 @@ describe('design-system conformance guard (FAR-2710)', () => {
     expect(countPatterns("import { Badge } from 'primevue/badge'").primevue_badge).toBe(1)
     expect(countPatterns("import { Badge as B } from 'primevue/badge'").primevue_badge).toBe(1)
     expect(countPatterns("import 'primevue/badge'").primevue_badge).toBe(1)
+    // A multi-line import is still an import: default, named and namespace forms.
+    expect(countPatterns("import Badge\n  from 'primevue/badge'").primevue_badge).toBe(1)
+    expect(countPatterns("import {\n  Badge,\n} from 'primevue/badge'").primevue_badge).toBe(1)
+    expect(countPatterns("import *\n  as Badge from 'primevue/badge'").primevue_badge).toBe(1)
+    // Two adjacent imports stay separately counted.
+    expect(countPatterns("import Badge from 'primevue/badge'\nimport Badge2 from 'primevue/badge'").primevue_badge).toBe(2)
     // Negative controls: a sibling module, a commented-out import, and the
     // template mention are not imports.
     expect(countPatterns("import Badge from 'primevue/badgex'").primevue_badge).toBe(0)
     expect(countPatterns("import Badge from 'primevue/message'").primevue_badge).toBe(0)
+    // A block-commented import is not an import (single- and multi-line).
+    expect(countPatterns("<script>\n/*\nimport Badge from 'primevue/badge'\n*/\n</script>").primevue_badge).toBe(0)
+    expect(countPatterns("<script>\n/* import Badge from 'primevue/badge' */\n</script>").primevue_badge).toBe(0)
+    // ...but a real import after a block comment still counts.
+    expect(countPatterns("/* header */\nimport Badge from 'primevue/badge'").primevue_badge).toBe(1)
     expect(countPatterns("<script>\n// import Badge from 'primevue/badge'\n</script>").primevue_badge).toBe(0)
     expect(countPatterns('<!-- import Badge from \'primevue/badge\' -->').primevue_badge).toBe(0)
     expect(countPatterns('<script>const mod = "primevue/badge"</script>').primevue_badge).toBe(0)
     expect(countPatterns("<style>@import 'primevue/badge';</style>").primevue_badge).toBe(0)
+  })
+
+  it('scans card markup in the template only, never in script or style blocks', () => {
+    // Positive control: the markup detectors still fire on real template markup.
+    expect(countPatterns('<template><div class="card" /></template>').card_container).toBe(1)
+    expect(countPatterns('<template><h3 class="text-base font-semibold">T</h3></template>').card_header).toBe(1)
+    // A card shell named inside a script string is not template markup.
+    expect(
+      countPatterns(`<template><div /></template><script>const tpl = '<div class="card" />'</script>`).card_container,
+    ).toBe(0)
+    expect(
+      countPatterns(
+        `<template><div /></template><script>const tpl = '<h3 class="text-base font-semibold">T</h3>'</script>`,
+      ).card_header,
+    ).toBe(0)
+    // ...nor is one named inside a CSS rule.
+    expect(
+      countPatterns(`<template><div /></template><style>.x::after { content: '<div class="card">' }</style>`)
+        .card_container,
+    ).toBe(0)
+    expect(
+      countPatterns(`<template><div /></template><style>.x::after { content: '<h3 class="text-base font-semibold">' }</style>`)
+        .card_header,
+    ).toBe(0)
   })
 
   it('counts a raw <button> in a template, and ignores comments, scripts, styles and components', () => {
