@@ -311,7 +311,7 @@
         </div>
 
         <div v-else-if="exportStatus === 'complete'" class="flex items-center gap-3">
-          <span class="badge badge-status-success">{{ $t('views.AdminOrgSettingsView.export_ready') }}</span>
+          <Badge variant="success">{{ $t('views.AdminOrgSettingsView.export_ready') }}</Badge>
           <span class="text-sm text-muted-foreground" data-testid="org-export-exported-at">
             {{ $t('views.AdminOrgSettingsView.exported_at', { date: formatDate(exportData.exportedAt) }) }}
           </span>
@@ -347,6 +347,7 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
+import Badge from '../components/ui/Badge.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { ref, computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'

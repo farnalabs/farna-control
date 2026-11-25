@@ -25,7 +25,6 @@ import CardTable from '../components/ui/CardTable.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import SummaryCard from '../components/ui/SummaryCard.vue'
 import StatCard from '../components/ui/StatCard.vue'
-import TableCard from '../components/ui/TableCard.vue'
 
 describe('useDeltaFormatting', () => {
   it.each([
@@ -239,6 +238,22 @@ describe('CardHeader and DataCard', () => {
     expect(actionOnly.find('.card-header').exists()).toBe(true)
   })
 
+  it('keeps the shared row layout contract: shrinking content and nowrap actions', () => {
+    const wrapper = mount(CardHeader, {
+      props: { title: 'Details' },
+      slots: {
+        actions: '<button>Go</button>',
+      },
+    })
+
+    const content = wrapper.find('.min-w-0.flex-1')
+    expect(content.exists()).toBe(true)
+    expect(content.classes()).toContain('min-w-0')
+    expect(content.classes()).toContain('flex-1')
+    expect(wrapper.find('.actions-nowrap').exists()).toBe(true)
+    expect(wrapper.find('.actions-nowrap').text()).toBe('Go')
+  })
+
   it('supports a leading slot and optional divider without changing the default header', () => {
     const composed = mount(CardHeader, {
       props: { title: 'Housekeeping', divider: true },
@@ -364,33 +379,27 @@ describe('CardContent, CardTable and CardSkeleton', () => {
   })
 })
 
-describe('TableCard', () => {
+describe('DataCard padding for a table body', () => {
   const tableSlot = { default: '<table><tbody><tr><td>row</td></tr></tbody></table>' }
 
-  it('renders a bare table untouched when neither heading nor table label is supplied', () => {
-    const wrapper = mount(TableCard, { slots: tableSlot })
+  // TableCard used to derive this padding. Its two callers now compose DataCard
+  // directly: a titled card keeps the inset, a bare table card is edge-to-edge
+  // (PipelineListView) or keeps the default inset (DashboardView).
+  it('defaults to the inset padding when a title is supplied', () => {
+    const wrapper = mount(DataCard, { props: { title: 'Rows' }, slots: tableSlot })
 
-    expect(wrapper.find('.overflow-x-auto').exists()).toBe(false)
+    expect(wrapper.find('.card').classes()).toContain('p-4')
+  })
+
+  it('renders an edge-to-edge body when padding is none', () => {
+    const wrapper = mount(DataCard, { props: { padding: 'none' }, slots: tableSlot })
+
+    expect(wrapper.find('.card').classes()).toContain('p-0')
     expect(wrapper.find('table').exists()).toBe(true)
   })
 
-  it('opts into the CardTable region from a table label alone', () => {
-    const wrapper = mount(TableCard, { props: { tableLabel: 'Rows table' }, slots: tableSlot })
-
-    const scroll = wrapper.find('.overflow-x-auto')
-    expect(scroll.exists()).toBe(true)
-    expect(scroll.attributes('aria-label')).toBe('Rows table')
-  })
-
-  it('opts into the CardTable region from a heading alone', () => {
-    const wrapper = mount(TableCard, { props: { heading: 'Rows' }, slots: tableSlot })
-
-    expect(wrapper.text()).toContain('Rows')
-    expect(wrapper.find('.overflow-x-auto').exists()).toBe(true)
-  })
-
-  it('honours an explicit padding over the header-derived default', () => {
-    const wrapper = mount(TableCard, { props: { title: 'Rows', padding: 'lg' }, slots: tableSlot })
+  it('honours an explicit padding over the default', () => {
+    const wrapper = mount(DataCard, { props: { title: 'Rows', padding: 'lg' }, slots: tableSlot })
 
     expect(wrapper.find('.card').classes()).toContain('p-6')
   })
