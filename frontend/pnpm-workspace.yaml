@@ -403,3 +403,8 @@ minimumReleaseAgeExclude:
   - '@lucide/vue@1.79.0'
   - '@grafana/faro-core@2.15.0'
   - '@grafana/faro-web-sdk@2.15.0'
+  - '@datadog/browser-core@7.19.0'
+  - '@datadog/browser-logs@7.19.0'
+  - '@datadog/browser-rum-core@7.19.0'
+  - '@datadog/browser-rum@7.19.0'
+  - '@datadog/js-core@0.0.23'
