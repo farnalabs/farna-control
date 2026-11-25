@@ -13,7 +13,9 @@ describe('Button', () => {
   it.each([
     ['primary', [], undefined],
     ['secondary', ['p-button-secondary', 'p-button-outlined'], 'secondary'],
+    ['secondary-text', ['p-button-secondary', 'p-button-text'], 'secondary'],
     ['ghost', ['p-button-text'], undefined],
+    ['link', ['p-button-link'], undefined],
     ['danger', ['p-button-danger'], 'danger'],
   ] as const)('maps variant %s to the PrimeVue severity/outlined/text flags', (variant, classes, severity) => {
     const wrapper = mount(Button, { props: { variant, label: 'Save' } })
@@ -25,6 +27,33 @@ describe('Button', () => {
     } else {
       expect(wrapper.attributes('data-p-severity')).toBe(severity)
     }
+  })
+
+  it('maps secondary-text to the secondary severity at rest rather than the primary one', () => {
+    const wrapper = mount(Button, { props: { variant: 'secondary-text', label: 'Cancel' } })
+
+    // The severity is the whole point of the variant: a plain `text` button
+    // would render the primary severity at rest.
+    expect(wrapper.classes()).toContain('p-button-secondary')
+    expect(wrapper.classes()).toContain('p-button-text')
+    expect(wrapper.classes()).not.toContain('p-button-outlined')
+    expect(wrapper.attributes('data-p-severity')).toBe('secondary')
+    expect(wrapper.attributes('data-p')).toContain('text')
+  })
+
+  it("maps link to PrimeVue's link flag, distinct from text", () => {
+    const link = mount(Button, { props: { variant: 'link', label: 'Learn more' } })
+    const text = mount(Button, { props: { variant: 'ghost', label: 'Learn more' } })
+
+    // `link` sets the link flag (transparent hover + underlined label on
+    // hover); `text` does not. They must not be the same combination.
+    expect(link.classes()).toContain('p-button-link')
+    expect(link.classes()).not.toContain('p-button-text')
+    expect(link.attributes('data-p')).toContain('link')
+
+    expect(text.classes()).toContain('p-button-text')
+    expect(text.classes()).not.toContain('p-button-link')
+    expect(text.attributes('data-p')).not.toContain('link')
   })
 
   it('keeps the variant flags exclusive: primary is solid and ghost is not outlined', () => {

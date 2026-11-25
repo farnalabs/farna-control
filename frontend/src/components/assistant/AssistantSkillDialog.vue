@@ -61,15 +61,14 @@
           />
         </div>
         <div class="flex items-center gap-2">
-          <label for="assistantskilldialog-field-1" class="flex items-center gap-2 text-sm cursor-pointer">
-            <input id="assistantskilldialog-field-1"
-              v-model="form.active"
-              type="checkbox"
-              class="rounded border-input"
-              data-testid="assistant-skills-form-active"
-            />
-            Active
-          </label>
+          <Checkbox
+            id="assistantskilldialog-field-1"
+            v-model="form.active"
+            label="Active"
+            class="flex items-center gap-2 text-sm cursor-pointer"
+            control-class="rounded border-input"
+            data-testid="assistant-skills-form-active"
+          />
         </div>
         <div v-if="saveError" class="text-sm text-destructive">
           {{ saveError }}
@@ -102,6 +101,7 @@
 <script setup lang="ts">
 import { ref, reactive } from "vue";
 import FormDialog from "@/components/shared/FormDialog.vue";
+import Checkbox from "../ui/Checkbox.vue";
 import { api } from "@/lib/api/client";
 import { formatApiError } from "@/lib/api/formatError";
 

@@ -200,24 +200,20 @@
               :id="`settingsmcpview-oauth-scope-group-${group.namespace}`"
               class="mb-1 text-xs font-semibold uppercase text-muted-foreground"
             >{{ scopeGroupLabel(group.namespace) }}</legend>
-            <label
+            <Checkbox
               v-for="scope in group.items"
               :key="scope.key"
-              :for="scopeInputId(scope.key)"
+              :id="scopeInputId(scope.key)"
+              :model-value="oauthScopes.includes(scope.key)"
               class="flex items-center gap-2 py-0.5"
+              control-class="h-4 w-4 rounded border-muted-foreground"
+              :data-testid="scopeTestid(scope.key)"
+              @update:model-value="toggleOauthScope(scope.key)"
             >
-              <input
-                :id="scopeInputId(scope.key)"
-                type="checkbox"
-                class="h-4 w-4 rounded border-muted-foreground"
-                :data-testid="scopeTestid(scope.key)"
-                :checked="oauthScopes.includes(scope.key)"
-                @change="toggleOauthScope(scope.key)"
-              />
               <span class="font-mono text-xs">{{ scope.key }}</span>
               <span aria-hidden="true" class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{{ scope.min_role }}</span>
               <span class="sr-only">{{ $t('views.SettingsMcpView.scope_min_role', { role: scope.min_role }) }}</span>
-            </label>
+            </Checkbox>
           </fieldset>
           <p
             v-if="filteredScopeCount === 0"
@@ -337,6 +333,7 @@ import { api } from '../../lib/api/client'
 import { formatApiError } from '../../lib/api/formatError'
 import type { components } from '../../lib/api/client'
 import Button from '../ui/Button.vue'
+import Checkbox from '../ui/Checkbox.vue'
 import DataCard from '../ui/DataCard.vue'
 import { DataTable, type Column, type DataTableRow } from '../ui/data-table'
 import Dialog from 'primevue/dialog'

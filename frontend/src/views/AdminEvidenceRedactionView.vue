@@ -114,23 +114,21 @@
               {{ $t('views.AdminEvidenceRedaction.redacted_fields') }}
             </legend>
             <div class="space-y-2">
-              <label
+              <Checkbox
                 v-for="redactionClass in classOptions"
                 :key="redactionClass"
+                :model-value="form.redacted_fields.includes(redactionClass)"
+                :value="redactionClass"
                 class="flex items-start gap-2 text-sm"
+                control-class="mt-0.5"
+                data-testid="admin-evidence-redaction-field-checkbox"
+                @update:model-value="toggleRedactedField(redactionClass)"
               >
-                <input
-                  v-model="form.redacted_fields"
-                  type="checkbox"
-                  :value="redactionClass"
-                  class="mt-0.5"
-                  data-testid="admin-evidence-redaction-field-checkbox"
-                />
                 <span>
                   <span class="font-mono text-xs">{{ redactionClass }}</span>
                   <span class="ml-2 text-muted-foreground">{{ classLabel(redactionClass) }}</span>
                 </span>
-              </label>
+              </Checkbox>
             </div>
             <p class="mt-2 text-xs text-muted-foreground">
               {{ $t('views.AdminEvidenceRedaction.redacted_fields_hint') }}
@@ -275,6 +273,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from '../components/ui/Button.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
@@ -365,6 +364,14 @@ const form = ref<{ key_pattern: string; role: string; redacted_fields: string[] 
   role: 'viewer',
   redacted_fields: [],
 })
+
+function toggleRedactedField(redactionClass: string): void {
+  const next = [...form.value.redacted_fields]
+  const index = next.indexOf(redactionClass)
+  if (index === -1) next.push(redactionClass)
+  else next.splice(index, 1)
+  form.value.redacted_fields = next
+}
 
 /**
  * A stored role this page does not recognise (e.g. a future role) must stay

@@ -89,17 +89,15 @@
               {{ switchSourceCopy }}
             </p>
             <div class="flex flex-wrap items-center gap-3">
-              <label class="inline-flex items-center gap-2 text-sm">
-                <input
-                  ref="toggleEl"
-                  type="checkbox"
-                  data-testid="instance-switch-toggle"
-                  :checked="instanceEnabled"
-                  :disabled="saving"
-                  @change="onToggle"
-                >
-                <span>{{ $t('views.AdminProductAnalyticsView.instance_switch_label') }}</span>
-              </label>
+              <Checkbox
+                ref="toggleEl"
+                :model-value="instanceEnabled"
+                :disabled="saving"
+                :label="$t('views.AdminProductAnalyticsView.instance_switch_label')"
+                class="inline-flex items-center gap-2 text-sm"
+                data-testid="instance-switch-toggle"
+                @update:model-value="onToggle"
+              />
               <button
                 v-if="hasExplicitOperatorValue"
                 type="button"
@@ -126,6 +124,7 @@ import { computed, onMounted, ref } from 'vue'
 import { parseISO } from 'date-fns'
 import PageHeader from '../components/shared/PageHeader.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
@@ -156,7 +155,7 @@ const store = useProductAnalyticsStore()
 const { t } = useI18n()
 const saving = ref(false)
 const saveError = ref<string | null>(null)
-const toggleEl = ref<HTMLInputElement | null>(null)
+const toggleEl = ref<InstanceType<typeof Checkbox> | null>(null)
 
 const view = computed<TransparencyView | null>(
   () => (store.transparency as unknown as TransparencyView | null) ?? null,
@@ -205,9 +204,10 @@ const warningMessage = computed(() => {
 // `:checked` only patches the DOM when the bound value CHANGES. A user-flipped
 // checkbox therefore stays flipped when the write fails (or the server's
 // effective value is unchanged), so re-assert the committed state after every
-// attempt settles.
+// attempt settles. The native control is exposed by the Checkbox primitive.
 function syncToggleDom(): void {
-  if (toggleEl.value) toggleEl.value.checked = instanceEnabled.value
+  const input = toggleEl.value?.inputEl
+  if (input) input.checked = instanceEnabled.value
 }
 
 async function saveSwitch(enabled: boolean | null): Promise<void> {
@@ -232,9 +232,8 @@ async function saveSwitch(enabled: boolean | null): Promise<void> {
   }
 }
 
-function onToggle(event: Event): void {
-  const target = event.target as HTMLInputElement
-  void saveSwitch(target.checked)
+function onToggle(checked: boolean): void {
+  void saveSwitch(checked)
 }
 
 function onReset(): void {

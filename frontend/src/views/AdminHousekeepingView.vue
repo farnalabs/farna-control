@@ -66,16 +66,14 @@
 
         <DataCard class="mb-4" variant="bordered" padding="sm" elevation="sm">
           <div class="flex items-center gap-4">
-            <label class="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                :checked="allSelected"
-                :indeterminate.prop="someSelected && !allSelected"
-                data-testid="hk-select-all"
-                @change="toggleSelectAll"
-              />
-              {{ $t('views.AdminHousekeepingView.select_all') }}
-            </label>
+            <Checkbox
+              :model-value="allSelected"
+              :indeterminate="someSelected && !allSelected"
+              :label="$t('views.AdminHousekeepingView.select_all')"
+              class="flex items-center gap-2 text-sm"
+              data-testid="hk-select-all"
+              @update:model-value="toggleSelectAll"
+            />
             <span class="text-sm text-muted-foreground">
               {{ $t('views.AdminHousekeepingView.selected_count', { count: selectedCount, total: totalCount }) }}
             </span>
@@ -105,14 +103,14 @@
             header-class="items-center border-b px-4 py-3 mb-0!"
           >
             <template #leading>
-              <input
-                type="checkbox"
+              <Checkbox
+                bare
                 :aria-label="cat.label"
-                :checked="categorySelected(cat.category)"
-                :indeterminate.prop="categoryPartial(cat.category)"
+                :model-value="categorySelected(cat.category)"
+                :indeterminate="categoryPartial(cat.category)"
                 :disabled="isFailed(cat)"
                 data-testid="hk-category-checkbox"
-                @change="toggleCategory(cat.category)"
+                @update:model-value="toggleCategory(cat.category)"
               />
             </template>
             <template #actions>
@@ -154,12 +152,12 @@
             class="flex items-center gap-3 border-t px-4 py-2.5"
             data-testid="hk-candidate"
           >
-            <input
-              type="checkbox"
+            <Checkbox
+              bare
               :aria-label="c.name"
-              :checked="isSelected(c.id)"
+              :model-value="isSelected(c.id)"
               data-testid="hk-candidate-checkbox"
-              @change="toggleItem(c.id)"
+              @update:model-value="toggleItem(c.id)"
             />
             <div class="flex-1 min-w-0">
               <p class="truncate text-sm font-medium">{{ c.name }}</p>
@@ -262,6 +260,7 @@ import { useI18n } from 'vue-i18n'
 import { useApi } from '../composables/useApi'
 import type { components } from '../lib/api/schema'
 import Button from '../components/ui/Button.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import PageHeader from '../components/shared/PageHeader.vue'

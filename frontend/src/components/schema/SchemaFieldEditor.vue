@@ -86,16 +86,15 @@
         </div>
 
         <div class="flex items-center gap-4">
-          <label :for="`schema-editor-field-${field._key}-required`" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <input :id="`schema-editor-field-${field._key}-required`"
-              :checked="field.required"
-              type="checkbox"
-              data-testid="schema-editor-field-required"
-              class="rounded border-input text-primary-text focus:ring-primary"
-              @change="update({ required: ($event.target as HTMLInputElement).checked })"
-            />
-            {{ $t('views.SchemaEditorView.required') }}
-          </label>
+          <Checkbox
+            :id="`schema-editor-field-${field._key}-required`"
+            :model-value="field.required"
+            :label="$t('views.SchemaEditorView.required')"
+            class="flex items-center gap-1.5 text-xs text-muted-foreground"
+            control-class="rounded border-input text-primary-text focus:ring-primary"
+            data-testid="schema-editor-field-required"
+            @update:model-value="update({ required: $event })"
+          />
         </div>
       </div>
 
@@ -114,6 +113,7 @@
 <script setup lang="ts">
 import type { SchemaField } from '../../utils/schema-definition'
 import Select from '../shared/AppSelect.vue'
+import Checkbox from '../ui/Checkbox.vue'
 import { ChevronUp, ChevronDown, Trash2 } from '@lucide/vue'
 
 const field = defineModel<SchemaField>('field', { required: true })

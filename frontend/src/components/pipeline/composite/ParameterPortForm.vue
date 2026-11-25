@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import AppSelect from "../../shared/AppSelect.vue";
+import Checkbox from "../../ui/Checkbox.vue";
 import type { ParameterPort } from "../../../types/pipeline";
 
 const { t } = useI18n();
@@ -50,9 +51,8 @@ const selectOptions = computed(() => [
   ...(props.port.options ?? []).map((opt) => ({ value: opt.value, label: opt.label })),
 ]);
 
-function onBooleanChange(event: Event) {
-  const target = event.target as HTMLInputElement;
-  localValue.value = target.checked;
+function onBooleanChange(checked: boolean) {
+  localValue.value = checked;
 }
 </script>
 
@@ -94,18 +94,16 @@ function onBooleanChange(event: Event) {
       @change="onNumberChange"
     />
 
-    <label for="parameterportform-field-1"
+    <Checkbox
       v-else-if="port.type === 'boolean'"
+      id="parameterportform-field-1"
+      :model-value="!!localValue"
+      :label="localValue ? 'Enabled' : 'Disabled'"
       class="inline-flex cursor-pointer items-center gap-2"
-    >
-      <input id="parameterportform-field-1"
-        :checked="!!localValue"
-        type="checkbox"
-        class="rounded border-gray-300 text-node-port focus:ring-node-port"
-        @change="onBooleanChange"
-      />
-      <span class="text-sm">{{ localValue ? "Enabled" : "Disabled" }}</span>
-    </label>
+      label-class="text-sm"
+      control-class="rounded border-gray-300 text-node-port focus:ring-node-port"
+      @update:model-value="onBooleanChange"
+    />
 
     <AppSelect
       v-else-if="port.type === 'select'"

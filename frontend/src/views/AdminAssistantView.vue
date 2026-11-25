@@ -162,16 +162,17 @@
               <label
                   v-for="role in orgRoles"
                   :key="role"
-                  for="adminassistantview-field-13"
+                  :for="`adminassistantview-role-${role}`"
                   class="flex items-center gap-2 text-sm cursor-pointer"
                   v-tooltip.top="role === 'admin' ? $t('views.AdminAssistantView.full_access_to_all_settings_and_assistant_configuration') : role === 'operator' ? $t('views.AdminAssistantView.can_create_and_manage_pipelines_use_assistant') : role === 'runner' ? $t('views.AdminAssistantView.can_execute_pipeline_runs_use_assistant') : $t('views.AdminAssistantView.readonly_access_can_view_but_not_edit_use_assistant')"
                 >
-                    <input id="adminassistantview-field-13"
-                      type="checkbox"
+                    <Checkbox
+                      bare
+                      :id="`adminassistantview-role-${role}`"
+                      :model-value="accessList.selectedRoles.includes(role)"
                       :value="role"
-                      :checked="accessList.selectedRoles.includes(role)"
-                      class="rounded border-input"
-                      @change="toggleRole(role)"
+                      control-class="rounded border-input"
+                      @update:model-value="toggleRole(role)"
                     />
                     {{ role }}
                   </label>
@@ -532,6 +533,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import AssistantSkillDialog from '../components/assistant/AssistantSkillDialog.vue'
 import AccessEntitySelector from '../components/assistant/AccessEntitySelector.vue'
 import Button from '../components/ui/Button.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import Select from '../components/shared/AppSelect.vue'
 import type { SkillItem } from '../types/assistant'
 import { useI18n } from 'vue-i18n'
