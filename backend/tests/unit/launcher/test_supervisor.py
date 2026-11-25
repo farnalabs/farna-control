@@ -1009,6 +1009,108 @@ def test_an_empty_record_is_unverifiable(tmp_path: Path) -> None:
     assert status.pid is None
 
 
+def test_a_non_object_record_is_unverifiable(tmp_path: Path) -> None:
+    """Valid JSON that is not a record object cannot identify anything."""
+    from farna.launcher import supervisor as supervisor_module
+
+    (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).write_text("[1, 2, 3]\n", encoding="ascii")
+
+    status = supervisor_module.inspect_restore_window_postmaster(tmp_path)
+    assert status.state is supervisor_module.RestoreWindowState.UNVERIFIABLE
+    assert status.pid is None
+    assert "no record object" in (status.detail or "")
+
+
+def test_a_record_from_an_unknown_format_version_is_unverifiable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A newer/older on-disk format must be reported, never acted on."""
+    from farna.launcher import supervisor as supervisor_module
+
+    (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).write_text('{"version": 99, "pid": 4242}\n', encoding="ascii")
+    monkeypatch.setattr(supervisor_module, "_pid_alive", lambda _pid: True)
+
+    status = supervisor_module.inspect_restore_window_postmaster(tmp_path)
+    assert status.state is supervisor_module.RestoreWindowState.UNVERIFIABLE
+    assert "format version" in (status.detail or "")
+
+
+def test_a_record_without_a_usable_pid_is_unverifiable(tmp_path: Path) -> None:
+    from farna.launcher import supervisor as supervisor_module
+
+    (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).write_text('{"version": 1, "pid": 0, "start_epoch": 1000.0, "data_dir": "/x"}\n', encoding="ascii")
+
+    status = supervisor_module.inspect_restore_window_postmaster(tmp_path)
+    assert status.state is supervisor_module.RestoreWindowState.UNVERIFIABLE
+    assert status.pid is None
+    assert "no usable pid" in (status.detail or "")
+
+
+def test_a_record_without_a_start_time_is_unverifiable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pid without a start time is an identity with a hole in it."""
+    from farna.launcher import supervisor as supervisor_module
+
+    (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).write_text('{"version": 1, "pid": 4242, "data_dir": "/x"}\n', encoding="ascii")
+    monkeypatch.setattr(supervisor_module, "_pid_alive", lambda _pid: True)
+
+    status = supervisor_module.inspect_restore_window_postmaster(tmp_path)
+    assert status.state is supervisor_module.RestoreWindowState.UNVERIFIABLE
+    assert status.pid == 4242
+    assert "no process start time" in (status.detail or "")
+
+
+def test_an_unreadable_record_is_unverifiable(tmp_path: Path) -> None:
+    """A path that cannot be read (e.g. a directory) is reported, never acted on."""
+    from farna.launcher import supervisor as supervisor_module
+
+    (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).mkdir()
+
+    status = supervisor_module.inspect_restore_window_postmaster(tmp_path)
+    assert status.state is supervisor_module.RestoreWindowState.UNVERIFIABLE
+    assert "cannot be read" in (status.detail or "")
+
+
+def test_an_unreadable_process_start_time_is_unverifiable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host that cannot read start times cannot prove the pid is the postmaster."""
+    from farna.launcher import supervisor as supervisor_module
+
+    _write_window_record(tmp_path, monkeypatch)
+    monkeypatch.setattr(supervisor_module, "_pid_alive", lambda _pid: True)
+    monkeypatch.setattr(supervisor_module, "_pid_starttime_epoch", lambda _pid: None)
+    monkeypatch.setattr(supervisor_module, "_is_postgres_process", lambda _pid: True)
+
+    status = supervisor_module.inspect_restore_window_postmaster(tmp_path)
+    assert status.state is supervisor_module.RestoreWindowState.UNVERIFIABLE
+    assert status.pid == 4242
+    assert "cannot read a process start time" in (status.detail or "")
+
+
+def test_an_unreadable_executable_identity_is_unverifiable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host that cannot read the executable cannot prove the process is postgres."""
+    from farna.launcher import supervisor as supervisor_module
+
+    _write_window_record(tmp_path, monkeypatch)
+    monkeypatch.setattr(supervisor_module, "_pid_alive", lambda _pid: True)
+    monkeypatch.setattr(supervisor_module, "_is_postgres_process", lambda _pid: None)
+
+    status = supervisor_module.inspect_restore_window_postmaster(tmp_path)
+    assert status.state is supervisor_module.RestoreWindowState.UNVERIFIABLE
+    assert status.pid == 4242
+    assert "cannot read that process's executable" in (status.detail or "")
+
+
+def test_a_pid_now_owned_by_a_non_postgres_is_stale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reused pid running a different program is debris, not this window's postmaster."""
+    from farna.launcher import supervisor as supervisor_module
+
+    _write_window_record(tmp_path, monkeypatch)
+    monkeypatch.setattr(supervisor_module, "_pid_alive", lambda _pid: True)
+    monkeypatch.setattr(supervisor_module, "_is_postgres_process", lambda _pid: False)
+
+    status = supervisor_module.inspect_restore_window_postmaster(tmp_path)
+    assert status.state is supervisor_module.RestoreWindowState.STALE
+    assert status.identified_pid is None
+    assert "different program" in (status.detail or "")
+
+
 def test_reconcile_does_not_blame_an_unverifiable_record_on_a_live_postmaster(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The defect's consequence: a bare pid that now belongs to an innocent
     postgres must NOT be reported as the restore window's leftover."""
