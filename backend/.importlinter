@@ -247,6 +247,15 @@ forbidden_modules =
 ignore_imports =
     # Shell resolves workspace sessions via the DB layer.
     farna.connectors.shell -> farna.db.session
+    # FAR-2705: the run model re-exports the DEPENDENCY-FREE data leaf
+    # ``farna.core.run_lifecycle`` (pure status/transition data; see the
+    # db-does-not-import-core exemption). Ignoring that single terminal edge
+    # removes the only chain from a connector into core:
+    #   connectors.shell -> db.crud.environment_profile -> db.crud.team_scope
+    #   -> db.models.run -> core.run_lifecycle
+    # No connector imports core behaviour; the chain ends in a data table that
+    # imports nothing from ``farna``.
+    farna.db.models.run -> farna.core.run_lifecycle
     # FAR-587: shell's hub-resolution guard maps the hub's typed
     # ProviderNotConfiguredError to the connector's fail-soft ValueError
     # contract - a single exception-type import (no core behaviour flows in).
