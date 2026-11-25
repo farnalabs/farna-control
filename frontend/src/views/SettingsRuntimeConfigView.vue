@@ -64,19 +64,19 @@
                   <AlertTriangle v-if="entryHasDrift(entry)" class="h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" focusable="false" />
                   <span v-if="entryHasDrift(entry)" class="sr-only">{{ $t('views.SettingsRuntimeConfigView.value_differs_from_environment') }}</span>
                 <code class="text-sm font-mono">{{ entry.key }}</code>
-                  <span
+                  <Badge
                     v-if="entry.hot_reloadable"
-                    class="badge badge-status-success"
+                    variant="success"
                   >
                     {{ $t('views.SettingsRuntimeConfigView.hot') }}
-                  </span>
-                  <span
+                  </Badge>
+                  <Badge
                     v-else
-                    class="badge badge-status-muted"
+                    variant="neutral"
                     :title="$t('views.SettingsRuntimeConfigView.requires_server_restart')"
                   >
                     {{ $t('views.SettingsRuntimeConfigView.static') }}
-                  </span>
+                  </Badge>
               </div>
             </td>
 
@@ -201,6 +201,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
+import Badge from '../components/ui/Badge.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import { AlertTriangle } from '@lucide/vue'
 

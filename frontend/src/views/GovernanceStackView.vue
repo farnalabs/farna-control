@@ -96,7 +96,7 @@
                 :aria-label="$t(level.titleKey)"
               >
                 <Badge
-                  :severity="badgeSeverity(level.state)"
+                  :variant="badgeVariant(level.state)"
                   :data-testid="`governance-level-state-${level.id}`"
                 >
                   {{ badgeLabel(level.state) }}
@@ -140,7 +140,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
-import Badge from 'primevue/badge'
+import Badge from '../components/ui/Badge.vue'
 
 const { t } = useI18n()
 
@@ -287,9 +287,9 @@ const levels = reactive<LevelView[]>(
  * neither "Configured" nor "Empty", because the read never established either.
  * Its count is hidden the same way - an unknown contribution is not a zero.
  */
-function badgeSeverity(state: LevelState): 'warn' | 'success' | 'secondary' {
-  if (state.indeterminate) return 'warn'
-  return state.configured ? 'success' : 'secondary'
+function badgeVariant(state: LevelState): 'warning' | 'success' | 'neutral' {
+  if (state.indeterminate) return 'warning'
+  return state.configured ? 'success' : 'neutral'
 }
 
 function badgeLabel(state: LevelState): string {

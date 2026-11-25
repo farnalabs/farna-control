@@ -70,17 +70,17 @@
         <div>
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminFeatureFlagsView.license_key') }}</span>
           <p class="mt-0.5">
-            <span :class="license.has_license_key ? 'badge badge-status-success' : 'badge badge-status-muted'">
+            <Badge :variant="license.has_license_key ? 'success' : 'neutral'">
               {{ license.has_license_key ? $t('views.AdminFeatureFlagsView.active') : $t('views.AdminFeatureFlagsView.not_set') }}
-            </span>
+            </Badge>
           </p>
         </div>
         <div>
           <span class="text-xs font-medium text-muted-foreground capitalize">{{ $t('views.AdminFeatureFlagsView.status_label') }}</span>
           <p class="mt-0.5">
-            <span :class="license.is_valid ? 'badge badge-status-success' : 'badge badge-status-destructive'">
+            <Badge :variant="license.is_valid ? 'success' : 'danger'">
               {{ license.is_valid ? $t('views.AdminFeatureFlagsView.valid') : $t('views.AdminFeatureFlagsView.invalid') }}
-            </span>
+            </Badge>
           </p>
         </div>
         <div>
@@ -89,7 +89,7 @@
             <template v-if="planStore.expiresAt">
               {{ formatDate(planStore.expiresAt) }}
             </template>
-            <span v-else class="badge badge-status-muted">{{ $t('views.AdminFeatureFlagsView.n_a') }}</span>
+            <Badge v-else variant="neutral">{{ $t('views.AdminFeatureFlagsView.n_a') }}</Badge>
           </p>
         </div>
       </div>
@@ -101,13 +101,13 @@
         {{ $t('views.AdminFeatureFlagsView.would_activate_features', { count: filteredWouldActivate.length }) }}
       </p>
       <div class="flex flex-wrap gap-2">
-        <span
-              v-for="flag in filteredWouldActivate"
+        <Badge
+          v-for="flag in filteredWouldActivate"
           :key="flag.name"
-          class="badge badge-status-warning"
+          variant="warning"
         >
           {{ flag.name }} <span class="opacity-70">({{ flag.tier }})</span>
-        </span>
+        </Badge>
       </div>
     </DataCard>
 
@@ -199,7 +199,7 @@
                       </button>
                     </td>
                     <td class="table-cell">
-                      <span :class="isFlagTierLocked(flag) ? 'badge badge-status-warning' : (flag.currently_active ? 'badge badge-status-success' : 'badge badge-status-muted')">
+                      <Badge :variant="isFlagTierLocked(flag) ? 'warning' : (flag.currently_active ? 'success' : 'neutral')">
                         <template v-if="isFlagTierLocked(flag)">
                           <Lock class="inline-block w-3 h-3 mr-1 align-middle" aria-hidden="true" focusable="false" />
                           {{ $t('views.AdminFeatureFlagsView.locked_requires_team') }}
@@ -207,7 +207,7 @@
                         <template v-else>
                           {{ flag.currently_active ? $t('views.AdminFeatureFlagsView.active') : $t('views.AdminFeatureFlagsView.inactive') }}
                         </template>
-                      </span>
+                      </Badge>
                     </td>
                     <td class="table-cell text-muted-foreground">{{ flag.description || '—' }}</td>
                     <td class="table-cell-numeric">
@@ -276,6 +276,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
+import Badge from '../components/ui/Badge.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Button from '../components/ui/Button.vue'
 import { Lock } from '@lucide/vue'

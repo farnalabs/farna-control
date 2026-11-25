@@ -3,7 +3,7 @@
  *
  * `.card` (plus `card-base` / `card-header` / `card-content` / `card-footer`)
  * is the ONE card surface in the app. It is emitted by `BaseCard` and reached
- * through its presets (`DataCard`, `TableCard`, `CollapsibleCard`,
+ * through its presets (`DataCard`, `CollapsibleCard`,
  * `CardSkeleton`, `CardHeader`, `CardContent`, `CardTable`, `EmptyState`,
  * `StatCard`, `SummaryCard`). A page must not re-implement the
  * surface with a raw `class="card ..."`, because that silently forks the

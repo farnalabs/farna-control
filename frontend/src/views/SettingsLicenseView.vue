@@ -22,8 +22,8 @@
         :title="licenseInfo.tier === 'team' ? $t('views.SettingsLicenseView.team') : $t('views.SettingsLicenseView.community')"
       >
         <template #headerActions>
-          <Badge v-if="licenseInfo.tier === 'team'" severity="info">{{ $t('common.active') }}</Badge>
-          <Badge v-else severity="secondary" class="border border-border">{{ $t('views.SettingsLicenseView.community') }}</Badge>
+          <Badge v-if="licenseInfo.tier === 'team'" variant="info">{{ $t('common.active') }}</Badge>
+          <Badge v-else variant="neutral" class="border border-border">{{ $t('views.SettingsLicenseView.community') }}</Badge>
         </template>
         <div v-if="licenseInfo.tier === 'team'">
           <p v-if="licenseInfo.org_id" class="text-sm text-muted-foreground">
@@ -209,7 +209,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import Badge from 'primevue/badge'
+import Badge from '../components/ui/Badge.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import { ExternalLink } from '@lucide/vue'
 import { format } from 'date-fns'
