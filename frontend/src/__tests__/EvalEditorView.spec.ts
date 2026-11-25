@@ -80,6 +80,7 @@ vi.mock('vue-router', async () => {
 
 import EvalEditorView from '../views/EvalEditorView.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import { api, getAccessToken } from '../lib/api/client'
 import PageTabs from '../components/PageTabs.vue'
 
@@ -207,6 +208,37 @@ describe('EvalEditorView', () => {
     ;(wrapper.vm as any).form.eval_type = ''
     await nextTick()
     expect(textarea.attributes('placeholder')).toBe('views.EvalEditorView.configPlaceholder.model_judge')
+  })
+
+  it('renders the derivation warning through the shared Notice danger variant (FAR-2766)', async () => {
+    const wrapper = mount(EvalEditorView, {
+      global: {
+        stubs: { FeatureGate: { template: '<div><slot /></div>' } },
+        mocks: { $t: (key: string) => key },
+      },
+    })
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="eval-editor-verdict-kind"]').exists()).toBe(true)
+    })
+    ;(wrapper.vm as any).typedDraft.verdictKind = 'derivation'
+    await nextTick()
+
+    const warning = wrapper.find('[data-testid="eval-editor-derivation-warning"]')
+    expect(warning.exists()).toBe(true)
+
+    // Structure: the alert is rendered by the shared Notice primitive, not a
+    // hand-rolled banner div.
+    const renderedByNotice = wrapper
+      .findAllComponents(Notice)
+      .some((notice) => notice.element === warning.element)
+    expect(renderedByNotice).toBe(true)
+
+    // Semantics: Notice's danger variant owns the destructive surface tokens
+    // (the pre-Notice banner used the lighter /5 and /30 steps).
+    expect(warning.classes()).toContain('bg-destructive/10')
+    expect(warning.classes()).toContain('border-destructive/50')
+    expect(warning.classes()).not.toContain('bg-destructive/5')
+    expect(warning.classes()).not.toContain('border-destructive/30')
   })
 })
 
