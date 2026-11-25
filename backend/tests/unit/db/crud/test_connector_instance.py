@@ -240,6 +240,32 @@ class TestListConnectorInstances:
         sql = compile_sql(stmt)
         assert f"organisation_id = '{_ORG_ID.hex}'" in sql
 
+    async def test_cursor_pagination_applies_team_scope(self, mock_session: AsyncMock) -> None:
+        """The cursor path must carry the team boundary into the paginated stmt (ADR 070 §5)."""
+        from farna.db.crud.connector_instance import list_connector_instances
+        from tests.unit.crud.helpers import compile_sql
+
+        paginator_mock = AsyncMock()
+        cp_result = MagicMock()
+        cp_result.items = []
+        cp_result.total = 0
+        cp_result.next_cursor = None
+        cp_result.has_more = False
+        paginator_mock.paginate = AsyncMock(return_value=cp_result)
+
+        with patch("farna.db.crud.connector_instance.CursorPaginator", return_value=paginator_mock):
+            await list_connector_instances(
+                mock_session,
+                organisation_id=_ORG_ID,
+                cursor="test-cursor",
+                team_id=_TEAM_ID,
+            )
+
+        stmt = paginator_mock.paginate.await_args.args[1]
+        sql = compile_sql(stmt)
+        assert "owner_team_id IS NULL" in sql
+        assert f"owner_team_id = '{_TEAM_ID.hex}'" in sql
+
     async def test_cursor_pagination_without_organisation_id(self, mock_session: AsyncMock) -> None:
         """With no org supplied the cursor path skips the org predicate but keeps the tier filter."""
         from farna.db.crud.connector_instance import list_connector_instances
