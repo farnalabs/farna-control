@@ -642,6 +642,9 @@ def _override_patches(exc: Exception | None = None) -> list:
             "_guardrail_override_rate_limiter",
             TokenBucketRegistry(rate=10 / 60.0, burst=10),
         ),
+        # ADR 070 §4: the override route loads the run through the shared team
+        # clamp before it acts; the mocked session answers no rows.
+        patch("farna.api.routes.runs.get_run", new_callable=AsyncMock, return_value=run),
     ]
     if exc is not None:
         patches.append(patch("farna.api.routes.runs.guardrail_override", new_callable=AsyncMock, side_effect=exc))
@@ -684,6 +687,8 @@ def test_guardrail_override_dispatch_failure_maps_to_500() -> None:
             "_guardrail_override_rate_limiter",
             TokenBucketRegistry(rate=10 / 60.0, burst=10),
         ),
+        # ADR 070 §4: the shared per-run clamp load precedes the core call.
+        patch("farna.api.routes.runs.get_run", new_callable=AsyncMock, return_value=_make_run()),
         patch("farna.api.routes.runs.guardrail_override", new_callable=AsyncMock, return_value=_make_run()),
         patch("farna.api.routes.runs.dispatch_run", new_callable=AsyncMock, side_effect=RuntimeError("queue down")),
     ):

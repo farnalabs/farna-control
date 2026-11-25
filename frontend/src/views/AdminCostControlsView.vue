@@ -92,7 +92,7 @@
               </template>
               <template #cell-actions="{ row }">
                 <div class="text-right">
-                  <Button size="small" :disabled="(row as any).saving" :data-testid="'cc-team-save-' + (row as any).id" @click="saveTeamBudget(row as any)">
+                  <Button size="sm" :disabled="(row as any).saving" :data-testid="'cc-team-save-' + (row as any).id" @click="saveTeamBudget(row as any)">
                     {{ (row as any).saving ? $t('views.AdminCostControlsView.saving') : $t('views.AdminCostControlsView.save') }}
                   </Button>
                 </div>
@@ -253,7 +253,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import InputText from 'primevue/inputtext'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { DataTable } from '../components/ui/data-table'
 import Select from '../components/shared/AppSelect.vue'
 import { formatMoney } from '../lib/money'

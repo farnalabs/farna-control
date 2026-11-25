@@ -517,7 +517,7 @@
           <p class="text-sm font-medium text-destructive-text">{{ $t('views.AdminModelBackendsView.delete_confirm', { name: deleteConfirmName }) }}</p>
           <p class="mt-1 text-sm text-destructive-text">{{ $t('views.AdminModelBackendsView.this_action_cannot_be_undone') }}</p>
           <div class="mt-3 flex items-center gap-2">
-          <Button :disabled="deleting" severity="danger" data-testid="admin-model-backends-delete-confirm" @click="deleteBackend">
+          <Button :disabled="deleting" variant="danger" data-testid="admin-model-backends-delete-confirm" @click="deleteBackend">
             {{ deleting ? $t('views.AdminModelBackendsView.deleting') : $t('views.AdminModelBackendsView.delete') }}
           </Button>
             <button
@@ -550,7 +550,7 @@ import DataCard from '../components/ui/DataCard.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { useProductAnalytics } from '../composables/useProductAnalytics'
 import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import TableActions from '../components/shared/TableActions.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
