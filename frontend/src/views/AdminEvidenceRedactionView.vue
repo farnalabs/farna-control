@@ -274,7 +274,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'

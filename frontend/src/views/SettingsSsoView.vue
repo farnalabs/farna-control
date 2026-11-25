@@ -140,7 +140,7 @@
               <p class="mt-1 text-sm text-destructive-text">{{ $t('views.SettingsSsoView.delete_warning') }}</p>
               <p class="mt-1 text-sm text-destructive-text" data-testid="settings-sso-delete-session-warning">{{ $t('views.SettingsSsoView.delete_session_warning') }}</p>
               <div class="mt-3 flex items-center gap-2">
-                <Button :disabled="deleting" severity="danger" data-testid="settings-sso-delete-confirm" @click="deleteProvider(provider.id)">
+                <Button :disabled="deleting" variant="danger" data-testid="settings-sso-delete-confirm" @click="deleteProvider(provider.id)">
                   {{ deleting ? $t('views.SettingsSsoView.deleting') : $t('views.SettingsSsoView.delete') }}
                 </Button>
                 <button type="button"
@@ -180,7 +180,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 import { useDataFetch } from '../composables/useDataFetch'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import TableActions from '../components/shared/TableActions.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
