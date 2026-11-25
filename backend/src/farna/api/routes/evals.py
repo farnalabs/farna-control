@@ -41,6 +41,7 @@ from farna.api.constants import (
     MSG_FEATURE_NOT_AVAILABLE,
     MSG_PIPELINE_NOT_FOUND,
     MSG_RESOURCE_ALREADY_EXISTS,
+    MSG_RUN_NOT_FOUND,
 )
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
 from farna.api.dependencies import (
@@ -49,6 +50,7 @@ from farna.api.dependencies import (
     require_permission,
     require_team_membership_or_admin,
 )
+from farna.api.run_scope import run_visible_to_principal
 from farna.api.team_scope import (
     resolve_eval_dataset_team_scope,
     resolve_eval_suite_team_scope,
@@ -3023,7 +3025,7 @@ async def list_run_evals(
             )
             run = run_result.scalar_one_or_none()
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
             from sqlalchemy import func as sa_func
 
@@ -3942,7 +3944,7 @@ def _iso_or_none(value: Any) -> str | None:
 
 
 async def _load_eval_source_run(session: AsyncSession, principal: TenantPrincipal, run_id: uuid.UUID) -> Run:
-    """Fetch the source run scoped to the caller's org (404 when missing)."""
+    """Fetch the source run scoped to the caller's org AND team (404 otherwise)."""
     run = (
         await session.execute(
             select(Run).where(
@@ -3952,7 +3954,13 @@ async def _load_eval_source_run(session: AsyncSession, principal: TenantPrincipa
         )
     ).scalar_one_or_none()
     if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+        raise HTTPException(status_code=404, detail=MSG_RUN_NOT_FOUND)
+    # ADR 070 §4: the same shared per-run clamp as the run-detail family. An
+    # eval definition may not be authored from a run outside the principal's
+    # team boundary; a refusal is NOT FOUND so run existence is not confirmed.
+    # The predicate is the leaf implementation, never a local team comparison.
+    if not await run_visible_to_principal(session, principal, run):
+        raise HTTPException(status_code=404, detail=MSG_RUN_NOT_FOUND)
     return run
 
 
