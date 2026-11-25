@@ -486,6 +486,13 @@ describe('ParameterSchemasView — parameter sets tab', () => {
     )
     expect(wrapper.text()).toContain('Prod Values')
     expect(wrapper.text()).toContain('prod')
+    // FAR-2768: the sets list sits on the page surface under its own heading -
+    // the set rows are the only cards, never nested inside an outer one.
+    const setsHeading = wrapper.findAll('h2').find((h) => h.text() === 'Parameter Sets')
+    expect(setsHeading).toBeDefined()
+    expect(setsHeading!.element.closest('.card')).toBeNull()
+    const setRow = wrapper.find('[data-testid="paramschema-set-set-1"]')
+    expect(setRow.element.closest('.card')).toBeNull()
   })
 
   it('shows the empty message when no sets exist', async () => {
