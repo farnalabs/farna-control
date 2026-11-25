@@ -36,40 +36,20 @@
       </template>
     </PageHeader>
 
-    <div
+    <!-- StateTabs composes these stable tab test IDs from testid-prefix:
+         :data-testid="'admin-audit-tab-org'" and :data-testid="'admin-audit-tab-system'". -->
+    <StateTabs
       v-if="isSystemAdmin"
-      role="tablist"
-      :aria-label="$t('views.AdminAuditView.audit_source_group')"
-      class="mb-4 flex flex-wrap gap-2"
+      :ariaLabel="$t('views.AdminAuditView.audit_source_group')"
+      :model-value="auditSource"
+      :tabs="auditSourceTabs"
+      class="mb-4 flex-wrap"
       data-testid="admin-audit-source-tabs"
-    >
-      <button
-        id="admin-audit-tab-org"
-        type="button"
-        role="tab"
-        :aria-selected="auditSource === 'org'"
-        aria-controls="admin-audit-source-org"
-        class="rounded-lg border border-input px-4 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        :class="auditSource === 'org' ? 'bg-accent' : 'bg-background hover:bg-accent'"
-        data-testid="admin-audit-tab-org"
-        @click="auditSource = 'org'"
-      >
-        {{ $t('views.AdminAuditView.tab_org_events') }}
-      </button>
-      <button
-        id="admin-audit-tab-system"
-        type="button"
-        role="tab"
-        :aria-selected="auditSource === 'system'"
-        aria-controls="admin-audit-source-system"
-        class="rounded-lg border border-input px-4 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        :class="auditSource === 'system' ? 'bg-accent' : 'bg-background hover:bg-accent'"
-        data-testid="admin-audit-tab-system"
-        @click="auditSource = 'system'"
-      >
-        {{ $t('views.AdminAuditView.tab_system_events') }}
-      </button>
-    </div>
+      id-prefix="admin-audit-tab"
+      panel-id-prefix="admin-audit-source"
+      testid-prefix="admin-audit-tab"
+      @update:model-value="onAuditSourceSelected"
+    />
 
     <div
       v-if="auditSource === 'org'"
@@ -78,7 +58,7 @@
       :aria-labelledby="isSystemAdmin ? 'admin-audit-tab-org' : undefined"
       class="space-y-4"
     >
-    <div v-if="chainResult" class="rounded-lg border px-4 py-3 text-sm" :class="chainResult.valid ? 'border-green-500 bg-green-50 text-green-800' : 'border-red-500 bg-red-50 text-red-800'" aria-live="polite" data-testid="admin-audit-chain-result">
+    <div v-if="chainResult" class="rounded-lg border px-4 py-3 text-sm" :class="chainResult.valid ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text'" aria-live="polite" data-testid="admin-audit-chain-result">
       <strong>{{ chainResult.valid ? $t('views.AdminAuditView.chain_valid') : $t('views.AdminAuditView.chain_broken') }}</strong>
       <span v-if="chainResult.checked_events" class="ml-2">— {{ $t('views.AdminAuditView.events_verified', { count: chainResult.checked_events }) }}</span>
       <span v-if="chainResult.error" class="ml-2">— {{ chainResult.error }}</span>
@@ -544,6 +524,7 @@
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import StateTabs, { type StateTab } from '../components/shared/StateTabs.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
@@ -636,6 +617,17 @@ const SYSTEM_PAGE_SIZE = 50
 // (default) and the org-independent durable ledger that survives a hard org
 // delete. `auditSource` is the single switch between the two panels.
 const auditSource = ref<'org' | 'system'>('org')
+
+const auditSourceTabs = computed<StateTab[]>(() => [
+  { id: 'org', label: t('views.AdminAuditView.tab_org_events') },
+  { id: 'system', label: t('views.AdminAuditView.tab_system_events') },
+])
+
+/** Only the two declared sources are selectable, whatever a caller sends. */
+function onAuditSourceSelected(id: string) {
+  const next = auditSourceTabs.value.find((tab) => tab.id === id)?.id
+  if (next === 'org' || next === 'system') auditSource.value = next
+}
 
 const systemPage = ref(1)
 const systemFilterEventType = ref('')

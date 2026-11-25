@@ -119,7 +119,7 @@ describe('PipelineEditorView — coverage: script logic branches', () => {
     const vm = wrapper.vm as any
 
     expect(vm.nodeTypeBadgeClass('manual')).toContain('warning')
-    expect(vm.nodeTypeBadgeClass('router')).toContain('indigo')
+    expect(vm.nodeTypeBadgeClass('router')).toContain('node-router')
     expect(vm.nodeTypeBadgeClass('hitl')).toContain('rose')
     expect(vm.nodeTypeBadgeClass('agent')).toContain('primary')
     expect(vm.nodeTypeBadgeClass('sandbox_agent')).toContain('primary')

@@ -44,7 +44,7 @@
           </table>
         </div>
       </DataCard>
-      <p v-if="store.index.missing_artifact_types.length" aria-live="polite" class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{{ $t('views.EvidenceIndexView.missing', { count: store.index.missing_artifact_types.length }) }}</p>
+      <p v-if="store.index.missing_artifact_types.length" aria-live="polite" class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning-text">{{ $t('views.EvidenceIndexView.missing', { count: store.index.missing_artifact_types.length }) }}</p>
     </template>
   </div>
 </template>

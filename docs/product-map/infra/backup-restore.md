@@ -285,19 +285,30 @@ operator-facing contract lives in `docs/operations/backup.md`.
       SIGTERM, SIGINT and SIGHUP are handled for the whole window — each stops
       that cluster before the command unwinds, and a second signal during that
       stop is ignored so the shutdown can finish — and the previous handlers are
-      restored afterwards. The window records the child's pid in
-      `<data-dir>/restore-window-postmaster.pid` while it is open. SIGKILL can
-      be handled by no process: the record is then the recovery, so the next
-      `farna-control restore --data-dir` stops that pid itself and says so, and
+      restored afterwards. The window records the child's IDENTITY — pid, that
+      process's start time and the data dir it belongs to — in
+      `<data-dir>/restore-window-postmaster.pid` while it is open, because a
+      bare pid can belong to any live postgres after a reboot, a `kill -9`, a
+      truncated write or a data dir copied to another machine. All recorded
+      fields must match before anything is signalled: a reused pid whose start
+      time differs is a DIFFERENT process and is never stopped, and an
+      unverifiable record (legacy bare pid, truncated or unreadable file, a
+      record written for another data dir) is reported with its file, its pid
+      and what to do, never acted on. SIGKILL can be handled by no process: the
+      record is then the recovery, so the next `farna-control restore
+      --data-dir` verifies and stops that process and says so, and
       `farna-control start --data-dir` refuses naming the pid, the recorded file
       and the `kill -INT <pid>` to run — instead of only "belongs to a live
       postgres process" or a port-in-use failure (`cli/backup.py::_bundled_cluster_for_restore`,
       `::_restore_window_signal_handlers`, `::_reap_leftover_window_postmaster`;
-      `launcher/supervisor.py::reconcile_orphans`;
+      `launcher/supervisor.py::reconcile_orphans`,
+      `::inspect_restore_window_postmaster`;
       `test_backup.py::TestBundledClusterWindowInternals::test_a_real_sigterm_stops_the_cluster_before_the_window_unwinds`,
       `::test_a_second_signal_does_not_interrupt_the_stop`,
       `::test_a_leftover_window_postmaster_is_stopped_by_pid_before_the_window`;
-      `test_supervisor.py::test_reconcile_names_a_live_restore_window_postmaster_by_pid`).
+      `test_backup_coverage_edges.py::TestReapLeftoverWindowPostmaster`;
+      `test_supervisor.py::test_reconcile_names_a_live_restore_window_postmaster_by_pid`,
+      `::test_a_reused_pid_is_not_the_window_postmaster`).
       <!-- behaviour: backup-restore-23 | tests: backend/tests/unit/launcher/test_supervisor.py::test_reconcile_names_a_live_restore_window_postmaster_by_pid, backend/tests/unit/cli/test_backup.py::test_a_real_sigterm_stops_the_cluster_before_the_window_unwinds, backend/tests/unit/cli/test_backup.py::test_a_second_signal_does_not_interrupt_the_stop, backend/tests/unit/cli/test_backup.py::test_a_leftover_window_postmaster_is_stopped_by_pid_before_the_window -->
 - [x] Restore refuses a MISSING dump when the archive describes one (a silent
       no-op restore is worse than a refusal), refuses a manifest filename that

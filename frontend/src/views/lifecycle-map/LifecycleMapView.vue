@@ -57,9 +57,7 @@
     </header>
 
     <section class="page-wide">
-      <div v-if="isLoadingDetail" class="flex items-center justify-center py-20">
-        <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
+      <LoadingSpinner v-if="isLoadingDetail" />
 
       <ErrorAlert
         v-else-if="detailError"
@@ -277,7 +275,7 @@
                   v-if="isDispatchedJourneyRun(run)"
                   :data-testid="`journey-run-dispatched-${run.run_id}`"
                   :title="$t('common.execution_origin.dispatched_hint')"
-                  class="inline-flex items-center rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300"
+                  class="inline-flex items-center rounded-full bg-run-dispatched/10 px-2 py-0.5 text-xs font-medium text-run-dispatched-text dark:bg-run-dispatched-surface"
                 >{{ $t('common.execution_origin.dispatched') }}</span>
                 <span class="text-muted-foreground">{{ formatRunDate(run.completed_at) }}</span>
               </li>
@@ -301,43 +299,38 @@
     </section>
 
     <!-- Import dialog -->
-    <Dialog :visible="showImportDialog" :modal="true" :dismissable-mask="true" class="sm:max-w-lg" data-testid="lifecycle-map-import-dialog" @update:visible="showImportDialog = $event">
-      <template #header>
-        <div>
-          <div class="text-lg font-semibold">{{ $t('views.LifecycleMapView.import_dialog_title') }}</div>
-          <div class="mt-0.5 text-sm text-muted-foreground">
-            {{ $t('views.LifecycleMapView.import_paste_hint') }}
-          </div>
-        </div>
-      </template>
-      <textarea
-        v-model="importPayload"
-        rows="10"
-        class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs"
-        :placeholder="$t('views.LifecycleMapView.import_placeholder')"
-        data-testid="lifecycle-map-import-payload"
-        :aria-label="$t('views.LifecycleMapView.import_payload_label')"
-      />
-      <!-- Import action error: no refetch loader; the Import button is the
-           retry path. -->
-      <ErrorAlert
-        v-if="importError"
-        role="alert"
-        class="mt-3"
-        :message="importError"
-        :retryable="false"
-      />
-      <template #footer>
-        <div class="flex gap-2 justify-end">
-          <Button severity="secondary" outlined size="small" @click="showImportDialog = false">
-            {{ $t('views.LifecycleMapView.cancel') }}
-          </Button>
-          <Button size="small" :disabled="!importPayload.trim() || importing" data-testid="lifecycle-map-import-confirm" @click="handleImportConfirm">
-            {{ importing ? $t('views.LifecycleMapView.importing') : $t('views.LifecycleMapView.import_map') }}
-          </Button>
-        </div>
-      </template>
-    </Dialog>
+    <FormDialog
+      v-model:open="showImportDialog"
+      :title="$t('views.LifecycleMapView.import_dialog_title')"
+      :description="$t('views.LifecycleMapView.import_paste_hint')"
+      :confirm-text="$t('views.LifecycleMapView.import_map')"
+      :confirm-loading-text="$t('views.LifecycleMapView.importing')"
+      :confirm-disabled="!importPayload.trim()"
+      :loading="importing"
+      confirm-test-id="lifecycle-map-import-confirm"
+      width="32rem"
+      @confirm="handleImportConfirm"
+    >
+      <div data-testid="lifecycle-map-import-dialog">
+        <textarea
+          v-model="importPayload"
+          rows="10"
+          class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs"
+          :placeholder="$t('views.LifecycleMapView.import_placeholder')"
+          data-testid="lifecycle-map-import-payload"
+          :aria-label="$t('views.LifecycleMapView.import_payload_label')"
+        />
+        <!-- Import action error: no refetch loader; the Import button is the
+             retry path. -->
+        <ErrorAlert
+          v-if="importError"
+          role="alert"
+          class="mt-3"
+          :message="importError"
+          :retryable="false"
+        />
+      </div>
+    </FormDialog>
 
     <!-- Delete confirmation dialog -->
     <FormDialog
@@ -364,11 +357,11 @@ import LifecycleMapRenderer from '../../components/lifecycle-map/LifecycleMapRen
 import ProvenanceBadge from '../../components/lifecycle-map/ProvenanceBadge.vue'
 import JourneyCard from '../../components/lifecycle-map/JourneyCard.vue'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
+import LoadingSpinner from '../../components/shared/LoadingSpinner.vue'
 import FormDialog from '../../components/shared/FormDialog.vue'
 import { formatRunDate, isDispatchedRun } from '../../utils/runUtils'
 import { shortId } from '../../utils/format'
 import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import type { JourneyRunHistoryItem, JourneySummary } from '../../types/lifecycleMap'
 import type { LifecycleMapStage } from '../../stores/lifecycleMaps'
 import Select from '../../components/shared/AppSelect.vue'

@@ -1,15 +1,17 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader :title="$t('views.SettingsErrorForwardersView.error_forwarders')" :subtitle="$t('views.SettingsErrorForwardersView.configure_external_error_tracking_and_alerting_integrations')" />
 
     <FeatureGate feature-name="error_forwarders" show-disabled>
 
       <div v-if="loading" class="space-y-6">
-        <div
+        <BaseCard
           v-for="n in 3"
           :key="`error-forwarders-skeleton-${n}`"
           data-testid="error-forwarders-skeleton"
-          class="rounded-lg border bg-card p-4 shadow-sm animate-pulse"
+          padding="md"
+          elevation="sm"
+          class="animate-pulse"
         >
           <div class="flex items-center gap-3">
             <div class="h-10 w-10 rounded-lg bg-muted" />
@@ -19,7 +21,7 @@
             </div>
             <div class="h-6 w-11 rounded-full bg-muted" />
           </div>
-        </div>
+        </BaseCard>
       </div>
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadForwarders" />
@@ -47,26 +49,14 @@
             <template #actions>
               <span
                 v-if="!fwd.configured"
-                class="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600"
+                class="rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning-text"
               >{{ $t('views.SettingsErrorForwardersView.not_configured') }}</span>
-              <button
-                type="button"
+              <ToggleSwitch
+                :checked="fwd.enabled"
                 data-testid="error-forwarders-toggle"
-                class="relative inline-flex h-6 w-11 items-center"
-                :aria-label="$t('views.SettingsErrorForwardersView.toggle_forwarder', { name: fwd.display_name })"
-                @click="toggleForwarder(fwd)"
-              >
-                <div
-                  class="h-6 w-11 rounded-full transition-colors"
-                  :class="fwd.enabled ? 'bg-primary' : 'bg-input'"
-                >
-                  <div
-                    class="h-5 w-5 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform"
-                    :class="fwd.enabled ? 'translate-x-[1.375rem]' : ''"
-                    style="margin-top: 2px;"
-                  />
-                </div>
-              </button>
+                :label="$t('views.SettingsErrorForwardersView.toggle_forwarder', { name: fwd.display_name })"
+                @toggle="toggleForwarder(fwd)"
+              />
             </template>
           </CardHeader>
 
@@ -285,6 +275,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
 import Button from 'primevue/button'

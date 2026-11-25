@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader :title="$t('views.AdminSystemOrgsView.system_admin_organisations')" :subtitle="$t('views.AdminSystemOrgsView.crosstenant_organisation_management_system_admin_only')" />
 
     <div class="grid gap-6 md:grid-cols-2">

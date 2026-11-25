@@ -80,7 +80,7 @@
             </DataCard>
           </div>
 
-          <div v-if="flash" class="p-3 rounded-md text-sm" :class="flashType === 'success' ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'">
+          <div v-if="flash" class="p-3 rounded-md text-sm" :class="flashType === 'success' ? 'bg-success/10 text-success-text' : 'bg-destructive/10 text-destructive-text'">
             {{ flash }}
           </div>
 

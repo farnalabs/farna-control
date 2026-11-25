@@ -158,7 +158,7 @@
             type="button"
             :disabled="retryingAll"
             data-testid="admin-notification-log-retry-all"
-            class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-40 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+            class="rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm font-medium text-warning-text hover:bg-warning/20 disabled:opacity-40"
             @click="retryAllConfirm = true"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.retry_all_failed') }}
@@ -169,7 +169,7 @@
               type="button"
               :disabled="retryingAll"
               data-testid="admin-notification-log-retry-all-confirm"
-              class="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              class="rounded-lg bg-warning px-3 py-1.5 text-sm font-medium text-warning-foreground hover:bg-warning/90 disabled:opacity-50"
               @click="retryAllFailed"
             >
               {{ retryingAll ? $t('views.AdminNotificationDeliveryLogView.retrying_all') : $t('views.AdminNotificationDeliveryLogView.confirm') }}
@@ -309,9 +309,9 @@
                     <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminNotificationDeliveryLogView.response_body') }}</span>
                     <pre class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{{ entry.response_body }}</pre>
                   </div>
-                  <div v-if="entry.last_error" class="rounded border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
-                    <span class="text-xs font-medium text-red-600 dark:text-red-400">{{ $t('views.AdminNotificationDeliveryLogView.error_details') }}</span>
-                    <pre class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-red-700 dark:text-red-300">{{ entry.last_error }}</pre>
+                  <div v-if="entry.last_error" class="rounded border border-destructive/30 bg-destructive/10 p-3">
+                    <span class="text-xs font-medium text-destructive-text">{{ $t('views.AdminNotificationDeliveryLogView.error_details') }}</span>
+                    <pre class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-destructive-text">{{ entry.last_error }}</pre>
                   </div>
                   <div v-if="entry.response_code" class="text-muted-foreground">
                     <span class="text-xs font-medium">{{ $t('views.AdminNotificationDeliveryLogView.http_response_code') }}</span>

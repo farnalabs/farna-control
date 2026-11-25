@@ -1,6 +1,6 @@
 <template>
 
-    <div data-theme="agent" class="page-wide">
+    <div class="page-wide">
     <PageHeader :title="$t('views.AdminProductAnalyticsView.title')" :subtitle="$t('views.AdminProductAnalyticsView.subtitle')" />
 
     <LoadingSpinner v-if="store.isLoading" />
@@ -10,7 +10,7 @@
       <div class="space-y-6">
         <!-- Warning banner: one shell, content chosen by the warning value so
              the two cases stay distinct without a second hand-rolled card. -->
-        <div v-if="warningMessage" class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+        <div v-if="warningMessage" class="rounded-lg border border-warning/40 bg-warning/10 p-4 text-warning-text">
           <p class="text-sm font-medium">{{ warningMessage }}</p>
         </div>
 

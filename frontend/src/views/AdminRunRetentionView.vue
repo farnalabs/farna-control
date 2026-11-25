@@ -232,38 +232,25 @@
           </div>
       </DataCard>
 
-      <Dialog
-        :visible="showPurgeConfirm"
-        :modal="true"
-        :dismissable-mask="true"
-        data-testid="admin-run-retention-confirm-dialog"
-        @update:visible="showPurgeConfirm = $event"
+      <FormDialog
+        v-model:open="showPurgeConfirm"
+        :title="$t('views.AdminRunRetentionView.confirm_clear_down')"
+        :description="$t('views.AdminRunRetentionView.confirm_warning')"
+        :confirm-text="$t('views.AdminRunRetentionView.purge_selected')"
+        :confirm-loading-text="$t('views.AdminRunRetentionView.purging')"
+        confirm-severity="danger"
+        :loading="purging"
+        cancel-test-id="admin-run-retention-purge-cancel"
+        confirm-test-id="admin-run-retention-purge-confirm"
+        @confirm="executePurge"
       >
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ $t('views.AdminRunRetentionView.confirm_clear_down') }}</div>
-            <div class="mt-0.5 text-sm text-muted-foreground">
-              {{ $t('views.AdminRunRetentionView.confirm_warning') }}
-            </div>
-          </div>
-        </template>
-        <div class="space-y-3 text-sm">
+        <div class="space-y-3 text-sm" data-testid="admin-run-retention-confirm-dialog">
           <p>
             {{ $t('views.AdminRunRetentionView.confirm_purge_detail', { count: displayTerminalCount }) }}
           </p>
            <p class="text-muted-foreground">{{ $t('views.AdminRunRetentionView.estimated_reclaimable') }}: {{ formatBytes(displayTerminalBytes) }}.</p>
         </div>
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <Button severity="secondary" outlined data-testid="admin-run-retention-purge-cancel" @click="showPurgeConfirm = false">
-              {{ $t('views.AdminRunRetentionView.cancel') }}
-            </Button>
-            <Button severity="danger" :disabled="purging" data-testid="admin-run-retention-purge-confirm" @click="executePurge">
-              {{ purging ? $t('views.AdminRunRetentionView.purging') : $t('views.AdminRunRetentionView.purge_selected') }}
-            </Button>
-          </div>
-        </template>
-      </Dialog>
+      </FormDialog>
     </div>
   </FeatureGate>
 </template>
@@ -277,10 +264,10 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import FormDialog from '../components/shared/FormDialog.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import Select from '../components/shared/AppSelect.vue'
 import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import { api, getAuthHeaders } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { isTerminalStatus } from '../constants/runStatuses'

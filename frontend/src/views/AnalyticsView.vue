@@ -38,10 +38,10 @@
         <div
           v-if="store.factsStale"
           aria-live="polite"
-          class="mb-4 flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/40 dark:text-amber-200"
+          class="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning-text"
           data-testid="analytics-stale-notice"
         >
-          <span class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true"></span>
+          <span class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-warning" aria-hidden="true"></span>
           <div>
             <p class="font-medium">{{ $t('views.AnalyticsView.stale_data_title') }}</p>
             <p class="mt-0.5 text-muted-foreground">{{ $t('views.AnalyticsView.stale_data_detail') }}</p>

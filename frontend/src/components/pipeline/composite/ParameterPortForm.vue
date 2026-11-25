@@ -101,7 +101,7 @@ function onBooleanChange(event: Event) {
       <input id="parameterportform-field-1"
         :checked="!!localValue"
         type="checkbox"
-        class="rounded border-gray-300 text-indigo-500 focus:ring-indigo-500"
+        class="rounded border-gray-300 text-node-port focus:ring-node-port"
         @change="onBooleanChange"
       />
       <span class="text-sm">{{ localValue ? "Enabled" : "Disabled" }}</span>

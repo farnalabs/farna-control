@@ -1,8 +1,6 @@
 <template>
   <div class="flex h-[calc(100vh-3.5rem)] h-chrome-dvh">
-    <div v-if="loading" class="flex flex-1 items-center justify-center">
-      <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-    </div>
+    <LoadingSpinner v-if="loading" class="flex-1" />
 
     <div v-else-if="pageError" class="flex flex-1 items-center justify-center">
       <ErrorAlert :message="pageError" :on-retry="loadData" />
@@ -154,6 +152,7 @@ import GraduationDialog from './GraduationDialog.vue'
 import VersionHistoryDropdown from './VersionHistoryDropdown.vue'
 import FlowControls from '../../shared/FlowControls.vue'
 import ErrorAlert from '../../shared/ErrorAlert.vue'
+import LoadingSpinner from '../../shared/LoadingSpinner.vue'
 import { useApi } from '../../../composables/useApi'
 import { formatApiError } from '../../../lib/api/formatError'
 import { randomId } from '../../../lib/randomId'

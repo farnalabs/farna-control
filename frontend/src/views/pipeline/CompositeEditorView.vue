@@ -23,7 +23,7 @@
         <button type="button"
           v-if="canManage"
           data-testid="composite-editor-save-as"
-          class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
+          class="rounded-md bg-action-build px-3 py-1 text-xs font-medium text-white hover:bg-action-build-hover"
           @click="openSaveAsDialog"
         >
           {{ $t('views.CompositeEditorView.save_as_composite_action') }}
@@ -70,16 +70,16 @@
             </div>
           </template>
           <template #node-composite="nodeProps">
-            <div class="rounded-lg border-2 border-indigo-500/60 bg-indigo-500/10 px-4 py-2 shadow-sm">
-              <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-indigo-700 dark:text-indigo-300">{{ $t('views.CompositeEditorView.node_composite_badge') }}</div>
+            <div class="rounded-lg border-2 border-node-composite/60 bg-node-composite/10 px-4 py-2 shadow-sm">
+              <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-node-composite-text">{{ $t('views.CompositeEditorView.node_composite_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
           </template>
           <!-- FAR-1141: dispatch nodes get their own canvas badge so they never
                render as AGENT. Display only — no authoring controls. -->
           <template #node-dispatch="nodeProps">
-            <div class="rounded-lg border-2 border-cyan-500/60 bg-cyan-500/10 px-4 py-2 shadow-sm">
-              <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-cyan-700 dark:text-cyan-300">{{ $t('views.CompositeEditorView.node_dispatch_badge') }}</div>
+            <div class="rounded-lg border-2 border-node-dispatch/60 bg-node-dispatch/10 px-4 py-2 shadow-sm">
+              <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-node-dispatch-text">{{ $t('views.CompositeEditorView.node_dispatch_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
           </template>

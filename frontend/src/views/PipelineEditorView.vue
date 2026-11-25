@@ -164,7 +164,7 @@
                   data-testid="pipeline-editor-save-as-composite"
                   @click="openSaveAsComposite"
                 >
-                  <DownloadIcon class="h-4 w-4 text-indigo-400" aria-hidden="true" />
+                  <DownloadIcon class="h-4 w-4 text-node-composite-code" aria-hidden="true" />
                   {{ $t('views.PipelineEditorView.composite') }}
                 </button>
               </div>
@@ -1054,7 +1054,7 @@
               >
                 {{ $t('views.PipelineEditorView.cancel') }}
               </button>
-              <Button v-if="!isWebhookTriggered" type="button" class="border-indigo-300 bg-indigo-600 text-white hover:bg-indigo-500" :disabled="running" @click="triggerRun" data-testid="pipeline-editor-run-submit">
+              <Button v-if="!isWebhookTriggered" type="button" class="border-action-build-border bg-action-build text-white hover:bg-action-build-hover" :disabled="running" @click="triggerRun" data-testid="pipeline-editor-run-submit">
                 <LoaderCircleIcon
                   v-if="running"
                   class="animate-spin h-4 w-4 mr-1"
@@ -1439,7 +1439,7 @@
                 <button
                   v-if="!isViewing"
                   type="button"
-                  class="mt-1 text-xs text-indigo-500 hover:text-indigo-400"
+                  class="mt-1 text-xs text-action-link hover:text-action-link-hover"
                   data-testid="pipeline-save-param-set"
                   @click="saveAsNewParamSet"
                 >
@@ -1547,7 +1547,7 @@
                 <span v-if="!doesNodeHaveCapabilityScope(selectedNodeData)" class="text-[11px] text-muted-foreground">{{ $t('views.PipelineEditorView.capability_scope_unrestricted') }}</span>
                 <button
                   type="button"
-                  class="text-[11px] text-indigo-500 hover:text-indigo-400"
+                  class="text-[11px] text-action-link hover:text-action-link-hover"
                   @click="resetCapabilityScope"
                   data-testid="pipeline-editor-scope-reset"
                 >{{ $t('views.PipelineEditorView.capability_scope_reset') }}</button>
@@ -1610,7 +1610,7 @@
                     v-model="singlePrPerRun"
                     type="checkbox"
                     :disabled="isViewing"
-                    class="mt-0.5 size-3.5 shrink-0 accent-indigo-500"
+                    class="mt-0.5 size-3.5 shrink-0 accent-node-port"
                     :aria-label="$t('views.PipelineEditorView.single_pr_per_run')"
                     aria-describedby="single-pr-per-run-help"
                     data-testid="pipeline-editor-single-pr-per-run-toggle"
@@ -2091,7 +2091,7 @@
                 v-model="saveAsSelectedNodeIds"
                 type="checkbox"
                 :value="node.id"
-                class="h-4 w-4 rounded border-gray-300 text-indigo-500 focus:ring-indigo-500"
+                class="h-4 w-4 rounded border-gray-300 text-node-port focus:ring-node-port"
               />
               <span>{{ node.label || $t('views.PipelineEditorView.node_fallback_label', { id: shortId(node.id) }) }}</span>
             </label>
@@ -2363,9 +2363,9 @@ const { track } = useProductAnalytics()
 
 function nodeTypeBadgeClass(nodeType: string): string {
   if (nodeType === 'manual') return 'badge badge-status-warning'
-  if (nodeType === 'router') return 'badge bg-indigo-500/10 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300'
+  if (nodeType === 'router') return 'badge bg-node-router/10 text-node-router-text dark:bg-node-router-surface'
   if (nodeType === 'hitl') return 'badge bg-rose-500/10 text-rose-600 dark:bg-rose-900 dark:text-rose-300'
-  if (nodeType === 'dispatch') return 'badge bg-cyan-500/10 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300'
+  if (nodeType === 'dispatch') return 'badge bg-node-dispatch/10 text-node-dispatch-text dark:bg-node-dispatch-surface'
   if (nodeType === 'connector') return 'badge bg-teal-500/10 text-teal-700 dark:bg-teal-900 dark:text-teal-300'
   return 'badge badge-status-primary'
 }
@@ -2545,7 +2545,7 @@ const canvasAnnouncement = ref('')
 // menu bar reads as one consistent control set (presentation only).
 const btnToolbarBase = 'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 const btnToolbarSecondary = `${btnToolbarBase} border border-input bg-background hover:bg-accent`
-const btnToolbarPrimary = `${btnToolbarBase} bg-indigo-600 text-white hover:bg-indigo-500`
+const btnToolbarPrimary = `${btnToolbarBase} bg-action-build text-white hover:bg-action-build-hover`
 const btnToolbarDestructive = `${btnToolbarBase} border border-destructive/50 bg-destructive/10 text-destructive-text hover:bg-destructive/20`
 const btnToolbarIcon = 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
 const groupDividerClass = 'mx-0.5 hidden h-5 w-px shrink-0 bg-border md:block'
