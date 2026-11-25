@@ -317,6 +317,13 @@ describe('EvalEditorView — FAR-617 pipeline/node/eval CRUD coverage', () => {
     expect(apiGET).toHaveBeenCalledWith('/api/v1/evals', { params: { query: { pipeline_id: 'p1' } } })
     expect(wrapper.text()).toContain('Existing Eval')
     expect(wrapper.text()).toContain('regex')
+    // FAR-2768: the existing-evals list sits on the page surface under its own
+    // heading - the eval rows are the only cards, never nested inside an outer one.
+    const evalsHeading = wrapper
+      .findAll('h2')
+      .find((h) => h.text() === 'views.EvalEditorView.existing_evals')
+    expect(evalsHeading).toBeDefined()
+    expect(evalsHeading!.element.closest('.card')).toBeNull()
   })
 
   it('falls back to empty collections when pipelines, graph and evals omit data', async () => {

@@ -18,6 +18,21 @@ Only `feature`, `fix`, and `breaking` produce a changelog entry. -->
 <!-- One or two sentences a product user would recognise — this is what ends
      up in the release notes. -->
 
+## Proving test
+
+<!-- A PR that changes backend/src/** or frontend/src/** must name the test
+     that would FAIL without the change, one `Proves:` line per test (the
+     `Prove the fix marker` workflow checks it). A change that touches no
+     product source can leave this empty. Convention:
+     docs/product-map/README.md
+
+       Proves: backend/tests/unit/api/test_health.py::test_liveness_ok
+       Proves: frontend/src/__tests__/ActionRow.spec.ts::stacks below sm
+-->
+
+Proves: <!-- fill in above, one test per line; an empty line is ignored, so
+     leave it empty when the change touches no product source -->
+
 ## Checklist
 
 - [ ] ruff, mypy, bandit, semgrep pass

@@ -471,6 +471,33 @@ def assert_plain_dump_complete(dump_path: Path) -> None:
         raise RuntimeError(str(exc)) from exc
 
 
+#: Replay prelude: recreate the application schema before the dump.
+#:
+#: pg_dump's ``--clean --if-exists`` preamble only knows the objects that
+#: existed when the snapshot was taken. A target that has migrated PAST that
+#: revision can hold a NEWER object that depends on one the preamble tries to
+#: drop, and the drop then fails — observed on the FAR-2674 matrix: a snapshot
+#: taken at ``0359`` could not be replayed onto a database migrated to
+#: ``0364`` because ``DROP CONSTRAINT organisations_pkey`` was refused with
+#: "constraint farna_journey_facts_organisation_id_fkey depends on index
+#: organisations_pkey" (the later migration added the FK). That is general to
+#: any upgrade whose migrations add a constraint or FK onto a pre-existing PK
+#: or unique index, so the fix cannot be a drop-order tweak.
+#:
+#: Dropping and recreating ``public`` makes every ``DROP ... IF EXISTS`` in the
+#: dump a no-op, so the replay no longer depends on pg_dump's ordering over a
+#: schema that has moved on. It is one transaction with the dump (``psql -1``
+#: below), so a replay that fails rolls the reset back too and leaves the
+#: target exactly as it was. The recreated schema carries initdb's PostgreSQL
+#: 15+ defaults (owner ``pg_database_owner``, ``USAGE`` for ``PUBLIC``): the
+#: product's role grants are re-applied immediately afterwards by
+#: ``_ensure_restore_posture``. Only ``public`` is touched because every
+#: application object this product (or its migration chain) creates lives
+#: there; a non-public schema a newer migration might add is not itself dropped,
+#: but anything in it that depends on a public object is cascaded away.
+_REPLAY_SCHEMA_RESET_SQL = "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public AUTHORIZATION pg_database_owner; GRANT USAGE ON SCHEMA public TO PUBLIC;"
+
+
 def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     _check_tool("psql")
     from farna.db.url_utils import pg_child_env
@@ -480,16 +507,31 @@ def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     # and psql would then exit 0 after a rolled-back restore. The explicit
     # -v ON_ERROR_STOP=1 below is authoritative only when nothing else can
     # change it, so the rc file is never read.
-    # -1 (single transaction): the --clean dump replays its DROPs and CREATEs
-    # atomically — a mid-import failure leaves the target database exactly as
-    # it was, not half-dropped. Combined with the pre-restore safety dump
-    # (see _take_safety_dump) a failed restore stays recoverable.
-    cmd = ["psql", "-X", "-q", "-1", "-v", "ON_ERROR_STOP=1", url_without_password]
+    # -1 (single transaction): the schema reset, the --clean dump's DROPs and
+    # its CREATEs all replay atomically — a mid-import failure leaves the
+    # target database exactly as it was, not half-dropped. Combined with the
+    # pre-restore safety dump (see _take_safety_dump) a failed restore stays
+    # recoverable.
+    # -c <reset> BEFORE -f <dump>: psql executes its -c/-f actions in the order
+    # given. Order is load-bearing — the dump must land in a freshly recreated
+    # schema, never one a forward migration has added objects to.
+    cmd = [
+        "psql",
+        "-X",
+        "-q",
+        "-1",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        _REPLAY_SCHEMA_RESET_SQL,
+        "-f",
+        str(input_path),
+        url_without_password,
+    ]
     try:
-        with input_path.open("rb") as f:
-            result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
-                cmd, stdin=f, capture_output=True, check=False, timeout=timeout, env=pg_child_env(password)
-            )
+        result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
+            cmd, capture_output=True, check=False, timeout=timeout, env=pg_child_env(password)
+        )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"psql restore timed out after {timeout}s") from exc
     if result.returncode != 0:
@@ -2507,10 +2549,13 @@ def _safety_dump(opts: _RestoreOptions, raw_url: str) -> None:
 def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, keys: _RestoreKeys) -> None:
     """Restore the database cluster from the archive.
 
-    Applies the SQL dump via psql, re-inserts the checkpoint_blobs /
-    checkpoints / checkpoint_writes JSON exports, re-encrypts credentials
-    when the FERNET_KEY has changed (ORDERING locked by contract: the
-    ``--previous-fernet-key`` re-encryption runs AFTER the checkpoint JSON
+    Applies the SQL dump via psql — resetting the ``public`` schema first and in
+    the SAME transaction, so a snapshot taken at revision N restores onto a
+    database migrated to N+k even when k added an FK/constraint onto a
+    pre-existing PK (see ``_REPLAY_SCHEMA_RESET_SQL``) — re-inserts the
+    checkpoint_blobs / checkpoints / checkpoint_writes JSON exports, re-encrypts
+    credentials when the FERNET_KEY has changed (ORDERING locked by contract:
+    the ``--previous-fernet-key`` re-encryption runs AFTER the checkpoint JSON
     exports and BEFORE the collation drift check), then checks
     collation-version drift when a database.sql was applied.
     """
@@ -2518,6 +2563,7 @@ def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: s
     db_sql = backup_dir / _DB_SQL_FILE
     if db_sql.exists():
         click.echo("Restoring database schema and data via psql...")
+        click.echo("  Recreating the target's public schema first, so objects a later migration added cannot block the snapshot's drops")
         _run_psql(raw_url, db_sql)
         click.echo("  Database restored from SQL dump")
     else:
@@ -2828,10 +2874,17 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
 )
 @click.option(
     "--target-fs",
-    type=click.Path(path_type=Path),
+    # readable=False is REQUIRED, not cosmetic: the value is only statvfs()'d
+    # by the disk pre-flight, and the compose deployment sets DB_CAPACITY_PATH
+    # to the postgres-owned 0700 database volume mounted read-only for the
+    # capacity monitor. click.Path defaults to readable=True, so the app user
+    # (www-data) failed option parsing on a path it never needs to read —
+    # restore exited 2 before any pre-flight (FAR-2763). The pre-flight still
+    # degrades loudly when it cannot measure (see _disk_preflight).
+    type=click.Path(path_type=Path, readable=False),
     envvar="DB_CAPACITY_PATH",
     default=None,
-    help=("A path on the DATABASE's own filesystem, used by the disk pre-flight. Without it (and without --data-dir) the pre-flight measures the archive's filesystem, which may be a different volume. The compose deployment sets DB_CAPACITY_PATH to its database volume."),
+    help=("A path on the DATABASE's own filesystem for the disk pre-flight (statvfs only, so it need not be readable). Without it (and without --data-dir) the pre-flight measures the archive's filesystem instead. The compose deployment sets DB_CAPACITY_PATH to its database volume."),
 )
 @click.option(
     "--verify-target-schema",
@@ -2858,7 +2911,8 @@ def restore(
     Verifies BEFORE it wipes (manifest shape + version, instance identity,
     database-emptiness probe for fresh targets, schema downgrade guard, disk
     pre-flight, file integrity), takes a pre-restore safety dump of the
-    target (or --no-safety-dump), restores the database via psql in a single
+    target (or --no-safety-dump), recreates the target's public schema and
+    restores the database via psql in a single
     transaction, re-inserts checkpoint_blobs from the JSON export,
     re-encrypts credentials if the FERNET_KEY has changed, re-ADOPTS the
     launcher artefacts only after the database restore SUCCEEDS, re-runs the

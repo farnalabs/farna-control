@@ -891,13 +891,8 @@
           </DataCard>
         </div>
 
-        <DataCard
-          :title="$t('views.EvalEditorView.existing_evals')"
-          heading-level="h2"
-          variant="bordered"
-          padding="md"
-          class="lg:col-span-2"
-        >
+        <section class="lg:col-span-2">
+          <CardHeader heading-level="h2" :title="$t('views.EvalEditorView.existing_evals')" />
           <ErrorAlert v-if="evalsError" :message="evalsError" :on-retry="loadEvals" compact class="mb-2" />
 
           <div v-if="!selectedPipelineId" class="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -997,7 +992,7 @@
               </div>
             </BaseCard>
           </div>
-        </DataCard>
+        </section>
       </div>
     </template>
   </div>
@@ -1020,6 +1015,7 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import { usePlanStore } from '../stores/planStore'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import FeatureGate from '../components/FeatureGate.vue'
