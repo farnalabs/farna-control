@@ -3378,7 +3378,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
           TAG: bundle-v${{ inputs.version }}
-          EXPECTED_KEY_ID: modulo-2026-a
         shell: bash
         run: |
           set -euo pipefail
@@ -3447,7 +3446,7 @@ jobs:
 
           published = Path(os.environ["RUNNER_TEMP"]) / "published-manifest"
           signature = m.read_signature_file(published / "RELEASE_MANIFEST.json.sig")
-          expected_key_id = os.environ["EXPECTED_KEY_ID"]
+          expected_key_id = m._KEY_ID_CURRENT
           if signature["key_id"] != expected_key_id:
               raise SystemExit(
                   f"published manifest signature key_id {signature['key_id']!r} does not match expected {expected_key_id!r}"
