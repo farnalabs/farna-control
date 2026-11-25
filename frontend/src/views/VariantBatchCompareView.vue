@@ -36,7 +36,8 @@
             <Button
               type="button"
               data-testid="variant-batch-back"
-              variant="outlined"
+              variant="primary"
+              :outlined="true"
               class="border border-input bg-background text-sm font-medium hover:bg-muted/50"
               @click="router.push('/variants/compare')"
             >
@@ -251,7 +252,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'

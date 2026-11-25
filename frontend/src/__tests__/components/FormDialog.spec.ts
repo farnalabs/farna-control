@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import FormDialog from '../../components/shared/FormDialog.vue'
+import Button from '../../components/ui/Button.vue'
 
 function mountDialog(props: Record<string, unknown> = {}) {
   return mount(FormDialog, {
@@ -46,6 +47,41 @@ describe('FormDialog', () => {
 
   it('falls back to the localized confirm label while loading when no texts are given', () => {
     expect(mountDialog({ loading: true }).findAll('button')[1].text()).toBe('Confirm')
+  })
+})
+
+describe('FormDialog footer (shared Button primitive)', () => {
+  function mountWithRealButton(props: Record<string, unknown> = {}) {
+    return mount(FormDialog, {
+      props: { open: true, title: 'Confirm action', ...props },
+      global: {
+        mocks: { $t: (key: string) => key },
+        stubs: {
+          Dialog: {
+            props: ['visible'],
+            template: '<div v-if="visible"><slot name="header" /><slot /><slot name="footer" /></div>',
+          },
+        },
+      },
+    })
+  }
+
+  it('renders the dialog footer with the shared Button primitive', () => {
+    const buttons = mountWithRealButton({ confirmText: 'Delete', confirmSeverity: 'danger' }).findAllComponents(Button)
+
+    expect(buttons).toHaveLength(2)
+    // Cancel is the secondary variant, which the primitive renders outlined.
+    expect(buttons[0].classes()).toContain('p-button-secondary')
+    expect(buttons[0].classes()).toContain('p-button-outlined')
+    // Confirm is the danger variant, which the primitive renders solid.
+    expect(buttons[1].classes()).toContain('p-button-danger')
+  })
+
+  it('keeps a secondary confirm solid as it rendered before the migration', () => {
+    const confirm = mountWithRealButton({ confirmText: 'Save', confirmSeverity: 'secondary' }).findAllComponents(Button)[1]
+
+    expect(confirm.classes()).toContain('p-button-secondary')
+    expect(confirm.classes()).not.toContain('p-button-outlined')
   })
 })
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { SchemaField } from '../../../types/pipeline'
-import Button from 'primevue/button'
+import Button from '../../ui/Button.vue'
 import Select from '../../shared/AppSelect.vue'
 
 const props = defineProps<{
@@ -103,10 +103,10 @@ function removeMapping(sourceKey: string) {
           {{ Object.keys(mappings).length }} field{{ Object.keys(mappings).length !== 1 ? 's' : '' }} mapped
         </span>
         <div class="flex gap-1">
-          <Button severity="secondary" outlined size="small" @click="autoMap">
+          <Button variant="secondary" size="sm" @click="autoMap">
             Auto-map
           </Button>
-          <Button v-if="Object.keys(mappings).length > 0" severity="secondary" outlined size="small" @click="clearMapping">
+          <Button v-if="Object.keys(mappings).length > 0" variant="secondary" size="sm" @click="clearMapping">
             Clear
           </Button>
         </div>
@@ -143,7 +143,7 @@ function removeMapping(sourceKey: string) {
             {{ unmappedSource.length }} unmapped source,
             {{ unmappedTarget.length }} unmapped target
           </span>
-          <Button severity="secondary" size="small" @click="showPicker = true">
+          <Button variant="secondary" :outlined="false" size="sm" @click="showPicker = true">
             Add mapping
           </Button>
         </div>
@@ -186,10 +186,10 @@ function removeMapping(sourceKey: string) {
             </div>
           </div>
           <div class="flex justify-end gap-1">
-            <Button severity="secondary" outlined size="small" @click="showPicker = false">
+            <Button variant="secondary" size="sm" @click="showPicker = false">
               Cancel
             </Button>
-            <Button size="small" :disabled="!selectedSource || !selectedTarget" @click="addMapping">
+            <Button size="sm" :disabled="!selectedSource || !selectedTarget" @click="addMapping">
               Add
             </Button>
           </div>

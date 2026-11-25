@@ -19,10 +19,8 @@
         <Button
           v-for="action in promptActions"
           :key="action.key"
-          :severity="action.variant === 'button-secondary' ? 'secondary' : undefined"
-          :outlined="action.variant === 'button-secondary'"
-          :text="action.variant === 'text'"
-          size="small"
+          :variant="buttonVariant(action)"
+          size="sm"
           :class="action.variant === 'text' ? 'text-xs text-muted-foreground underline underline-offset-2 hover:no-underline' : ''"
           :disabled="store.loading"
           :data-testid="action.testid"
@@ -38,7 +36,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 import ProductAnalyticsError from './ProductAnalyticsError.vue'
 import { useProductAnalyticsStore } from '../../stores/productAnalyticsStore'
 
@@ -75,6 +73,14 @@ const buildPromptActions = (defs: PromptActionDef[]): PromptAction[] =>
   defs.map(([key, labelKey, testid, variant, action]) => ({ key, labelKey, testid, variant, action }))
 
 const promptActions = computed<PromptAction[]>(() => buildPromptActions(standardActions))
+
+// The shared Button's four variants express the three action styles this
+// prompt declares: secondary (outlined), ghost (text) and primary.
+function buttonVariant(action: PromptAction): 'primary' | 'secondary' | 'ghost' {
+  if (action.variant === 'button-secondary') return 'secondary'
+  if (action.variant === 'text') return 'ghost'
+  return 'primary'
+}
 
 onMounted(() => {
   if (!store.consent.prompted) {
