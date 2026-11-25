@@ -704,6 +704,7 @@ docs/product-map/infra/health-checks.md	1
 docs/product-map/infra/native-single-install.md	6
 docs/product-map/infra/support-diagnostics.md	2
 docs/product-map/library/library.md	4
+docs/product-map/library/primitive-registry.md	1
 docs/product-map/observability/observability.md	2
 docs/product-map/pipelines/system-maps.md	1
 docs/product-map/system/system-orgs.md	1
