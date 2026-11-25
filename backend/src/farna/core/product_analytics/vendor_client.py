@@ -27,6 +27,32 @@ _log = logging.getLogger(__name__)
 # else on a 2xx is a contract mismatch, not a delivery.
 _ACCEPTED_BODY_STATUSES = frozenset({"accepted", "stale_sequence"})
 
+#: Fixed marker substituted for the instance secret in any vendor-derived text
+#: that is logged or returned. One shared constant so every redaction site
+#: agrees on the exact substitution (FAR-2740).
+REDACTED_SECRET_MARKER = "[redacted]"
+
+
+def redact_instance_secret(text: str | None, secret: str | None) -> str:
+    """Return ``text`` with every occurrence of ``secret`` replaced.
+
+    The vendor's response body is NOT trusted: a rejection can quote the very
+    secret it refused (``HTTP 500: secret rejected``), and that text reaches an
+    ERROR log and the failure tuple that is persisted, returned by the
+    transparency API and emailed to the operator. Redacting at the point the
+    body is read means no derived copy can carry the secret, whichever caller
+    ends up handling it (FAR-2740).
+
+    ``None`` text normalises to an empty string; an absent or empty secret
+    leaves the text untouched (there is nothing to redact).
+    """
+    if text is None:
+        return ""
+    if not secret:
+        return text
+    return text.replace(secret, REDACTED_SECRET_MARKER)
+
+
 # Retry configuration — mirrors Notifier RETRY_DELAYS.
 MAX_ATTEMPTS = 4  # 1 initial + 3 retries
 RETRY_DELAYS = [1.0, 5.0, 30.0]
@@ -193,7 +219,14 @@ class VendorClient:
     def _log_attempt_failure(self, attempt: int, last_error: str) -> None:
         _log.warning(
             "product_analytics.vendor_post_attempt_failed",
-            extra={"attempt": attempt, "max_attempts": MAX_ATTEMPTS, "last_error": last_error},
+            extra={
+                "attempt": attempt,
+                "max_attempts": MAX_ATTEMPTS,
+                # Defence in depth: the error is already redacted at the point
+                # the vendor body is read, but an unexpected exception message
+                # could quote the secret, so redact again before it is logged.
+                "last_error": redact_instance_secret(last_error, self._instance_secret),
+            },
         )
 
     async def _post_once(
@@ -246,7 +279,7 @@ class VendorClient:
         receiver that answers an empty 200.
         """
         try:
-            raw_body = resp.text
+            raw_body = redact_instance_secret(str(resp.text), self._instance_secret)
         except Exception:
             # Defensive: a lazy content/decode failure must not escape the
             # "never re-raises" contract. Treat it as an absent body below.
@@ -266,15 +299,18 @@ class VendorClient:
         status = body["status"]
         if status in _ACCEPTED_BODY_STATUSES:
             return True, response_code, None
+        # The parsed status is vendor-controlled text too: redact before it is
+        # logged or quoted in the returned message.
+        safe_status = redact_instance_secret(str(status), self._instance_secret)
         _log.error(
             "product_analytics.vendor_success_body_unrecognised",
             extra={
                 "status_code": response_code,
-                "body_status": str(status)[:100],
+                "body_status": safe_status[:100],
                 "response_body": str(raw_body)[:500],
             },
         )
-        return False, response_code, f"Unrecognised success status {status!r}: {str(raw_body)[:200]}"
+        return False, response_code, f"Unrecognised success status {safe_status!r}: {str(raw_body)[:200]}"
 
     async def _classify_response(
         self,
@@ -298,8 +334,10 @@ class VendorClient:
             return self._success_terminal(resp, response_code), "", False
         # Every non-2xx is logged at ERROR with the status and a truncated body.
         # A 422's validation detail is exactly what makes a contract mismatch
-        # findable; the previous warning-only path hid it.
-        response_body = resp.text
+        # findable; the previous warning-only path hid it. The body is vendor
+        # text and can echo the secret it rejected, so redact it before it is
+        # logged OR returned in the failure tuple (FAR-2740).
+        response_body = redact_instance_secret(str(resp.text), self._instance_secret)
         _log.error(
             "product_analytics.vendor_post_rejected",
             extra={
@@ -339,9 +377,12 @@ class VendorClient:
         try:
             resp = await self._post_once(client, url, signature, body, timestamp, sequence)
         except (TimeoutError, httpx.RequestError) as exc:
-            return None, None, self._describe_error(exc), False
+            # A transport error's message is not vendor response text, but an
+            # exception can still quote the secret it was handling, so redact
+            # at this single chokepoint before it is logged or returned.
+            return None, None, redact_instance_secret(self._describe_error(exc), self._instance_secret), False
         except Exception as exc:
-            return None, None, f"Unexpected: {exc}", False
+            return None, None, redact_instance_secret(f"Unexpected: {exc}", self._instance_secret), False
         terminal, http_error, retried_after_429 = await self._classify_response(resp, attempt)
         return terminal, resp.status_code, http_error, retried_after_429
 
@@ -381,15 +422,16 @@ class VendorClient:
             # Envelope construction reads payload keys, so a malformed payload
             # (KeyError/TypeError) is a real failure — return it, do not let it
             # escape and crash the SAQ job.
-            _log.error("product_analytics.vendor_batch_build_failed", extra={"error": str(exc)})
-            return False, None, f"EnvelopeError: {exc}"
+            error = redact_instance_secret(f"EnvelopeError: {exc}", self._instance_secret)
+            _log.error("product_analytics.vendor_batch_build_failed", extra={"error": error})
+            return False, None, error
 
         url = f"{self._endpoint_url}/api/v1/batch"
 
         try:
             client = await self._get_client()
         except Exception as exc:
-            error = self._describe_error(exc)
+            error = redact_instance_secret(self._describe_error(exc), self._instance_secret)
             _log.error("product_analytics.vendor_client_build_failed", extra={"error": error})
             return False, None, error
 

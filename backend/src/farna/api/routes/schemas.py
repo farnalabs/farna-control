@@ -21,6 +21,7 @@ from farna.api.db_error_handling import handle_db_errors, raise_session_contract
 from farna.api.dependencies import (
     get_db_session,
     require_feature,
+    require_feature_any_credential,
     require_permission,
     require_permission_any_credential,
 )
@@ -602,7 +603,11 @@ async def delete_schema_endpoint(
 
 @router.get(
     "/{schema_id}/versions",
-    dependencies=[require_feature("schema_version_history")],
+    # any_credential: declarative apply (FAR-681) fetches versions with mk_ keys.
+    # BOTH gates must accept an mk_ key: the feature gate previously resolved
+    # through the JWT-only get_current_user, so it 401'd an org API key before
+    # the handler (FAR-2729).
+    dependencies=[require_feature_any_credential("schema_version_history")],
 )
 async def list_schema_versions_endpoint(
     schema_id: uuid.UUID,
@@ -660,7 +665,10 @@ async def list_schema_versions_endpoint(
     "/{schema_id}/versions",
     status_code=status.HTTP_201_CREATED,
     dependencies=[
-        require_feature("schema_version_history"),
+        # any_credential: declarative apply (FAR-681) creates versions with mk_
+        # keys. The feature gate must accept the same credential as the handler
+        # and the audit dep, or it 401s the key before either runs (FAR-2729).
+        require_feature_any_credential("schema_version_history"),
         Depends(audited("schema_version_created", "schema_version", principal_dep=get_current_tenant_user_or_api_key)),
     ],
 )
