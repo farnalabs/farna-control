@@ -15,6 +15,8 @@ Farna Control is a self-hosted Delivery Governance Platform. Govern the software
 
 ## 1. Start infrastructure
 
+macOS and Linux:
+
 ```bash
 # From the repository root.
 
@@ -23,7 +25,6 @@ Farna Control is a self-hosted Delivery Governance Platform. Govern the software
 # backend/.env in step 2. A Fernet key is URL-safe base64 of exactly 32 bytes.
 # `uv run --with cryptography` installs the package into an ephemeral
 # environment, so this works before `uv sync` in step 2 and needs no pre-setup.
-# (Windows PowerShell: uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 export FERNET_KEY=$(uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 
 # The backend .env below logs in as the `farna_control` superuser with password
@@ -31,6 +32,23 @@ export FERNET_KEY=$(uv run --with cryptography --no-project python -c "from cryp
 # default is `changeme`).
 POSTGRES_PASSWORD=farna_control docker compose -f docker-compose.local.yml up -d
 ```
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+# From the repository root.
+
+# Generate the Fernet key ONCE and export it. The same value is reused in
+# backend/.env in step 2.
+$env:FERNET_KEY = uv run --with cryptography --no-project python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Start Postgres with the same password the backend .env uses.
+$env:POSTGRES_PASSWORD = "farna_control"
+docker compose -f docker-compose.local.yml up -d
+```
+
+</details>
 
 This starts:
 - **PostgreSQL 16** on port `5434`
