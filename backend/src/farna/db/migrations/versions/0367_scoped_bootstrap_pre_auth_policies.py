@@ -40,7 +40,7 @@ catalogue (ADR 070 §6), named as such.
 SQLite (test-only, ADR 068) has no RLS policies at all, so both directions are a
 documented no-op there.
 
-Revision ID: 0365_scoped_bootstrap_pre_auth_policies
+Revision ID: 0367_scoped_bootstrap_pre_auth_policies
 Revises: 0364_rewrite_legacy_persisted_values
 Create Date: 2026-11-24
 """
@@ -49,8 +49,8 @@ import re
 
 from alembic import op
 
-revision: str = "0365_scoped_bootstrap_pre_auth_policies"
-down_revision: str | None = "0364_rewrite_legacy_persisted_values"
+revision: str = "0367_scoped_bootstrap_pre_auth_policies"
+down_revision: str | None = "0366_onboarding_progress_rls_setting"
 branch_labels = None
 depends_on = None
 
