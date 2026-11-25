@@ -905,10 +905,10 @@
           </div>
 
           <div v-else-if="evalsLoading" class="space-y-2" data-testid="eval-editor-loading-skeleton">
-            <BaseCard v-for="n in 3" :key="`eval-editor-skeleton-${n}`" variant="bordered" padding="md" elevation="sm">
+            <div v-for="n in 3" :key="`eval-editor-skeleton-${n}`" class="rounded-lg border bg-card p-4">
               <SkeletonBlock height-class="h-5 w-1/3" />
               <SkeletonBlock class="mt-2" height-class="h-4 w-2/3" />
-            </BaseCard>
+            </div>
           </div>
 
           <EmptyState

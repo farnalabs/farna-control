@@ -239,6 +239,12 @@ describe('EvalEditorView', () => {
     expect(warning.classes()).toContain('border-destructive/50')
     expect(warning.classes()).not.toContain('bg-destructive/5')
     expect(warning.classes()).not.toContain('border-destructive/30')
+
+    // Live region: pinned on the rendered element, so a future Notice change
+    // cannot silently drop the assertion. The view passes `live="assertive"`
+    // explicitly; this proves it reaches the DOM with an alert role.
+    expect(warning.attributes('role')).toBe('alert')
+    expect(warning.attributes('aria-live')).toBe('assertive')
   })
 })
 
