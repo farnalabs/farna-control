@@ -3235,6 +3235,11 @@ async def list_pipelines_endpoint(
                 cursor=cursor,
                 include_archived=include_archived,
                 folder_id=folder_id,
+                # ADR 070 §5 / FAR-681: a team-scoped key's own team boundary is
+                # not the DB policy's (``rls_team_isolation`` filters on the KEY
+                # OWNER's memberships), so the list must clamp explicitly - the
+                # same ``team_id`` argument the MCP list tool passes.
+                team_id=getattr(principal, "team_id", None),
                 organisation_id=principal.organisation_id,
             )
     except ProgrammingError as exc:
