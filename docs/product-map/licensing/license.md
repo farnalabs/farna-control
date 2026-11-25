@@ -298,6 +298,12 @@ trust-anchor caveat) are documented in
       `backend/src/farna/core/feature_flags.py`,
       `backend/src/farna/api/routes/admin_license.py`, FAR-2153)
       <!-- behaviour: license-18 | tests: none -->
+- [ ] License-driven gating is not applied to EVERY registered `feat-*` surface:
+      `require_feature` / `get_plan_context` gate the licensed Team-tier
+      surfaces (SSO administration, `/api/v1/teams`, the audit read surfaces
+      and admin spend limits), not the whole feature registry (unshipped
+      deferral; see Known Gaps).
+      <!-- behaviour: license-19 | tests: none -->
 
 ## Known Gaps
 
