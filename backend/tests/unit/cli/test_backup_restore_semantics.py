@@ -8,6 +8,12 @@ refusals, verify-before-wipe ordering (instance identity + disk
 pre-flight), the fresh-target exemption, the populated-mismatch refusal
 with the ``--replace-cluster`` confirmation, the newer-manifest refusal,
 the collation drift warning, and the promoted bootstrap posture re-run.
+
+FAR-2763 adds the packaged-compose recovery's two defects: the compose default
+``DB_CAPACITY_PATH`` (an unreadable database volume) is measured, never read, so
+it must not refuse at option parsing; and the replay resets the ``public``
+schema inside the same single transaction, so a snapshot taken at revision N
+replays over a database a later release migrated to N+k.
 """
 
 from __future__ import annotations
@@ -1679,3 +1685,101 @@ class TestDiskPreflightTarget:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         assert backup_mod._resolve_preflight_target(archive, data_dir, volume, None) == data_dir
+
+
+class TestTheComposeCapacityPathIsOnlyMeasured:
+    """FAR-2763 defect 1: --target-fs / DB_CAPACITY_PATH is statvfs'd, never read.
+
+    The packaged compose sets DB_CAPACITY_PATH=/var/lib/farna/db-volume: the
+    postgres-owned 0700 data volume, mounted read-only for the capacity
+    monitor. click.Path defaults to readable=True, so os.access(R_OK) ran at
+    option parsing and the documented recovery died with exit 2
+    ("Invalid value for '--target-fs': Path ... is not readable") before any of
+    the restore's own checks - and before the pre-flight that already degrades
+    loudly when it cannot measure the path.
+    """
+
+    def test_the_option_is_declared_unreadable_and_keeps_the_envvar(self) -> None:
+        """The structural half: a cross-platform pin of the declaration itself.
+
+        The behavioural case below needs a POSIX-permission unreadable
+        directory (on Windows os.access ignores ACLs, so the defect cannot be
+        reproduced there). This pin fails on every platform without the fix.
+        """
+        option = next(param for param in cli.commands["restore"].params if param.name == "target_fs")
+        assert option.envvar == "DB_CAPACITY_PATH"
+        assert isinstance(option.type, click.Path)
+        assert option.type.readable is False
+
+    @pytest.mark.skipif(os.name != "posix", reason="needs POSIX permission bits: os.access ignores ACLs on Windows")
+    def test_an_existing_but_unreadable_volume_does_not_refuse_at_option_parsing(self, tmp_path: Path) -> None:
+        if os.geteuid() == 0:  # pragma: no cover - root passes every os.access check
+            pytest.skip("running as root: an unreadable directory cannot be constructed")
+        archive = _make_archive(tmp_path, MANIFEST_VERSION, None)
+        volume = tmp_path / "db-volume"
+        volume.mkdir()
+        volume.chmod(0o000)
+        try:
+            assert not os.access(volume, os.R_OK), "the fixture must be genuinely unreadable"
+            with contextlib.ExitStack() as stack:
+                _enter_restore_patches(stack)
+                result = CliRunner().invoke(
+                    cli,
+                    ["restore", str(archive), "--dry-run", "--app-db-url", _APP_DB_URL],
+                    env={"DB_CAPACITY_PATH": str(volume)},
+                )
+        finally:
+            volume.chmod(0o755)
+        assert "is not readable" not in result.output
+        assert result.exit_code == 0, result.output
+        assert "DRY RUN" in result.output
+
+
+class TestTheReplayResetsPublicFirst:
+    """FAR-2763 defect 2: a snapshot replays over a forward-migrated schema.
+
+    A plain --clean --if-exists dump can only drop the objects it knows about,
+    so a snapshot taken at revision N cannot be replayed over a database a
+    later release migrated to N+k: the dump's DROP CONSTRAINT hits a constraint
+    the N+k object depends on (observed: organisations_pkey, because a later
+    migration added an FK to it). The replay therefore resets the public schema
+    - the one schema pg_dump does not recreate - in the SAME psql transaction,
+    which makes the dump's drops no-ops and lets it rebuild exactly what it
+    captured.
+    """
+
+    def test_the_reset_drops_and_recreates_public_with_pristine_defaults(self) -> None:
+        sql = backup_mod._REPLAY_SCHEMA_RESET_SQL
+        assert "DROP SCHEMA IF EXISTS public CASCADE" in sql
+        # pg_dump never recreates public (it is a system schema), so the reset
+        # must, with the PostgreSQL 15+ defaults a fresh database carries.
+        assert "CREATE SCHEMA public AUTHORIZATION pg_database_owner" in sql
+        assert "GRANT USAGE ON SCHEMA public TO PUBLIC" in sql
+        # No other schema is touched: a non-public schema is dumped as
+        # DROP SCHEMA IF EXISTS + CREATE SCHEMA and needs no help here.
+        assert "farna_internal" not in sql
+
+    def test_psql_runs_the_reset_before_the_dump_in_one_transaction(self, tmp_path: Path) -> None:
+        """The reset is a -c action ahead of the dump's -f, in ONE psql call,
+        so -1 wraps the reset and the whole dump in a single transaction."""
+        dump = tmp_path / "database.sql"
+        dump.write_text("-- dump\n", encoding="utf-8")
+        seen: dict[str, Any] = {}
+
+        def _capture(argv: list[str], **kwargs: Any) -> Any:
+            seen["argv"] = argv
+            return MagicMock(returncode=0, stderr=b"")
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch("farna.cli.backup.shutil.which", return_value="/usr/bin/psql"))
+            run = stack.enter_context(patch("farna.cli.backup.subprocess.run", side_effect=_capture))
+            backup_mod._run_psql("postgresql://user:pw@host:5432/farna_control", dump)
+
+        assert run.call_count == 1, "the reset and the dump must be ONE psql invocation"
+        cmd = seen["argv"]
+        assert cmd.count("-1") == 1, "single-transaction mode must span the reset and the dump"
+        reset_index = cmd.index("-c")
+        dump_index = cmd.index("-f")
+        assert reset_index < dump_index, "psql runs -c/-f in argv order; the reset must precede the dump"
+        assert cmd[reset_index + 1] == backup_mod._REPLAY_SCHEMA_RESET_SQL
+        assert cmd[dump_index + 1] == str(dump)
