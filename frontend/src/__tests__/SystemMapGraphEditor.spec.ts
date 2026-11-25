@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import enUS from '../locales/en-US.js'
 import SystemMapGraphEditor from '../components/system-maps/SystemMapGraphEditor.vue'
-import { NODE_TYPES, RELATIONSHIP_TYPES, type SystemMapNode } from '../stores/systemMaps'
+import { NODE_TYPES, RELATIONSHIP_TYPES, type SystemMapNode, type SystemMapRelationship } from '../stores/systemMaps'
 
 const i18n = createI18n({ legacy: false, locale: 'en-US', messages: { 'en-US': enUS } })
 
@@ -30,6 +30,34 @@ function node(nodeKey: string): SystemMapNode {
 }
 
 describe('SystemMapGraphEditor', () => {
+  it('renders the relationships list through the BaseCard primitive', () => {
+    const relationship: SystemMapRelationship = {
+      id: 'r1',
+      organisation_id: '',
+      revision_id: '',
+      source_node_key: 'pipeline-1',
+      target_node_key: 'connector-2',
+      relationship_type: 'flow',
+      config_json: {},
+      deleted_at: null,
+      deleted_by: null,
+      created_at: '1970-01-01T00:00:00.000Z',
+      updated_at: '1970-01-01T00:00:00.000Z',
+    }
+    const wrapper = mount(SystemMapGraphEditor, {
+      props: { nodes: [], relationships: [relationship], loopConfigs: [], nodeTypes: NODE_TYPES, relationshipTypes: RELATIONSHIP_TYPES },
+      global: { plugins: [i18n] },
+    })
+
+    const list = wrapper.get('[data-testid="system-map-relationships"]')
+    // `card-base` exists only on BaseCard's own root (components/ui/BaseCard.vue);
+    // the hand-rolled <div> this replaced carried neither class, so this assertion
+    // fails unless the list is rendered by the primitive (FAR-2769).
+    expect(list.classes()).toContain('card-base')
+    expect(list.classes()).toContain('card')
+    expect(list.find('ul').exists()).toBe(true)
+  })
+
   it('keeps node keys unique after removing and re-adding a node type', async () => {
     const wrapper = mount(SystemMapGraphEditor, {
       props: { nodes: [], relationships: [], loopConfigs: [], nodeTypes: NODE_TYPES, relationshipTypes: RELATIONSHIP_TYPES },

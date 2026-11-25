@@ -242,7 +242,11 @@ describe('EvalEditorView — typed question builder', () => {
     expect(warning.exists()).toBe(true)
     expect(warning.text()).toContain('weakest')
     expect(warning.text()).toContain('must be computed')
-    expect(wrapper.find('[data-testid="eval-editor-client-errors"]').text()).toContain(
+    expect(warning.attributes('role')).toBe('alert')
+    expect(warning.attributes('aria-live')).toBe('assertive')
+    const clientErrors = wrapper.find('[data-testid="eval-editor-client-errors"]')
+    expect(clientErrors.attributes('aria-live')).toBe('polite')
+    expect(clientErrors.text()).toContain(
       'Derivation checks are not supported by typed questions',
     )
     expect(wrapper.find('[data-testid="eval-editor-save"]').attributes('disabled')).toBeDefined()
@@ -285,6 +289,8 @@ describe('EvalEditorView — typed question builder', () => {
 
     const serverError = wrapper.find('[data-testid="eval-editor-server-error"]')
     expect(serverError.exists()).toBe(true)
+    expect(serverError.attributes('role')).toBe('alert')
+    expect(serverError.attributes('aria-live')).toBe('assertive')
     expect(serverError.text()).toContain('Derivation checks are not supported by typed questions.')
     expect(serverError.text()).toContain(
       'verdict_kind=derivation is not supported by typed judgment in v1',

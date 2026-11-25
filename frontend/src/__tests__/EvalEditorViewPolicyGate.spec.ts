@@ -116,7 +116,8 @@ function installRouter() {
 
 const viewStubs = {
   LoadingSpinner: true,
-  ErrorAlert: true,
+  // Render ErrorAlert's slots so tests can assert its body and actions.
+  ErrorAlert: { template: '<div><slot /><slot name="actions" /></div>' },
   PageHeader: { template: '<div />' },
 }
 

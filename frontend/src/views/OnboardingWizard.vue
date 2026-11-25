@@ -18,7 +18,7 @@
       </template>
     </div>
 
-    <div class="rounded-lg border bg-card p-6 shadow-sm">
+    <BaseCard padding="lg" elevation="sm">
       <header class="mb-6">
         <h2 class="text-xl font-semibold">{{ steps[currentStep].title }}</h2>
         <p class="mt-1 text-sm text-muted-foreground">{{ steps[currentStep].subtitle }}</p>
@@ -425,7 +425,7 @@
         </div>
         <ErrorAlert v-if="pipelineRunError" :message="pipelineRunError" :on-retry="runPipeline" />
       </div>
-    </div>
+    </BaseCard>
 
     <div v-if="currentStep < 7" class="flex items-center justify-between">
       <div>
@@ -462,6 +462,7 @@ import { Check, ChartLine, Layers } from '@lucide/vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'

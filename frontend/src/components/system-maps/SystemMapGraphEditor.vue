@@ -119,7 +119,12 @@
       </svg>
     </div>
 
-    <div v-if="localRelationships.length" class="mt-4 rounded-lg border bg-card p-3" data-testid="system-map-relationships">
+    <BaseCard
+      v-if="localRelationships.length"
+      padding="sm"
+      class="mt-4"
+      data-testid="system-map-relationships"
+    >
       <h2 class="text-sm font-medium">{{ $t('views.SystemMapDetailView.relationships') }}</h2>
       <ul class="mt-2 divide-y">
         <li v-for="relationship in localRelationships" :key="relationship.id" class="flex items-center justify-between py-2 text-xs">
@@ -127,7 +132,7 @@
           <button type="button" class="rounded px-2 py-1 text-destructive hover:bg-destructive/10 disabled:opacity-50" :disabled="readOnly" @click="removeRelationship(relationship.id)" :aria-label="$t('views.SystemMapDetailView.remove_relationship')" :data-testid="`system-map-remove-relationship-${relationship.id}`">{{ $t('views.SystemMapDetailView.remove') }}</button>
         </li>
       </ul>
-    </div>
+    </BaseCard>
   </div>
 </template>
 <script setup lang="ts">
@@ -135,6 +140,7 @@ import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import type { SystemMapNode, SystemMapRelationship, NodeType, RelationshipType } from '../../stores/systemMaps'
 import { createSystemMapRendererModel } from '../../utils/system-map-renderer'
 import AppSelect from '../shared/AppSelect.vue'
+import BaseCard from '../ui/BaseCard.vue'
 import type { SystemMapRendererNode } from '../../types/system-map-renderer'
 
 const props = defineProps<{ nodes: SystemMapNode[]; relationships: SystemMapRelationship[]; loopConfigs: unknown[]; nodeTypes: readonly NodeType[]; relationshipTypes: readonly RelationshipType[]; readOnly?: boolean; dataTestId?: string }>()

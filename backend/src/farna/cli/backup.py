@@ -479,23 +479,25 @@ def assert_plain_dump_complete(dump_path: Path) -> None:
 #: WHY a reset at all: a plain ``--clean --if-exists`` dump can only drop the
 #: objects it KNOWS ABOUT. A snapshot taken at revision N, replayed over a
 #: database a later release migrated to N+k, therefore cannot drop a pre-existing
-#: constraint that a N+k object depends on — observed: ``cannot drop constraint
-#: organisations_pkey ... because other objects depend on it`` when a later
-#: migration added ``farna_journey_facts.organisation_id`` referencing that PK
-#: index. Any upgrade whose migrations add a foreign key to an existing PK or
-#: unique index breaks the replay that way, so the recovery point stops being a
-#: recovery point. Dropping the schema first makes every DROP in the dump's
-#: preamble a no-op (they are all ``IF EXISTS``) and leaves the dump to recreate
-#: exactly the state it captured.
+#: constraint that a N+k object depends on — observed on the FAR-2674 matrix: a
+#: snapshot taken at ``0359`` could not be replayed onto a database migrated to
+#: ``0364`` because ``DROP CONSTRAINT organisations_pkey`` was refused with
+#: "constraint farna_journey_facts_organisation_id_fkey depends on index
+#: organisations_pkey" (the later migration added an FK onto that pre-existing
+#: PK). That is general to any upgrade whose migrations add a constraint or FK
+#: onto a pre-existing PK or unique index, so the fix cannot be a drop-order
+#: tweak: the recovery point stops being a recovery point. Dropping the schema
+#: first makes every DROP in the dump's preamble a no-op (they are all
+#: ``IF EXISTS``) and leaves the dump to recreate exactly the state it captured.
 #:
 #: WHICH schema: only ``public``. It is the one schema pg_dump does NOT recreate
 #: (it is a system schema), so it must be reset here; a non-public schema (this
 #: product's ``farna_internal``) is dumped as ``DROP SCHEMA IF EXISTS`` +
 #: ``CREATE SCHEMA`` and already transformed that way by every replay. The
 #: recreated schema is given the pristine PostgreSQL 15+ defaults
-#: (``pg_database_owner``, ``USAGE`` for ``PUBLIC``) — the restore's own
-#: role-posture step re-grants the application roles afterwards, exactly as it
-#: does for the tables.
+#: (``pg_database_owner``, ``USAGE`` for ``PUBLIC``) — ``_ensure_restore_posture``
+#: re-grants the application roles immediately afterwards, exactly as it does
+#: for the tables.
 #:
 #: WHAT IT COSTS: extensions installed in ``public`` are dropped by CASCADE and
 #: recreated by the dump's own ``CREATE EXTENSION IF NOT EXISTS ... WITH SCHEMA
@@ -551,6 +553,10 @@ def _run_psql(raw_url: str, input_path: Path, timeout: int = 600, *, preamble_sq
     # (see _take_safety_dump) a failed restore stays recoverable. The optional
     # schema reset (see _PUBLIC_SCHEMA_RESET_SQL) is inside that same
     # transaction, so a failed replay cannot leave the target schema-less.
+    # The reset file's -f comes BEFORE the dump's -f: psql executes its -f
+    # actions in the order given, and that order is load-bearing — the dump
+    # must land in a freshly recreated schema, never one a forward migration
+    # has added objects to.
     cmd = ["psql", "-X", "-q", "-1", "-v", "ON_ERROR_STOP=1"]
     preamble_path = _write_restore_preamble(preamble_sql) if preamble_sql is not None else None
     try:
@@ -2594,6 +2600,7 @@ def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: s
     db_sql = backup_dir / _DB_SQL_FILE
     if db_sql.exists():
         click.echo("Restoring database schema and data via psql...")
+        click.echo("  Recreating the target's public schema first, so objects a later migration added cannot block the snapshot's drops")
         _run_psql(raw_url, db_sql, preamble_sql=_PUBLIC_SCHEMA_RESET_SQL)
         click.echo("  Database restored from SQL dump")
     else:
@@ -2919,7 +2926,7 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
     envvar="DB_CAPACITY_PATH",
     default=None,
     help=(
-        "A path on the DATABASE's own filesystem, used by the disk pre-flight (it is only measured, never read, so an "
+        "A path on the DATABASE's own filesystem, used by the disk pre-flight (it is only statvfs'd, never read, so an "
         "unreadable database volume is accepted). Without it (and without --data-dir) the pre-flight measures the "
         "archive's filesystem, which may be a different volume. The compose deployment sets DB_CAPACITY_PATH to its "
         "database volume."

@@ -616,6 +616,14 @@ def test_deactivate_success(api: tuple[TestClient, AsyncMock], monkeypatch: pyte
     monkeypatch.setattr(admin, "assert_not_last_admin", AsyncMock())
     monkeypatch.setattr(admin, "list_team_memberships_for_account", AsyncMock(return_value=[]))
     monkeypatch.setattr("farna.core.audit_logger.append_audit_event", AsyncMock())
+    set_rls_calls: list[uuid.UUID] = []
+    real_set_rls_org = admin.set_rls_org
+
+    async def _spy_set_rls_org(sess: Any, org_id: uuid.UUID) -> None:
+        set_rls_calls.append(org_id)
+        await real_set_rls_org(sess, org_id)
+
+    monkeypatch.setattr(admin, "set_rls_org", _spy_set_rls_org)
     # The SECURITY DEFINER tombstones the membership; session.refresh is what
     # surfaces the new deactivated_at on the ORM object (per-org is_active).
     session.refresh = AsyncMock(side_effect=lambda obj, *a, **k: setattr(obj, "deactivated_at", _NOW))
@@ -624,6 +632,10 @@ def test_deactivate_success(api: tuple[TestClient, AsyncMock], monkeypatch: pyte
     data = resp.json()
     assert data["id"] == str(_TARGET_USER_ID)
     assert data["is_active"] is False
+    # 0367 fail-closes org_memberships with no org context: the post-commit
+    # refresh runs in a NEW transaction, so the route must re-establish the org
+    # scope there too (mutation transaction + refresh transaction).
+    assert set_rls_calls == [_ORG_ID, _ORG_ID]
 
 
 # ── POST /users/{user_id}/reactivate ──
@@ -653,15 +665,27 @@ def test_reactivate_membership_missing_404(api: tuple[TestClient, AsyncMock], mo
 
 
 def test_reactivate_success(api: tuple[TestClient, AsyncMock], monkeypatch: pytest.MonkeyPatch) -> None:
-    client, _ = api
+    client, _session = api
     account = _account()
     membership = _membership(role="runner")
     monkeypatch.setattr(admin, "get_account_by_id", AsyncMock(return_value=account))
     monkeypatch.setattr(admin, "get_membership_by_account_and_org", AsyncMock(return_value=membership))
     monkeypatch.setattr("farna.core.audit_logger.append_audit_event", AsyncMock())
+    set_rls_calls: list[uuid.UUID] = []
+    real_set_rls_org = admin.set_rls_org
+
+    async def _spy_set_rls_org(sess: Any, org_id: uuid.UUID) -> None:
+        set_rls_calls.append(org_id)
+        await real_set_rls_org(sess, org_id)
+
+    monkeypatch.setattr(admin, "set_rls_org", _spy_set_rls_org)
     resp = client.post(f"/api/v1/admin/users/{_TARGET_USER_ID}/reactivate")
     assert resp.status_code == 200
     assert resp.json()["is_active"] is True
+    # 0367 fail-closes org_memberships with no org context: the post-commit
+    # refresh runs in a NEW transaction, so the route must re-establish the org
+    # scope there too (mutation transaction + refresh transaction).
+    assert set_rls_calls == [_ORG_ID, _ORG_ID]
 
 
 @pytest.mark.parametrize(("exc", "expected"), _DB_ERROR_PARAMS)

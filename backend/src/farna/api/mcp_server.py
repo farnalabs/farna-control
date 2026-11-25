@@ -8616,7 +8616,7 @@ async def list_model_backends(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_model_backends(s, org_id=org_id, cursor=cursor, page_size=lim)
+            result = await db_list_model_backends(s, org_id=org_id, cursor=cursor, page_size=lim, team_id=_ctx_team_id_val())
 
         return {
             "data": [_model_backend_item(mb) for mb in result.items],
@@ -8661,6 +8661,9 @@ async def get_model_backend(model_backend_id: str) -> dict[str, Any]:
         # RLS were misconfigured.
         if mb is None or mb.organisation_id != org_id:
             return {"error": "not_found", "detail": f"Model backend {model_backend_id} not found"}
+        # ADR 070 §5: a team-scoped key must not read another team's backend.
+        if _team_scoped_key_mismatch(mb.owner_team_id):
+            return _team_scope_error("model_backend", model_backend_id)
 
         item = _model_backend_item(mb)
         raw_fallback_ids = getattr(mb, "fallback_backend_ids", None)
@@ -8760,6 +8763,9 @@ async def _apply_model_backend_update(
         existing = await db_get_model_backend(s, backend_id)
         if existing is None or existing.organisation_id != org_id:
             return {"error": "not_found", "detail": f"Model backend {model_backend_id} not found"}
+        # ADR 070 §5: a team-scoped key must not mutate another team's backend.
+        if _team_scoped_key_mismatch(existing.owner_team_id):
+            return _team_scope_error("model_backend", model_backend_id)
 
         # Reuse the HTTP PATCH request contract so MCP cannot bypass the
         # tier enum, the name/model_id bounds, or the team-visibility
@@ -9834,8 +9840,15 @@ async def delete_connector(
             }
 
         from farna.db.crud.connector_instance import delete_connector_instance as db_delete_connector
+        from farna.db.crud.connector_instance import get_connector_instance as db_get_connector_instance
 
         async with _session(org_id) as s:
+            # ADR 070 §5: a team-scoped key must not DELETE another team's
+            # connector. Read first (same transaction) so the boundary is
+            # applied to the row about to be removed, never to a stale lookup.
+            existing = await db_get_connector_instance(s, cid)
+            if existing is not None and _team_scoped_key_mismatch(existing.owner_team_id):
+                return _team_scope_error("connector", connector_id)
             deleted = await db_delete_connector(s, cid)
 
         if not deleted:
@@ -9900,6 +9913,7 @@ async def list_connectors(
                 organisation_id=org_id,
                 page_size=lim,
                 cursor=cursor,
+                team_id=_ctx_team_id_val(),
             )
 
         return {
@@ -9943,6 +9957,9 @@ async def get_connector(connector_id: str) -> dict[str, Any]:
         # RLS were misconfigured.
         if ci is None or ci.organisation_id != org_id:
             return {"error": "not_found", "detail": f"Connector {connector_id} not found"}
+        # ADR 070 §5: a team-scoped key must not read another team's connector.
+        if _team_scoped_key_mismatch(ci.owner_team_id):
+            return _team_scope_error("connector", connector_id)
 
         item = _connector_item(ci)
         item["degraded_at"] = ci.degraded_at.isoformat() if ci.degraded_at else None
@@ -12725,7 +12742,7 @@ async def list_environment_profiles(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_environment_profiles(s, org_id=org_id, cursor=cursor, page_size=lim)
+            result = await db_list_environment_profiles(s, org_id=org_id, cursor=cursor, page_size=lim, team_id=_ctx_team_id_val())
 
         return {
             "data": [

@@ -318,13 +318,23 @@ instance identity: it refuses a target whose recorded revision is not in the
 archive's lineage (a different release train, or not a Farna Control database
 at all). A target the newer release has migrated PAST the archive is accepted,
 because that is the rollback the archive exists for: the restore returns the
-database to the archived revision with the archived data. `--replace-cluster`
-overrides the refusal.
+database to the archived revision with the archived data, naming the migrations
+being rolled back. `--replace-cluster` overrides the refusal.
 The disk pre-flight measures the DATABASE's filesystem — pass `--target-fs` (or
 set `DB_CAPACITY_PATH`, which the compose deployment does) when the archive is
 on a different volume from the database. The value only has to be a path on
-that volume (a permission the operator does not have is fine: it is measured,
-never read).
+that volume: it is only `statvfs`'d, so it does not need to be readable — a
+permission the operator does not have is fine, and the pre-flight degrades with
+a loud warning when it cannot measure.
+
+Before the dump is applied, the replay recreates the target's `public` schema
+**in the same `psql` transaction as the dump**. pg_dump's `--clean` preamble
+only knows the objects that existed when the snapshot was taken, so replaying
+it over a forward-migrated schema can fail on a drop a newer object depends on
+(an FK added by a later migration onto a pre-existing primary key). Recreating
+the schema first makes those drops no-ops, and because the reset and the dump
+commit or roll back together, a failed replay leaves the target exactly as it
+was — on top of the pre-restore safety dump taken before either runs.
 
 Because `database.sql` is a dump of the whole database, restoring it also
 restores the pre-upgrade `alembic_version` row, leaving the database recorded
