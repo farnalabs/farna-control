@@ -123,7 +123,8 @@
     "tests/unit/determination/test_scanner.py",
     "tests/unit/notifier/test_notifier.py",
     "tests/unit/pipeline_engine/test_dispatch_composed_e2e.py",
-    "tests/unit/test_guardrail_compensation.py"
+    "tests/unit/test_guardrail_compensation.py",
+    "tests/unit/tools/test_provider_contract_probe.py"
   ],
   "version": 1,
   "violations": {
@@ -704,6 +705,15 @@
       "unused_route"
     ],
     "tests/unit/connectors/test_jenkins.py::test_write_missing_job_name": [
+      "unused_route"
+    ],
+    "tests/unit/tools/test_provider_contract_probe.py::test_missing_credential_fails_by_default": [
+      "unused_route"
+    ],
+    "tests/unit/tools/test_provider_contract_probe.py::test_unrecorded_golden_fails_by_default": [
+      "unused_route"
+    ],
+    "tests/unit/tools/test_provider_contract_probe.py::test_zero_attempts_fails_even_when_every_skip_is_excused": [
       "unused_route"
     ]
   }

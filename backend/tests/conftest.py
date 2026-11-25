@@ -476,19 +476,29 @@ def pytest_runtest_logstart(nodeid: str, location: tuple[str, int, str]) -> None
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
-    """Fail a passing test whose respx usage broke the strict policy.
+    """Fail a test whose respx usage broke the strict transport policy.
 
-    Runs at teardown (after every router the test stopped, including routers
-    a fixture tore down) and flips a green report to failed with the
-    collected violations, so the failure names the offending routes rather
-    than the test erroring on an opaque respx assertion.
+    The call phase is checked first so the common case (a router stopped in the
+    test body) is reported as a FAILED test, not a teardown ERROR. Anything a
+    fixture tears down afterwards is caught at teardown. ``drain_violations``
+    keeps the node id until teardown so those later findings are still
+    attributed to this test.
     """
     outcome = yield
     report = outcome.get_result()
-    if report.when != "teardown":
+    if report.when == "call":
+        # Always drain: findings from a test that failed for another reason are
+        # still recorded, but they must not be re-reported as a teardown error.
+        violations = _transport_strict.drain_violations()
+        if report.outcome != "passed":
+            return
+    elif report.when == "teardown":
+        violations = _transport_strict.finish_test()
+        if report.outcome != "passed":
+            return
+    else:
         return
-    violations = _transport_strict.finish_test()
-    if not violations or report.outcome != "passed":
+    if not violations:
         return
     report.outcome = "failed"
     report.longrepr = _transport_strict.format_failure(violations)

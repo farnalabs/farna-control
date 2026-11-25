@@ -139,18 +139,29 @@ def start_test(nodeid: str) -> None:
         _reset_global_router()
 
 
-def finish_test() -> list[Violation]:
-    """Close the current test: persist its violations and return them."""
+def _persist(violations: list[Violation]) -> None:
+    if not violations or _report_path is None:
+        return
+    # Always per-process: xdist workers append concurrently and a single
+    # shared file cannot be written safely from several processes.
+    path = _report_path.with_name(f"{_report_path.name}.{os.getpid()}.jsonl")
+    with path.open("a", encoding="utf-8") as handle:
+        for violation in violations:
+            handle.write(json.dumps(violation.as_dict(), sort_keys=True) + "\n")
+
+
+def drain_violations() -> list[Violation]:
+    """Take the findings so far, keeping the test id for later teardown work."""
     violations = list(_current())
     _state.violations = []
+    _persist(violations)
+    return violations
+
+
+def finish_test() -> list[Violation]:
+    """Close the current test: persist its violations and return them."""
+    violations = drain_violations()
     _state.test = None
-    if violations and _report_path is not None:
-        # Always per-process: xdist workers append concurrently and a single
-        # shared file cannot be written safely from several processes.
-        path = _report_path.with_name(f"{_report_path.name}.{os.getpid()}.jsonl")
-        with path.open("a", encoding="utf-8") as handle:
-            for violation in violations:
-                handle.write(json.dumps(violation.as_dict(), sort_keys=True) + "\n")
     return violations
 
 

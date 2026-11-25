@@ -29,6 +29,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import subprocess
@@ -135,7 +136,32 @@ def _run_pytest(modules: list[Path], report: Path, timeout: int, jobs: int) -> i
     return completed.returncode
 
 
+def _respx_modules() -> list[str]:
+    """Every collectable ``tests/test_*.py`` module importing respx (backend-relative)."""
+    modules: list[str] = []
+    for path in sorted((BACKEND / "tests").rglob("*.py")):
+        if not _is_collectable(path.name):
+            continue
+        raw = path.read_bytes()
+        if b"respx" not in raw:
+            continue
+        try:
+            tree = ast.parse(raw)
+        except (SyntaxError, ValueError):  # pragma: no cover - test tree is valid Python
+            continue
+        imports_respx = any(
+            (isinstance(node, ast.Import) and any(alias.name == "respx" or alias.name.startswith("respx.") for alias in node.names)) or (isinstance(node, ast.ImportFrom) and node.module is not None and (node.module == "respx" or node.module.startswith("respx."))) for node in ast.walk(tree)
+        )
+        if imports_respx:
+            modules.append(path.relative_to(BACKEND).as_posix())
+    return modules
+
+
 def _write_baseline(path: Path, baseline: dict, report: dict[str, set[str]], scanned_modules: set[str], *, replace: bool) -> None:
+    # Refresh the module inventory too: a new respx-using module must be
+    # enumerated for the policy scan to cover it, and a module that stopped
+    # importing respx must leave (shrink-only).
+    baseline["modules"] = _respx_modules()
     violations: dict[str, list[str]] = {node: sorted(kinds) for node, kinds in baseline.get("violations", {}).items()}
     if replace:
         for node in list(violations):
@@ -144,9 +170,10 @@ def _write_baseline(path: Path, baseline: dict, report: dict[str, set[str]], sca
     for node, kinds in report.items():
         if _module_of(node) in scanned_modules:
             violations[node] = sorted(kinds)
-    baseline["violations"] = {node: violations[node] for node in sorted(violations)}
+    known = set(baseline["modules"])
+    baseline["violations"] = {node: sorted(violations[node]) for node in sorted(violations) if _module_of(node) in known}
     path.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"baseline written: {path} ({len(baseline['violations'])} violation(s))")
+    print(f"baseline written: {path} ({len(baseline['modules'])} module(s), {len(baseline['violations'])} violation(s))")
 
 
 def _resolve_arg(raw: str) -> Path:
