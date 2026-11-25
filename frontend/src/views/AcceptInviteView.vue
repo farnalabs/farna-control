@@ -69,14 +69,16 @@
         </button>
       </form>
 
-      <div
+      <Notice
         v-else
-        aria-live="polite"
+        variant="success"
+        live="polite"
+        :icon="false"
         data-testid="accept-invite-success"
-        class="mt-5 rounded-lg border border-success/50 bg-success/10 p-4 text-sm text-success-text"
+        class="mt-5 text-sm"
       >
         {{ successMessage }}
-      </div>
+      </Notice>
     </div>
   </div>
 </template>
@@ -87,6 +89,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '../composables/useApi'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import { passwordRuleKey, validatePasswordClient } from '../lib/passwordRules'
 
 const { t } = useI18n()

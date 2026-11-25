@@ -484,6 +484,7 @@ async def _verify_identity(principal: AuthenticatedPrincipal) -> str | None:
             get_or_create_engine,
             get_or_create_session_factory,
         )
+        from farna.db.rls import set_rls_org
         from farna.settings import get_settings as _get_settings
 
         engine = get_or_create_engine(_get_settings())
@@ -517,6 +518,13 @@ async def _verify_identity(principal: AuthenticatedPrincipal) -> str | None:
                 )
                 raise OrganisationNotFound
 
+            # ADR 070 §2: bind the org the token claims BEFORE the membership
+            # read. This is a fresh session opened for verification, so no org
+            # context exists yet; the claim is signed (and the org row was just
+            # proved to exist), so scoping to it is strictly NARROWER than the
+            # fail-open NULL arm the table used to carry — and it keeps the
+            # live-role read working after migration 0367 removes that arm.
+            await set_rls_org(session, principal.organisation_id)
             live_role = await resolve_role_from_membership(
                 session,
                 str(principal.account_id),

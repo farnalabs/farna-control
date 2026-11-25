@@ -164,16 +164,18 @@
           </button>
         </div>
 
-        <div
+        <Notice
           v-if="result"
-          class="mt-6 rounded-lg border border-success/50 bg-success/10 p-4 text-success-text"
+          variant="success"
+          :icon="false"
+          class="mt-6"
         >
           <p class="font-medium">{{ $t('views.LibraryPipelineWizard.pipeline_created') }}</p>
           <p class="text-sm mt-1">
             {{ $t('views.LibraryPipelineWizard.pipeline_ready', { name: result.name }) }}
              <a :href="`/pipelines/${result.id}`" class="underline font-medium" data-testid="library-wizard-view-pipeline">{{ $t('views.LibraryPipelineWizard.view_pipeline') }}</a>
           </p>
-        </div>
+        </Notice>
 
         <ErrorAlert v-if="createError" :message="createError" :on-retry="createPipeline" class="mt-6" />
       </div>
@@ -190,6 +192,7 @@ import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import Button from 'primevue/button'
 import { useDataFetch } from '../composables/useDataFetch'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'
 import type { OwnershipValue } from '../components/OwnershipPicker.vue'

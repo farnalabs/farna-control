@@ -138,7 +138,7 @@ matrix must be run for both supported targets: Linux native on a supported
 glibc host, and Docker using the shipped `docker-compose.prod.yml` bundle. For
 each target, capture one repeatable transcript for:
 
-`clean install -> upgrade -> intentionally failed upgrade -> rollback -> rollback verification`.
+`clean install -> upgrade (verified pre-upgrade snapshot) -> intentionally failed upgrade -> startup-guard refusal on the forward-migrated database -> restore the pre-upgrade snapshot -> start the previous release with the pre-upgrade data intact`.
 
 The native release smoke workflow already performs the native install, refusal,
 N-1 upgrade, doctor, backup and rollback-target checks against the published
@@ -146,8 +146,9 @@ Linux bundle. The Docker leg is the companion
 `scripts/verify_compose_upgrade_rollback.py` harness, which runs against the
 extracted release compose asset and writes `metadata.json`, `commands.jsonl`,
 per-command stdout/stderr, and a final `RESULT` marker. Its failed-upgrade step
-must leave readiness unavailable before the old immutable image is started
-again.
+must leave readiness unavailable; the documented recovery then restores the
+pre-upgrade snapshot before the previous release is started on the restored
+database.
 
 `rc-validate.yml` runs that Docker leg after the anonymous clean-host compose
 check and before the live pen test. It resolves the previous published

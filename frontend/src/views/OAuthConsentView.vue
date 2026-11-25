@@ -30,13 +30,16 @@
         :retryable="false"
       />
 
-      <output
+      <Notice
         v-if="success"
-        class="block rounded-lg border border-success/50 bg-success/10 p-4 text-sm"
+        variant="success"
+        live="polite"
+        :icon="false"
+        class="text-sm"
         data-testid="oauth-consent-success"
       >
         {{ $t('views.OAuthConsentView.approved_redirecting') }}
-      </output>
+      </Notice>
 
       <div
         v-if="declined"
@@ -144,6 +147,7 @@ import { getAccessToken } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import LogoMark from '../components/LogoMark.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 
 interface ConsentContextTeam {
   id: string

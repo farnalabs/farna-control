@@ -196,14 +196,18 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       `::test_bundled_env_values_satisfy_the_settings_validators`).
       <!-- behaviour: container-deployment-12 | tests: backend/tests/unit/scripts/test_package_compose_release.py::test_validate_release_tag_rejects_latest -->
 - [x] The release acceptance matrix proves the operator-visible Compose
-      lifecycle: clean install of the old tag, upgrade to the new tag, an
-      intentionally broken upgrade (invalid `SECRET_KEY`), rollback to the old
-      tag, and rollback readiness. It runs in an isolated Compose project,
+      lifecycle: clean install of the old tag, upgrade to the new tag with a
+      verified pre-upgrade snapshot, an intentionally broken upgrade (invalid
+      `SECRET_KEY`), the previous image refused by the startup guard on the
+      forward-migrated database (exit 78 and the one `REFUSED:` line), the
+      documented snapshot restore through `compose-restore.sh`, and the previous
+      release started with `compose-rollback.sh` with the data written before
+      the upgrade still present. It runs in an isolated Compose project,
       records host/image/command/outcome/container-log evidence, redacts secret
       literals, and tears the project down in a `finally` block.
       (`scripts/verify_compose_upgrade_rollback.py`;
       `test_verify_compose_upgrade_rollback.py::test_build_compose_command_is_project_isolated`,
-      `::test_matrix_records_every_required_transition`,
+      `::test_matrix_records_the_documented_recovery_transitions`,
       `::test_evidence_redacts_secret_literals`,
       `::test_failed_upgrade_reads_the_backend_child_log_not_the_container_log`).
       <!-- behaviour: container-deployment-13 | tests: backend/tests/unit/scripts/test_verify_compose_upgrade_rollback.py::test_build_compose_command_is_project_isolated -->

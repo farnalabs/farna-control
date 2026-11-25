@@ -1853,14 +1853,17 @@
                run gets cancelled. Warn, never gate the save. aria-live (not
                role="status") so assistive tech announces it without SonarCloud
                Web:S6819. -->
-          <p
+          <Notice
             v-if="ownerlessGateAdvisory"
-            class="rounded-lg border border-warning/40 bg-warning/10 p-2 text-xs text-warning-text"
-            aria-live="polite"
+            variant="warning"
+            live="polite"
+            :icon="false"
+            padding="xs"
+            class="text-xs"
             data-testid="pipeline-editor-ownerless-gate-advisory"
           >
             {{ $t('views.PipelineEditorView.ownerless_gate_advisory') }}
-          </p>
+          </Notice>
           <hr class="border-t" />
           <div>
             <label for="pipelineeditorview-field-11" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.PipelineEditorView.condition_type') }}</label>
@@ -2296,6 +2299,7 @@ import { usePlanStore } from '../stores/planStore'
 
 import FormDialog from '../components/shared/FormDialog.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import FolderListError from '../components/pipelines/FolderListError.vue'
 import FlowControls from '../components/shared/FlowControls.vue'
 import PipelineSnapshotTimeline from '../components/pipeline/PipelineSnapshotTimeline.vue'

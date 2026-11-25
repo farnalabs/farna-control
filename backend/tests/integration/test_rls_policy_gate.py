@@ -14,13 +14,28 @@ Part 1 (structural) — every table in ``pg_class`` with ``relrowsecurity`` and 
 
     (organisation_id = current_setting('app.organisation_id')) AND (<rest>)
 
-or the single-clause form ``organisation_id = current_setting(...)``. A top-level
-``OR`` is the fail-open shape (``... OR current_setting(...) IS NULL`` /
-``... OR organisation_id IS NULL``) and fails. An org equality that is not the
-first conjunct fails. The expression is tokenised (string / dollar-quoted /
+or the single-clause form ``organisation_id = current_setting(...)``, or — since
+migration 0367 — the scoped pre-auth form::
+
+    (organisation_id = current_setting('app.organisation_id')) OR
+    (current_setting('app.bootstrap_context', true) = 'true')
+
+A top-level ``OR`` with any arm that is neither the org equality nor an explicit
+bootstrap grant is the fail-open shape (``... OR current_setting(...) IS NULL`` /
+``... OR organisation_id IS NULL``) and fails. An org equality that is not one of
+the top-level arms fails. The expression is tokenised (string / dollar-quoted /
 quoted-identifier aware), balanced-paren stripped and split on top-level
 ``AND``/``OR``; no substring matching is used. Tables with RLS but no policy fail
 unless they are on the checked-in exception list.
+
+The four pre-auth tables (``oauth_clients``, ``oauth_consent_states``,
+``org_memberships``, ``token_families``) were exceptions while their NULL arm
+stood. Migration 0367 replaced that arm with the bootstrap grant, so they left the
+exception list and are now pinned by ``_BOOTSTRAP_GRANT_TABLES``: the gate fails if
+one of them regains *any* ``IS NULL`` arm
+(``test_no_policy_regains_an_org_context_is_null_arm``), and
+``test_global_asset_tables_keep_their_named_null_arm`` keeps the two deliberate
+``organisation_id IS NULL`` global-asset arms named as such (ADR 070 §6).
 
 Part 2 (behavioural) — for ``pipelines``, ``runs``, ``connector_instances``,
 ``model_backends`` and ``system_maps`` this seeds two organisations (two teams
@@ -29,7 +44,8 @@ context returns zero org-A rows across the full GUC matrix (cross-org, cross-org
 admin, cross-org + execution context, org unset) and — for the team-scoped
 tables — that a team-B member returns zero team-A rows inside the *same* org.
 Every context carries a positive control so a policy that simply denies
-everything cannot pass.
+everything cannot pass. The pre-auth bootstrap grant is proved behaviourally in
+``test_rls_bootstrap_context.py``.
 
 Scope note: ``runs`` is org-scoped today (ADR 070 Phase 1B flips the runs family
 to the team predicate). It is therefore exercised across orgs only; the cross-team
@@ -70,24 +86,31 @@ class Exemption:
     arm: str
 
 
-_PRE_AUTH = (
-    "pre-auth bootstrap read: the row must be readable before any principal (and "
-    "therefore before any organisation context) exists, so the legacy predicate "
-    "widens to every row when app.organisation_id is unset. It is an accidental "
-    "god-mode rather than a scoped read and is scheduled for replacement by a "
-    "scoped bootstrap read in ADR 070 Phase 0."
-)
-_GLOBAL_ASSET = "global asset catalogue: NULL-organisation rows are built-in, shared assets readable by every organisation. The NULL arm must be *named* as the global catalogue rather than left as a side effect; it is recorded in ADR 070 §6."
+_GLOBAL_ASSET = "global asset catalogue: NULL-organisation rows are built-in, shared assets readable by every organisation. The NULL arm is DELIBERATE and NAMED as the global catalogue (not a side effect); it is recorded in ADR 070 §6."
 
 _EXEMPTIONS: dict[str, Exemption] = {
-    # ── Fail-open shape: (... = current_org) OR (current_org IS NULL) ──────
-    "oauth_clients": Exemption(reason=_PRE_AUTH, adr="ADR 070 §2 (fail-open policies)", arm="org_context_is_null"),
-    "oauth_consent_states": Exemption(reason=_PRE_AUTH, adr="ADR 070 §2 (fail-open policies)", arm="org_context_is_null"),
-    "org_memberships": Exemption(reason=_PRE_AUTH, adr="ADR 070 §2 (fail-open policies)", arm="org_context_is_null"),
-    "token_families": Exemption(reason=_PRE_AUTH, adr="ADR 070 §2 (fail-open policies)", arm="org_context_is_null"),
     # ── Global-asset shape: (... = current_org) OR (organisation_id IS NULL) ─
     "assistant_context_sources": Exemption(reason=_GLOBAL_ASSET, adr="ADR 070 §6 (global asset catalogue)", arm="organisation_id_is_null"),
     "assistant_skills": Exemption(reason=_GLOBAL_ASSET, adr="ADR 070 §6 (global asset catalogue)", arm="organisation_id_is_null"),
+}
+
+# ── The four pre-auth tables that LEFT the exception list in migration 0367 ──
+# They used to carry ``(... = current_org) OR (current_org IS NULL)``, which the
+# pool-checkout reset turned into an accidental god-mode ("no context" meant
+# "every row"). 0367 replaced that arm with an explicit, transaction-scoped
+# ``app.bootstrap_context = 'true'`` grant, so they are no longer exempt — they
+# are pinned here instead, and the gate fails if any of them regains an IS NULL
+# arm (``test_no_policy_regains_an_org_context_is_null_arm``).
+#
+#   oauth_clients         — pre-auth authorize lookup by client_id, before any org exists
+#   oauth_consent_states  — anonymous consent-context read by state, before any org exists
+#   org_memberships       — login/SSO/refresh role resolution, pinned to (account, org)
+#   token_families        — refresh rotation + credential-change revocation, pinned to (family, account)
+_BOOTSTRAP_GRANT_TABLES: dict[str, str] = {
+    "oauth_clients": "pre-auth OAuth client lookup by client_id (authorize / token / refresh legs)",
+    "oauth_consent_states": "anonymous consent-context read by state (the org is a column of the row)",
+    "org_memberships": "login/SSO/refresh live-role resolution, pinned to (account, org)",
+    "token_families": "refresh-token rotation and credential-change revocation, pinned to (family_id, account_id)",
 }
 
 # The tenant-table census is deliberate: if a table drops out of RLS (or a new
@@ -100,12 +123,8 @@ _EXEMPTIONS: dict[str, Exemption] = {
 # exists) and ``run_node_outputs_quarantine`` (ops-only remediation evidence).
 _EXPECTED_TENANT_TABLE_COUNT = 102
 
-# The six tables the ADR names, split by the shape they are allowed to carry.
+# The exception list is now only the two deliberate global-asset catalogues.
 _REQUIRED_EXEMPTIONS: dict[str, str] = {
-    "oauth_clients": "org_context_is_null",
-    "oauth_consent_states": "org_context_is_null",
-    "org_memberships": "org_context_is_null",
-    "token_families": "org_context_is_null",
     "assistant_context_sources": "organisation_id_is_null",
     "assistant_skills": "organisation_id_is_null",
 }
@@ -124,6 +143,9 @@ _REQUIRED_EXEMPTIONS: dict[str, str] = {
 _DOLLAR_QUOTE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)?\$")
 _BARE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 _ORG_GUC = re.compile(r"current_setting\s*\(\s*'app\.organisation_id'")
+_BOOTSTRAP_GUC = re.compile(r"current_setting\s*\(\s*'app\.bootstrap_context'")
+_LITERAL_TRUE = re.compile(r"^'true'(?:::text)?$")
+_IS_NULL = re.compile(r"(?<![A-Za-z0-9_$])IS\s+NULL(?![A-Za-z0-9_$])", re.IGNORECASE)
 
 
 def _mask_literals(expr: str) -> str:
@@ -251,6 +273,30 @@ def is_org_equality(expr: str) -> bool:
     return any(_bare_column(column_side) == "organisation_id" and _ORG_GUC.search(guc_side) is not None for column_side, guc_side in ((left, right), (right, left)))
 
 
+def is_bootstrap_grant(expr: str) -> bool:
+    """True when *expr* is ``current_setting('app.bootstrap_context', true) = 'true'``.
+
+    This is the ONLY arm allowed to widen a pre-auth policy (ADR 070 §2,
+    migration 0367). It is an equality against the literal ``'true'``, so an
+    unset GUC (NULL) or the post-checkout reset value ``''`` fails closed —
+    unlike an ``IS NULL`` arm, which widens precisely when no context exists.
+    """
+    inner = _unwrap(expr)
+    if is_org_equality(inner):
+        return False
+    equals_at = _top_level_equals(inner)
+    if equals_at == -1:
+        return False
+    left = inner[:equals_at].strip()
+    right = inner[equals_at + 1 :].strip()
+    return any(_BOOTSTRAP_GUC.search(guc_side) is not None and _LITERAL_TRUE.match(literal_side) is not None for guc_side, literal_side in ((left, right), (right, left)))
+
+
+def has_is_null_arm(expr: str) -> bool:
+    """True when *expr* carries an ``IS NULL`` test (literal-aware)."""
+    return _IS_NULL.search(_mask_literals(_unwrap(expr))) is not None
+
+
 @dataclass(frozen=True)
 class PredicateShape:
     """The top-level structure of one policy predicate."""
@@ -264,9 +310,27 @@ class PredicateShape:
             return False
         return is_org_equality(self.conjuncts[0])
 
+    @property
+    def bootstrap_grant(self) -> bool:
+        """The scoped pre-auth form: org equality OR explicit bootstrap grant.
+
+        Everything that is not the org equality must be a bootstrap-grant arm —
+        one stray arm (an ``IS NULL``, a ``TRUE``, anything else) and this is
+        False, so the shape cannot be smuggled in alongside a widened arm.
+        """
+        if self.operator != "OR":
+            return False
+        if not any(is_org_equality(conjunct) for conjunct in self.conjuncts):
+            return False
+        others = [conjunct for conjunct in self.conjuncts if not is_org_equality(conjunct)]
+        return bool(others) and all(is_bootstrap_grant(conjunct) for conjunct in others)
+
+    def is_acceptable(self) -> bool:
+        return self.org_first or self.bootstrap_grant
+
     def describe(self) -> str:
         if self.operator == "OR":
-            return "top-level OR (fail-open shape)"
+            return "top-level OR with an arm that is neither the org equality nor an explicit bootstrap grant (fail-open shape)"
         if not self.org_first:
             return f"org equality is not the first conjunct: first is {self.conjuncts[0]!r}"
         return "ok"
@@ -367,7 +431,7 @@ def _policy_failures(policies: TablePolicies) -> list[str]:
             continue
         for predicate in predicates:
             shape = parse_predicate(predicate)
-            if not shape.org_first:
+            if not shape.is_acceptable():
                 failures.append(f"{policies.table}.{policy.name} ({policy.command}): {shape.describe()} — {predicate}")
     return failures
 
@@ -399,12 +463,38 @@ def test_every_tenant_table_policy_is_org_first(tenant_policy_census: dict[str, 
     assert not failures, "RLS policy shape gate failed:\n" + "\n".join(failures)
 
 
-def _widened_arm(predicate: str) -> str | None:
-    """Which fail-open arm a top-level-OR predicate carries, or None."""
+def _widened_arms(predicate: str) -> set[str]:
+    """Every widening arm a top-level-OR predicate carries, order-independently.
+
+    ``bootstrap_grant`` is a named, scoped widening (migration 0367) and is
+    legitimate on ``_BOOTSTRAP_GRANT_TABLES``; the two ``*_is_null`` arms are the
+    fail-open shapes this gate exists to keep out.
+
+    Every top-level OR operand is inspected, not just the trailing one: an arm in
+    a non-trailing position is still accepted by :meth:`PredicateShape.is_acceptable`
+    (it checks the whole conjunct set), so a tail-only reading would let it slip
+    past the bootstrap-grant register unrecorded.
+    """
     if parse_predicate(predicate).operator != "OR":
-        return None
-    tail = _split_on_operator(_unwrap(predicate), "OR")[-1]
-    return "org_context_is_null" if _ORG_GUC.search(tail) else "organisation_id_is_null"
+        return set()
+    arms: set[str] = set()
+    for conjunct in _split_on_operator(_unwrap(predicate), "OR"):
+        if is_org_equality(conjunct):
+            continue
+        if has_is_null_arm(conjunct):
+            arms.add("org_context_is_null" if _ORG_GUC.search(conjunct) else "organisation_id_is_null")
+        elif is_bootstrap_grant(conjunct):
+            arms.add("bootstrap_grant")
+    return arms
+
+
+def _table_widening_arms(policies: TablePolicies) -> set[str]:
+    """Union of widening arms across every predicate of every policy on a table."""
+    arms: set[str] = set()
+    for policy in policies.policies:
+        for predicate in policy.predicates():
+            arms |= _widened_arms(predicate)
+    return arms
 
 
 def test_exemptions_are_real_and_current(tenant_policy_census: dict[str, TablePolicies]) -> None:
@@ -424,20 +514,82 @@ def test_exemptions_are_real_and_current(tenant_policy_census: dict[str, TablePo
         if policies is None:
             problems.append(f"{table}: exempted but not an RLS tenant table")
             continue
-        found = {_widened_arm(predicate) for policy in policies.policies for predicate in policy.predicates()}
+        found = _table_widening_arms(policies)
         if not found:
             problems.append(f"{table}: exempted but has no policy predicate at all")
         elif exemption.arm not in found:
-            problems.append(f"{table}: exemption arm {exemption.arm!r} is no longer present (found {sorted(arm for arm in found if arm)}); the exemption is stale — remove it")
+            problems.append(f"{table}: exemption arm {exemption.arm!r} is no longer present (found {sorted(found)}); the exemption is stale — remove it")
     assert not problems, "exception list is out of date:\n" + "\n".join(problems)
 
 
-def test_exception_list_covers_the_known_six() -> None:
-    """The six ADR-named tables must all be enumerated, with the documented arms."""
+def test_global_asset_tables_keep_their_named_null_arm(tenant_policy_census: dict[str, TablePolicies]) -> None:
+    """The two global-asset catalogues must still be the ONLY ``IS NULL`` widenings.
+
+    ADR 070 §6 names them as an intentional global catalogue — a NULL-organisation
+    row is a built-in asset every org can read. Keeping the expectation explicit
+    stops the exemption from silently describing a different table, and stops a
+    third table acquiring the same arm without a reviewed ADR entry.
+    """
+    offenders: dict[str, list[str]] = {}
+    for table, policies in sorted(tenant_policy_census.items()):
+        arms = _table_widening_arms(policies)
+        if "organisation_id_is_null" in arms and table not in _REQUIRED_EXEMPTIONS:
+            offenders[table] = sorted(arms)
+    assert not offenders, f"only the named global-asset catalogue may carry an organisation_id IS NULL arm; found {offenders}"
+
+
+def test_exception_list_covers_the_global_asset_pair() -> None:
+    """The two ADR §6 tables must both be enumerated, with the documented arm."""
     missing = sorted(set(_REQUIRED_EXEMPTIONS) - set(_EXEMPTIONS))
-    assert not missing, f"exception list is missing the ADR-named tables: {missing}"
+    assert not missing, f"exception list is missing the ADR-named global-asset tables: {missing}"
     wrong = {table: (_EXEMPTIONS[table].arm, arm) for table, arm in _REQUIRED_EXEMPTIONS.items() if table in _EXEMPTIONS and _EXEMPTIONS[table].arm != arm}
-    assert not wrong, f"exception list records the wrong fail-open arm for: {wrong}"
+    assert not wrong, f"exception list records the wrong arm for: {wrong}"
+
+
+def test_no_policy_regains_an_org_context_is_null_arm(tenant_policy_census: dict[str, TablePolicies]) -> None:
+    """No policy anywhere may widen on ``current_setting('app.organisation_id') IS NULL``.
+
+    The pool-checkout reset writes ``app.organisation_id = ''`` and
+    ``NULLIF('','')`` is NULL, so that arm means "any unbound session reads every
+    row". Migration 0367 removed the last four (and with them the four exception
+    entries); this test is the tripwire that fails if any of them — or any other
+    table — regains it, whatever the exemption list says.
+
+    ``test_every_tenant_table_policy_is_org_first`` already rejects the shape by
+    construction (the arm is not an org equality and not a bootstrap grant); this
+    one names the defect precisely so a regression reports the class, not just
+    "top-level OR".
+    """
+    offenders: dict[str, list[str]] = {}
+    for table, policies in sorted(tenant_policy_census.items()):
+        for policy in policies.policies:
+            for predicate in policy.predicates():
+                if "org_context_is_null" in _widened_arms(predicate):
+                    offenders.setdefault(table, []).append(f"{policy.name}: {predicate}")
+    assert not offenders, "fail-open org-context arm regained (ADR 070 §2 forbids it; use app.bootstrap_context instead):\n" + "\n".join(f"{table}: {rows}" for table, rows in offenders.items())
+
+
+def test_bootstrap_grant_tables_use_the_scoped_arm(tenant_policy_census: dict[str, TablePolicies]) -> None:
+    """The four pre-auth tables must hold the scoped bootstrap grant, and no others.
+
+    Both directions matter. If one of the four drifts back to a fail-open arm the
+    gate says so; if a table that is NOT on the reviewed list acquires the grant,
+    a pre-auth read has been widened without this test being updated.
+    """
+    problems: list[str] = []
+    carrying: set[str] = set()
+    for table, policies in sorted(tenant_policy_census.items()):
+        arms = _table_widening_arms(policies)
+        if "bootstrap_grant" in arms:
+            carrying.add(table)
+        expected = table in _BOOTSTRAP_GRANT_TABLES
+        actual = "bootstrap_grant" in arms
+        if expected and not actual:
+            problems.append(f"{table}: is on the reviewed pre-auth list but carries no bootstrap grant (arms: {sorted(arm for arm in arms if arm)}) — {_BOOTSTRAP_GRANT_TABLES[table]}")
+        if actual and not expected:
+            problems.append(f"{table}: carries an app.bootstrap_context grant but is not on the reviewed pre-auth list — add it with a reason, or remove the arm")
+    assert not problems, "bootstrap-grant register is out of date:\n" + "\n".join(problems)
+    assert carrying == set(_BOOTSTRAP_GRANT_TABLES), f"expected exactly {sorted(_BOOTSTRAP_GRANT_TABLES)}, found {sorted(carrying)}"
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +645,100 @@ def test_parser_reads_top_level_structure(predicate: str, expected_operator: str
     shape = parse_predicate(predicate)
     assert shape.operator == expected_operator
     assert shape.org_first is expected_org_first
+
+
+_ORG_ARM = "(organisation_id = (NULLIF(current_setting('app.organisation_id'::text, true), ''::text))::uuid)"
+_BOOTSTRAP_ARM = "(current_setting('app.bootstrap_context'::text, true) = 'true'::text)"
+
+
+@pytest.mark.parametrize(
+    ("predicate", "acceptable", "bootstrap_grant"),
+    [
+        # The 0367 scoped pre-auth shape — the ONLY widening this gate allows.
+        (f"({_ORG_ARM} OR {_BOOTSTRAP_ARM})", True, True),
+        # Operand order is irrelevant to the invariant.
+        (f"({_ORG_ARM} OR ('true'::text = current_setting('app.bootstrap_context'::text, true)))", True, True),
+        # The fail-open shapes must still fail, including when the bootstrap arm
+        # is ALSO present — a second widening arm cannot be smuggled in.
+        (
+            f"({_ORG_ARM} OR (NULLIF(current_setting('app.organisation_id'::text, true), ''::text) IS NULL))",
+            False,
+            False,
+        ),
+        (f"({_ORG_ARM} OR (organisation_id IS NULL))", False, False),
+        (f"({_ORG_ARM} OR {_BOOTSTRAP_ARM} OR (organisation_id IS NULL))", False, False),
+        # A bootstrap-only policy is not org-gated at all — must fail.
+        (f"(({_BOOTSTRAP_ARM}))", False, False),
+        # An always-true arm is not a bootstrap grant.
+        (f"({_ORG_ARM} OR true)", False, False),
+        # Comparing the GUC to something other than the literal 'true' fails closed
+        # but is not the reviewed shape; it must not pass the gate.
+        (f"({_ORG_ARM} OR (current_setting('app.bootstrap_context'::text, true) IS NOT NULL))", False, False),
+        # The plain org-scoped form stays acceptable and is not a bootstrap grant.
+        (_ORG_ARM, True, False),
+    ],
+    ids=[
+        "scoped-bootstrap-grant",
+        "scoped-bootstrap-grant-reversed-operands",
+        "org-context-is-null-arm",
+        "organisation-id-is-null-arm",
+        "bootstrap-plus-null-arm",
+        "bootstrap-only-no-org-gate",
+        "always-true-arm",
+        "bootstrap-is-not-null-arm",
+        "plain-org-equality",
+    ],
+)
+def test_parser_accepts_only_the_scoped_bootstrap_widening(predicate: str, acceptable: bool, bootstrap_grant: bool) -> None:
+    """Pin the accept-set: org equality, or org equality OR a literal-'true' bootstrap grant."""
+    shape = parse_predicate(predicate)
+    assert shape.is_acceptable() is acceptable
+    assert shape.bootstrap_grant is bootstrap_grant
+
+
+@pytest.mark.parametrize(
+    ("predicate", "expected_arms"),
+    [
+        # Bootstrap arm in the TRAILING position (the shape the schema ships).
+        (f"({_ORG_ARM} OR {_BOOTSTRAP_ARM})", {"bootstrap_grant"}),
+        # Bootstrap arm in the LEADING position: still acceptable, so a tail-only
+        # reading would accept it yet fail to record the grant.
+        (f"({_BOOTSTRAP_ARM} OR {_ORG_ARM})", {"bootstrap_grant"}),
+        # Bootstrap arm in a non-trailing position of a three-arm OR.
+        (f"({_ORG_ARM} OR {_BOOTSTRAP_ARM} OR {_BOOTSTRAP_ARM})", {"bootstrap_grant"}),
+        # Fail-open arms are recorded wherever they sit.
+        (
+            f"({_ORG_ARM} OR (NULLIF(current_setting('app.organisation_id'::text, true), ''::text) IS NULL) OR {_ORG_ARM})",
+            {"org_context_is_null"},
+        ),
+        (f"({_ORG_ARM} OR (organisation_id IS NULL))", {"organisation_id_is_null"}),
+        # An arm that is neither the org equality, an IS NULL test nor a bootstrap
+        # grant contributes no widening arm (it is rejected elsewhere).
+        (f"({_ORG_ARM} OR true)", set()),
+        # The plain org-scoped form carries no widening arm.
+        (_ORG_ARM, set()),
+        # A non-OR predicate carries no widening arm.
+        (f"({_ORG_ARM} AND {_BOOTSTRAP_ARM})", set()),
+    ],
+    ids=[
+        "bootstrap-trailing",
+        "bootstrap-leading",
+        "bootstrap-middle",
+        "org-context-is-null-middle",
+        "organisation-id-is-null-trailing",
+        "always-true-arm-no-widening",
+        "plain-org-equality",
+        "and-predicate",
+    ],
+)
+def test_widened_arms_are_recorded_order_independently(predicate: str, expected_arms: set[str]) -> None:
+    """Every widening arm is recorded, not just the trailing OR operand.
+
+    The bootstrap-grant register in ``test_bootstrap_grant_tables_use_the_scoped_arm``
+    relies on this: an arm in a non-trailing position must still be seen, or a
+    table outside the reviewed list could carry the grant undetected.
+    """
+    assert _widened_arms(predicate) == expected_arms
 
 
 # ---------------------------------------------------------------------------

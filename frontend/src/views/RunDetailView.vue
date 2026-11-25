@@ -65,12 +65,15 @@
       <!-- Run-level warnings summary strip: surfaces run-level issues at the
            top of the page so they are visible without scrolling to the
            dedicated detail sections below. -->
-      <div
+      <Notice
         v-if="runLevelWarnings.length > 0"
         id="warnings"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="run-detail-warnings-strip"
-        aria-live="polite"
-        class="mb-4 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm text-warning-text"
       >
         <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold tracking-tight">
           <AlertTriangle aria-hidden="true" class="h-4 w-4 shrink-0" />
@@ -89,18 +92,21 @@
             </button>
           </li>
         </ul>
-      </div>
+      </Notice>
 
       <!-- Queue position banner (pending + waiting on sandbox capacity) -->
-      <output
+      <Notice
         v-if="run.status === 'pending' && run.capacity?.waiting"
-        data-testid="run-detail-queue-banner"
-        aria-live="polite"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        padding="none"
         :aria-label="queuedCapacityReason(run.capacity, t)"
-        class="mb-4 block rounded-lg border border-warning/50 bg-warning/10 px-4 py-2 text-sm text-warning-text"
+        class="mb-4 px-4 py-2 text-sm"
+        data-testid="run-detail-queue-banner"
       >
         {{ queuedCapacityReason(run.capacity, t) }}
-      </output>
+      </Notice>
       <output
         v-else-if="run.status === 'pending'"
         data-testid="run-detail-queued-starting"
@@ -356,13 +362,13 @@
       </DataCard>
 
       <!-- Capacity-blocked pending run (queued on sandbox concurrency limit) -->
-      <div v-if="run.status === 'pending' && (run.error_code === 'capacity.org' || run.error_code === 'capacity.pipeline')" data-testid="run-detail-waiting-for-capacity" class="rounded-lg border border-warning/50 bg-warning/10 p-4 mb-4">
+      <Notice v-if="run.status === 'pending' && (run.error_code === 'capacity.org' || run.error_code === 'capacity.pipeline')" variant="warning" :icon="false" class="mb-4" data-testid="run-detail-waiting-for-capacity">
         <h3 class="text-sm font-semibold text-warning-text mb-1">{{ $t('views.RunDetailView.waiting_for_capacity') }}</h3>
         <p v-if="run.error_detail" class="text-xs whitespace-pre-wrap text-warning-text">{{ run.error_detail }}</p>
-      </div>
+      </Notice>
 
       <!-- Failed Run Diagnostics -->
-      <div v-if="run.status === 'failed' && run.error_detail" class="rounded-lg border border-destructive/50 bg-destructive/10 p-4 mb-4">
+      <ErrorAlert v-if="run.status === 'failed' && run.error_detail" class="mb-4" :retryable="false">
         <div class="flex flex-wrap items-center gap-2 mb-1">
           <h3 class="text-sm font-semibold text-destructive-text">{{ $t('views.RunDetailView.run_error') }}</h3>
           <RunErrorTag
@@ -372,7 +378,7 @@
           />
         </div>
         <pre class="text-xs whitespace-pre-wrap font-mono text-destructive-text">{{ run.error_detail }}</pre>
-      </div>
+      </ErrorAlert>
 
       <!-- FAR-704: deadline-kill / cancellation triage evidence retained from
            the sandbox attempt (raw-output marker store). Rendered whenever the
@@ -482,11 +488,13 @@
       </BaseCard>
 
       <!-- Guardrail-blocked override (terminal eval_failed / eval_blocked) -->
-      <div
+      <Notice
         v-if="isGuardrailBlocked"
         id="run-detail-guardrail-override"
+        variant="warning"
+        :icon="false"
+        class="mb-4"
         data-testid="run-detail-guardrail-override-panel"
-        class="rounded-lg border border-warning/50 bg-warning/10 p-4 mb-4"
       >
         <h3 class="text-sm font-semibold text-warning-text mb-1">{{ $t('views.RunDetailGuardrailSummary.override_guardrail') }}</h3>
         <p class="text-xs text-warning-text mb-3">{{ $t('views.RunDetailGuardrailSummary.override_disclosure') }}</p>
@@ -500,7 +508,7 @@
         >
           {{ $t('views.RunDetailGuardrailSummary.override_requires_operator') }}
         </p>
-      </div>
+      </Notice>
 
       <!-- FAR-2072: worst-case wall clock for a running/failed node. The
            timeout is per attempt, so a retried timeout can consume it more
@@ -1059,6 +1067,7 @@ import CardHeader from '../components/ui/CardHeader.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import RunErrorTag from '../components/shared/RunErrorTag.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
