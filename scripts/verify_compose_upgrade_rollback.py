@@ -171,6 +171,11 @@ _INVALID_SECRET_KEY = "intentionally-invalid-secret"
 #: this message, never "any error" or "any exit".
 _INVALID_SECRET_KEY_FAILURE = "SECRET_KEY must be at least"
 
+#: Placeholder for a value that was never observed: no HTTP status code, no
+#: matching release log line, or an empty revision set. Kept as one constant so
+#: the wording of "nothing was there" cannot drift across the assertions.
+_ABSENT_VALUE = "<none>"
+
 #: The all-in-one image runs supervisord, which dup2()s each child program's
 #: streams onto per-program log files (deploy/supervisor/supervisord.conf).
 #: The backend child's output therefore NEVER reaches the container's
@@ -491,7 +496,7 @@ class Matrix:
         deadline = time.monotonic() + max(self.timeout, floor)
         poll_interval = min(0.25, max(0.01, self.timeout / 10))
         attempt = 0
-        last_code = "<none>"
+        last_code = _ABSENT_VALUE
         last_returncode = 0
         while True:
             attempt += 1
@@ -508,7 +513,7 @@ class Matrix:
             result = CommandResult(name + f"-attempt-{attempt}", tuple(argv), raw.returncode, raw.stdout or "", raw.stderr or "")
             self.evidence.record(result, outcome=self._readiness_outcome(raw.returncode))
             code = result.stdout.strip()
-            last_code = code or "<none>"
+            last_code = code or _ABSENT_VALUE
             last_returncode = raw.returncode
             reachable = raw.returncode == 0
             is_ready = reachable and code == "200"
@@ -699,7 +704,7 @@ class Matrix:
         restore_lines = [line for line in lines if line.startswith(_RESTORE_COMMAND_PREFIX)]
         documented = f"./{_RESTORE_HELPER} --confirm {snapshot}"
         if len(restore_lines) != 1 or documented not in restore_lines[0]:
-            found = restore_lines[0] if restore_lines else "<none>"
+            found = restore_lines[0] if restore_lines else _ABSENT_VALUE
             raise ValidationError(f"the release did not print the documented recovery command for the snapshot it took: expected a {_RESTORE_COMMAND_PREFIX!r} line naming {documented!r}, found {found!r}")
         presence = self.compose(
             "upgrade-snapshot-presence",
@@ -725,8 +730,8 @@ class Matrix:
 
     def _recovery_required(self, revisions_before: tuple[str, ...], revisions_after: tuple[str, ...], snapshot: str | None) -> bool:
         """Whether this pair migrated the database and therefore owes a recovery point."""
-        before = ", ".join(revisions_before) or "<none>"
-        after = ", ".join(revisions_after) or "<none>"
+        before = ", ".join(revisions_before) or _ABSENT_VALUE
+        after = ", ".join(revisions_after) or _ABSENT_VALUE
         if revisions_after == revisions_before:
             detail = f"no migration ran ({before} unchanged), so no snapshot was owed and the documented restore has nothing to recover; the previous image is started on the unchanged schema"
             if snapshot is not None:
