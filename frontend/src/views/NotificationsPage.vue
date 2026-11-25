@@ -78,17 +78,17 @@
     <div v-if="loading" data-testid="notifications-loading">
       <output class="sr-only" aria-live="polite">{{ $t('views.NotificationsPage.loading_notifications') }}</output>
       <div class="space-y-2" aria-busy="true">
-        <div
+        <DataCard
           v-for="n in 3"
           :key="`notifications-skeleton-${n}`"
-          class="border p-4"
+          padding="sm"
         >
           <div class="space-y-2">
             <SkeletonBlock height-class="h-4 w-48" />
             <SkeletonBlock height-class="h-3 w-72" />
             <SkeletonBlock height-class="h-3 w-40" />
           </div>
-        </div>
+        </DataCard>
       </div>
     </div>
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadNotifications" />
@@ -134,6 +134,7 @@ import { useDataFetch } from "../composables/useDataFetch";
 import { fetchNotifications, reviewLater } from "../lib/api/notifications";
 import { useNotificationsStore } from "../stores/notifications";
 import NotificationCard from "../components/NotificationCard.vue";
+import DataCard from "../components/ui/DataCard.vue";
 import PageHeader from '../components/shared/PageHeader.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import Pagination from '../components/shared/Pagination.vue'

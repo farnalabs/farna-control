@@ -391,7 +391,7 @@
               <div
                 v-for="n in 4"
                 :key="`paramschema-sets-skeleton-${n}`"
-                class="flex items-center justify-between border px-4 py-3"
+                class="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
               >
                 <div class="space-y-2">
                   <SkeletonBlock height-class="h-4 w-40" />

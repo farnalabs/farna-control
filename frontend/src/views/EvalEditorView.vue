@@ -225,8 +225,7 @@
                       :icon="false"
                       padding="xs"
                       radius="sm"
-                      role="alert"
-                      aria-live="assertive"
+                      live="assertive"
                       data-testid="eval-editor-derivation-warning"
                       class="text-xs"
                     >
@@ -566,7 +565,7 @@
                     :icon="false"
                     padding="xs"
                     radius="sm"
-                    aria-live="polite"
+                    live="polite"
                     data-testid="eval-editor-client-errors"
                     class="mt-3 text-xs"
                   >
@@ -617,8 +616,7 @@
                   :icon="false"
                   padding="xs"
                   radius="sm"
-                  role="alert"
-                  aria-live="assertive"
+                  live="assertive"
                   data-testid="eval-editor-server-error"
                   class="mt-3 text-xs"
                 >
@@ -814,28 +812,24 @@
                   </div>
 
                   <!-- Gate error state -->
-                  <Notice
+                  <ErrorAlert
                     v-if="gateError"
-                    variant="danger"
-                    :icon="false"
-                    padding="xs"
-                    radius="sm"
-                    role="alert"
-                    aria-live="assertive"
+                    compact
                     data-testid="policy-gate-error"
-                    class="flex items-center gap-2 text-xs"
                   >
                     <span>{{ $t('views.EvalEditorView.policyGate.errorState') }}</span>
-                    <button
-                      type="button"
-                      data-testid="policy-gate-retry"
-                      :aria-label="$t('views.EvalEditorView.policyGate.retryAriaLabel')"
-                      class="rounded bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive-text hover:bg-destructive/20"
-                      @click="retryPolicyGate"
-                    >
-                      {{ $t('views.EvalEditorView.policyGate.retry') }}
-                    </button>
-                  </Notice>
+                    <template #actions>
+                      <button
+                        type="button"
+                        data-testid="policy-gate-retry"
+                        :aria-label="$t('views.EvalEditorView.policyGate.retryAriaLabel')"
+                        class="rounded bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive-text hover:bg-destructive/20"
+                        @click="retryPolicyGate"
+                      >
+                        {{ $t('views.EvalEditorView.policyGate.retry') }}
+                      </button>
+                    </template>
+                  </ErrorAlert>
                 </div>
               </div>
 
@@ -911,10 +905,10 @@
           </div>
 
           <div v-else-if="evalsLoading" class="space-y-2" data-testid="eval-editor-loading-skeleton">
-            <div v-for="n in 3" :key="`eval-editor-skeleton-${n}`" class="border p-4">
+            <BaseCard v-for="n in 3" :key="`eval-editor-skeleton-${n}`" variant="bordered" padding="md" elevation="sm">
               <SkeletonBlock height-class="h-5 w-1/3" />
               <SkeletonBlock class="mt-2" height-class="h-4 w-2/3" />
-            </div>
+            </BaseCard>
           </div>
 
           <EmptyState

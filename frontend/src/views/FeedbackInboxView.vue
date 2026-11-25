@@ -50,17 +50,18 @@
     <div v-if="loading" data-testid="feedback-inbox-loading">
       <output class="sr-only" aria-live="polite">{{ $t('views.FeedbackInboxView.loading_feedback') }}</output>
       <div class="space-y-2" aria-busy="true">
-        <div
+        <DataCard
           v-for="n in 3"
           :key="`feedback-inbox-skeleton-${n}`"
-          class="border p-4"
+          padding="none"
+          elevation="sm"
         >
-          <div class="space-y-2">
+          <div class="space-y-2 p-4">
             <SkeletonBlock height-class="h-4 w-48" />
             <SkeletonBlock height-class="h-3 w-72" />
             <SkeletonBlock height-class="h-3 w-40" />
           </div>
-        </div>
+        </DataCard>
       </div>
     </div>
     <ErrorAlert v-else-if="error" :message="error" :on-retry="loadFeedback" />
