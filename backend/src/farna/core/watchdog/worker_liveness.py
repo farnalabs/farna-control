@@ -350,7 +350,7 @@ async def _post_webhook_payload(url: str, payload: bytes, channel: str) -> None:
             resp = await client.post(
                 url,
                 content=payload,
-                headers={"Content-Type": "application/json", "User-Agent": "Modulo-Watchdog/1.0"},
+                headers={"Content-Type": "application/json", "User-Agent": "Farna-Control-Watchdog/1.0"},
             )
         if not resp.is_success:
             _log.warning("watchdog.%s_http_error status=%s", channel, resp.status_code)

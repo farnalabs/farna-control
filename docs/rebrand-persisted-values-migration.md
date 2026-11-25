@@ -387,16 +387,22 @@ deploy, and a HITL resume only re-emits the resumed segment's events, so the
 stored row is the only place a prior segment's masked failure is visible
 (`finalize.py:258-273`).
 
-### Recommendation: add `synthetic_failure`, dual-write, dual-read, then drop
+### Recommendation: add `farna_control_synthetic_failure`, dual-write, dual-read, then drop
 
-The key should match its constant (`SYNTHETIC_FAILURE_MARKER`) and should not
-carry a product name. `synthetic_failure` is the natural value.
+The key must stay collision-resistant. The finalize scan also inspects the pure
+agent return (`outputs_json`), so a bare `synthetic_failure` key would let an
+agent-authored `{"status": "failed", "synthetic_failure": true}` masquerade as
+the runner's marker and downgrade a run that should finalize `complete`. The
+namespaced alternative from decision 2 (`farna_control_synthetic_failure`)
+restores the collision resistance the legacy key had. It repeats the rebrand
+problem at the next rename, but the masked-failure safety path outweighs that
+cost.
 
-1. **R1**: define `SYNTHETIC_FAILURE_MARKER = "synthetic_failure"` and
-   `LEGACY_SYNTHETIC_FAILURE_MARKERS = ("modulo_synthetic_failure",)`. When the
-   field is true, write BOTH keys into the envelope. Change the predicate to
-   match either key. Dual-write is mandatory here because an older release may
-   finalize a run written by a newer one.
+1. **R1**: define `SYNTHETIC_FAILURE_MARKER = "farna_control_synthetic_failure"`
+   and `LEGACY_SYNTHETIC_FAILURE_MARKERS = ("modulo_synthetic_failure",)`. When
+   the field is true, write BOTH keys into the envelope. Change the predicate
+   to match either key. Dual-write is mandatory here because an older release
+   may finalize a run written by a newer one.
 2. **R2** (at least 24 hours after R1): stop writing the old key. Keep reading
    it. The old key remains in every historical row, which is correct: those
    rows are evidence, and the finalize predicate is the only reader that acts
@@ -575,7 +581,7 @@ Add these gates.
    minimum:
    - `ISSUANCE_PROVENANCE_SELF_MINTED == "self_minted"` (or the approved value)
      and `"modulo_minted" in ISSUANCE_PROVENANCES` until R3.
-   - `SYNTHETIC_FAILURE_MARKER == "synthetic_failure"` and
+   - `SYNTHETIC_FAILURE_MARKER == "farna_control_synthetic_failure"` and
      `LEGACY_SYNTHETIC_FAILURE_MARKERS == ("modulo_synthetic_failure",)` until
      R3.
    - `NOTIFIER_USER_AGENT == "Farna-Control-Notifier/1.0"`.
@@ -627,16 +633,14 @@ is made.
    already on the `source` column. If you choose migrate, the work is
    mechanical: new seed value, equality-guarded migration `0365`, dual-read,
    tests.
-2. **Target token shape for the two machine values.** Your call. The
-   recommendation is brand-free `self_minted` and `synthetic_failure`, because
-   they match their constant names and never need another rebrand. The
-   alternative is product-prefixed `farna_control_minted` and
-   `farna_control_synthetic_failure`, which is a smaller conceptual change but
-   repeats the problem at the next rename.
-3. **`modulo_synthetic_failure`: migrate or keep.** Your call, because it
-   touches the masked-failure safety path. The recommendation is migrate with
-   dual-write and dual-read. If you prefer zero risk, keep it permanently and
-   add only the pin test.
+2. **Target token shape for the two machine values.** Decided: `self_minted`
+   is brand-free, but the synthetic marker must be namespaced
+   `farna_control_synthetic_failure`. A bare `synthetic_failure` collides with
+   agent-authored JSON scanned by the finalize predicate (see section 5), so
+   the product-prefixed alternative wins for that one value.
+3. **`modulo_synthetic_failure`: migrate or keep.** Decided: migrate with
+   dual-write and dual-read, using the namespaced new key. If you prefer zero
+   risk later, keep the legacy key permanently and add only the pin test.
 4. **`modulo_minted` companions.** Your call. The recommendation is to change
    `issuer` and `ModuloCredentialIssuer.name` from `"modulo"` to
    `"farna_control"` in the same release as the provenance token, because the

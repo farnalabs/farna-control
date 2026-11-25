@@ -316,7 +316,7 @@ async def _dispatch_webhook(
             resp = await client.post(
                 webhook_url,
                 content=body,
-                headers={"Content-Type": "application/json", "User-Agent": "Modulo-Error-Alert/1.0"},
+                headers={"Content-Type": "application/json", "User-Agent": "Farna-Control-Error-Alert/1.0"},
             )
             if not resp.is_success:
                 record_alert_delivery_failed(str(alert.rule_id), "webhook")
@@ -382,7 +382,7 @@ async def dispatch_alert_resolved(
                     resp = await client.post(
                         webhook_url,
                         content=body,
-                        headers={"Content-Type": "application/json", "User-Agent": "Modulo-Error-Alert/1.0"},
+                        headers={"Content-Type": "application/json", "User-Agent": "Farna-Control-Error-Alert/1.0"},
                     )
                     if not resp.is_success:
                         _log.warning(

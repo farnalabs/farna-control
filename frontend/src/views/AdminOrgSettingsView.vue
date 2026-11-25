@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader
       :title="$t('views.AdminOrgSettingsView.title')"
       :subtitle="$t('views.AdminOrgSettingsView.subtitle')"
@@ -20,8 +20,8 @@
       :description="$t('views.AdminOrgSettingsView.hitl_review_window_description')"
     >
       <div v-if="hitlWindowLoading" class="space-y-2" aria-hidden="true" data-testid="org-hitl-review-window-skeleton">
-        <div class="h-4 w-32 animate-pulse rounded bg-muted" />
-        <div class="h-10 w-full animate-pulse rounded bg-muted" />
+        <SkeletonBlock height-class="h-4 w-32" />
+        <SkeletonBlock height-class="h-10 w-full" />
       </div>
 
       <div v-else-if="hitlWindowLoadError" class="space-y-2">
@@ -114,8 +114,8 @@
       :description="$t('views.AdminOrgSettingsView.mcp_authority_description')"
     >
       <div v-if="mcpAuthorityLoading" class="space-y-2" aria-hidden="true" data-testid="org-mcp-authority-skeleton">
-        <div class="h-4 w-48 animate-pulse rounded bg-muted" />
-        <div class="h-10 w-full animate-pulse rounded bg-muted" />
+        <SkeletonBlock height-class="h-4 w-48" />
+        <SkeletonBlock height-class="h-10 w-full" />
       </div>
 
       <div v-else-if="mcpAuthorityLoadError" class="space-y-2">
@@ -292,8 +292,8 @@
         </div>
 
         <div v-else-if="exportStatus === 'loading'" class="space-y-2" aria-hidden="true" data-testid="org-export-skeleton">
-          <div class="h-4 w-40 animate-pulse rounded bg-muted" />
-          <div class="h-8 w-32 animate-pulse rounded bg-muted" />
+          <SkeletonBlock height-class="h-4 w-40" />
+          <SkeletonBlock height-class="h-8 w-32" />
         </div>
 
         <div v-else-if="exportStatus === 'error'" class="flex items-center gap-3">
@@ -354,6 +354,7 @@ import Button from 'primevue/button'
 import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
+import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import ProductAnalyticsSettings from '../components/product-analytics/ProductAnalyticsSettings.vue'

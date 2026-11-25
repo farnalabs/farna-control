@@ -189,11 +189,11 @@ side. Surfaces: `/admin/costs`, `/admin/costs/limits`, `/admin/costs/controls`,
   label uses the same shared metric-label contract as the Dashboard's `StatCard`
   label (`text-sm font-medium text-muted-foreground`), deliberately smaller and
   muted beneath the page and card titles, so the difference is intentional
-  hierarchy. The remaining visual difference from Dashboard is the page-level
-  `data-theme="agent"` monospace font family, which is the intentional agent-theme
-  typography (`frontend/src/style.css`, FAR-1938) - not an inconsistency. No visual
-  change was made; a focused regression test pins the metric-label classes to the
-  `StatCard` contract (`frontend/src/__tests__/AdminCostBreakdownView.spec.ts`).
+  hierarchy. The page-level monospace font family this review noted came from the
+  per-view agent theme, retired in FAR-2756 - `/admin/costs` now inherits the app's
+  standard theme. No visual change was made by that review; a focused regression
+  test pins the metric-label classes to the `StatCard` contract
+  (`frontend/src/__tests__/AdminCostBreakdownView.spec.ts`).
 - 2026-10-26: **FAR-2170 costs-page investigation** – confirmed team-level cost
   attribution remains supported (`get_cost_report(group_by="team")` over the
   `OrgDailyRunCount` team rows, plus `group_by=team|org` on

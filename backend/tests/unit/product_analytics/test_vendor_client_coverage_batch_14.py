@@ -11,7 +11,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from farna.core.model_backend_endpoints import INSECURE_HTTP_NOT_ALLOWED
-from farna.core.product_analytics.vendor_client import MAX_ATTEMPTS, VendorClient
+from farna.core.product_analytics.vendor_client import (
+    MAX_ATTEMPTS,
+    REDACTED_SECRET_MARKER,
+    VendorClient,
+    redact_instance_secret,
+)
 
 
 def _payload() -> dict:
@@ -22,6 +27,26 @@ def _payload() -> dict:
         "instance_id": "instance-123",
         "errors": [],
     }
+
+
+@pytest.mark.parametrize(
+    ("text", "secret", "expected"),
+    [
+        (None, "shh-secret", ""),
+        ("body text", None, "body text"),
+        ("body text", "", "body text"),
+        (f"rejected {REDACTED_SECRET_MARKER}", "shh-secret", f"rejected {REDACTED_SECRET_MARKER}"),
+        ("rejected shh-secret", "shh-secret", f"rejected {REDACTED_SECRET_MARKER}"),
+    ],
+)
+def test_redact_instance_secret_covers_every_documented_arm(text, secret, expected):
+    """Pin every documented arm of the shared redaction helper (FAR-2740).
+
+    ``None`` text normalises to ``""``; an absent or empty secret leaves the
+    text untouched (nothing to redact); otherwise every occurrence of the secret
+    becomes the shared marker.
+    """
+    assert redact_instance_secret(text, secret) == expected
 
 
 @pytest.mark.asyncio
@@ -170,6 +195,7 @@ async def test_vendor_client_sends_x_farna_headers_and_no_x_modulo_headers():
     assert headers["Content-Type"] == "application/json"
     assert headers["X-Farna-Timestamp"] == "1.0"
     assert headers["X-Farna-Sequence"] == "7"
+    assert headers["User-Agent"] == "Farna-Control-MetricsDump/1.0"
     legacy = [name for name in headers if name.lower().startswith("x-farna-control-")]
     assert len(legacy) == 0
     await client.close()
@@ -209,3 +235,80 @@ async def test_vendor_client_signs_body_with_receiver_no_separator_layout():
     assert body["timestamp"] == timestamp
     assert call_kwargs["headers"]["X-Farna-Timestamp"] == str(timestamp)
     await client.close()
+
+
+def _assert_no_secret_in_records(records: list[logging.LogRecord], secret: str) -> None:
+    """Assert no value carried on any captured record contains ``secret``.
+
+    ``caplog.text`` only renders ``record.getMessage()``, so the vendor body
+    (attached as an ``extra=`` attribute) never appears there. Inspecting every
+    attribute of every record is what actually proves the log line is clean.
+    """
+    assert records
+    for record in records:
+        for value in record.__dict__.values():
+            assert secret not in str(value)
+
+
+@pytest.mark.asyncio
+async def test_vendor_error_body_echoing_the_secret_is_redacted(caplog: pytest.LogCaptureFixture):
+    """A rejection whose body quotes the secret must not leak it — logged or returned.
+
+    The receiver can echo what it refused (``HTTP 500: secret rejected <secret>``).
+    That text reaches the ERROR log *and* the failure tuple that is persisted,
+    served by the transparency API and emailed to the operator, so the client
+    redacts at the point the body is read (FAR-2740).
+    """
+    secret = "shh-secret"
+    client = VendorClient("https://vendor.example", secret)
+    client._http_client = AsyncMock(is_closed=False)
+    response = MagicMock(
+        status_code=500,
+        is_success=False,
+        text=f"HTTP 500: secret rejected {secret}",
+        headers={},
+    )
+    client._http_client.post = AsyncMock(return_value=response)
+
+    with (
+        patch("farna.core.product_analytics.vendor_client.asyncio.sleep", new_callable=AsyncMock),
+        caplog.at_level(logging.WARNING, logger="farna.core.product_analytics.vendor_client"),
+    ):
+        success, code, error = await client.post_batch(_payload(), 1.0, 2)
+
+    assert success is False
+    assert code == 500
+    assert error is not None
+    assert secret not in error
+    assert "[redacted]" in error
+    # The status and a recognisable reason survive the redaction.
+    assert "500" in error
+    assert "secret rejected" in error
+
+    _assert_no_secret_in_records(caplog.records, secret)
+    rejected = [record for record in caplog.records if record.message == "product_analytics.vendor_post_rejected"]
+    assert rejected
+    assert "[redacted]" in rejected[0].response_body
+    await client.close()
+
+
+def test_success_terminal_unrecognised_status_echoing_secret_is_redacted(caplog: pytest.LogCaptureFixture):
+    """A 2xx body status echoing the secret is redacted from log AND message."""
+    secret = "shh-secret"
+    client = VendorClient("https://vendor.example", secret)
+    response = MagicMock(
+        status_code=200,
+        is_success=True,
+        text=json.dumps({"status": f"echo {secret}"}),
+        headers={},
+    )
+
+    with caplog.at_level(logging.ERROR, logger="farna.core.product_analytics.vendor_client"):
+        success, code, error = client._success_terminal(response, 200)
+
+    assert success is False
+    assert code == 200
+    assert error is not None
+    assert secret not in error
+    assert "[redacted]" in error
+    _assert_no_secret_in_records(caplog.records, secret)

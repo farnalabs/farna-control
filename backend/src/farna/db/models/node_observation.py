@@ -12,6 +12,11 @@ class NodeObservation(OrgScoped):
     __table_args__ = (UniqueConstraint("run_id", "node_id", name="uq_node_observations_run_node"),)
 
     run_id: Mapped[uuid.UUID] = mapped_column(Uuid(), ForeignKey("runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    # ADR 070 Phase 1A: the parent run's team, stamped by ``observe_node`` in the
+    # same transaction as the observation (from ``runs``, never the live pipeline -
+    # see ``db/run_ownership.py``). NULL for a run of an org-level pipeline and for
+    # rows of a legacy-unowned run. ON DELETE RESTRICT mirrors ``runs.owner_team_id``.
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), index=True)
     # FAR-644: no FK to nodes.id — ``nodes`` is the deprecated composite-template
     # store; this node id is a JSON-graph id (pipelines.graph_nodes_json) that
     # never materialises as a ``nodes`` row (see migration 0170's correction),

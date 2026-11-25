@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { defineComponent, nextTick } from 'vue'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import JsonViewer from '../components/shared/JsonViewer.vue'
@@ -251,7 +251,7 @@ function tokenNamesFromCss(css: string): string[] {
 }
 
 function tokenDefinedInStyleCss(styleCss: string, token: string): boolean {
-  // e.g. `--primary:` appears once per theme block (dark default, .light, [data-theme="agent"])
+  // e.g. `--primary:` appears once per theme block (dark default, .light)
   return styleCss.includes(`${token}:`)
 }
 
@@ -290,7 +290,7 @@ describe('JsonViewer override contract', () => {
     const longCollapsed = mountLong()
     const longExpanded = mountLong()
     // Expand one long string so the expanded-state selectors have an element.
-    await longExpanded.get('[data-testid="json-viewer-string-expand"]').trigger('click')
+    await longExpanded.get('[data-testid^="json-viewer-string-expand-"]').trigger('click')
     await nextTick()
     const plainLong = mountPlainLong()
     const sheet = findOverrideSheet()
@@ -330,51 +330,164 @@ describe('JsonViewer override contract', () => {
   it('truncates long string values by default and expands to the full value', async () => {
     const wrapper = mountLong()
 
-    const truncated = wrapper.find('[data-testid="json-viewer-string-truncated"]')
+    const truncated = wrapper.find('[data-testid^="json-viewer-string-truncated-"]')
     expect(truncated.exists()).toBe(true)
     expect(truncated.text()).toContain('Expand')
     expect(truncated.text()).toContain('chars')
     expect(truncated.text()).not.toContain(longValue)
 
-    await wrapper.get('[data-testid="json-viewer-string-expand"]').trigger('click')
+    await wrapper.get('[data-testid^="json-viewer-string-expand-"]').trigger('click')
     await nextTick()
 
-    const expanded = wrapper.find('[data-testid="json-viewer-string-expanded"]')
+    const expanded = wrapper.find('[data-testid^="json-viewer-string-expanded-"]')
     expect(expanded.exists()).toBe(true)
     expect(expanded.text()).toContain(longValue)
-    expect(wrapper.find('[data-testid="json-viewer-string-truncated"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="json-viewer-string-truncated-"]').exists()).toBe(false)
 
-    await wrapper.get('[data-testid="json-viewer-string-collapse"]').trigger('click')
+    await wrapper.get('[data-testid^="json-viewer-string-collapse-"]').trigger('click')
     await nextTick()
 
-    expect(wrapper.find('[data-testid="json-viewer-string-truncated"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="json-viewer-string-expanded"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="json-viewer-string-truncated-"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="json-viewer-string-expanded-"]').exists()).toBe(false)
   })
 
   it('truncates a long top-level plain string with an expand affordance', async () => {
     const wrapper = mountPlainLong()
 
-    const truncated = wrapper.find('[data-testid="json-viewer-string-truncated"]')
+    const truncated = wrapper.find('[data-testid^="json-viewer-string-truncated-"]')
     expect(truncated.exists()).toBe(true)
     expect(truncated.text()).not.toContain(longValue)
 
-    await wrapper.get('[data-testid="json-viewer-string-expand"]').trigger('click')
+    await wrapper.get('[data-testid^="json-viewer-string-expand-"]').trigger('click')
     await nextTick()
 
     expect(wrapper.find('.json-viewer pre').text()).toContain(longValue)
   })
 
+  it('gives two viewers on one page distinct long-string toggle ids (FAR-2719)', async () => {
+    // Two viewers each showing an expandable long string must not share the
+    // expand/collapse ids (FAR-2714 made the root + toolbar per-instance).
+    // Both mount inside ONE app: useId's counter is per-app, so separate
+    // mounts would each allocate the same suffix and hide the collision.
+    const Host = defineComponent({
+      components: { JsonViewer },
+      template: '<div><JsonViewer :data="value" /><JsonViewer :data="value" /></div>',
+      setup() {
+        return { value: longValue }
+      },
+    })
+    const wrapper = mount(Host)
+
+    const toggleIds = (re: RegExp) =>
+      wrapper
+        .findAll('[data-testid]')
+        .map((el) => el.attributes('data-testid') ?? '')
+        .filter((id) => re.test(id))
+
+    // Collapsed state: one expand toggle per viewer, both ids unique.
+    const expandIds = toggleIds(/^json-viewer-string-expand-/)
+    expect(expandIds).toHaveLength(2)
+    expect(new Set(expandIds).size).toBe(2)
+
+    // Expanding each viewer swaps in its collapse toggle; those must be
+    // unique too. Reverting either id to a static value fails the Set check.
+    for (const toggle of wrapper.findAll('[data-testid^="json-viewer-string-expand-"]')) {
+      await toggle.trigger('click')
+    }
+    await nextTick()
+
+    const collapseIds = toggleIds(/^json-viewer-string-collapse-/)
+    expect(collapseIds).toHaveLength(2)
+    expect(new Set(collapseIds).size).toBe(2)
+  })
+
+  it('gives two viewers distinct truncated and expanded value ids (FAR-2724)', async () => {
+    // Two plain-string viewers each truncate their preview, and two object
+    // viewers each truncate a long string node; expanding the object viewers
+    // swaps in the expanded container. One mount: useId's counter is per-app,
+    // so separate mounts would each allocate the same suffix and hide the
+    // collision.
+    const Host = defineComponent({
+      components: { JsonViewer },
+      template:
+        '<div><JsonViewer :data="plain" /><JsonViewer :data="plain" /><JsonViewer :data="obj" /><JsonViewer :data="obj" /></div>',
+      setup() {
+        return { plain: longValue, obj: longFixture }
+      },
+    })
+    const wrapper = mount(Host)
+
+    const ids = (re: RegExp) =>
+      wrapper
+        .findAll('[data-testid]')
+        .map((el) => el.attributes('data-testid') ?? '')
+        .filter((id) => re.test(id))
+
+    // Collapsed: every viewer truncates exactly one value (2 plain strings +
+    // 2 object string nodes), so all four truncated ids must be unique.
+    const truncatedIds = ids(/^json-viewer-string-truncated/)
+    expect(truncatedIds).toHaveLength(4)
+    expect(new Set(truncatedIds).size).toBe(4)
+
+    // Expanding each viewer's long string swaps the two object viewers' nodes
+    // in as expanded containers, which must also be unique.
+    for (const toggle of wrapper.findAll('[data-testid^="json-viewer-string-expand-"]')) {
+      await toggle.trigger('click')
+    }
+    await nextTick()
+
+    const expandedIds = ids(/^json-viewer-string-expanded/)
+    expect(expandedIds).toHaveLength(2)
+    expect(new Set(expandedIds).size).toBe(2)
+  })
+
+  it('gives two long nodes inside ONE viewer distinct ids (FAR-2719)', async () => {
+    // A single viewer can hold more than one long string (a realistic
+    // run-output/config payload). Keying the ids on the viewer alone would
+    // emit duplicate data-testid values for every long node after the first,
+    // so the id must also identify the value node within the tree.
+    const twoLong = { agent_stdout: longValue, agent_stderr: 'B'.repeat(1200) }
+    const wrapper = mount(JsonViewer, { props: { data: twoLong } })
+
+    const ids = (re: RegExp) =>
+      wrapper
+        .findAll('[data-testid]')
+        .map((el) => el.attributes('data-testid') ?? '')
+        .filter((id) => re.test(id))
+
+    const truncatedIds = ids(/^json-viewer-string-truncated-/)
+    expect(truncatedIds).toHaveLength(2)
+    expect(new Set(truncatedIds).size).toBe(2)
+
+    const expandIds = ids(/^json-viewer-string-expand-/)
+    expect(expandIds).toHaveLength(2)
+    expect(new Set(expandIds).size).toBe(2)
+
+    for (const toggle of wrapper.findAll('[data-testid^="json-viewer-string-expand-"]')) {
+      await toggle.trigger('click')
+    }
+    await nextTick()
+
+    const expandedIds = ids(/^json-viewer-string-expanded-/)
+    expect(expandedIds).toHaveLength(2)
+    expect(new Set(expandedIds).size).toBe(2)
+
+    const collapseIds = ids(/^json-viewer-string-collapse-/)
+    expect(collapseIds).toHaveLength(2)
+    expect(new Set(collapseIds).size).toBe(2)
+  })
+
   it('short string values are not truncated', () => {
     const wrapper = mountSimple()
-    expect(wrapper.find('[data-testid="json-viewer-string-truncated"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="json-viewer-string-expand"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="json-viewer-string-truncated-"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="json-viewer-string-expand-"]').exists()).toBe(false)
   })
 
   it('renders a long unbreakable value on the default dep path (FAR-626 wrap case)', () => {
     const wrapper = mountWrap()
     // Below the truncation threshold: the dep's default value rendering stays.
-    expect(wrapper.find('[data-testid="json-viewer-string-truncated"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="json-viewer-string-expand"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="json-viewer-string-truncated-"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="json-viewer-string-expand-"]').exists()).toBe(false)
     const values = wrapper.findAll('.vjs-value-string').map((node) => node.text())
     expect(values.some((text) => text.includes(unbreakableToken))).toBe(true)
     // Tripwire: the wrap CSS targets the dep's classless value-wrapper <span>

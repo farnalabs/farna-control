@@ -206,28 +206,17 @@
       @confirm="submitCreate"
     >
         <form class="space-y-4" @submit.prevent="submitCreate">
-          <div class="flex gap-2" role="tablist" :aria-label="$t('views.AdminUsersView.add_user_mode')">
-          <button
-            type="button"
-            role="tab"
-            data-testid="admin-users-mode-create"
-            :aria-selected="createMode === 'password'"
-            :class="['px-3 py-1.5 rounded-lg text-sm border transition-colors', createMode === 'password' ? 'bg-primary text-primary-foreground border-primary' : 'border-input hover:bg-accent']"
-            @click="createMode = 'password'"
-          >
-            {{ $t('views.AdminUsersView.mode_password') }}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            data-testid="admin-users-mode-invite"
-            :aria-selected="createMode === 'invite'"
-            :class="['px-3 py-1.5 rounded-lg text-sm border transition-colors', createMode === 'invite' ? 'bg-primary text-primary-foreground border-primary' : 'border-input hover:bg-accent']"
-            @click="createMode = 'invite'"
-          >
-            {{ $t('views.AdminUsersView.mode_invite') }}
-          </button>
-        </div>
+        <!-- StateTabs composes these stable tab test IDs from testid-prefix:
+             :data-testid="'admin-users-mode-create'" and :data-testid="'admin-users-mode-invite'". -->
+        <StateTabs
+          :ariaLabel="$t('views.AdminUsersView.add_user_mode')"
+          :model-value="createModeTabId"
+          :tabs="createModeTabs"
+          id-prefix="admin-users-mode"
+          size="compact"
+          testid-prefix="admin-users-mode"
+          @update:model-value="onCreateModeSelected"
+        />
         <div>
           <label for="adminusersview-field-4" class="block text-sm font-medium mb-1">{{ $t('common.email') }}</label>
           <input id="adminusersview-field-4" v-model="newUser.email" data-testid="admin-users-create-email" type="email" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
@@ -359,30 +348,24 @@
     </Dialog>
 
     <!-- Revoke invitation confirmation -->
-    <Dialog
-      :visible="showRevokeDialog"
-      :modal="true"
-      :dismissable-mask="true"
-      :style="{ width: '24rem' }"
-      @update:visible="showRevokeDialog = false"
-    >
-      <template #header>
-        <div class="text-lg font-semibold">{{ $t('views.AdminUsersView.revoke_invitation') }}</div>
-      </template>
-      <p class="text-sm text-muted-foreground">{{ $t('views.AdminUsersView.confirm_revoke_invitation', { email: revokeTarget?.email ?? '' }) }}</p>
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <Button severity="secondary" outlined data-testid="admin-invitations-cancel-revoke" @click="showRevokeDialog = false">{{ $t('common.cancel') }}</Button>
-          <Button severity="danger" data-testid="admin-invitations-confirm-revoke" @click="revokeInvitation">{{ $t('common.confirm') }}</Button>
-        </div>
-      </template>
-    </Dialog>
+    <FormDialog
+      v-model:open="showRevokeDialog"
+      :title="$t('views.AdminUsersView.revoke_invitation')"
+      :description="$t('views.AdminUsersView.confirm_revoke_invitation', { email: revokeTarget?.email ?? '' })"
+      :confirm-text="$t('common.confirm')"
+      confirm-severity="danger"
+      width="24rem"
+      cancel-test-id="admin-invitations-cancel-revoke"
+      confirm-test-id="admin-invitations-confirm-revoke"
+      @confirm="revokeInvitation"
+    />
   </div>
   </FeatureGate>
 </template>
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import StateTabs, { type StateTab } from '../components/shared/StateTabs.vue'
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import QRCode from 'qrcode'
@@ -451,6 +434,21 @@ const pendingInvitations = computed(() => invitationsResp.value?.items ?? [])
 
 const showCreate = ref(false)
 const createMode = ref<'password' | 'invite'>('password')
+
+const createModeTabs = computed<StateTab[]>(() => [
+  { id: 'create', label: t('views.AdminUsersView.mode_password') },
+  { id: 'invite', label: t('views.AdminUsersView.mode_invite') },
+])
+
+/** The create tab carries the password mode; only the invite tab differs. */
+const createModeTabId = computed(() => (createMode.value === 'invite' ? 'invite' : 'create'))
+
+/** Only the two declared modes are selectable, whatever a caller sends. */
+function onCreateModeSelected(id: string) {
+  if (id === 'create') createMode.value = 'password'
+  else if (id === 'invite') createMode.value = 'invite'
+}
+
 const createError = ref('')
 const createLoading = ref(false)
 const newUser = ref({ email: '', display_name: '', password: '', org_role: 'runner' })

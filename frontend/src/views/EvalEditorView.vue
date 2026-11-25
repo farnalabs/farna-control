@@ -14,7 +14,7 @@
          so the fallback is never mistaken for a broken link. -->
     <p
       v-if="pipelineLinkNotice"
-      class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+      class="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm"
       role="status"
       aria-live="polite"
       data-testid="eval-editor-pipeline-link-notice"
@@ -120,7 +120,7 @@
                 </div>
 
                 <template v-if="isTyped">
-                  <div v-if="legacyMode" class="mt-3 rounded border border-amber-500/40 bg-amber-500/10 p-3 text-xs" data-testid="eval-editor-legacy-notice">
+                  <div v-if="legacyMode" class="mt-3 rounded border border-warning/40 bg-warning/10 p-3 text-xs" data-testid="eval-editor-legacy-notice">
                     <p class="font-medium">{{ $t('views.EvalEditorView.judging.legacyNoticeTitle') }}</p>
                     <p class="mt-1 text-muted-foreground">{{ $t('views.EvalEditorView.judging.legacyNoticeBody') }}</p>
                     <pre class="mt-2 max-h-40 overflow-auto rounded bg-background p-2 font-mono text-[11px]">{{ legacyConfigJson }}</pre>
@@ -683,23 +683,14 @@
 
                   <!-- Operator enable/disable toggle (CO-5) -->
                   <div v-if="policyGate.exists" class="flex items-center gap-2">
-                    <button
-                      type="button"
-                      role="switch"
-                      :aria-checked="policyGate.enabled"
-                      :aria-label="$t('views.EvalEditorView.policyGate.toggleAriaLabel')"
-                      data-testid="policy-gate-toggle"
-                      class="inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors"
-                      :class="policyGate.enabled ? 'bg-primary' : 'bg-input'"
+                    <ToggleSwitch
+                      :checked="policyGate.enabled"
+                      :label="$t('views.EvalEditorView.policyGate.toggleAriaLabel')"
                       :disabled="gateToggleBusy"
-                      @click="requestToggleGate"
-                    >
-                      <span
-                        class="pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
-                        :class="policyGate.enabled ? 'translate-x-4' : 'translate-x-0.5'"
-                        aria-hidden="true"
-                      />
-                    </button>
+                      :toggling="gateToggleBusy"
+                      data-testid="policy-gate-toggle"
+                      @toggle="requestToggleGate"
+                    />
                     <span class="text-xs text-muted-foreground">
                       {{ policyGate.enabled
                         ? $t('views.EvalEditorView.policyGate.enabledDescription')
@@ -911,7 +902,7 @@
                     <span
                       v-if="evalGateActions[ev.id]"
                       class="inline-block rounded px-2 py-0.5 text-xs font-medium"
-                      :class="evalGateActions[ev.id] === 'block' ? 'bg-destructive/10 text-destructive-text' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'"
+                      :class="evalGateActions[ev.id] === 'block' ? 'bg-destructive/10 text-destructive-text' : 'bg-warning/10 text-warning-text'"
                       data-testid="policy-gate-badge"
                     >
                       {{ evalGateActions[ev.id] === 'block' ? $t('views.EvalEditorView.policyGate.badgeBlock') : $t('views.EvalEditorView.policyGate.badgeWarn') }}
@@ -995,6 +986,7 @@ import { usePlanStore } from '../stores/planStore'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import Button from 'primevue/button'
 import Select from '../components/shared/AppSelect.vue'
 import { Pencil, Trash2 } from '@lucide/vue'

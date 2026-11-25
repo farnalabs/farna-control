@@ -23,6 +23,18 @@
 ; installs to {app}\bin\modulo.exe. The marker is part of the native launcher contract. It must be shipped by
 ; the real runtime build and is deliberately required at compile time.
 ;
+; Product analytics (FAR-2741): the wizard shows ONE optional page, defaulting to
+; "do not send". Choosing to send writes the
+; FARNA_CONTROL_PRODUCT_ANALYTICS_* settings into the native config file
+; (the launcher's data-dir config.env under commonappdata) before the launcher
+; ever starts.
+; Declining writes nothing at all, so "no telemetry by default" stays true.
+; FAR-2747: the per-instance secret is NOT generated here. Pascal Script has
+; only Setup's seeded Random, so a secret minted by the installer would be
+; predictable and every install's HMAC key would be guessable. The launcher
+; generates a 32-byte hex secret on first boot when the endpoint is set, and
+; persists it in config.env, so the installer writes only the endpoint and the
+; ON switch.
 ; Build example:
 ;   iscc /DVERSION_NUM=0.4.0 /DBUNDLE_ARCH=amd64 /DBUNDLE_DIR=C:\bundle modulo.iss
 ;
@@ -150,6 +162,13 @@ const
   LOG_EXT = '.log';
   SUPPORT_REF_LENGTH = 8;
   HEX_CHARS = '0123456789abcdef';
+  { Product analytics (FAR-2741): the launcher's config file lives in its data
+    directory - the same product folder name used for logs (LOG_DIR_NAME) plus
+    a 'data' subfolder, rooted at commonappdata - and the endpoint analytics is
+    sent to. The instance secret is deliberately NOT generated here (FAR-2747) -
+    the launcher mints and persists it on first boot. }
+  ANALYTICS_DATA_SUBDIR = '\data';
+  ANALYTICS_ENDPOINT_URL = 'https://telemetry.farna.dev';
 
 var
   SupportRef: string;
@@ -162,6 +181,7 @@ var
   InstallCompleted: Boolean;
   UserCancelled: Boolean;
   SupportBlockShown: Boolean;
+  AnalyticsPage: TInputOptionWizardPage;
 
 function GetLogDir: string;
 begin
@@ -471,6 +491,114 @@ begin
     'service is registered.');
 end;
 
+{ --- product analytics opt-in (FAR-2741) ----------------------------------
+  One optional wizard page, shown once, defaulting to "do not send". Choosing
+  to send writes the endpoint and the ON switch into the launcher's config.env
+  before it starts; the launcher adds the per-instance secret on first boot
+  (FAR-2747 - Pascal Script has no cryptographic RNG). Declining writes
+  nothing: absence is the off state, so the switch is deliberately NOT written
+  as false. The page explains in plain words what is sent and where it goes. }
+
+procedure InitializeWizard;
+begin
+  AnalyticsPage := CreateInputOptionPage(wpSelectTasks,
+    'Product analytics (optional)',
+    'Help improve Farna Control. Analytics is OFF unless you choose to send it.',
+    'If you choose to send, once a day this instance sends aggregate counts only: ' +
+    'how many organisations, pipelines, agents, schemas, teams, model backends, ' +
+    'connector instances and triggers exist; run statistics (counts, durations ' +
+    'and outcomes); counts of error families; and an inventory of which provider ' +
+    'and connector types are in use. No prompts, pipeline outputs, credentials or ' +
+    'customer content are sent. It goes to the Farnalabs telemetry service at ' +
+    ANALYTICS_ENDPOINT_URL + '. You can turn it off later in the app ' +
+    '(Administration, Product analytics); turning it on after declining ' +
+    'requires updating the instance configuration.',
+    True, False);
+  AnalyticsPage.Add('Do not send analytics (default)');
+  AnalyticsPage.Add('Send anonymous aggregate analytics');
+  { Default OFF: the first option is the selected one. }
+  AnalyticsPage.Values[0] := True;
+end;
+
+function AnalyticsOptedIn: Boolean;
+begin
+  Result := (AnalyticsPage <> nil) and AnalyticsPage.Values[1];
+end;
+
+function AnalyticsConfigPath: String;
+begin
+  Result := ExpandConstant('{commonappdata}') + '\' + LOG_DIR_NAME + ANALYTICS_DATA_SUBDIR + '\config.env';
+end;
+
+{ True when a previous run already recorded an analytics decision in config.env.
+  The page is skipped in that case, so the installer never shows a choice whose
+  answer WriteProductAnalyticsConfig would have to ignore. On an upgrade from a
+  version that predates FAR-2741 the launcher has written config.env but it has
+  no analytics switch, so the page still appears and ACCEPT appends the keys. }
+function AnalyticsConfigured: Boolean;
+var
+  ConfigPath: String;
+  Content: AnsiString;
+begin
+  Result := False;
+  ConfigPath := AnalyticsConfigPath;
+  if not FileExists(ConfigPath) then
+    Exit;
+  if not LoadStringFromFile(ConfigPath, Content) then
+    Exit;
+  Result := Pos('FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=', Content) > 0;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (AnalyticsPage <> nil) and (PageID = AnalyticsPage.ID) and AnalyticsConfigured;
+end;
+
+procedure WriteProductAnalyticsConfig;
+var
+  ConfigDir: String;
+  ConfigPath: String;
+  Content: String;
+  Existing: AnsiString;
+  Append: Boolean;
+begin
+  if not AnalyticsOptedIn then
+  begin
+    WriteInstallLog('Product analytics: not enabled (default). No analytics settings written.');
+    Exit;
+  end;
+  ConfigDir := ExpandConstant('{commonappdata}') + '\' + LOG_DIR_NAME + ANALYTICS_DATA_SUBDIR;
+  ConfigPath := ConfigDir + '\config.env';
+  if not ForceDirectories(ConfigDir) then
+  begin
+    MarkFailure('post-install', 'could not create the native data directory for the analytics opt-in: ' + ConfigDir);
+    Exit;
+  end;
+  Content :=
+    'FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL=' + ANALYTICS_ENDPOINT_URL + #13#10 +
+    'FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED=true' + #13#10;
+  { The page is only shown when the analytics switch is absent, so ACCEPT either
+    creates config.env (fresh install) or appends to the launcher's existing
+    file (an upgrade from a version that predates FAR-2741). Appending keeps the
+    launcher's SECRET_KEY/FERNET_KEY lines intact. }
+  Append := FileExists(ConfigPath);
+  if Append then
+  begin
+    Existing := '';
+    if LoadStringFromFile(ConfigPath, Existing) then
+    begin
+      if (Length(Existing) > 0) and (Existing[Length(Existing)] <> #10) then
+        Content := #13#10 + Content;
+    end;
+  end;
+  if not SaveStringToFile(ConfigPath, Content, Append) then
+  begin
+    MarkFailure('post-install', 'could not write the product-analytics settings to ' + ConfigPath);
+    Exit;
+  end;
+  WriteInstallLog('Product analytics: opt-in accepted; endpoint and ON switch written to ' + ConfigPath + ' (the launcher generates the instance secret on first boot)');
+end;
+
 function InitializeSetup: Boolean;
 begin
   SupportRef := GenerateSupportRef;
@@ -553,6 +681,8 @@ begin
     { Nothing is registered or started here: Alpha's launch path is the Start
       Menu shortcut, and the transcript records that service mode is deferred. }
     WriteServiceModeNotice;
+    { Record the analytics opt-in (if accepted) before the first launcher start. }
+    WriteProductAnalyticsConfig;
   end
   else if CurStep = ssDone then
   begin

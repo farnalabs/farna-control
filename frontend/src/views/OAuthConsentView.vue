@@ -32,7 +32,7 @@
 
       <output
         v-if="success"
-        class="block rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-4 text-sm"
+        class="block rounded-lg border border-success/50 bg-success/10 p-4 text-sm"
         data-testid="oauth-consent-success"
       >
         {{ $t('views.OAuthConsentView.approved_redirecting') }}

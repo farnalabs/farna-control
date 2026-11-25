@@ -15,6 +15,11 @@ Two delivery mechanisms share ONE composition core:
   set, so the init-kwargs layer (which outranks the env source) can never
   shadow an explicit operator environment variable.
 
+:func:`export_analytics_env` exports the RESOLVED product-analytics settings to
+``os.environ`` because two of their consumers never read the pinned dotenv: the
+ON-switch resolver reads the process environment, and the SAQ workers are
+separate processes that inherit the launcher's environment.
+
 IMPORT HYGIENE (locked by tests): this module must NOT import
 ``farna.settings`` at module import time — the source is installed ONLY by
 the native launcher, after the environment scrub and the config pin.
@@ -31,6 +36,7 @@ import hmac
 import logging
 import os
 from pathlib import Path
+from secrets import token_hex
 from typing import Any
 from urllib.parse import quote_plus
 
@@ -62,10 +68,14 @@ _COMPOSED_FIELDS: dict[str, str] = {
 # The launcher-owned public surface (consumed by the entry; vulture's
 # dead-code gate special-cases __all__).
 __all__ = [
+    "ANALYTICS_ENABLED_KEY",
+    "ANALYTICS_ENDPOINT_URL_KEY",
+    "ANALYTICS_INSTANCE_SECRET_KEY",
     "CONFIG_ENV_FILENAME",
     "LauncherConfigError",
     "LauncherConfigSource",
     "compose_config",
+    "export_analytics_env",
     "load_launcher_config_inputs",
     "render_env_file",
     "resolve_pinned_runtime_keys",
@@ -85,10 +95,28 @@ class LauncherConfigError(RuntimeError):
 # cap tears the whole stack down (FAR-2581).
 NATIVE_SAQ_AUTH_USERNAME = "admin"
 
+# Product-analytics opt-in settings (FAR-2741), written into config.env by the
+# installers. They are ordinary operator-owned settings, so they ride the same
+# precedence chain as the application keys. The one launcher-derived value is
+# the instance secret (FAR-2747): when an endpoint is configured and nothing
+# supplied a secret, the launcher mints one here, because no installer has a
+# cryptographic RNG and a predictable signing secret would be guessable.
+ANALYTICS_ENDPOINT_URL_KEY = "FARNA_CONTROL_PRODUCT_ANALYTICS_ENDPOINT_URL"
+ANALYTICS_INSTANCE_SECRET_KEY = "FARNA_CONTROL_PRODUCT_ANALYTICS_INSTANCE_SECRET"
+ANALYTICS_ENABLED_KEY = "FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED"
+
 # The application-level keys config.env persists. Each one resolves with the
 # installer's precedence: operator environment > the value already persisted
 # in config.env > the launcher-derived value. Never logged.
-_RUNTIME_KEY_NAMES: tuple[str, ...] = ("SECRET_KEY", "FERNET_KEY", "SAQ_AUTH_USERNAME", "SAQ_AUTH_PASSWORD")
+_RUNTIME_KEY_NAMES: tuple[str, ...] = (
+    "SECRET_KEY",
+    "FERNET_KEY",
+    "SAQ_AUTH_USERNAME",
+    "SAQ_AUTH_PASSWORD",
+    ANALYTICS_ENDPOINT_URL_KEY,
+    ANALYTICS_INSTANCE_SECRET_KEY,
+    ANALYTICS_ENABLED_KEY,
+)
 
 
 def _derive(secrets: LauncherSecrets, label: bytes) -> str:
@@ -117,7 +145,7 @@ def _native_saq_auth_password(secrets: LauncherSecrets) -> str:
 
 
 def _existing_runtime_keys(path: Path) -> dict[str, str]:
-    """Read operator-owned runtime keys from config.env without logging them."""
+    """Read persisted runtime keys from config.env without logging them."""
     try:
         values: dict[str, str] = {}
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -201,6 +229,14 @@ def resolve_pinned_runtime_keys(composed: dict[str, str], path: Path) -> dict[st
     """Apply the installer's runtime-key precedence to launcher config.
 
     operator environment > persisted (config.env) > launcher-derived, per key.
+
+    The product-analytics keys (FAR-2741/2747) are carried through unchanged;
+    the only launcher-derived one is the instance secret: an endpoint with no
+    secret gets a freshly generated 32-byte hex secret, which the caller
+    persists to config.env, so it is stable on every later boot. An explicitly
+    supplied secret (environment or config.env) always wins and is never
+    regenerated. No endpoint means no secret — nothing is minted for an install
+    that did not opt in.
     """
     persisted = _existing_runtime_keys(path)
     for key in _RUNTIME_KEY_NAMES:
@@ -208,6 +244,9 @@ def resolve_pinned_runtime_keys(composed: dict[str, str], path: Path) -> dict[st
             composed[key] = persisted[key]
         if os.environ.get(key):
             composed[key] = os.environ[key]
+    if composed.get(ANALYTICS_ENDPOINT_URL_KEY) and not composed.get(ANALYTICS_INSTANCE_SECRET_KEY):
+        composed[ANALYTICS_INSTANCE_SECRET_KEY] = token_hex(32)
+        _log.info("launcher.product_analytics_instance_secret_generated path=%s", path)
     return composed
 
 
@@ -242,6 +281,25 @@ def write_pinned_env_file(
         pass  # unreadable existing file: the overwrite proceeds and is logged by the writer
     _write_env_file(str(path), rendered)
     return path
+
+
+def export_analytics_env(composed: dict[str, str]) -> None:
+    """Export the RESOLVED product-analytics settings to ``os.environ`` (FAR-2747).
+
+    config.env reaches ``Settings`` through the pinned dotenv, but two consumers
+    never read it that way: ``core.product_analytics.consent`` resolves the ON
+    switch from ``os.environ`` only, and the SAQ workers are separate processes
+    that receive a copy of the launcher's environment (they never pin the
+    dotenv, and the at-head boot path skips the migration whose env-file load
+    would incidentally populate it). Exporting the values this module already
+    resolved keeps the API and the dump worker on one answer on every boot, not
+    only the first. Absent or blank settings are never exported - absence is the
+    off state.
+    """
+    for key in (ANALYTICS_ENDPOINT_URL_KEY, ANALYTICS_INSTANCE_SECRET_KEY, ANALYTICS_ENABLED_KEY):
+        value = composed.get(key)
+        if value:
+            os.environ[key] = value
 
 
 class LauncherConfigSource:

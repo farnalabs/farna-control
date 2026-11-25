@@ -99,6 +99,37 @@ _TESTID_LITERAL = re.compile(
     r"|:data-testid=\"`([a-zA-Z0-9_-]+)`\""
 )
 
+#: A testid is not only ever the ``data-testid`` attribute: shared components
+#: accept it as a PROP and forward it to the rendered control, e.g.
+#: ``<Pagination prev-testid="runs-list-prev-page" />`` or
+#: ``<DataTable row-testid="admin-errors-row" />``. That value ships as a real
+#: testid but carries no ``data-testid`` spelling, so the literal scan above is
+#: blind to it and a documented element fails ``test_element_testids_exist_in_frontend``
+#: even though the surface exists. Collect any attribute name ending in
+#: ``testid`` or ``test-id`` as well — including the BARE spellings ``testid``
+#: and ``test-id`` (e.g. ``<Thing test-id="thing-x" />``, used in-tree by
+#: ``HitlNode.vue`` / ``RouterNode.vue`` / ``AdminAssistantView.vue``). Three
+#: static shapes count:
+#:
+#: - a plain attribute value ``x-testid="lit"`` / ``test-id="lit"`` /
+#:   ``testid="lit"`` (either quote style);
+#: - a bound string literal ``:x-testid="'lit'"`` / ``:test-id="'lit'"`` /
+#:   ``:testid="'lit'"`` (or ``'"lit"'`` / ``"`lit`"``);
+#: - a simple ternary whose BOTH branches are string literals, e.g.
+#:   ``:row-testid="open ? 'row-open' : 'row-closed'"``.
+#:
+#: A computed binding (an identifier, concatenation, interpolated template
+#: literal, or a ternary with a dynamic branch) evaluates to a value the scanner
+#: cannot know, so it is never collected - the guard stays conservative.
+_TESTID_ATTR_NAME = r"(?:[A-Za-z][\w-]*(?:testid|test-id)|testid|test-id)"
+_TESTID_ATTR_STATIC = re.compile(rf"""(?<![\w.:@-]){_TESTID_ATTR_NAME}\s*=\s*(?:"([a-zA-Z0-9_-]+)"|'([a-zA-Z0-9_-]+)')""")
+_TESTID_ATTR_BOUND = re.compile(rf"""(?<![\w.:@-])(?:v-bind:|:){_TESTID_ATTR_NAME}\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+_TESTID_STRING_LITERAL = re.compile(r"""^(?:'([a-zA-Z0-9_-]+)'|"([a-zA-Z0-9_-]+)"|`([a-zA-Z0-9_-]+)`)$""")
+_TESTID_TERNARY = re.compile(
+    r"""^[^?:]+\?\s*(?:'([a-zA-Z0-9_-]+)'|"([a-zA-Z0-9_-]+)"|`([a-zA-Z0-9_-]+)`)"""
+    r"""\s*:\s*(?:'([a-zA-Z0-9_-]+)'|"([a-zA-Z0-9_-]+)"|`([a-zA-Z0-9_-]+)`)$"""
+)
+
 #: The repo's element-coverage guard above and Playwright's ``getByTestId``
 #: both key on the exact attribute ``data-testid`` (``_TESTID_LITERAL``
 #: deliberately matches only that spelling). A ``data-test-id`` typo renders a
@@ -230,17 +261,86 @@ def _load_elements() -> dict[str, list[dict]]:
     return elements
 
 
+def _static_testids_in_expression(expression: str) -> set[str]:
+    """The literal testid(s) a bound attribute expression statically names.
+
+    Returns the empty set for anything computed (an identifier, a concatenation,
+    an interpolated template literal, a ternary with a dynamic branch), so a
+    dynamic value is never mistaken for a shipped literal.
+    """
+    stripped = expression.strip()
+    literal = _TESTID_STRING_LITERAL.match(stripped)
+    if literal is not None:
+        return {group for group in literal.groups() if group}
+    ternary = _TESTID_TERNARY.match(stripped)
+    if ternary is not None:
+        return {group for group in ternary.groups() if group}
+    return set()
+
+
+def _static_testids_in_text(text: str) -> set[str]:
+    """Every statically-known testid literal in one source file's text.
+
+    Unions the exact ``data-testid`` literal forms with the testid-valued
+    component-prop forms (see ``_TESTID_ATTR_STATIC`` / ``_TESTID_ATTR_BOUND``),
+    so a testid forwarded through a prop is recognised as shipped.
+    """
+    found: set[str] = set()
+    for match in _TESTID_LITERAL.finditer(text):
+        found.update(group for group in match.groups() if group)
+    for match in _TESTID_ATTR_STATIC.finditer(text):
+        found.update(group for group in match.groups() if group)
+    for match in _TESTID_ATTR_BOUND.finditer(text):
+        expression = match.group(1) if match.group(1) is not None else match.group(2)
+        found.update(_static_testids_in_expression(expression))
+    return found
+
+
 def _static_testids_in_frontend() -> frozenset[str]:
-    """Every static ``data-testid`` literal shipped anywhere in the frontend."""
+    """Every static testid literal shipped anywhere in the frontend."""
     src = set()
     for path in (REPO_ROOT / "frontend" / "src").rglob("*"):
         if path.suffix not in {".vue", ".ts", ".js"}:
             continue
         try:
-            src.update(t for match in _TESTID_LITERAL.findall(path.read_text(encoding="utf-8")) for t in match if t)
+            src.update(_static_testids_in_text(path.read_text(encoding="utf-8")))
         except (OSError, UnicodeDecodeError):
             continue
     return frozenset(src)
+
+
+def test_static_testid_scanner_recognises_prop_forms():
+    """Positive control: each accepted testid-prop shape is collected."""
+    cases = {
+        '<Pagination prev-testid="runs-list-prev-page" />': "runs-list-prev-page",
+        "<Thing x-test-id='thing-x' />": "thing-x",
+        '<Thing test-id="thing-x" />': "thing-x",
+        "<Thing testid='thing-y' />": "thing-y",
+        """<Thing :test-id="'thing-x'" />""": "thing-x",
+        """<Thing :testid="'thing-y'" />""": "thing-y",
+        """<Pagination :prev-testid="'runs-list-prev-page'" />""": "runs-list-prev-page",
+        """<Pagination :prev-testid='"runs-list-prev-page"' />""": "runs-list-prev-page",
+        '<Pagination :prev-testid="`runs-list-prev-page`" />': "runs-list-prev-page",
+        """<Thing :row-testid="isOpen ? 'row-open' : 'row-closed'" />""": {"row-open", "row-closed"},
+    }
+    for source, expected in cases.items():
+        collected = _static_testids_in_text(source)
+        wanted = {expected} if isinstance(expected, str) else expected
+        assert wanted <= collected, f"expected {sorted(wanted)} from {source!r}, got {sorted(collected)}"
+
+
+def test_static_testid_scanner_ignores_computed_values():
+    """Negative control: a computed testid is never collected as a literal."""
+    cases = (
+        """<Pagination :prev-testid="computedTestid" />""",
+        '<Pagination :prev-testid="`page-${n}`" />',
+        """<Pagination :prev-testid="'a' + suffix" />""",
+        """<Thing :row-testid="isOpen ? 'row-open' : dynamic" />""",
+        """<Thing :testid="computedTestid" />""",
+        """<Thing :test-id="'a' + suffix" />""",
+    )
+    for source in cases:
+        assert not _static_testids_in_text(source), f"computed value wrongly collected from {source!r}"
 
 
 def test_element_entries_have_core_fields():
@@ -339,11 +439,16 @@ def test_mapped_route_elements_cover_owning_view_testids():
 
     Every whole-page view that gates its content behind the plan entitlement
     surface (``components/FeatureGate.vue``, which embeds ``LockIcon.vue``)
-    owns the gate's static testids — ``feature-gate`` / ``feature-gate-disabled``
-    / ``feature-gate-lock`` / ``feature-gate-title`` / ``lock-icon`` — just like the FilterBar search
-    surface. The gate wraps the page content, so a newly shipped control on the
-    entitlement card would otherwise stay invisible to Assistant's docs indexer and
-    to ``/api/v1/manifest`` on every gated route.
+    owns the gate's only static testid — ``lock-icon`` — just like the FilterBar
+    search surface. The gate wraps the page content, so a newly shipped control
+    on the entitlement card would otherwise stay invisible to Assistant's docs
+    indexer and to ``/api/v1/manifest`` on every gated route. The gate's own
+    markers (``feature-gate`` / ``feature-gate-disabled`` / ``feature-gate-lock``
+    / ``feature-gate-title``) are per-instance: they carry a ``useId()`` suffix
+    (FAR-2714 / FAR-2719) so several gates on one page never collide, which makes
+    them dynamic testids. They are therefore deliberately NOT registered as
+    static manifest elements, and a route listing ``FeatureGate.vue`` only
+    contributes the embedded ``lock-icon``.
 
     A page header with an action slot owns the ``PageHeader`` right-slot
     surface: the shared ``components/shared/PageHeader.vue`` strips only render
@@ -360,9 +465,14 @@ def test_mapped_route_elements_cover_owning_view_testids():
     A page that renders the shared ``components/shared/JsonViewer.vue``
     (an expanded audit payload, a system-config entry value, a feedback
     correction proposal, a run-output diff leg, or a raw inferred schema) owns
-    its static testids — ``json-viewer`` and the toolbar / string-toggle
-    controls — because the viewer is part of the page surface whenever it is
-    shown. Likewise ``/assistant`` embeds ``components/analytics/AnalyticsChart.vue``
+    no static testids: the whole viewer surface — the root, the toolbar
+    (copy / expand-all / collapse-all) and the long-string toggle controls
+    (expand / collapse / truncated / expanded) — carries a ``useId()`` suffix
+    (FAR-2714 / FAR-2719 / FAR-2724) so several viewers on one page never
+    collide. Those are dynamic testids and are deliberately not registered as
+    static manifest elements, so listing the component on a route contributes
+    nothing to its elements inventory. Likewise ``/assistant`` embeds
+    ``components/analytics/AnalyticsChart.vue``
     through ``AssistantChat.vue`` for analytics-chart turns, so the chart surface
     (``analytics-chart`` / ``analytics-chart-canvas`` / ``analytics-chart-empty``)
     is registered on the route.

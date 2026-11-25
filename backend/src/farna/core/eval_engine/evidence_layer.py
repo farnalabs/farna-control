@@ -99,8 +99,9 @@ def append_evidence(
     value: Any,
     producer_type: str,
     producer_id: UUID | None = None,
+    owner_team_id: UUID | None = None,
 ) -> Evidence:
-    """Append one evidence fact — the store's ONLY write path (FAR-1293).
+    """Append one evidence fact - the store's ONLY write path (FAR-1293).
 
     Every production producer calls this instead of constructing an
     ``Evidence`` row directly, so :func:`assert_write_authorisation` is
@@ -109,7 +110,15 @@ def append_evidence(
     session, meaning a producer writing a key outside its owned namespace
     fails CLOSED with no partial write.
 
-    The row is added to *db* but not flushed — it persists when the caller's
+    ``owner_team_id`` (ADR 070 Phase 1A) is the parent RUN's team for a
+    ``subject_type="run"`` fact. The producer supplies it because it holds the
+    run (or resolved the owner from it) - the store never derives a team from a
+    subject id: it cannot read the run synchronously, and a non-run subject
+    (``trigger_event``) has no run to inherit from at all. OMITTED = no team,
+    which is the correct value for every non-run subject and for a run of an
+    org-level pipeline.
+
+    The row is added to *db* but not flushed - it persists when the caller's
     transaction flushes, exactly like every other row written on that path.
     The table is append-only: this layer exposes no update or delete.
 
@@ -125,6 +134,7 @@ def append_evidence(
         key=key,
         subject_type=subject_type,
         subject_id=subject_id,
+        owner_team_id=owner_team_id,
         value=value,
         producer_type=producer_type,
         producer_id=producer_id,

@@ -39,7 +39,7 @@
       </button>
 
       <div v-if="loading" class="px-3 py-2 space-y-2">
-        <div v-for="i in 3" :key="i" class="h-5 w-3/4 bg-muted rounded animate-pulse" />
+        <SkeletonBlock v-for="i in 3" :key="i" height-class="h-5 w-3/4" />
       </div>
 
       <div v-else-if="error" class="px-3 py-2">
@@ -193,6 +193,7 @@ import InputText from 'primevue/inputtext'
 import Select from '../shared/AppSelect.vue'
 import FormDialog from '../shared/FormDialog.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
+import SkeletonBlock from '../shared/SkeletonBlock.vue'
 import FolderListError from './FolderListError.vue'
 
 interface FlatTreeItem {

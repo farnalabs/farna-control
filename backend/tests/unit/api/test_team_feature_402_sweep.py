@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
+from farna.api.dependencies import _get_engine, get_db_session, get_plan_context, get_plan_context_any_credential
 from farna.api.main import app
 from farna.auth.dependencies import get_current_tenant_user, get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal
@@ -65,6 +65,9 @@ def _build_client(plan: object) -> Generator[TestClient, None, None]:
 
     app.dependency_overrides[get_settings] = _settings
     app.dependency_overrides[get_plan_context] = lambda: plan
+    # FAR-2729: schema-version routes gate features through the any-credential
+    # plan context, so the sweep must stub that too or it resolves for real.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: plan
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(

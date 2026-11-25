@@ -33,7 +33,7 @@ overrides:
   # openapi-typescript upgrades to @redocly/openapi-core 2.x (js-yaml ^5.2.2).
   "@redocly/openapi-core>js-yaml": "4.3.2"
   "postcss>nanoid": "^6.0.0"
-  rollup: "4.68.7"
+  rollup: "4.68.8"
   "@tanstack/query-core": "5.108.2"
   "@tanstack/vue-query": "5.108.2"
   # GHSA-mrhx-c7xc-m3w5 (CVE-2023-54404): zod <4.6.6 affected. Scoped to its
@@ -403,3 +403,8 @@ minimumReleaseAgeExclude:
   - '@lucide/vue@1.79.0'
   - '@grafana/faro-core@2.15.0'
   - '@grafana/faro-web-sdk@2.15.0'
+  - '@datadog/browser-core@7.19.0'
+  - '@datadog/browser-logs@7.19.0'
+  - '@datadog/browser-rum-core@7.19.0'
+  - '@datadog/browser-rum@7.19.0'
+  - '@datadog/js-core@0.0.23'

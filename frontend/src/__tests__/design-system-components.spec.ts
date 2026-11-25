@@ -16,6 +16,7 @@ import {
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
+import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardContent from '../components/ui/CardContent.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
@@ -898,5 +899,56 @@ describe('FormDialog width', () => {
     const dialog = mountDialog({ width: '40rem' }).find('[data-testid="dialog"]')
 
     expect(dialog.attributes('style')).toContain('width: 40rem')
+  })
+})
+
+describe('LoadingSpinner', () => {
+  it('renders the original page-level markup byte-for-byte with no props', () => {
+    const wrapper = mount(LoadingSpinner)
+
+    // No props must equal the pre-prop output exactly: a page-level py-16
+    // wrapper around the md ring.
+    expect(wrapper.attributes('class')).toBe('flex items-center justify-center py-16')
+    expect(wrapper.find('.animate-spin').attributes('class')).toBe(
+      'h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent',
+    )
+  })
+
+  it('renders the sm ring when size="sm"', () => {
+    const wrapper = mount(LoadingSpinner, { props: { size: 'sm' } })
+    const ring = wrapper.find('.animate-spin')
+
+    expect(ring.classes()).toContain('h-5')
+    expect(ring.classes()).toContain('w-5')
+    expect(ring.classes()).toContain('border-2')
+    // The md size must not leak through when the prop is set.
+    expect(ring.classes()).not.toContain('h-8')
+    expect(ring.classes()).not.toContain('border-4')
+  })
+
+  it('renders the lg ring when size="lg"', () => {
+    const wrapper = mount(LoadingSpinner, { props: { size: 'lg' } })
+    const ring = wrapper.find('.animate-spin')
+
+    expect(ring.classes()).toContain('h-12')
+    expect(ring.classes()).toContain('w-12')
+    expect(ring.classes()).toContain('border-4')
+    expect(ring.classes()).not.toContain('h-8')
+    expect(ring.classes()).not.toContain('border-2')
+  })
+
+  it('drops the vertical padding when padded is false, keeping the centring', () => {
+    const wrapper = mount(LoadingSpinner, { props: { padded: false } })
+
+    expect(wrapper.classes()).toEqual(['flex', 'items-center', 'justify-center'])
+    expect(wrapper.classes()).not.toContain('py-16')
+    expect(wrapper.find('.animate-spin').exists()).toBe(true)
+  })
+
+  it('combines the inline size and unpadded variant used by inline panels', () => {
+    const wrapper = mount(LoadingSpinner, { props: { size: 'sm', padded: false } })
+
+    expect(wrapper.attributes('class')).toBe('flex items-center justify-center')
+    expect(wrapper.find('.animate-spin').classes()).toContain('h-5')
   })
 })

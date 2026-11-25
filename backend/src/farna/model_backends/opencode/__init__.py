@@ -41,7 +41,7 @@ class OpenCodeBackend(OpenAICompatibleBackend):
         # backend instance (= one pipeline run).  The gateway uses this for
         # routing and prompt caching.
         self._session_id = str(uuid.uuid4())
-        user_agent = f"modulo/{get_version()}"
+        user_agent = f"farna-control/{get_version()}"
 
         # default_headers are applied by the OpenAI SDK at request level
         # (via _build_headers → _custom_headers), not at the httpx transport

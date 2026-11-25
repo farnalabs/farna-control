@@ -2237,6 +2237,7 @@ async def _seed_demo_readonly_surfaces(
         "observed_at": runs[0].completed_at or runs[0].started_at or datetime.now(UTC),
         "producer_type": "derived",
         "producer_id": None,
+        "owner_team_id": runs[0].owner_team_id,
     }
     evidence_recover_stmt = select(Evidence).where(
         Evidence.organisation_id == org.id,

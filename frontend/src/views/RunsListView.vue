@@ -57,8 +57,9 @@
     />
 
     <template v-else>
-      <!-- An emptied cursor page still renders the footer when the user can
-           go back, so they are never stranded without Prev. -->
+      <!-- An emptied cursor page shows the empty state; the footer below
+           still renders when the user can go back, so they are never stranded
+           without Prev. -->
       <EmptyState
         v-if="runs.length === 0"
         :title="$t('views.RunsListView.no_runs_found')"
@@ -130,7 +131,7 @@
                 v-if="isDispatchedRun((row as RunListItem).execution_origin)"
                 :data-testid="`runs-list-dispatched-${row.run_id}`"
                 :title="$t('common.execution_origin.dispatched_hint')"
-                class="inline-flex items-center rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300"
+                class="inline-flex items-center rounded-full bg-run-dispatched/10 px-2 py-0.5 text-xs font-medium text-run-dispatched-text dark:bg-run-dispatched-surface"
               >{{ $t('common.execution_origin.dispatched') }}</span>
             </div>
           </template>
@@ -228,27 +229,36 @@
         </DataTable>
       </div>
 
-      <div
-        v-if="runs.length > 0 || cursorStack.length > 0"
-        class="flex items-center justify-between"
-      >
-        <span class="text-sm text-muted-foreground">
-          {{ $t('views.RunsListView.run_count', total) }}
-        </span>
-        <Pagination
-          :has-prev="canGoPrev"
-          :has-next="canGoNext"
-          :page-label="positionKnown ? $t('views.RunsListView.page_label', { page: pagePosition }) : null"
-          :prev-label="$t('views.RunsListView.previous')"
-          :next-label="$t('views.RunsListView.next')"
-          prev-testid="runs-list-prev-page"
-          next-testid="runs-list-next-page"
-          status-testid="runs-list-page-label"
-          @prev="prevPage"
-          @next="nextPage"
-        />
-      </div>
     </template>
+
+    <!-- FAR-2751: keep the footer OUTSIDE the loading swap above. Pagination's
+         `page X of Y` label lives in a polite live region, and re-mounting that
+         region with the new text already present is not announced by screen
+         readers — only a text change inside a persistent node is. Rendering the
+         footer here keeps the region mounted while a page load swaps the table
+         for the skeleton. The controls are disabled rather than removed during
+         that fetch, so the live region stays in the accessibility tree and the
+         guards still drop a click that races the load. -->
+    <div
+      v-if="!error && (runs.length > 0 || cursorStack.length > 0)"
+      class="flex items-center justify-between"
+    >
+      <span class="text-sm text-muted-foreground">
+        {{ $t('views.RunsListView.run_count', total) }}
+      </span>
+      <Pagination
+        :has-prev="canGoPrev && !loading"
+        :has-next="canGoNext && !loading"
+        :page-label="positionKnown ? $t('views.RunsListView.page_label', { page: pagePosition }) : null"
+        :prev-label="$t('views.RunsListView.previous')"
+        :next-label="$t('views.RunsListView.next')"
+        prev-testid="runs-list-prev-page"
+        next-testid="runs-list-next-page"
+        status-testid="runs-list-page-label"
+        @prev="prevPage"
+        @next="nextPage"
+      />
+    </div>
   </div>
 </template>
 

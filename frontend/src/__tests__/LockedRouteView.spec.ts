@@ -66,7 +66,7 @@ describe('LockedRouteView', () => {
       'Costs requires the Cost governance capability',
     )
     // The entitlement lock reuses FeatureGate rather than a second pattern.
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(true)
     // No "try again" link: a retry cannot help before an upgrade.
     expect(wrapper.find('[data-testid="locked-route-open"]').exists()).toBe(false)
     // But the caller is never stranded: the lock branch still offers the way

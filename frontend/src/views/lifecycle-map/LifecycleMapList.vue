@@ -145,72 +145,60 @@
     </section>
 
     <!-- Create dialog -->
-    <dialog
-      v-if="showCreateDialog"
-      ref="createDialogRef"
-      aria-labelledby="lifecycle-map-create-title"
-      class="w-full max-w-md border-0 bg-transparent p-0 text-foreground backdrop:bg-black/50"
-      @click.self="closeCreateDialog"
-      @keydown.escape="closeCreateDialog"
-      @close="showCreateDialog = false"
+    <FormDialog
+      v-model:open="showCreateDialog"
+      :title="$t('views.LifecycleMapList.create_lifecycle_map')"
+      :confirm-text="$t('views.LifecycleMapList.create')"
+      :confirm-loading-text="$t('views.LifecycleMapList.creating')"
+      :loading="creating"
+      :confirm-disabled="!newName.trim()"
+      cancel-test-id="lifecycle-map-list-create-cancel"
+      confirm-test-id="lifecycle-map-list-create-submit"
+      @confirm="handleCreateConfirm"
     >
-      <div class="w-full max-w-md rounded-lg border bg-card p-6 shadow-lg">
-        <h2 id="lifecycle-map-create-title" class="mb-4 text-base font-semibold">{{ $t('views.LifecycleMapList.create_lifecycle_map') }}</h2>
-        <div class="space-y-4">
-          <div>
-            <label for="lifecyclemaplist-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.LifecycleMapList.name') }}</label>
-            <input id="lifecyclemaplist-field-2"
-              v-model="newName"
-              @keydown.space.stop
-              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              :placeholder="$t('views.LifecycleMapList.name_placeholder')"
-              data-testid="lifecycle-map-list-create-name"
-            />
-          </div>
-          <div>
-            <label for="lifecyclemaplist-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.LifecycleMapList.description') }}</label>
-            <textarea id="lifecyclemaplist-field-1"
-              v-model="newDescription"
-              @keydown.space.stop
-              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              rows="3"
-              :placeholder="$t('views.LifecycleMapList.description_placeholder')"
-              data-testid="lifecycle-map-list-create-description"
-            />
-          </div>
-          <!-- Create action error: no refetch loader; the Create button is
-               the retry path. -->
-          <ErrorAlert
-            v-if="createError"
-            :message="createError"
-            :retryable="false"
+      <div class="space-y-4">
+        <div>
+          <label for="lifecyclemaplist-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.LifecycleMapList.name') }}</label>
+          <input id="lifecyclemaplist-field-2"
+            v-model="newName"
+            @keydown.space.stop
+            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            :placeholder="$t('views.LifecycleMapList.name_placeholder')"
+            data-testid="lifecycle-map-list-create-name"
           />
-          <div class="flex justify-end gap-2">
-            <button type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
-              @click="closeCreateDialog"
-              data-testid="lifecycle-map-list-create-cancel"
-            >
-              {{ $t('views.LifecycleMapList.cancel') }}
-            </button>
-            <Button :disabled="!newName.trim() || creating" @click="handleCreateConfirm" data-testid="lifecycle-map-list-create-submit">
-              {{ creating ? $t('views.LifecycleMapList.creating') : $t('views.LifecycleMapList.create') }}
-            </Button>
-          </div>
         </div>
+        <div>
+          <label for="lifecyclemaplist-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.LifecycleMapList.description') }}</label>
+          <textarea id="lifecyclemaplist-field-1"
+            v-model="newDescription"
+            @keydown.space.stop
+            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            rows="3"
+            :placeholder="$t('views.LifecycleMapList.description_placeholder')"
+            data-testid="lifecycle-map-list-create-description"
+          />
+        </div>
+        <!-- Create action error: no refetch loader; the Create button is
+             the retry path. -->
+        <ErrorAlert
+          v-if="createError"
+          :message="createError"
+          :retryable="false"
+        />
       </div>
-    </dialog>
+    </FormDialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Clock, Pencil, Plus, Star, User } from '@lucide/vue'
 import PageHeader from '../../components/shared/PageHeader.vue'
 import FilterBar from '../../components/shared/FilterBar.vue'
 import { useLifecycleMapsStore } from '../../stores/lifecycleMaps'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
+import FormDialog from '../../components/shared/FormDialog.vue'
 import EmptyState from '../../components/shared/EmptyState.vue'
 import CardSkeleton from '../../components/ui/CardSkeleton.vue'
 import Button from 'primevue/button'
@@ -287,38 +275,26 @@ function editMap(m: LifecycleMapSummary): void {
 }
 
 const showCreateDialog = ref(false)
-const createDialogRef = ref<HTMLDialogElement | null>(null)
 const newName = ref('')
 const newDescription = ref('')
 const creating = ref(false)
 const createError = ref<string | null>(null)
 
-// A bare `<dialog open>` keeps the UA's fit-content sizing, so `fixed inset-0`
-// never stretches it. showModal() makes it a real modal: viewport-sized
-// layout, an inert background and native Escape, with focus moved into the
-// panel. flush:'post' waits for the v-if branch to render the element.
-watch(
-  showCreateDialog,
-  (isOpen) => {
-    if (isOpen) openCreateDialog()
-  },
-  { immediate: true, flush: 'post' },
-)
-
+// FormDialog (PrimeVue Dialog) owns the modal semantics — backdrop, focus
+// trap and Escape — so these helpers only toggle the open state.
 function openCreateDialog(): void {
-  const dialog = createDialogRef.value
-  if (dialog && !dialog.open) dialog.showModal()
+  showCreateDialog.value = true
 }
 
 function closeCreateDialog(): void {
-  createDialogRef.value?.close()
+  showCreateDialog.value = false
 }
 
 function handleNewMap(): void {
   newName.value = ''
   newDescription.value = ''
   createError.value = null
-  showCreateDialog.value = true
+  openCreateDialog()
 }
 
 async function handleCreateConfirm(): Promise<void> {

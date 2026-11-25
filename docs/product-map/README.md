@@ -850,10 +850,11 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > `journeys/eval-journey.spec.ts`; real-time run events by
 > `frontend/tests/e2e/sse-crossworker-notification.spec.ts` plus the backend
 > `operations/websocket_reconnection.feature` and
-> `observability/active_run_observability.feature` (all executing BDD); theme
-> switching does not ship (there is no theme toggle; the static
-> `data-theme="agent"` CSS hook is locked by
-> `frontend/src/__tests__/agent-theme-audit.spec.ts`).
+> `observability/active_run_observability.feature` (all executing BDD). Theme
+> switching ships as the sidebar light/dark toggle (`.light` / `.dark` on
+> `<html>`); the per-view theme hook these drafts assumed was retired in FAR-2756,
+> and `frontend/src/__tests__/agent-theme-audit.spec.ts` now audits view rendering
+> and testid coverage.
 > `_ORPHANED_BDD_FEATURES` stays empty and the new guard
 > `test_no_bdd_citations_for_fully_deselected_features` makes it an invariant
 > that a product-map `bdd:` citation always names at least one scenario CI
@@ -1271,6 +1272,30 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > `declared_scopes` recorded but unenforced). `_ORPHANED_BDD_FEATURES` stays
 > empty.
 
+> **Closed this walk (2026-11-24):** tracked one shipped but untracked backend
+> surface: the system-administrator Fernet key-rotation control plane
+> (`system/key-rotation.md`). `POST /api/v1/admin/rotation/rotate-key` and
+> `GET /api/v1/admin/rotation/status` ship REST-only (no manifest route, no UI,
+> no MCP tool) and were documented only in `docs/security/secret-management.md`,
+> so neither product-map layer described them. The entry records the
+> `system.config.manage` floor, break-glass mint-deny, the start/completed audit
+> events, the Redis/in-process rotation lock, the `503` system-role guard and the
+> no-downtime contract, and keeps the honest gaps (process-local last result, no
+> resume/cancel, no failure audit event, no UI, instance-wide scope).
+> `_ORPHANED_BDD_FEATURES` stays empty.
+
+> **Closed this walk (2026-11-24):** tracked one shipped but untracked
+> operational surface: the deploy drain control plane
+> (`infra/deployment-drain.md`). `GET /api/v1/deployment` (public readout) and
+> `POST /api/v1/deployment/drain` (bearer-token admission freeze) ship REST-only
+> and are consumed by `.github/workflows/deploy.yml`; neither product-map layer
+> described them. The entry records the public-safe readout, the constant-time
+> token guard, the advisory-lock plus audit write, the `sandbox_agent`-scoped
+> `create_run` gate and its fail-closed flag read, and keeps the honest gaps
+> (CI-only control, no cancel-on-drain, reused `TriggersPausedError`, fail-open
+> malformed-graph scan, instance-wide scope). `_ORPHANED_BDD_FEATURES` stays
+> empty.
+
 ### Admin
 - [feat-product-analytics](admin/product-analytics.md) => PRD N/A
 - [feat-plugins](admin/plugins.md) => PRD N/A
@@ -1330,6 +1355,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-apt-distribution](infra/apt-distribution.md) => PRD N/A
 - [feat-backup-restore](infra/backup-restore.md) => PRD N/A
 - [feat-container-deployment](infra/container-deployment.md) => PRD N/A
+- [feat-deployment-drain](infra/deployment-drain.md) => PRD N/A
 - [feat-infra-health](infra/health-checks.md) => PRD N/A
 - [feat-native-single-install](infra/native-single-install.md) => PRD N/A
 - [feat-support](infra/support-diagnostics.md) => PRD N/A
@@ -1362,6 +1388,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-schemas](schemas/schemas.md) => PRD N/A
 
 ### System
+- [feat-key-rotation](system/key-rotation.md) => PRD N/A
 - [feat-org](admin/org.md) => PRD N/A
 - [feat-runtime](system/runtime.md) => PRD N/A
 - [feat-system-config](system/system-config.md) => PRD N/A

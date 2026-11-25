@@ -124,11 +124,24 @@ DEGRADED_FILENAME = "degraded.json"
 UPGRADE_MARKER_FILENAME = "upgrade.json"
 DEGRADED_SCHEMA_VERSION = 1
 POSTMASTER_PIDFILE = "postmaster.pid"
-# The pid of the postmaster a `restore --data-dir` WINDOW started (see
+# The identity of the postmaster a `restore --data-dir` WINDOW started (see
 # cli/backup.py::_bundled_cluster_for_restore). That postmaster is deliberately
 # in its own session, so nothing supervises it; if the restore is SIGKILLed the
 # file is the only handle a later start/restore has on the stray process.
+#
+# It records an IDENTITY (pid + process start time + data dir), never a bare
+# pid: the same number can belong to ANY live postgres after a reboot, a
+# `kill -9`, a truncated write, or a data dir copied to another machine, and a
+# bare pid was enough to make a later start/restore shut down a server it never
+# started. All recorded fields must match before the record is acted on; a
+# record that cannot be verified is REPORTED (file, pid, what to do) and never
+# killed. `_postmaster_is_stale` pins a start time for the same reuse reason.
 RESTORE_WINDOW_PIDFILE = "restore-window-postmaster.pid"
+RESTORE_WINDOW_RECORD_VERSION = 1
+# A start-time epoch derived from a boot-relative tick count agrees with a
+# re-read to well under a second; five seconds is the same tolerance the stale
+# `postmaster.pid` check uses.
+PROCESS_START_TOLERANCE_SECONDS = 5.0
 LAUNCHER_LOG_FILENAME = "launcher.log"
 # Per-boot 0600 Redis config files (requirepass lives INSIDE the file so the
 # password never appears on the world-readable /proc cmdline). Written fresh
@@ -173,6 +186,7 @@ __all__ = [
     "GATE_SUPERVISOR_PRE_TEARDOWN",
     "REDIS_CONF_PREFIX",
     "RESTORE_WINDOW_PIDFILE",
+    "RESTORE_WINDOW_RECORD_VERSION",
     "ROTATE_DEFAULT_KEEP",
     "ROTATE_DEFAULT_MAX_BYTES",
     "RUNTIME_FILENAME",
@@ -183,6 +197,8 @@ __all__ = [
     "DataDirLockError",
     "LauncherError",
     "ProbeOutcome",
+    "RestoreWindowState",
+    "RestoreWindowStatus",
     "Supervisor",
     "SupervisorKnobs",
     "_children_of",
@@ -191,14 +207,13 @@ __all__ = [
     "clear_degraded_record",
     "clear_restore_window_pidfile",
     "collect_status",
+    "inspect_restore_window_postmaster",
     "knobs_from_env",
-    "live_restore_window_pid",
     "log_paths",
     "read_degraded_reason",
     "read_degraded_record",
     "read_log_tail",
     "read_proc_starttime",
-    "read_restore_window_pidfile",
     "read_runtime_manifest",
     "read_upgrade_marker",
     "reconcile_orphans",
@@ -1869,33 +1884,48 @@ def _pid_starttime_epoch(pid: int) -> float | None:
     return backend.start_epoch(pid)
 
 
-def reconcile_orphans(pgdata: Path, *, tolerance_seconds: float = 5.0) -> str | None:
+def reconcile_orphans(pgdata: Path, *, tolerance_seconds: float = PROCESS_START_TOLERANCE_SECONDS) -> str | None:
     """Validate/remove a stale ``postmaster.pid`` and sweep SIGKILL debris.
 
     Returns a short description of what was done (for logs); raises
     :class:`LauncherError` when a LIVE postgres still holds the pidfile —
     that instance must be stopped by its owner, never raced. When that live
-    postmaster is the one a ``restore --data-dir`` window started (recorded in
-    :data:`RESTORE_WINDOW_PIDFILE`), the refusal names it by pid: nothing
-    supervises that process, so its pid is the only handle on it.
+    postmaster is provably the one a ``restore --data-dir`` window started
+    (:func:`inspect_restore_window_postmaster` — pid, start time AND data dir
+    all match), the refusal names it by pid: nothing supervises that process,
+    so its pid is the only handle on it. A record that cannot be verified is
+    reported with its file and pid and is NOT blamed for the live postmaster.
     """
     pidfile = pgdata / POSTMASTER_PIDFILE
     action: str | None = None
+    window = inspect_restore_window_postmaster(pgdata.parent, tolerance_seconds=tolerance_seconds)
     if pidfile.exists():
         stale = _postmaster_is_stale(pidfile, tolerance_seconds=tolerance_seconds)
         if stale is not True:
-            window_pid = live_restore_window_pid(pgdata.parent)
-            if window_pid is not None:
-                raise LauncherError(_restore_window_refusal(pidfile, window_pid, pgdata.parent))
-            raise LauncherError(f"Refusing to start: {pidfile} belongs to a live postgres process. Stop that postgres first; the launcher never races another postmaster.")
+            raise LauncherError(_live_postmaster_refusal(pidfile, window, pgdata.parent))
         pidfile.unlink(missing_ok=True)
         action = "removed_stale_postmaster_pid"
         _log.warning("supervisor.stale_postmaster_pid_removed path=%s", pidfile)
-    # A record naming a postmaster that is gone (SIGKILL, crash recovery, or a
-    # pid now reused by an unrelated process) is debris: drop it, so a later
-    # start never reports a process that no longer exists.
-    if live_restore_window_pid(pgdata.parent) is None:
+    # A record that PROVABLY names nothing live (SIGKILL, crash recovery, or a
+    # pid now reused by a different process) is debris: drop it, so a later
+    # start never reports a process that no longer exists. A record that cannot
+    # be identified is kept and reported instead — it may be the only handle on
+    # a live postmaster, and clearing it would destroy that handle.
+    if window.state is RestoreWindowState.STALE:
+        _log.warning(
+            "supervisor.stale_restore_window_record_removed path=%s pid=%s reason=%s",
+            window.path,
+            window.pid,
+            window.detail,
+        )
         clear_restore_window_pidfile(pgdata.parent)
+    elif window.state is RestoreWindowState.UNVERIFIABLE:
+        _log.warning(
+            "supervisor.restore_window_record_unidentifiable path=%s pid=%s reason=%s",
+            window.path,
+            window.pid,
+            window.detail,
+        )
     if pgdata.parent.exists():
         _sweep_stale_tmp_dirs(pgdata.parent)
         _sweep_stale_redis_confs(pgdata.parent)
@@ -1908,39 +1938,210 @@ def restore_window_pidfile(data_dir: Path) -> Path:
     return data_dir / RESTORE_WINDOW_PIDFILE
 
 
+@dataclass(frozen=True)
+class _WindowRecord:
+    """A record that parsed completely: the identity a window wrote."""
+
+    pid: int
+    start_epoch: float
+    data_dir: str
+
+
+class RestoreWindowState(enum.Enum):
+    """Whether a restore-window record can be trusted as a process identity.
+
+    ``ABSENT``: no record. ``IDENTIFIED``: every recorded field matches a live
+    postgres of THIS data dir, so the record may be acted on. ``STALE``: the
+    record provably names nothing live (the pid is gone, or its start time or
+    program differs), so it may be dropped. ``UNVERIFIABLE``: the identity
+    cannot be established (legacy/truncated/unreadable record, a foreign data
+    dir, an unreadable start time or executable) — REPORT it, never kill on it.
+    """
+
+    ABSENT = "absent"
+    IDENTIFIED = "identified"
+    STALE = "stale"
+    UNVERIFIABLE = "unverifiable"
+
+
+@dataclass(frozen=True)
+class RestoreWindowStatus:
+    """What a restore-window record says, and whether it can be trusted.
+
+    ``pid`` is the best-effort pid the file names (for the operator message
+    only — it is NEVER an identity on its own). ``detail`` explains a
+    ``STALE``/``UNVERIFIABLE`` verdict.
+    """
+
+    state: RestoreWindowState
+    path: Path
+    pid: int | None = None
+    detail: str | None = None
+
+    @property
+    def identified_pid(self) -> int | None:
+        """The pid, but only when the record is a verified identity."""
+        return self.pid if self.state is RestoreWindowState.IDENTIFIED else None
+
+
+def _path_identity(path: Path) -> str:
+    """A data dir's stable identity for the record: absolute, links resolved.
+
+    Recorded and compared so a data dir COPIED to another machine (or another
+    path) can never be mistaken for the install the window actually ran on.
+    """
+    try:
+        return os.path.normcase(str(path.resolve()))
+    except OSError:  # pragma: no cover - unresolvable path
+        return os.path.normcase(str(path.absolute()))
+
+
+def _parse_window_record(text: str) -> tuple[_WindowRecord | None, int | None, str | None]:
+    """(record, best-effort pid, problem) for a record's text.
+
+    ``record`` is None exactly when ``problem`` says why the file cannot be
+    trusted; ``pid`` is whatever number the file names, in ANY format (the
+    current JSON record or the legacy bare pid), for the operator message.
+    """
+    try:
+        payload: Any = json.loads(text)
+    except ValueError as exc:
+        return None, None, f"it is not a valid record ({exc})"
+    if isinstance(payload, int) and not isinstance(payload, bool):
+        legacy_pid = int(payload)
+        return (
+            None,
+            legacy_pid if legacy_pid > 0 else None,
+            f"it is a legacy bare pid ({legacy_pid}) with no start time and no data dir, so that number cannot be proven to be this window's postmaster",
+        )
+    if not isinstance(payload, dict):
+        return None, None, "it holds no record object"
+    raw_pid = payload.get("pid")
+    pid = raw_pid if isinstance(raw_pid, int) and not isinstance(raw_pid, bool) and raw_pid > 0 else None
+    version = payload.get("version")
+    if version != RESTORE_WINDOW_RECORD_VERSION:
+        return None, pid, f"it records format version {version!r}, which this release cannot verify"
+    start_epoch = payload.get("start_epoch")
+    recorded_data_dir = payload.get("data_dir")
+    if pid is None:
+        return None, None, "it records no usable pid"
+    if not isinstance(start_epoch, (int, float)) or isinstance(start_epoch, bool):
+        return None, pid, f"it records no process start time for pid {pid}"
+    if not isinstance(recorded_data_dir, str) or not recorded_data_dir:
+        return None, pid, f"it records no data dir for pid {pid}"
+    return _WindowRecord(pid=pid, start_epoch=float(start_epoch), data_dir=recorded_data_dir), pid, None
+
+
+def inspect_restore_window_postmaster(
+    data_dir: Path,
+    *,
+    tolerance_seconds: float = PROCESS_START_TOLERANCE_SECONDS,
+) -> RestoreWindowStatus:
+    """Identify the postmaster a ``restore --data-dir`` window recorded.
+
+    The record is an IDENTITY, and every field must agree before any caller
+    treats the process as the window's postmaster: the pid must be alive, its
+    start time must still be the recorded one (a reused pid is a DIFFERENT
+    process, however postgres-looking), the executable must still be postgres,
+    and the record must have been written for THIS data dir. Anything less is
+    not identification, and the one thing that must never happen is a
+    fast-shutdown/SIGTERM/SIGKILL of a PostgreSQL this install did not start —
+    so an unreadable, truncated or legacy record yields ``UNVERIFIABLE`` (to be
+    reported, carrying its file and pid), never a guess.
+    """
+    path = restore_window_pidfile(data_dir)
+    try:
+        text = path.read_text(encoding="ascii")
+    except FileNotFoundError:
+        return RestoreWindowStatus(state=RestoreWindowState.ABSENT, path=path)
+    except (OSError, ValueError) as exc:
+        return RestoreWindowStatus(
+            state=RestoreWindowState.UNVERIFIABLE,
+            path=path,
+            detail=f"the file cannot be read ({exc.__class__.__name__}: {exc})",
+        )
+    record, pid, problem = _parse_window_record(text)
+    if pid is not None and not _pid_alive(pid):
+        return RestoreWindowStatus(
+            state=RestoreWindowState.STALE,
+            path=path,
+            pid=pid,
+            detail="that pid is not running" if problem is None else f"that pid is not running ({problem})",
+        )
+    if record is None:
+        return RestoreWindowStatus(state=RestoreWindowState.UNVERIFIABLE, path=path, pid=pid, detail=problem)
+    expected_data_dir = _path_identity(data_dir)
+    if record.data_dir != expected_data_dir:
+        return RestoreWindowStatus(
+            state=RestoreWindowState.UNVERIFIABLE,
+            path=path,
+            pid=record.pid,
+            detail=f"it was written for the data dir {record.data_dir}, not {expected_data_dir}",
+        )
+    actual_start = _pid_starttime_epoch(record.pid)
+    if actual_start is None:
+        return RestoreWindowStatus(
+            state=RestoreWindowState.UNVERIFIABLE,
+            path=path,
+            pid=record.pid,
+            detail="this host cannot read a process start time, so the pid cannot be proven to be this window's postmaster",
+        )
+    if abs(actual_start - record.start_epoch) > tolerance_seconds:
+        return RestoreWindowStatus(
+            state=RestoreWindowState.STALE,
+            path=path,
+            pid=record.pid,
+            detail="the pid now belongs to a different process (its start time changed), so it is not this window's postmaster",
+        )
+    is_postgres = _is_postgres_process(record.pid)
+    if is_postgres is None:
+        return RestoreWindowStatus(
+            state=RestoreWindowState.UNVERIFIABLE,
+            path=path,
+            pid=record.pid,
+            detail="this host cannot read that process's executable identity, so it cannot be proven to be a postgres",
+        )
+    if not is_postgres:
+        return RestoreWindowStatus(
+            state=RestoreWindowState.STALE,
+            path=path,
+            pid=record.pid,
+            detail="that pid now belongs to a different program, not a postgres",
+        )
+    return RestoreWindowStatus(state=RestoreWindowState.IDENTIFIED, path=path, pid=record.pid)
+
+
 def write_restore_window_pidfile(data_dir: Path, pid: int) -> Path:
-    """Record the pid of the postmaster a ``restore --data-dir`` window started.
+    """Record the IDENTITY of the postmaster a ``restore --data-dir`` window started.
 
     That postmaster runs in its own session for up to the whole dump-and-replay
     window (minutes), so nothing supervises it. SIGTERM/SIGINT/SIGHUP are
     handled by the window, but SIGKILL (a timeout, the OOM killer, a service
     manager) cannot be: it leaves the postmaster holding ``pgdata`` and the
-    port. This file is how a LATER start or restore names that process by pid
-    instead of failing on a stale ``postmaster.pid`` or a bound port.
+    port. This file is how a LATER start or restore names that process instead
+    of failing on a stale ``postmaster.pid`` or a bound port.
 
-    Credential-free by construction (one decimal pid), mode 0600.
+    A bare pid is NOT enough: the same number can belong to any live postgres
+    after a reboot or a ``kill -9``, so the record carries the pid, that
+    process's start-time epoch and the data dir it belongs to, and readers
+    require all three to agree (:func:`inspect_restore_window_postmaster`). A
+    host that cannot read the start time writes it as null; the record is then
+    UNVERIFIABLE and is reported rather than acted on.
+
+    Credential-free by construction (a pid, a float and a path), mode 0600.
     """
     path = restore_window_pidfile(data_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"{int(pid)}\n", encoding="ascii")
+    payload: dict[str, Any] = {
+        "version": RESTORE_WINDOW_RECORD_VERSION,
+        "pid": int(pid),
+        "start_epoch": _pid_starttime_epoch(int(pid)),
+        "data_dir": _path_identity(data_dir),
+    }
+    path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="ascii")
     with contextlib.suppress(OSError):
         path.chmod(0o600)
     return path
-
-
-def read_restore_window_pidfile(data_dir: Path) -> int | None:
-    """The recorded window-postmaster pid, or None (absent/unreadable)."""
-    try:
-        text = restore_window_pidfile(data_dir).read_text(encoding="ascii")
-    except (OSError, ValueError):
-        return None
-    for line in text.splitlines():
-        if line.strip():
-            try:
-                return int(line.strip())
-            except ValueError:
-                return None
-    return None
 
 
 def clear_restore_window_pidfile(data_dir: Path) -> None:
@@ -1949,21 +2150,26 @@ def clear_restore_window_pidfile(data_dir: Path) -> None:
         restore_window_pidfile(data_dir).unlink(missing_ok=True)
 
 
-def live_restore_window_pid(data_dir: Path) -> int | None:
-    """The pid of a restore-window postmaster that is STILL running, or None.
+def _live_postmaster_refusal(pidfile: Path, window: RestoreWindowStatus, data_dir: Path) -> str:
+    """The refusal text when a LIVE postgres holds ``postmaster.pid``.
 
-    A recorded pid that is gone — or that has been reused by a process provably
-    not postgres — is stale: answer None so the caller drops the record instead
-    of blaming an innocent process. An UNKNOWABLE identity (no process backend,
-    no permission) is still reported: a live pid is the only handle there is,
-    and the caller's message asks the operator to check it.
+    Blames the restore-window postmaster only when the record is a verified
+    identity. An unidentifiable record is reported with its file and pid and is
+    explicitly NOT treated as this cluster's postmaster — the operator decides.
     """
-    pid = read_restore_window_pidfile(data_dir)
-    if pid is None or not _pid_alive(pid):
-        return None
-    if _is_postgres_process(pid) is False:
-        return None
-    return pid
+    generic = f"Refusing to start: {pidfile} belongs to a live postgres process. Stop that postgres first; the launcher never races another postmaster."
+    if window.state is RestoreWindowState.IDENTIFIED and window.pid is not None:
+        return _restore_window_refusal(pidfile, window.pid, data_dir)
+    if window.state is not RestoreWindowState.UNVERIFIABLE:
+        return generic
+    named = f"pid {window.pid}" if window.pid is not None else "no readable pid"
+    stop_hint = f"`kill -INT {window.pid}` (PostgreSQL's fast shutdown)" if window.pid is not None else "`kill -INT <pid>`"
+    return (
+        f"{generic} Note: {window.path} records a restore-window postmaster ({named}, for {data_dir}) that cannot "
+        f"be verified — {window.detail}. It is NOT assumed to be this cluster's postmaster, and it will not be "
+        f"signalled. If that process is a PostgreSQL an interrupted restore left behind, stop it with {stop_hint}; "
+        f"if it is not, delete {window.path}. The record is kept until then: nothing is killed on a guess."
+    )
 
 
 def _restore_window_refusal(pidfile: Path, window_pid: int, data_dir: Path) -> str:

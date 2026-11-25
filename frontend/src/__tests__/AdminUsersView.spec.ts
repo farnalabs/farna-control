@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query'
+import StateTabs from '../components/shared/StateTabs.vue'
 
 vi.mock('../lib/api/client', () => ({
   getAccessToken: vi.fn().mockReturnValue('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbkBleGFtcGxlLmNvbSJ9.AAA'),
@@ -475,8 +476,8 @@ describe('AdminUsersView', () => {
     })
 
     expect(wrapper.find('[data-testid^="feature-gate-"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(false)
     expect(wrapper.find('table').exists()).toBe(true)
     expect(wrapper.text()).toContain('alice@example.com')
   })
@@ -489,8 +490,8 @@ describe('AdminUsersView', () => {
     // router keeps a commercial route locked until the plan payload lands.
     const wrapper = await mountViewWithPlan({ features: {}, currentTier: 'community' })
 
-    expect(wrapper.find('[data-testid="feature-gate-disabled"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="feature-gate-lock"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid^="feature-gate-disabled-"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="feature-gate-lock-"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Users')
   })
 
@@ -512,6 +513,7 @@ describe('AdminUsersView', () => {
     })
     await wrapper.findAll('[data-testid="admin-invitations-revoke"]')[0].trigger('click')
     await nextTick()
+    expect(wrapper.find('[data-testid="admin-invitations-cancel-revoke"]').exists()).toBe(true)
     const confirmButton = wrapper.find('[data-testid="admin-invitations-confirm-revoke"]')
     expect(confirmButton.exists()).toBe(true)
     await confirmButton.trigger('click')
@@ -531,6 +533,49 @@ describe('AdminUsersView', () => {
     await wrapper.find('[data-testid="admin-users-mode-invite"]').trigger('click')
     await nextTick()
     expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(false)
+  })
+
+  it('renders the add-user mode tabs through StateTabs and switches them from the keyboard', async () => {
+    const wrapper = mountView()
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="admin-users-add-user"]').exists()).toBe(true)
+    })
+    await wrapper.find('[data-testid="admin-users-add-user"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="admin-users-mode-create"]').attributes('role')).toBe('tab')
+    expect(wrapper.get('[data-testid="admin-users-mode-create"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="admin-users-mode-create"]').attributes('tabindex')).toBe('0')
+    expect(wrapper.get('[data-testid="admin-users-mode-invite"]').attributes('tabindex')).toBe('-1')
+    expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="admin-users-mode-create"]').trigger('keydown', { key: 'ArrowRight' })
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="admin-users-mode-invite"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(false)
+  })
+
+  it('returns to password mode when the create tab is reselected and ignores unknown ids', async () => {
+    const wrapper = mountView()
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="admin-users-add-user"]').exists()).toBe(true)
+    })
+    await wrapper.find('[data-testid="admin-users-add-user"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="admin-users-mode-invite"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(false)
+
+    const modeTabs = wrapper.findComponent(StateTabs)
+    modeTabs.vm.$emit('update:modelValue', 'create')
+    await nextTick()
+    expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(true)
+
+    // An unknown mode id is ignored and leaves the current selection in place.
+    modeTabs.vm.$emit('update:modelValue', 'bogus')
+    await nextTick()
+    expect(wrapper.get('[data-testid="admin-users-mode-create"]').attributes('aria-selected')).toBe('true')
   })
 
   it('submits an invite and surfaces the single-use invite link', async () => {
@@ -777,5 +822,26 @@ describe('generateStrongPassword', () => {
       expect(pw).toMatch(/[A-Z]/)
       expect(pw).toMatch(/\d/)
     }
+  })
+})
+
+describe('AdminUsersView — create mode guard', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    baseMocks()
+  })
+
+  it('ignores an unknown create mode id and honours the two declared modes', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { createMode: string; onCreateModeSelected: (id: string) => void }
+
+    vm.onCreateModeSelected('create')
+    expect(vm.createMode).toBe('password')
+    vm.onCreateModeSelected('invite')
+    expect(vm.createMode).toBe('invite')
+    vm.onCreateModeSelected('bogus')
+    expect(vm.createMode).toBe('invite')
   })
 })

@@ -110,6 +110,7 @@ from farna.api.routes.triggers import (
     _validate_connector_instance_team_scope,
     _validate_trigger_config_keys,
 )
+from farna.api.run_scope import team_boundary_blocked
 from farna.auth.api_key import (
     KEY_SCOPE_ORG,
     ApiKeyGrantsUnavailableError,
@@ -831,11 +832,12 @@ def _team_scoped_key_mismatch(owner_team_id: uuid.UUID | None) -> bool:
     carry no team boundary. A resource with no owning team (org-level
     pipeline) is accessible to any team-scoped credential; a resource owned
     by a different team is blocked.
+
+    ADR 070 §4: the predicate itself lives in ``api.run_scope`` so the REST
+    run-detail clamp and this MCP guard cannot drift; only the credential's
+    team source differs (a request contextvar here, a principal field there).
     """
-    key_team_id = _ctx_team_id.get(None)
-    if key_team_id is None:
-        return False
-    return owner_team_id is not None and owner_team_id != key_team_id
+    return team_boundary_blocked(_ctx_team_id.get(None), owner_team_id)
 
 
 def _team_scope_error(resource_kind: str, resource_id: str) -> dict[str, Any]:

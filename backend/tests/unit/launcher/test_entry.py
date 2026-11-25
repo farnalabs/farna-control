@@ -1370,14 +1370,18 @@ def test_prepare_database_env_with_admin_url(monkeypatch: pytest.MonkeyPatch) ->
     # `_prepare_database_env` writes the REAL process environment, so the value
     # must be recorded for restoration: leaking it left `DATABASE_ADMIN_URL`
     # pointing at a test URL for every later test in the same pytest process
-    # (which silently retargeted the restore tests).
-    monkeypatch.delenv("DATABASE_ADMIN_URL", raising=False)
+    # (which silently retargeted the restore tests). `setenv` BEFORE the write
+    # is what registers that undo — `delenv(..., raising=False)` on an absent
+    # key registers nothing, which let the value leak into a later suite's
+    # `_resolve_url(None)` when both suites ran in one process.
+    monkeypatch.setenv("DATABASE_ADMIN_URL", "")
     entry_module._prepare_database_env({"DATABASE_ADMIN_URL": "postgresql://admin/db"})
     assert os.environ.get("DATABASE_ADMIN_URL") == "postgresql://admin/db"
 
 
 def test_prepare_database_env_with_system_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
+    # Same real-environment write, same restoration requirement.
+    monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
     entry_module._prepare_database_env({"FARNA_CONTROL_SYSTEM_DATABASE_URL": "postgresql://sys/db"})
     assert os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL") == "postgresql://sys/db"
 
@@ -2256,6 +2260,50 @@ def test_compose_and_pin_config_returns_the_persisted_runtime_keys(monkeypatch: 
     assert composed["SECRET_KEY"] == SECRET_KEY
     assert composed["FERNET_KEY"] == FERNET_KEY
     assert composed["SAQ_AUTH_PASSWORD"]
+
+
+def test_compose_and_pin_config_exports_resolved_analytics_to_os_environ(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """FAR-2741 review: the entry point must export the resolved analytics values.
+
+    The consent resolver reads ``os.environ``, not the pinned dotenv, so a test
+    of ``export_analytics_env`` alone would stay green if the entry-side call
+    were deleted while the native opt-in stopped reaching delivery.
+    """
+    from farna.launcher.config_source import (
+        ANALYTICS_ENABLED_KEY,
+        ANALYTICS_ENDPOINT_URL_KEY,
+        ANALYTICS_INSTANCE_SECRET_KEY,
+        CONFIG_ENV_FILENAME,
+    )
+    from farna.launcher.secrets_file import LauncherSecrets
+    from farna.launcher.state import LauncherState
+
+    for name in (
+        "SECRET_KEY",
+        "FERNET_KEY",
+        "SAQ_AUTH_PASSWORD",
+        "SAQ_AUTH_USERNAME",
+        ANALYTICS_ENDPOINT_URL_KEY,
+        ANALYTICS_INSTANCE_SECRET_KEY,
+        ANALYTICS_ENABLED_KEY,
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(settings_module, "pin_env_file", lambda path: None)
+    monkeypatch.setattr(settings_module, "set_first_boot_guard", lambda guard: None)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / CONFIG_ENV_FILENAME).write_text(
+        f"{ANALYTICS_ENDPOINT_URL_KEY}=https://analytics.example.test\n{ANALYTICS_ENABLED_KEY}=true\n",
+        encoding="utf-8",
+    )
+    secrets = LauncherSecrets(postgres_password="pg-pw", redis_password="redis-pw", state_hmac_key=bytes(range(32)))
+    state = LauncherState(postgres_port=15432, redis_port=16379, api_port=18000)
+
+    entry_module._compose_and_pin_config(data_dir, state, secrets)
+
+    assert os.environ[ANALYTICS_ENDPOINT_URL_KEY] == "https://analytics.example.test"
+    assert os.environ[ANALYTICS_ENABLED_KEY] == "true"
+    assert len(os.environ[ANALYTICS_INSTANCE_SECRET_KEY]) == 64
 
 
 def test_head_gate_uses_a_fresh_disposed_engine_per_check(monkeypatch: pytest.MonkeyPatch) -> None:

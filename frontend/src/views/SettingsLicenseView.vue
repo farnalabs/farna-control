@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" data-loading="false" class="page-wide">
+  <div data-loading="false" class="page-wide">
     <PageHeader title="License" data-testid="license-title" :subtitle="$t('views.SettingsLicenseView.manage_your_modulo_team_license_key_and_view_plan_details')" />
 
     <LoadingSpinner v-if="loading" />

@@ -61,7 +61,10 @@ async def maker(tmp_path: Any) -> AsyncIterator[async_sessionmaker[AsyncSession]
 
     async with engine.begin() as conn:
         await conn.exec_driver_sql("CREATE TABLE organisations (id VARCHAR(32) PRIMARY KEY)")
-        await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, organisation_id VARCHAR(32) NOT NULL)")
+        # ``teams`` exists so the attempt's owner_team_id FK has a referent (the
+        # model declares it; ADR 070 Phase 1A).
+        await conn.exec_driver_sql("CREATE TABLE teams (id VARCHAR(32) PRIMARY KEY)")
+        await conn.exec_driver_sql("CREATE TABLE runs (id VARCHAR(32) PRIMARY KEY, organisation_id VARCHAR(32) NOT NULL, owner_team_id VARCHAR(32))")
         await conn.run_sync(RunAttempt.__table__.create)
         await conn.exec_driver_sql(
             "INSERT INTO organisations (id) VALUES (:org), (:other_org)",
@@ -152,6 +155,26 @@ class TestStartAttempt:
         async with maker() as session:
             [attempt] = list(await list_attempts(session, _OTHER_RUN, org_id=_OTHER_ORG))
         assert attempt.organisation_id == _OTHER_ORG
+
+    async def test_owner_team_id_is_stamped_from_the_run(self, maker: async_sessionmaker[AsyncSession]) -> None:
+        """ADR 070 Phase 1A: the attempt inherits the RUN's team, and a NULL owner
+        (org-level pipeline / legacy-unowned run) stays NULL rather than being
+        fabricated."""
+        team_id = uuid.uuid4()
+        async with maker() as session:
+            await session.execute(text("INSERT INTO teams (id) VALUES (:id)"), {"id": team_id.hex})
+            await session.execute(text("UPDATE runs SET owner_team_id = :team WHERE id = :run"), {"team": team_id.hex, "run": _RUN.hex})
+            await session.commit()
+
+        await _start(maker)
+
+        [attempt] = await _attempts(maker)
+        assert attempt.owner_team_id == team_id
+        # The other run is unowned: its attempt stays unowned.
+        await _start(maker, _OTHER_RUN)
+        async with maker() as session:
+            [other_attempt] = list(await list_attempts(session, _OTHER_RUN, org_id=_OTHER_ORG))
+        assert other_attempt.owner_team_id is None
 
     async def test_uses_the_supplied_started_at(self, maker: async_sessionmaker[AsyncSession]) -> None:
         started = datetime(2026, 10, 22, 9, 30, tzinfo=UTC)

@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader
       :title="$t('views.AdminCostBreakdownView.cost_controls')"
       :subtitle="$t('views.AdminCostControlsView.budget_overview_team_budgets_alert_thresholds_and_billing_se')"
@@ -398,7 +398,9 @@ const progressBarClass = computed(() => {
   const pct = percentUsed.value
   if (pct >= 100) return 'bg-destructive'
   if (pct >= 90) return 'bg-warning'
-  if (pct >= 75) return 'bg-amber-500'
+  // Both caution tiers share the warning token; they stay separate branches so a
+  // spend between 75% and 89% is still a caution, not the healthy primary fill.
+  if (pct >= 75) return 'bg-warning'
   return 'bg-primary'
 })
 
