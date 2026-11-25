@@ -202,6 +202,14 @@ organization's plan or tier.
       per-route data is captured, client or server side
       (`frontend/src/App.vue`,
       `frontend/src/composables/useProductAnalytics.ts`)
+- [ ] The `/admin/product-analytics` page does not yet show in-product usage or
+      adoption metrics for system administrators; it renders only the
+      transparency endpoint's delivery, consent and switch fields (unshipped
+      deferral; see Known Gaps).
+- [ ] An in-product analytics export or administration surface (self-serve
+      downloadable org metrics, a configurable reporting schedule, or an
+      in-app analytics warehouse) is not shipped; warehouse scope sits under
+      `feat-analytics` (unshipped deferral; see Known Gaps).
 
 ## Consent scoping (FAR-1635)
 
