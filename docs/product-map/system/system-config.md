@@ -11,7 +11,7 @@ unit-tests:
 bdd:
   - backend/tests/bdd/features/system_admin/system_admin_config.feature
 depends-on: []
-status: covered
+status: partial
 ---
 
 # System Config
@@ -25,14 +25,18 @@ with sensitive value masking.
 - [x] GET `/api/v1/system-admin/config` lists all config entries with sensitive
       value masking; gated on `system.config.manage` (system admin only)
       (`admin_system_config.py`)
+      <!-- behaviour: system-config-01 | tests: none -->
 - [x] PUT `/api/v1/system-admin/config/{key}` creates or updates a config entry
       (upsert) with `updated_by` tracking
       (`backend/tests/bdd/features/system_admin/system_admin_config.feature`)
+      <!-- behaviour: system-config-02 | tests: backend/tests/bdd/features/system_admin/system_admin_config.feature -->
 - [x] DELETE `/api/v1/system-admin/config/{key}` deletes a config entry; returns
       404 if not found
       (`backend/tests/bdd/features/system_admin/system_admin_config.feature`)
+      <!-- behaviour: system-config-03 | tests: backend/tests/bdd/features/system_admin/system_admin_config.feature -->
 - [x] Regular admin receives 403 Forbidden on all system-config endpoints
       (`backend/tests/bdd/features/system_admin/system_admin_config.feature`)
+      <!-- behaviour: system-config-04 | tests: backend/tests/bdd/features/system_admin/system_admin_config.feature -->
 
 ## QA History
 - 2026-09-17: **product-map review pass** - closed the last

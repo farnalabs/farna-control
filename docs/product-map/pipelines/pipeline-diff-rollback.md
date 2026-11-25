@@ -33,7 +33,7 @@ bdd:
   - backend/tests/bdd/steps/test_pipelines.py
 depends-on:
   - feat-pipelines-pipeline-versioning
-status: covered
+status: partial
 ---
 
 # Pipeline Snapshot Diff & Rollback
@@ -49,15 +49,20 @@ centralized authorization cleanup.
 - [x] Snapshot created automatically when a run is triggered and on every
       explicit graph save (the save→edit contract is detailed under
       `feat-pipelines-pipeline-versioning`)
+      <!-- behaviour: pipeline-diff-rollback-01 | tests: none -->
 - [x] List snapshots for a pipeline, ordered by version descending, with total count
+      <!-- behaviour: pipeline-diff-rollback-02 | tests: none -->
 - [x] Get snapshot detail by id (full snapshot graph and metadata)
+      <!-- behaviour: pipeline-diff-rollback-03 | tests: none -->
 - [x] Tag and annotate a snapshot via PATCH (custom tag + notes)
+      <!-- behaviour: pipeline-diff-rollback-04 | tests: none -->
 - [x] Rollback to a previous snapshot creates a NEW live-edit snapshot tagged
       `rollback-v{version}` that restores the graph: `rollback_to_snapshot`
       writes `version_kind='edit'` / `created_kind='rollback'` with the next
       allocated `snapshot_version`, so a restore is a new version rather than a
       rewrite and history is never deleted, so the same target can be restored
       again (`backend/src/farna/db/crud/pipeline_snapshot_versioning.py::rollback_to_snapshot`)
+      <!-- behaviour: pipeline-diff-rollback-05 | tests: none -->
 - [x] The editor's restore flow is ONE shared FormDialog opened from the
       read-only historic view (the persistent banner's Restore this version and
       the version timeline's per-version action): it embeds the old-vs-latest
@@ -73,11 +78,13 @@ centralized authorization cleanup.
       the outcome (`Restored v{n}. Created v{m}.`) in an `<output>` status
       notice (`frontend/src/views/PipelineEditorView.vue`,
       `frontend/src/__tests__/PipelineEditorHistoricVersion.spec.ts`)
+      <!-- behaviour: pipeline-diff-rollback-06 | tests: none -->
 - [x] The historic version view and the restore flow are reachable from the
       route deep links `?snapshot=<uuid>` / `?version=<n>`; the full read-only
       contract (frozen graph, live editor state preserved, write affordances
       unmounted, `?compare=<uuid>`) is tracked under
       `feat-pipelines-pipeline-versioning`
+      <!-- behaviour: pipeline-diff-rollback-07 | tests: none -->
 - [x] Snapshot diff and rollback are Community-tier: the
       `pipeline_diff_rollback` plan gate is RETIRED (FAR-1819): no
       `require_feature` guard remains on the routes, and migration
@@ -86,6 +93,7 @@ centralized authorization cleanup.
       advertise a flag that gates nothing
       (`frontend/tests/e2e/journeys/snapshot-versioning-journey.spec.ts` asserts
       no 402; `backend/tests/unit/api/test_pipeline_snapshot_gating.py`)
+      <!-- behaviour: pipeline-diff-rollback-08 | tests: backend/tests/unit/api/test_pipeline_snapshot_gating.py -->
 - [x] Rollback is guarded under the pipeline row lock before any graph mutation:
       a HITL-gate weakening is denied (`HitlReviewWeakeningDenied`, legacy
       snapshots fail closed as `legacy-snapshot-ambiguous`), a non-admin may not
@@ -94,6 +102,7 @@ centralized authorization cleanup.
       (`backend/src/farna/db/crud/pipeline_snapshot_versioning.py::rollback_to_snapshot`,
       `backend/tests/bdd/features/pipelines/snapshot_versioning.feature`
       "Rollback that would weaken a HITL review is denied")
+      <!-- behaviour: pipeline-diff-rollback-09 | tests: backend/tests/bdd/features/pipelines/snapshot_versioning.feature -->
 - [x] Rollback reconciles declared `policy_gate` blocks against the pre-rollback
       graph in the same transaction through the shared
       `reconcile_graph_policy_gates` (FAR-1666): a gate the rollback reintroduces
@@ -101,6 +110,7 @@ centralized authorization cleanup.
       graph would carry a block with no governing row
       (`backend/src/farna/db/crud/pipeline_snapshot_versioning.py`,
       `backend/tests/unit/db/crud/test_far1666_policy_gate_graph_writers.py`)
+      <!-- behaviour: pipeline-diff-rollback-10 | tests: backend/tests/unit/db/crud/test_far1666_policy_gate_graph_writers.py -->
 - [x] Rollback runs the connector-team gate under the same row lock via the
       `post_lock_gate` hook (FAR-1515 MAJOR 3): the target snapshot's bindings
       are judged against the pipeline's CURRENT owner team and a mismatch raises
@@ -108,21 +118,25 @@ centralized authorization cleanup.
       have moved since the snapshot was taken (shared rule tracked under
       `feat-connectors`)
       (`backend/src/farna/api/routes/pipelines.py::rollback_snapshot_endpoint`)
+      <!-- behaviour: pipeline-diff-rollback-11 | tests: none -->
 - [x] Rollback emits the same `pipeline.graph_updated` audit event a graph write
       does (FAR-1471), attributed to the rollback caller, in the same transaction
       as the restore
       (`backend/tests/unit/db/crud/test_pipeline_graph_updated_audit.py`)
+      <!-- behaviour: pipeline-diff-rollback-12 | tests: backend/tests/unit/db/crud/test_pipeline_graph_updated_audit.py -->
 - [x] Tag / diff / delete scope their snapshot reads to the `{pipeline_id}` path
       segment (FAR-1360): a snapshot of another pipeline resolves to `None` and
       the route maps it to the existing 404, so the path is never decorative;
       every mutation additionally re-checks the team gate inside the transaction
       (FAR-1312 TOCTOU close)
       (`backend/tests/unit/api/test_snapshot_path_scoping_and_residual_gates.py`)
+      <!-- behaviour: pipeline-diff-rollback-13 | tests: backend/tests/unit/api/test_snapshot_path_scoping_and_residual_gates.py -->
 - [x] Diff two snapshots returns added / removed / modified nodes and edges with
       per-field changes, plus the FAR-402 P6 semantic layer: aggregated
       port-signature deltas, downstream `impacted_nodes`, and `breaking_changes`
       (`block` vs `warning`)
       (`backend/tests/unit/db/crud/test_snapshot_versioning_far402.py::TestDiffSnapshotsSemantic`)
+      <!-- behaviour: pipeline-diff-rollback-14 | tests: backend/tests/unit/db/crud/test_snapshot_versioning_far402.py -->
 - [x] A node that differs ONLY in behavior-bearing config is reported as
       modified, never as unchanged: the per-field comparison covers the
       node-level `hitl_config` gate (a gate added, removed or retargeted changes
@@ -134,6 +148,7 @@ centralized authorization cleanup.
       the two graphs behave differently
       (`backend/src/farna/db/crud/pipeline_snapshot_versioning.py::_compute_node_changes`,
       `backend/tests/unit/pipelines/test_snapshot_versioning.py::TestComputeNodeChangesExecutionSemantics`)
+      <!-- behaviour: pipeline-diff-rollback-15 | tests: backend/tests/unit/pipelines/test_snapshot_versioning.py -->
 - [x] A conditional edge that differs only in its routing expression is reported
       as modified: `condition_expression` (or the legacy `condition` spelling,
       normalized before comparison so a re-spelled-but-identical expression is
@@ -142,6 +157,7 @@ centralized authorization cleanup.
       reported change has a field to land on
       (`_compute_edge_changes` / `_rebuild_graph`,
       `backend/tests/unit/pipelines/test_snapshot_versioning.py::TestComputeEdgeChanges`)
+      <!-- behaviour: pipeline-diff-rollback-16 | tests: backend/tests/unit/pipelines/test_snapshot_versioning.py -->
 - [x] The snapshot read paths carry an explicit `organisation_id` scope on top
       of RLS: `list_snapshots` (applied to BOTH the page query and its count, so
       the pair can never disagree about what is in scope), `delete_snapshot`,
@@ -152,15 +168,21 @@ centralized authorization cleanup.
       context is missing
       (`backend/tests/unit/pipelines/test_snapshot_versioning.py::TestDiffSnapshotsOrgScoping`,
       `::TestDeleteSnapshotScope`, `::TestListSnapshots`)
+      <!-- behaviour: pipeline-diff-rollback-17 | tests: backend/tests/unit/pipelines/test_snapshot_versioning.py -->
 - [x] A corrupt (id-less) node in a stored snapshot fails LOUDLY rather than
       being collapsed under one `None` key: the diff indexer and the frozen-graph
       rebuild read `n["id"]` strictly, per the recorded decision below
       (`_rebuild_graph`, `::TestRebuildGraph::test_an_id_less_node_fails_loudly`)
+      <!-- behaviour: pipeline-diff-rollback-18 | tests: backend/tests/unit/pipelines/test_snapshot_versioning.py::test_an_id_less_node_fails_loudly -->
 - [x] Non-existent snapshot or pipeline id → 404; invalid UUID → 422
+      <!-- behaviour: pipeline-diff-rollback-19 | tests: none -->
 - [x] Delete snapshot (versioned) is supported
+      <!-- behaviour: pipeline-diff-rollback-20 | tests: none -->
 - [x] Backward compatibility for pre-versioning snapshot records
+      <!-- behaviour: pipeline-diff-rollback-21 | tests: none -->
 - [x] Snapshot authorization re-reads the live role under the pipeline row lock
       (`rollback_to_snapshot`, graph-replace, pipeline update)
+      <!-- behaviour: pipeline-diff-rollback-22 | tests: none -->
 
 ## Known Gaps
 

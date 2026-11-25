@@ -33,7 +33,7 @@ bdd:
   - backend/tests/bdd/steps/test_guardrails_steps.py
   - backend/tests/bdd/steps/test_guardrail_config_steps.py
 depends-on: [feat-evals]
-status: covered
+status: partial
 ---
 
 # Guardrails
@@ -54,22 +54,26 @@ compensation, and single-node self-correction. Built on the eval engine
       detection is DETERMINISTIC and PURE – only the `regex` and `json_schema`
       eval types are usable, and the engine raises on a `model_judge` /
       `custom_function` guardrail misrouting
+      <!-- behaviour: guardrails-01 | tests: none -->
 - [x] Four actions with distinct semantics: `observe` computes + validates +
       discards + logs a would-block result (shadow mode); `warn` logs the
       violation and the run continues; `block` transitions the run to the
       TERMINAL `eval_failed` state; `redact` masks-only field-scoped redaction
       at the ingestion edge – `failure_behaviour='retry'` was never expressible
       on a guardrail row (block semantics are guardrail-owned, not eval-owned)
+      <!-- behaviour: guardrails-02 | tests: none -->
 - [x] The interception pass runs at run-creation BEFORE `input_payload` is
       persisted, in two phases: evaluate ALL bound guardrails against an
       immutable pre-act copy of the payload, then apply redaction masks in
       deterministic order; a block outcome raises `GuardrailBlockedError` which
       the interception seam maps to a terminal `eval_failed` run – persisted
       state is post-redaction
+      <!-- behaviour: guardrails-03 | tests: none -->
 - [x] Redaction is masks-only with a fixed mask token never derived from payload
       content; field paths are STATIC author config resolved with EXACT/ANCHOR
       key matching (substring matching is forbidden) and a built-in allowlist of
       never-touch system fields is always honored
+      <!-- behaviour: guardrails-04 | tests: none -->
 - [x] Config-as-code (`GuardrailConfigSet`, FAR-219 T3): a versioned YAML
       source-of-truth whose entries map 1:1 to the guardrail `EvalDefinition`
       rows, validated against the engine's own rules, hashed over a canonical
@@ -77,6 +81,7 @@ compensation, and single-node self-correction. Built on the eval engine
       and diffed; the propose → apply/reject workflow reconciles the live rows,
       and applied snapshots are pinned (`guardrail_pins_json`) for drift
       detection
+      <!-- behaviour: guardrails-05 | tests: none -->
 - [x] REST surface (`/api/v1/guardrails/config`): `GET` config export as YAML,
       `POST propose` (validate + hash + diff), `POST apply` (approve/merge),
       `POST reject` (discard), `GET drift` (recompute vs applied pin,
@@ -86,6 +91,7 @@ compensation, and single-node self-correction. Built on the eval engine
       payloads only (never raw config content); GET /drift is side-effect
       free so viewer-scoped callers cannot mutate the pin or generate audit
       rows by polling
+      <!-- behaviour: guardrails-06 | tests: none -->
 - [x] Creation-time materialization (FAR-1593): a pipeline created AFTER an
       apply/import inherits the applied org config in the SAME transaction:
       `db/crud/pipeline.py::create_pipeline` (the ORM chokepoint user-facing
@@ -107,12 +113,15 @@ compensation, and single-node self-correction. Built on the eval engine
       is no `pipelines` DB trigger) and is likewise not a production creation
       path
       (`backend/tests/integration/test_guardrail_pipeline_creation_freshness.py`)
+      <!-- behaviour: guardrails-07 | tests: backend/tests/integration/test_guardrail_pipeline_creation_freshness.py -->
 - [x] Kill switch: an org-level guardrail kill switch disables enforcement and
       is surfaced as a banner in the `/settings/guardrails` view
+      <!-- behaviour: guardrails-08 | tests: none -->
 - [x] Agent-loop interior interception (FAR-211 T3): a Farna Control-hosted bridge
       inside `sandbox_agent` loops reports each tool invocation before execution
       and each tool result before it re-enters model context, REUSING the T1
       guardrail rows + engine – detection is never reimplemented
+      <!-- behaviour: guardrails-09 | tests: none -->
 - [x] The bridge handoff is newline-safe (FAR-664): the rendered agent command
       is written to a command FILE (`/home/user/.modulo_bridge_cmd.sh`) and the
       wrapped command invokes `bash <file>` after `--` – never the command
@@ -122,20 +131,24 @@ compensation, and single-node self-correction. Built on the eval engine
       command-file write failure fails OPEN (bridge disabled for the node,
       `loop_intercept_setup_failed` logged, plain command still dispatches)
       (`backend/tests/unit/pipeline_engine/test_node_runner_residual.py`)
+      <!-- behaviour: guardrails-10 | tests: backend/tests/unit/pipeline_engine/test_node_runner_residual.py -->
 - [x] Run-termination compensation (FAR-213): on a guardrail-blocked
       terminalization, per-node connector compensating callbacks run
       best-effort with failure isolation (e.g. GitHub closes an opened PR), a
       `blocked_partial` run summary records executed nodes / publish status /
       output references (never duplicated raw payloads), audit events record
       the compensation – the hook never raises into terminalization
+      <!-- behaviour: guardrails-11 | tests: none -->
 - [x] Single-node self-correction (FAR-210 T2b): a bounded, single-node recovery
       rewrites a guardrail-violating node input through a RESTRICTED model
       backend (which never receives guardrail config or vault secrets, and sees
       PRE-REDACTED input) and re-validates the produced output with a
       DIFFERENT-FAMILY detector within a single retry budget – no pipeline
       re-execution, no connector/vault access
+      <!-- behaviour: guardrails-12 | tests: none -->
 - [x] Packs ship as versioned policy packs (e.g. SOC2 pack, policy pack) that
       bundle pre-authored guardrail definitions
+      <!-- behaviour: guardrails-13 | tests: none -->
 - [x] Cross-org inheritance ships via the config-as-code import surface:
       `POST /api/v1/guardrails/config/import` (admin-gated like apply/reject)
       applies a config YAML – e.g. the unmasked elevated export
@@ -150,6 +163,7 @@ compensation, and single-node self-correction. Built on the eval engine
       (`backend/src/farna/api/routes/guardrail_config.py`,
       `backend/tests/integration/test_guardrail_config_api.py`,
       `backend/tests/bdd/features/evals/guardrail_config.feature`)
+      <!-- behaviour: guardrails-14 | tests: backend/tests/integration/test_guardrail_config_api.py, backend/tests/bdd/features/evals/guardrail_config.feature -->
 - [x] The in-page Import control ships on `/settings/guardrails`: an
       admin-gated "Import Config" control opens a dialog that pastes a config
       YAML (e.g. the elevated export of another org) and applies it directly as
@@ -160,6 +174,7 @@ compensation, and single-node self-correction. Built on the eval engine
       refresh; non-admins never see the control
       (`frontend/src/views/SettingsGuardrailsView.vue`,
       `frontend/src/__tests__/SettingsGuardrailsView.spec.ts`)
+      <!-- behaviour: guardrails-15 | tests: none -->
 
 - [x] Output-side interception (FAR-209 Track B): a guardrail may declare
       `interception_point: "output"` in its config to intercept a completed
@@ -177,6 +192,7 @@ compensation, and single-node self-correction. Built on the eval engine
       (`backend/src/farna/core/guardrails/output_intercept.py`,
       `backend/src/farna/core/pipeline_engine/executor.py`,
       `backend/src/farna/db/crud/run.py`)
+      <!-- behaviour: guardrails-16 | tests: none -->
 - [x] Destroy redaction mode (FAR-209 Track B): `mode: destroy` replaces each
       candidate - the detection regex's matches inside a string leaf (the
       untouched surroundings of a match stay readable), else the whole leaf -
@@ -189,6 +205,7 @@ compensation, and single-node self-correction. Built on the eval engine
       terminal block (fail closed) - never a masks-only fallback and never an
       unredacted persist
       (`backend/src/farna/core/guardrails/redaction_mode.py`)
+      <!-- behaviour: guardrails-17 | tests: none -->
 
 ## Known Gaps
 

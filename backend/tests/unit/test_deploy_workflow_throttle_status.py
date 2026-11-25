@@ -125,11 +125,20 @@ def test_status_skip_path_uses_warning_annotation_with_reason_and_next_deploy() 
 
 
 def test_force_deploy_bypass_still_deploys() -> None:
-    """force_deploy short-circuits the throttle before any check runs."""
+    """force_deploy short-circuits the throttle before any check or Actions read.
+
+    The force branch is evaluated first: ahead of the in-progress check, the
+    commit-fix bypass and the throttle-anchor scan (which makes 1 + up to 50
+    Actions API reads). The emergency bypass must never wait on the Actions API,
+    so this ordering is pinned; an edit that hoists the anchor scan back above
+    force re-opens a hang on a slow Actions API (FAR-954 review finding 1).
+    """
     script = _throttle_check_step()["run"]
     force_idx = script.index('if [ "$FORCE_DEPLOY" = "true" ]')
     in_progress_idx = script.index('if [ -n "$IN_PROGRESS" ]')
     assert force_idx < in_progress_idx, "force_deploy must exit before the in-progress/throttle checks - the bypass order is the policy"
+    anchor_idx = script.index("gh run list")
+    assert force_idx < anchor_idx, "force_deploy must exit before the anchor's Actions reads - the emergency bypass must never wait on the Actions API"
     # The bypass must publish should_deploy=true to $GITHUB_OUTPUT. The write
     # may be a single individually-redirected echo, or the writes may be
     # gathered into one redirected group (actionlint SC2129) - both emit the
@@ -139,3 +148,57 @@ def test_force_deploy_bypass_still_deploys() -> None:
     assert "should_deploy=true" in force_branch, "the force_deploy bypass must publish should_deploy=true"
     assert '"$GITHUB_OUTPUT"' in force_branch, "the force_deploy bypass must write the output to $GITHUB_OUTPUT"
     assert "Force deploy requested" in force_branch
+    # The force path still emits the legibility output so the summary reports it
+    # as unknown rather than fabricating an anchor.
+    assert "last_deploy=${LAST}" in force_branch
+
+
+def test_last_deploy_is_declared_and_emitted_on_every_branch() -> None:
+    """Every branch that publishes should_deploy must also publish last_deploy.
+
+    FAR-954 hoisted the anchor observation so every path can report WHEN the
+    last real deploy was. The status job consumes
+    ``needs.deploy-throttle.outputs.last_deploy``; a missing declaration or a
+    branch that forgets to emit it silently degrades the summary to "unknown"
+    (force_deploy is the one path that deliberately reports unknown, but still
+    emits the key). Pin the declaration and one emission per branch.
+    """
+    outputs = _workflow()["jobs"]["deploy-throttle"]["outputs"]
+    assert "last_deploy" in outputs, "deploy-throttle must export last_deploy for the status job"
+    assert outputs["last_deploy"] == "${{ steps.check.outputs.last_deploy }}", "last_deploy must pass through the check step's output"
+
+    script = _throttle_check_step()["run"]
+    should_writes = script.count('echo "should_deploy=')
+    last_writes = script.count('echo "last_deploy=${LAST}"')
+    assert should_writes > 0, "the throttle step must still write should_deploy"
+    assert last_writes == should_writes, f"every should_deploy branch must emit last_deploy too: {should_writes} should_deploy write(s) vs {last_writes} last_deploy write(s)"
+
+
+def test_status_summary_renders_last_deploy_and_prod_main_gap() -> None:
+    """The status summary must consume last_deploy and render every gap state.
+
+    FAR-954 legibility added (1) the last real-deploy line, (2) the
+    production-vs-origin/main gap with a branch per readable/unreadable state,
+    and (3) the explicit verdict lines. Nothing else gates these strings, so
+    assert them here; a future edit that drops a branch stays red.
+    """
+    step = _summary_step()
+    env = step["env"]
+    assert env["LAST_DEPLOY"] == "${{ needs.deploy-throttle.outputs.last_deploy }}", "summary must consume the throttle's last_deploy, not re-derive it"
+    for key in ("PROD_SHA", "MAIN_SHA", "COMMITS_BEHIND"):
+        assert key in env, f"summary must consume {key} from the read-only state step"
+
+    script = step["run"]
+    # Last real deploy: passed through, rendered as unknown only when absent.
+    assert "**Last real deploy:**" in script
+    assert "unknown on this path" in script
+    # All five prod-vs-main gap renderings.
+    assert "current with origin/main" in script, "prod == origin/main branch must survive"
+    assert "commit(s) ahead" in script, "prod-behind-origin/main branch must survive"
+    assert "gap unknown: compare API unavailable" in script, "compare-API-unavailable branch must survive"
+    assert "origin/main unreadable" in script, "main-unreadable branch must survive"
+    assert "unreadable - origin/main is" in script, "prod-unreadable branch must survive"
+    # The three verdict lines a reader scans for.
+    assert "DEPLOY VERDICT: YES - this run is deploying" in script
+    assert "DEPLOY VERDICT: THROTTLE CHECK FAILED" in script
+    assert "DEPLOY VERDICT: NO DEPLOY — throttled (FAR-954)." in script

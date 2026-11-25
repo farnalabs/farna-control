@@ -264,7 +264,7 @@ from farna.db.models.run import (
     TERMINAL_STATUSES,
     Run,
 )
-from farna.db.rls import set_rls_org, set_rls_user_context
+from farna.db.rls import bootstrap_read, set_rls_org, set_rls_user_context
 from farna.db.settings_resolver import resolve_authz_enforce
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
 from farna.settings import get_settings
@@ -14696,8 +14696,12 @@ async def _oauth_authorize(request: Request) -> JSONResponse | RedirectResponse:
     try:
         session_factory = _get_session_factory()
         async with session_factory() as s, s.begin():
-            # Look up client by globally unique client_id.
-            client = await get_oauth_client_by_client_id(s, client_id)
+            # Look up client by globally unique client_id. PRE-AUTH: the org is
+            # a COLUMN of this row, so there is no org context to scope by yet —
+            # the lookup rides the explicit bootstrap grant (ADR 070 §2), and is
+            # pinned to the unique client_id, never a table scan.
+            async with bootstrap_read(s):
+                client = await get_oauth_client_by_client_id(s, client_id)
             if client is None:
                 return JSONResponse(
                     {"error": "invalid_client", "detail": "Unknown client_id"},
@@ -14871,8 +14875,11 @@ async def _exchange_authorization_code(creds: dict[str, str], settings: Any) -> 
 
     session_factory = _get_session_factory()
     async with session_factory() as s, s.begin():
-        # Step 1: Validate client credentials to discover org_id.
-        client = await validate_client_secret(s, creds["client_id"], creds["client_secret"])
+        # Step 1: Validate client credentials to discover org_id. PRE-AUTH: the
+        # client row is the only thing that names the org, so this pinned
+        # (client_id) read rides the explicit bootstrap grant (ADR 070 §2).
+        async with bootstrap_read(s):
+            client = await validate_client_secret(s, creds["client_id"], creds["client_secret"])
 
         # Step 2: Set RLS context for the client's org.
         await set_rls_org(s, client.organisation_id)
@@ -15113,7 +15120,10 @@ async def _exchange_refresh_token(creds: dict[str, str], settings: Any) -> tuple
 
     session_factory = _get_session_factory()
     async with session_factory() as s, s.begin():
-        client = await validate_client_secret(s, creds["client_id"], creds["client_secret"])
+        # PRE-AUTH: the client row is what names the org, so this pinned
+        # (client_id) read rides the explicit bootstrap grant (ADR 070 §2).
+        async with bootstrap_read(s):
+            client = await validate_client_secret(s, creds["client_id"], creds["client_secret"])
         await set_rls_org(s, client.organisation_id)
 
         # FAR-1283: pre-auth grant — the kill switch is enforced against the

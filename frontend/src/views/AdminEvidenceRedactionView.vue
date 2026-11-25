@@ -22,12 +22,15 @@
     >
       {{ $t('views.AdminEvidenceRedaction.server_boundary_note') }}
     </div>
-    <div
-      class="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
+    <Notice
+      variant="warning"
+      :icon="false"
+      padding="sm"
+      class="mb-4 text-sm"
       data-testid="admin-evidence-redaction-fail-closed-note"
     >
       {{ $t('views.AdminEvidenceRedaction.fail_closed_note') }}
-    </div>
+    </Notice>
 
     <div
       v-if="loading"
@@ -168,23 +171,29 @@
         </form>
       </BaseCard>
 
-      <p
+      <Notice
         v-if="statusMessage"
-        aria-live="polite"
-          class="mb-4 rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+        variant="success"
+        live="polite"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-evidence-redaction-status"
       >
         {{ statusMessage }}
-      </p>
+      </Notice>
 
-      <p
+      <Notice
         v-if="!hasCatchAll"
-        aria-live="assertive"
-        class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive-text"
+        variant="danger"
+        live="assertive"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-evidence-redaction-catch-all-missing"
       >
         {{ $t('views.AdminEvidenceRedaction.catch_all_missing') }}
-      </p>
+      </Notice>
 
       <EmptyState
         v-if="rules.length === 0 && !formOpen"
@@ -270,6 +279,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'

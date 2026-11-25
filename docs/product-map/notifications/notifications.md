@@ -57,12 +57,15 @@ events into typed notification payloads; and in-app notifications stream over SS
       `error_detail`, includes the failed node name and error message, retries up to 3
       times, and auto-disables the endpoint after 10 consecutive failures (logging an
       alert) (`failure_webhook.feature`)
+      <!-- behaviour: notifications-01 | tests: backend/tests/bdd/features/notifications/failure_webhook.feature -->
 - [x] A HITL webhook fires when a run reaches an approval gate with `run_id`/`review_id`
       and gate context, retries on failure, and after final failure the event lands on the
       dead-letter queue (`hitl_webhook.feature`)
+      <!-- behaviour: notifications-02 | tests: backend/tests/bdd/features/notifications/hitl_webhook.feature -->
 - [x] Outgoing webhooks are signed with HMAC-SHA256 (per-endpoint secrets) and carry
       `X-Farna-Control-Signature` / `X-Farna-Control-Timestamp`, and a receiver can verify the signature
       (`signing.feature`)
+      <!-- behaviour: notifications-03 | tests: backend/tests/bdd/features/notifications/signing.feature -->
 - [x] Delivery attempts are recorded against `NotificationDeliveryLog` and are
       manageable from `/admin/notification-delivery` – titled **Webhook
       Deliveries** – (status/event filters, retry of failed deliveries)
@@ -93,10 +96,13 @@ events into typed notification payloads; and in-app notifications stream over SS
       ONE tri-state (`unknown` / `none` / `configured`): a failed or malformed
       read stays `unknown` and renders no claim at all, so no empty state is
       ever shown before the read resolves.
+      <!-- behaviour: notifications-04 | tests: backend/tests/unit/api/test_admin_notifications_webhooks.py -->
 - [x] In-app notifications stream over SSE with a dashboard panel, per-user filters and a
       dismiss flow (`in_app_notifications/*.feature`, `test_in_app_notifications.py`)
+      <!-- behaviour: notifications-05 | tests: backend/tests/bdd/steps/test_in_app_notifications.py -->
 - [x] Email delivery settings and message sending are configured under `/settings/email`
       (`core/email_service.py`, `test_admin_email.py`)
+      <!-- behaviour: notifications-06 | tests: backend/tests/unit/api/test_admin_email.py -->
 
 ### Lifecycle semantics
 
@@ -117,6 +123,7 @@ events into typed notification payloads; and in-app notifications stream over SS
       lost (`test_in_app_notifications_lifecycle.py`, including the
       `expires_at IS NULL` never-expires arm – see the note below on why that
       arm exists despite the ORM model declaring `NOT NULL`).
+      <!-- behaviour: notifications-07 | tests: backend/tests/unit/api/test_in_app_notifications_lifecycle.py -->
 - [x] **The `status` query param is constrained to its vocabulary.** The
       allowed values are `active`, `dismissed_self`, `dismissed_scope`, or the
       param omitted (the inbox default) – exactly the branches
@@ -129,6 +136,7 @@ events into typed notification payloads; and in-app notifications stream over SS
       that raises, so a future caller cannot reintroduce the bypass
       (`test_in_app_notifications_routes.py`,
       `tests/unit/db/crud/test_notifications.py`).
+      <!-- behaviour: notifications-08 | tests: backend/tests/unit/api/test_in_app_notifications_routes.py, backend/tests/unit/db/crud/test_notifications.py -->
 - [x] **Dismissals hide on EVERY live view, including the default inbox.**
       `_hidden_from_user_clause` is applied to the inbox default (no `status`)
       as well as `status=active`, the dashboard panel and the unread count, so
@@ -139,6 +147,7 @@ events into typed notification payloads; and in-app notifications stream over SS
       neither the TTL nor the dismissal clause, so a dismissed row stays
       fetchable by its id). List and count share `_apply_status_filter`, so
       `items` and `total` cannot disagree (`test_in_app_notifications_lifecycle.py`).
+      <!-- behaviour: notifications-09 | tests: backend/tests/unit/api/test_in_app_notifications_lifecycle.py -->
 - [x] **Dismissal scope is honored in the active filter.**
       `POST /{id}/dismiss` with `dismiss_scope="self"` writes a per-user
       dismissal that hides the row ONLY for the dismissing user;
@@ -150,6 +159,7 @@ events into typed notification payloads; and in-app notifications stream over SS
       `organisation_id` so a dismissal can never cross a tenant on a backend
       without RLS; `dismissed_self` / `dismissed_scope` remain the record of
       what the acting user dismissed (`test_in_app_notifications_lifecycle.py`).
+      <!-- behaviour: notifications-10 | tests: backend/tests/unit/api/test_in_app_notifications_lifecycle.py -->
 - [x] **A `self` dismissal can be escalated to `scope`.** A user who filed
       "Review later" (`dismiss_scope="self"`) may then call
       `POST /{id}/dismiss` with `dismiss_scope="scope"`: the existing row is
@@ -162,6 +172,7 @@ events into typed notification payloads; and in-app notifications stream over SS
       an identical-scope repeat keeps the pre-existing refusal
       (`test_in_app_notifications_lifecycle.py`,
       `tests/unit/db/crud/test_notifications.py`).
+      <!-- behaviour: notifications-11 | tests: backend/tests/unit/api/test_in_app_notifications_lifecycle.py, backend/tests/unit/db/crud/test_notifications.py -->
 - [x] **No fresh `hitl.awaiting` for an already-terminal run.** The sole
       `EVENT_HITL_AWAITING` call site is `PipelineExecutor._dispatch_hitl_awaiting`
       (`core/pipeline_engine/executor.py`), which funnels through
@@ -178,6 +189,7 @@ events into typed notification payloads; and in-app notifications stream over SS
       enrichment (`run_status` / `run_terminal` / `run_cancel_reason`) is
       unchanged (`test_hitl_awaiting_terminal_suppression.py`, including the
       read-error fail-open case).
+      <!-- behaviour: notifications-12 | tests: backend/tests/unit/notifier/test_hitl_awaiting_terminal_suppression.py -->
 - [x] **The approaching-deadline HITL sweep has a webhook + in-app leg
       (FAR-1295).** The `hitl_deadline_warning` system cron
       (`core/hitl_manager/deadline_warning.py`) dispatches
@@ -194,6 +206,7 @@ events into typed notification payloads; and in-app notifications stream over SS
       (`backend/tests/unit/hitl_manager/test_deadline_warning.py`,
       `backend/tests/integration/test_hitl_deadline_warning.py`,
       `backend/tests/unit/notifier/test_event_mapper.py`)
+      <!-- behaviour: notifications-13 | tests: backend/tests/unit/hitl_manager/test_deadline_warning.py, backend/tests/integration/test_hitl_deadline_warning.py, backend/tests/unit/notifier/test_event_mapper.py -->
 
 #### Why the `expires_at IS NULL` arm is still there
 

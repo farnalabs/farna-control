@@ -51,7 +51,7 @@ bdd:
   - backend/tests/bdd/steps/test_eval_block_steps.py
   - backend/tests/bdd/steps/test_eval_scorer_gates.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Evals
@@ -75,14 +75,17 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       output against JSON Schema), `custom_function` (user-defined function),
       and `human_set` (registered, versioned, human-authored eval sets – the
       deterministic trustworthy path)
+      <!-- behaviour: evals-01 | tests: none -->
 - [x] Eval outputs are evaluated against delimited `---BEGIN/END EVALUATED
       CONTENT---` framing with a data-not-instructions guard instruction, a
       content-length cap, and an embedded-judge-injection + ReDoS guard on
       regex patterns
+      <!-- behaviour: evals-02 | tests: none -->
 - [x] Each eval carries an internal-only `failure_behaviour` (`warn` | `block`);
       a blocked eval raises `EvalBlockedError` which terminalizes the run as
       `eval_failed`, and eval-generated guardrail blocks surface in the run
       detail UI
+      <!-- behaviour: evals-03 | tests: none -->
 - [x] Policy-gate decision records (`PolicyGateDecision`, FAR-1060 / FAR-1102):
       the eval loop persists one decision-record row per policy-gate evaluation,
       built by `build_decision_row` (`core/eval_engine/policy_gate.py`) with the
@@ -99,6 +102,7 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       `test_policy_gate_acceptance.py` for the FK RESTRICT guard, and
       `test_admin_housekeeping_decision_block.py` for the housekeeping
       `blocked_by` surfacing)
+      <!-- behaviour: evals-04 | tests: backend/tests/unit/core/eval_engine/test_policy_gate_decision_row.py, backend/tests/unit/core/test_eval_persist_order_failopen.py, backend/tests/unit/db/crud/test_policy_gate_decision_purge.py, backend/tests/integration/api/test_policy_gate_acceptance.py, backend/tests/unit/api/test_admin_housekeeping_decision_block.py -->
 - [x] The `/evals` list shows every eval in the organisation in one table
       (name, pipeline, node, type, judging, pass threshold, version) without
       picking a pipeline first, filterable by pipeline and eval type and
@@ -106,6 +110,7 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       joined client-side because the API row carries no `pipeline_name`
       (`frontend/src/views/EvalsListView.vue`,
       `frontend/src/__tests__/EvalsListView.spec.ts`)
+      <!-- behaviour: evals-05 | tests: none -->
 - [x] The eval surface is three route-per-tab destinations rendered by the
       shared `PageHeader` tabs - `/evals` (All evals), `/evals/editor`
       (Editor) and `/evals/proposals` (Proposals) - and `/evals` is a real
@@ -121,6 +126,7 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       and falls back to the all-pipelines state with a visible notice for an
       unknown id instead of a blank page (`frontend/src/views/EvalEditorView.vue`,
       `frontend/src/views/EvalProposalsQueueView.vue`)
+      <!-- behaviour: evals-06 | tests: none -->
 - [x] Eval definitions are org-scoped CRUD whose permissions come from the
       ADR 047 registry and the route dependencies, not from prose:
       `POST /api/v1/evals` requires `eval.definition.create` and
@@ -134,7 +140,9 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       `POST /api/v1/evals/from-run` to author a definition from run data
       (`backend/src/farna/api/routes/evals.py`,
       `backend/src/farna/auth/permissions.py`)
+      <!-- behaviour: evals-07 | tests: none -->
 - [x] Policy-gate permissions are separate from eval-definition permissions: `gate.create` and `gate.edit` are operator-or-admin, `gate.enforcement.raise` explicitly authorizes warn→block, and `gate.enforcement.weaken` is admin-only for block→warn with a mandatory non-blank reason. The transition is checked under the existing per-eval advisory lock and audited with previous/new action, actor, and reason; the shared REST/MCP eval writers fail closed before creating or updating a PolicyGate without its gate permission.
+      <!-- behaviour: evals-08 | tests: none -->
 - [x] Policy-gate binding (`POST`/`PUT /api/v1/evals/{eval_id}/policy-gate`)
       runs the FAR-957 advisory author-warning checks for the eval's
       `evidence_key` (`no_producer` / `temporal_ordering` / `recent_undefined` –
@@ -142,6 +150,7 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       the `PolicyGateResponse` carries the non-blocking `warnings` list
       (`core/eval_engine/author_warnings.py`,
       `tests/unit/core/evidence/test_author_warnings.py`)
+      <!-- behaviour: evals-09 | tests: backend/tests/unit/core/evidence/test_author_warnings.py -->
 - [x] Policy-gate operator control and pin-set integrity (FAR-967 chunk 10):
       `PATCH /api/v1/evals/{eval_id}/policy-gate/toggle` (admin-only
       `eval.definition.update`, break-glass mint denied) flips the gate's
@@ -172,24 +181,30 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       `test_policy_gate_pin.py`, `test_policy_gate_eval_wiring.py`,
       `test_policy_gate_routes_coverage.py`,
       `EvalEditorViewPolicyGate.spec.ts`)
+      <!-- behaviour: evals-10 | tests: backend/tests/unit/core/test_policy_gate_pin.py, backend/tests/unit/core/pipeline_engine/test_policy_gate_eval_wiring.py, backend/tests/unit/api/test_policy_gate_routes_coverage.py -->
 - [x] Results are queryable per run (`GET /api/v1/runs/{run_id}/evals`) and
       comparable side-by-side between two runs (`POST /api/v1/evals/compare`)
+      <!-- behaviour: evals-11 | tests: none -->
 - [x] Leaderboards aggregate pass/fail over a window grouped by pipeline, node,
       or agent (`GET /api/v1/evals/leaderboard`)
+      <!-- behaviour: evals-12 | tests: none -->
 - [x] Coverage surfaces: an eval coverage map for a pipeline
       (`GET /api/v1/evals/coverage`, eval definitions counted per graph node) and
       the eval-suite insufficiency signal (`GET /api/v1/eval-coverage-gap`, scoped
       to a variant group / batch, using a `min_runs` minimum and a variant
       divergence `threshold` parameter; `coverage_gap.py`)
+      <!-- behaviour: evals-13 | tests: none -->
 - [x] Suite orchestration resolves an immutable baseline snapshot and a
       deterministic "latest completed same-tuple prior run" baseline, persists
       per-case outcomes into `eval_results` with a `suite_run_id` FK, and
       aggregates pass-rate per `eval_type` – never cross-combining raw scores
       across differing eval types (type-incorrect refusal)
+      <!-- behaviour: evals-14 | tests: none -->
 - [x] Suite regression detection delegates to `detect_regressions` and routes
       comparison postings through the existing Notifier
       (`EVENT_EVAL_REGRESSION`); suite alerting is configurable
       (`PUT /api/v1/evals/suites/{suite_id}/alerting`, admin-only)
+      <!-- behaviour: evals-15 | tests: none -->
 - [x] Proposal queue: eval-gap feedback records are listed as eval proposals
       (`GET /api/v1/feedback/proposals`) and a proposal can be published into a
       real eval definition (`POST /api/v1/feedback/proposals/{record_id}/
@@ -198,6 +213,7 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       offers publish / dismiss actions, but its publish only marks the proposal
       `resolved` – creating the eval definition is the API/BDD path, not yet wired
       from the view
+      <!-- behaviour: evals-16 | tests: none -->
 - [x] The proposal queue's audience is permissions, not a role check (FAR-2621):
       the `/evals/proposals` route declares `required_permissions:
       [feedback.list]` – exactly the read `GET /api/v1/feedback/proposals`
@@ -212,9 +228,11 @@ Surfaces: `/evals` (the all-evals list), `/evals/editor` and
       parallel hand-maintained role check; a caller who holds neither sees one
       read-only notice (`proposal-readonly-notice`) instead of buttons the API
       would 403
+      <!-- behaviour: evals-17 | tests: none -->
 - [x] The `/evals/editor` view authors evals against a pipeline + node with a
       type selector, JSON config editor, and pass threshold, save / edit /
       delete
+      <!-- behaviour: evals-18 | tests: none -->
 
 ## Known Gaps
 
