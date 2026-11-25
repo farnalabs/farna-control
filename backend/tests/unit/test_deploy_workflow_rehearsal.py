@@ -4640,6 +4640,130 @@ def test_bundle_tag_publication_has_no_overwrite_escape_hatches() -> None:
     assert 'git push origin "$BUNDLE_TAG"' in script
 
 
+def _upload_step_script() -> str:
+    return _extract_publish_release_step_script("Create GitHub Release with assets")
+
+
+def _upload_step_harness(
+    tmp_path: Path,
+    *,
+    include_windows: bool,
+    release_has_windows: bool,
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """Execute the upload step against git/gh stubs to prove asset reconciliation.
+
+    The recut arm must delete a stale Windows installer BEFORE it replaces the
+    rest of the inventory, or the post-upload "unexpected asset" check fails
+    with no documented recovery (FAR-2789). A logical-line ordering assertion
+    cannot see the guard actually fire, so this runs the real step: the gh stub
+    models the existing release and its asset list and records every subcommand
+    in the order the script issues it.
+    """
+    version = "0.1.0"
+    target = "a" * 40
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "calls.log"
+    artefacts = tmp_path / "release-artefacts"
+    artefacts.mkdir()
+
+    for name in (
+        f"farna-control-{version}-linux-amd64.tar.gz",
+        f"FarnaControl-{version}-macos-arm64.dmg",
+        f"FarnaControl-{version}-macos-x86_64.dmg",
+        f"farna-control-{version}-compose.tar.gz",
+        f"farna-control_{version}_amd64.deb",
+        "openapi.json",
+        "SHA256SUMS",
+        "RELEASE_MANIFEST.json",
+        "RELEASE_MANIFEST.json.sig",
+        f"farna-control-{version}-windows-amd64.exe",
+    ):
+        (artefacts / name).write_bytes(b"payload")
+
+    calls_path = shlex.quote(str(calls))
+    _write_executable(
+        bin_dir / "git",
+        f"#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> {calls_path}\ncase \"$1\" in\n  rev-parse) printf '%s\\n' {target} ;;\n  describe) printf 'v0.0.0\\n' ;;\n  rev-list) printf '%s\\n' {target} ;;\n  *) exit 0 ;;\nesac\n",
+    )
+    _write_executable(
+        bin_dir / "python3",
+        "#!/usr/bin/env bash\nprintf 'generated changelog\\n'\n",
+    )
+    _write_executable(
+        bin_dir / "gh",
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f"printf '%s\\n' \"$*\" >> {calls_path}\n"
+        'case "$1 $2" in\n'
+        f"  'release list') printf 'bundle-v{version}\\n' ;;\n"
+        "  'release view')\n"
+        '    if [[ "$*" == *"--json assets"* ]] && [ "$RELEASE_HAS_WINDOWS" = "true" ]; then\n'
+        f"      printf '%s\\n' 'farna-control-{version}-windows-amd64.exe'\n"
+        "    fi ;;\n"
+        "  *) exit 0 ;;\n"
+        "esac\n",
+    )
+
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "VERSION": version,
+        "TAG": f"bundle-v{version}",
+        "RC_TAG": f"v{version}-rc1",
+        "INCLUDE_WINDOWS": "true" if include_windows else "false",
+        "MODE": "recut",
+        "TARGET_SHA": target,
+        "TARGET_PINNED": "false",
+        "GITHUB_REPOSITORY": "farnalabs/farna-control",
+        "RUNNER_TEMP": str(tmp_path),
+        "RELEASE_HAS_WINDOWS": "true" if release_has_windows else "false",
+    }
+    result = _run_bash(_upload_step_script(), cwd=tmp_path, env=env)
+    return result, calls
+
+
+@pytest.mark.posix_only
+def test_upload_step_removes_a_dropped_windows_asset_before_replacing(tmp_path: Path) -> None:
+    """A recut that shrinks the inventory deletes the stale .exe before upload."""
+    result, calls = _upload_step_harness(tmp_path, include_windows=False, release_has_windows=True)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "removed farna-control-0.1.0-windows-amd64.exe" in result.stdout
+
+    commands = calls.read_text(encoding="utf-8").splitlines()
+    delete_index = next(i for i, line in enumerate(commands) if line.startswith("release delete-asset"))
+    upload_index = next(i for i, line in enumerate(commands) if line.startswith("release upload"))
+    assert delete_index < upload_index, "the dropped Windows asset must be removed before the replacement upload"
+
+    delete = commands[delete_index]
+    assert "bundle-v0.1.0" in delete
+    assert "farna-control-0.1.0-windows-amd64.exe" in delete
+    assert "--yes" in delete.split()
+    assert "windows-amd64.exe" not in commands[upload_index], "a recut built without Windows must not re-upload the .exe"
+
+
+@pytest.mark.posix_only
+def test_upload_step_keeps_the_windows_asset_when_this_recut_includes_it(tmp_path: Path) -> None:
+    result, calls = _upload_step_harness(tmp_path, include_windows=True, release_has_windows=True)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = calls.read_text(encoding="utf-8").splitlines()
+    assert not any(line.startswith("release delete-asset") for line in commands)
+    uploads = [line for line in commands if line.startswith("release upload")]
+    assert any("farna-control-0.1.0-windows-amd64.exe" in line for line in uploads)
+
+
+@pytest.mark.posix_only
+def test_upload_step_does_not_delete_a_windows_asset_the_release_lacks(tmp_path: Path) -> None:
+    result, calls = _upload_step_harness(tmp_path, include_windows=False, release_has_windows=False)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = calls.read_text(encoding="utf-8").splitlines()
+    assert not any(line.startswith("release delete-asset") for line in commands)
+    assert any(line.startswith("release upload") for line in commands)
+
+
 def test_publish_release_guard_covers_exactly_its_needs() -> None:
     """The set of jobs the guard checks must equal the set of ``needs``.
 
