@@ -193,3 +193,79 @@ def test_the_pre_fix_refusal_is_gone_and_replacement_is_used() -> None:
     assert "without clobbering" not in script
     assert "--clobber" in existing.split()
     assert 'gh release upload "$TAG" "${ASSETS[@]}"' in existing
+
+
+AUX_STAPLE_MARKER = "MACOS_STAPLED.json"
+
+
+def test_the_staple_marker_is_the_one_permitted_unexpected_asset() -> None:
+    """Prove-the-fix: the pre-fix verification compared exact counts and named
+    no auxiliary asset, so it fails the first assertion below.
+
+    ``MACOS_STAPLED.json`` is written by macos-staple-retry.yml, never by this
+    publish step, so a recut always sees it on the release. It is permitted by
+    exact basename; any other unexpected asset is a hard error.
+    """
+    script = _single_step(VERIFY_STEP)["run"]
+
+    assert AUX_STAPLE_MARKER in script
+    # Exact-basename match, never a substring one.
+    assert '[ "$published_name" = "$STAPLE_MARKER" ]' in script
+    assert "*MACOS_STAPLED*" not in script
+    assert "MACOS_STAPLED*" not in script
+    # The marker is explained, not silently tolerated.
+    assert "macos-staple-retry.yml" in script
+    assert "re-validated by DMG digest" in script
+    # Any other unexpected asset is named in a hard error.
+    assert "unexpected asset ${published_name}" in script
+    assert "::error::release ${TAG} publishes unexpected asset" in script
+    # The old exact-count equality is gone.
+    assert "published_count" not in script
+    assert "expected_count" not in script
+
+
+def test_tag_step_refuses_a_recut_once_the_ga_tag_exists() -> None:
+    """Prove-the-fix: the pre-fix step never queried the GA tag."""
+    script = _single_step(TAG_STEP)["run"]
+
+    assert 'git ls-remote --exit-code origin "refs/tags/v${VERSION}"' in script
+    assert "version ${VERSION} is already promoted (tag v${VERSION} exists); refusing to republish its bundle" in script
+    # Exit 0 means promoted, exit 2 means absent; anything else is UNKNOWN.
+    assert "state UNKNOWN, refusing to republish" in script
+
+
+def test_tag_step_refuses_when_the_compare_is_behind_or_diverged() -> None:
+    """Prove-the-fix: the pre-fix step made no ancestry query at all."""
+    script = _single_step(TAG_STEP)["run"]
+
+    assert "/compare/${remote_tag_sha}...${RELEASE_SHA}" in script
+    assert "--jq '.status'" in script
+    assert "ahead|identical" in script
+    assert "behind|diverged" in script
+    assert "bundle tag points at a commit unrelated to this release target" in script
+
+
+def test_tag_step_converges_on_the_protected_bundle_tag_without_moving_it() -> None:
+    """Prove-the-fix: the pre-fix step had no converge path or notice."""
+    script = _single_step(TAG_STEP)["run"]
+
+    assert "release-tag-protection" in script
+    assert "::notice::${BUNDLE_TAG} stays at ${remote_tag_sha}" in script
+    assert "first published commit for this version" in script
+    # It never moves or deletes the immutable tag.
+    assert "--force" not in script
+    assert "--delete" not in script
+    pushes = [line for line in _logical_lines(script) if line.startswith("git push")]
+    assert pushes == ['git push origin "$BUNDLE_TAG"']
+
+
+def test_tag_step_verifies_the_expected_sha_for_the_branch_it_took() -> None:
+    """Prove-the-fix: the pre-fix step always required ``RELEASE_SHA``."""
+    script = _single_step(TAG_STEP)["run"]
+
+    # Each branch records its own expected SHA: a push converges on the release
+    # checkout, an existing/converged tag on the immutable remote tag SHA.
+    assert 'expected_tag_sha="$RELEASE_SHA"' in script
+    assert 'expected_tag_sha="$remote_tag_sha"' in script
+    assert 'if [ "$verified_sha" != "$expected_tag_sha" ]; then' in script
+    assert 'if [ "$verified_sha" != "$RELEASE_SHA" ]; then' not in script
