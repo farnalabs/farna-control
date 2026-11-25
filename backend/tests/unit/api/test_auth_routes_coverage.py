@@ -218,6 +218,27 @@ def test_login_happy_path_mints_tokens_and_cookies(client: tuple[TestClient, Asy
     assert "modulo_session" in resp.cookies
 
 
+def test_login_system_admin_without_org_mints_via_bootstrap_grant(client: tuple[TestClient, AsyncMock]) -> None:
+    """A system admin has no org: the family row falls back to the sentinel org,
+    which is created through the pre-auth bootstrap grant (ADR 070 §2), not an
+    org-scoped transaction. Prove the no-org login arm works end-to-end."""
+    http, _session = client
+    account = _make_account(is_system_admin=True)
+    family = MagicMock()
+    family.family_id = uuid.uuid4()
+    with (
+        patch(f"{_PREFIX}_authenticate_credentials", new=AsyncMock(return_value=account)),
+        patch(f"{_PREFIX}list_memberships_for_account", new=AsyncMock(return_value=[])),
+        patch(f"{_PREFIX}create_family", new=AsyncMock(return_value=family)),
+        patch(f"{_PREFIX}update_last_login", new_callable=AsyncMock),
+    ):
+        resp = http.post("/api/v1/auth/login", json=_LOGIN_BODY)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["requires_bootstrap"] is True
+    assert REFRESH_COOKIE in resp.cookies
+
+
 # ---------------------------------------------------------------------------
 # POST /auth/demo — stealth 404s + happy mint
 # ---------------------------------------------------------------------------
