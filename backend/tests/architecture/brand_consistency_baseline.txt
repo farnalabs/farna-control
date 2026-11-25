@@ -596,6 +596,7 @@ backend/tests/unit/scripts/test_backup_prune_classify_one.py	1
 backend/tests/unit/scripts/test_branch_fixer_dispatch_retry.py	3
 backend/tests/unit/scripts/test_bump_version.py	18
 backend/tests/unit/scripts/test_bundle_release_security.py	1
+backend/tests/unit/scripts/test_copy_consistency.py	45
 backend/tests/unit/scripts/test_deploy_health.py	3
 backend/tests/unit/scripts/test_deploy_run_attempts.py	1
 backend/tests/unit/scripts/test_dispatch_with_retry_sh.py	1
@@ -887,6 +888,7 @@ plugins/modulo/skills/install/SKILL.md	2
 scripts/backup-prune.py	2
 scripts/backup.py	4
 scripts/check_doc_validity.py	16
+scripts/copy_consistency.py	53
 scripts/create-macos-info-plist.sh	3
 scripts/dispatch_with_retry.sh	2
 scripts/install.sh	20
