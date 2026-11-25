@@ -203,6 +203,10 @@ describe('VariantBatchCompareView', () => {
     expect(badges[0].text()).toContain('Complete')
     expect(badges[1].text()).toContain('Failed')
     expect(badges[2].text()).toContain('Running')
+    // FAR-2793: the in-flight badge must carry a class `style.css` defines - it
+    // previously used `badge-status-info`, which has no rule, so it rendered plain.
+    expect(badges[2].classes()).toContain('badge-status-primary')
+    expect(badges[2].classes()).not.toContain('badge-status-info')
   })
 
   it('renders partial-results notice when some variants fail but others complete', async () => {
