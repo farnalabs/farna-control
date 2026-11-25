@@ -43,7 +43,7 @@ from farna.db.crud.token_family import blacklist_family, create_family, list_fam
 from farna.db.models.account import Account
 from farna.db.models.assistant_skill import AssistantSkill
 from farna.db.models.token_family import TokenFamily
-from farna.db.rls import set_rls_org
+from farna.db.rls import bootstrap_read, set_rls_org
 from farna.settings import Settings, get_settings
 
 _CODE_ROUTES_ME = "routes.me"
@@ -263,15 +263,14 @@ async def change_password(
     try:
         async with session.begin():
             # NOTE: do NOT scope the transaction to the user's org up front.
-            # ``token_families`` retains a fail-open ``rls_org_isolation`` policy
-            # (the null-context branch returns every row when ``app.organisation_id``
-            # is unset), so leaving the org context unset here makes
-            # ``list_families_for_account`` / ``blacklist_family`` operate on ALL of
-            # the account's token families across every org — which is exactly the
-            # correct, fail-closed behaviour for credential change: every refresh
-            # token family for the account must be revoked, regardless of which org
-            # it was minted under. Scoping to the current org would silently leave
-            # cross-org / NULL-org families live (a token-invalidation gap).
+            # A credential change must revoke EVERY refresh-token family for the
+            # account, across every org (and the sentinel-org families of a
+            # system-admin login) — scoping to the current org would silently
+            # leave cross-org families live, a token-invalidation gap. That
+            # cross-org access is now an EXPLICIT, narrow grant: the reads and
+            # writes are pinned to ``account_id`` and wrapped in the pre-auth
+            # bootstrap context (ADR 070 §2, migration 0365). Before 0365 the
+            # same behaviour came from the table's fail-open NULL arm.
             account_record = await get_account_by_id(session, current_user.account_id)
             account = _require_human_account(account_record)
 
@@ -295,27 +294,29 @@ async def change_password(
             account.must_change_password = False
             session.add(account)
 
-            families = await list_families_for_account(session, current_user.account_id)
-            for family in families:
-                try:
-                    await blacklist_family(session, family.family_id, current_user.account_id)
-                except (HTTPException, asyncio.CancelledError):
-                    raise
-                except SQLAlchemyError:
-                    logger.exception("me.change_password.blacklist_failed")
-                    logger.warning(
-                        "Failed to blacklist token family %s for account %s — aborting password change",
-                        family.family_id,
-                        current_user.account_id,
-                    )
-                    raise
+            async with bootstrap_read(session):
+                families = await list_families_for_account(session, current_user.account_id)
+                for family in families:
+                    try:
+                        await blacklist_family(session, family.family_id, current_user.account_id)
+                    except (HTTPException, asyncio.CancelledError):
+                        raise
+                    except SQLAlchemyError:
+                        logger.exception("me.change_password.blacklist_failed")
+                        logger.warning(
+                            "Failed to blacklist token family %s for account %s — aborting password change",
+                            family.family_id,
+                            current_user.account_id,
+                        )
+                        raise
 
-            new_family = await create_family(session, current_user.account_id, current_user.organisation_id)
+                new_family = await create_family(session, current_user.account_id, current_user.organisation_id)
 
             # Audit is fail-open-with-alert: the password change ALWAYS commits;
             # a failed audit write is loudly logged and never rolls back the change.
-            # Establish the org context now (the token-family ops above ran with it
-            # unset on purpose) so the strict ``audit_events`` insert is org-scoped.
+            # Establish the org context now (the token-family ops above ran under
+            # the bootstrap grant, which ``bootstrap_read`` has already cleared)
+            # so the strict ``audit_events`` insert is org-scoped.
             try:
                 from farna.core.audit_logger import append_audit_event
 

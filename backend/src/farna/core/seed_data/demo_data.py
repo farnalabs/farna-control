@@ -34,6 +34,7 @@ from farna.db.crud.organisation import update_org_settings_patch
 from farna.db.models.account import Account
 from farna.db.models.org_membership import OrgMembership
 from farna.db.models.organisation import Organisation
+from farna.db.rls import bootstrap_read
 from farna.settings import get_settings
 
 _log = logging.getLogger(__name__)
@@ -237,8 +238,13 @@ async def seed_demo_org(
         raise LicenseSigningError(f"No license signing private key configured for demo org {slug!r} (set FARNA_CONTROL_LICENSE_PRIVATE_KEY).")
 
     org = await _seed_demo_org_entity(session, slug)
-    account = await _seed_demo_admin_account(session, admin_email=admin_email, admin_password=admin_password, org=org)
-    await _seed_demo_membership(session, account=account, org=org, admin_email=admin_email, slug=slug)
+    # The boot seeder runs outside any request/RLS-bound session, and
+    # ``org_memberships`` no longer carries a fail-open NULL arm (ADR 070 §2,
+    # migration 0365). Both steps below are pinned to (account, org), so they
+    # ride the explicit pre-auth bootstrap grant rather than a table-wide scan.
+    async with bootstrap_read(session):
+        account = await _seed_demo_admin_account(session, admin_email=admin_email, admin_password=admin_password, org=org)
+        await _seed_demo_membership(session, account=account, org=org, admin_email=admin_email, slug=slug)
 
     # 4. Per-org signed license (community | team), bound to the real org id.
     #    Only write back when something actually changed.

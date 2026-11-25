@@ -333,6 +333,7 @@ async def _reset_password(url: str, email: str, password: str) -> str:
     from farna.auth.passwords import hash_password
     from farna.db.crud.token_family import blacklist_family, list_families_for_account
     from farna.db.models.account import Account
+    from farna.db.rls import bootstrap_read
 
     engine, maker = _engine_and_factory(url)
     try:
@@ -345,9 +346,13 @@ async def _reset_password(url: str, email: str, password: str) -> str:
             if account.is_break_glass is True:
                 raise UserCliError(f"{email} is a break-glass account — password reset refused (the admin route refuses too): overwriting its hash breaks the break-glass CAS and orphans the last-resort recovery credential.")
             account.password_hash = hash_password(password)
-            families = await list_families_for_account(session, account.id)
-            for family in families:
-                await blacklist_family(session, family.family_id, account.id)
+            # Revoke EVERY family of the account, across every org (the CLI has
+            # no org context at all). Pinned to ``account_id`` under the explicit
+            # pre-auth bootstrap grant (ADR 070 §2, migration 0365).
+            async with bootstrap_read(session):
+                families = await list_families_for_account(session, account.id)
+                for family in families:
+                    await blacklist_family(session, family.family_id, account.id)
             signed_out = len(families)
     finally:
         await engine.dispose()

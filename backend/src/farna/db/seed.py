@@ -237,6 +237,11 @@ async def seed_modulo_users(session_factory: Callable[[], Any], users: str) -> N
 
     async with session_factory() as session, session.begin():
         org, _created = await ensure_default_organisation(session)
+        # Bind the seeding org before the membership reads/writes: the boot seed
+        # runs as the non-BYPASSRLS app role with no request context, and
+        # ``org_memberships`` no longer carries a fail-open NULL arm (ADR 070 §2,
+        # migration 0365). The org is known here, so scope to it exactly.
+        await set_rls_org(session, org.id)
         for entry in users.split(","):
             await seed_modulo_user(session, org, entry)
 

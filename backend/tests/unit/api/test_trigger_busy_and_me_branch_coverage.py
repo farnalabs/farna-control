@@ -213,8 +213,12 @@ async def test_me_update_skill_applies_every_optional_field() -> None:
 
 @pytest.mark.anyio
 async def test_me_change_password_rethrows_blacklist_db_error() -> None:
-    session = AsyncMock()
-    session.add = MagicMock()
+    # ``change_password`` now wraps its token-family work in the pre-auth
+    # bootstrap grant (ADR 070 §2), which — like ``set_rls_org`` — reads
+    # ``in_transaction()`` / ``get_bind()`` synchronously. The contract-correct
+    # preamble keeps those as sync MagicMocks instead of leaking never-awaited
+    # AsyncMock coroutines.
+    session = configure_rls_preamble(AsyncMock())
     session.begin = MagicMock(return_value=_SessionContext(session))
     family = MagicMock(family_id=uuid.uuid4())
     with (
@@ -238,8 +242,12 @@ async def test_me_change_password_rethrows_blacklist_db_error() -> None:
 async def test_me_change_password_audit_failure_is_logged_and_programming_error_maps(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    session = AsyncMock()
-    session.add = MagicMock()
+    # ``change_password`` now wraps its token-family work in the pre-auth
+    # bootstrap grant (ADR 070 §2), which — like ``set_rls_org`` — reads
+    # ``in_transaction()`` / ``get_bind()`` synchronously. The contract-correct
+    # preamble keeps those as sync MagicMocks instead of leaking never-awaited
+    # AsyncMock coroutines.
+    session = configure_rls_preamble(AsyncMock())
     session.begin = MagicMock(return_value=_SessionContext(session))
     family = MagicMock(family_id=uuid.uuid4())
     with (
@@ -281,8 +289,12 @@ async def test_me_change_password_audit_failure_is_logged_and_programming_error_
 
 @pytest.mark.anyio
 async def test_me_change_password_raises_when_no_token_family_created() -> None:
-    session = AsyncMock()
-    session.add = MagicMock()
+    # ``change_password`` now wraps its token-family work in the pre-auth
+    # bootstrap grant (ADR 070 §2), which — like ``set_rls_org`` — reads
+    # ``in_transaction()`` / ``get_bind()`` synchronously. The contract-correct
+    # preamble keeps those as sync MagicMocks instead of leaking never-awaited
+    # AsyncMock coroutines.
+    session = configure_rls_preamble(AsyncMock())
     session.begin = MagicMock(return_value=_SessionContext(session))
     family = MagicMock(family_id=uuid.uuid4())
     with (

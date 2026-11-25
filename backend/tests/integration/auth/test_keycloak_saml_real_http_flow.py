@@ -143,7 +143,16 @@ async def _get_membership_role(
     account_id: Any,
     org_id: uuid.UUID,
 ) -> str | None:
-    async with engine.connect() as conn:
+    # ``org_memberships`` is org-scoped and carries no NULL-context arm since
+    # ADR 070 §2 / migration 0365, so this verification read must bind the org it
+    # is asking about (the JIT write itself is already org-scoped). Without the
+    # binding an unbound NON-superuser session reads zero rows — which is the
+    # fail-closed behaviour this suite's ``app_engine`` now enforces.
+    async with engine.connect() as conn, conn.begin():
+        await conn.execute(
+            text("SELECT set_config('app.organisation_id', :oid, true)"),
+            {"oid": str(org_id)},
+        )
         row = (
             (
                 await conn.execute(

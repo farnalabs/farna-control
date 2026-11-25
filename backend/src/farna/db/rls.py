@@ -12,6 +12,8 @@ into every SELECT/UPDATE/DELETE automatically.
 import asyncio
 import logging
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy import event, text
@@ -29,12 +31,27 @@ _TENANT_COLUMN = "organisation_id"
 
 # The RLS GUC names the pool-checkout reset hook clears. Module-level constant
 # so any consumer of the hook is validated against one authoritative set.
+#
+# ``app.bootstrap_context`` (ADR 070 §2/§3, migration 0365) is the pre-auth
+# grant for the four tables a legitimate flow must read BEFORE any organisation
+# is known (oauth_clients, oauth_consent_states, org_memberships,
+# token_families). It lives here for the same reason as
+# ``app.execution_context``: it must never survive a pool checkout, or a later
+# request sharing the connection would inherit it.
 _RLS_CONFIG_NAMES: tuple[str, ...] = (
     "app.organisation_id",
     "app.user_id",
     "app.org_role",
     "app.execution_context",
+    "app.bootstrap_context",
 )
+
+#: The GUC that carries the explicit pre-auth bootstrap grant. The policy arm is
+#: ``current_setting('app.bootstrap_context', true) = 'true'`` — a NULL (unset)
+#: or empty-string (post-checkout reset) value fails closed.
+BOOTSTRAP_CONTEXT_GUC = "app.bootstrap_context"
+
+_TENANT_KEY_BOOTSTRAP = "bootstrap_context"
 
 
 def _set_config_statement(config_name: str) -> str:
@@ -280,6 +297,92 @@ async def set_rls_execution_context(session: AsyncSession) -> None:
         )
     else:
         session.info["execution_context"] = True
+
+
+async def set_rls_bootstrap_context(session: AsyncSession) -> None:
+    """Grant the transaction-scoped pre-auth bootstrap read (ADR 070 §2/§3).
+
+    Four tables must be readable BEFORE any organisation is known — the OAuth
+    client lookup, the consent-state handoff, org-membership resolution for
+    login/SSO, and the refresh-token family. Their legacy policies said
+    ``... OR current_setting('app.organisation_id') IS NULL``, which the
+    pool-checkout reset turns into ``NULLIF('','') IS NULL`` — i.e. *any*
+    unbound session read *every* row. "No context" must not mean "everything".
+
+    Migration 0365 replaces that NULL arm with an explicit arm on THIS GUC, so
+    a pre-context read only succeeds when the caller has said, in so many
+    words, that it is performing a pinned bootstrap lookup.
+
+    Transaction-local (``set_config(..., is_local=true)``), so it dies at
+    COMMIT/ROLLBACK by construction; ``app.bootstrap_context`` is also in
+    ``_RLS_CONFIG_NAMES``, so the pool-checkout reset clears it. Requires an
+    active transaction — raises ``RuntimeError`` otherwise, exactly like
+    :func:`set_rls_execution_context`.
+
+    Prefer :func:`bootstrap_read` (which clears the grant again) unless the
+    whole remaining transaction is the pre-auth flow.
+    """
+    dialect = await _ensure_active_transaction(session)
+
+    if dialect == "postgresql":
+        await session.execute(
+            text("SELECT set_config(:name, 'true', true)"),
+            {"name": BOOTSTRAP_CONTEXT_GUC},
+        )
+    else:
+        info = getattr(session, "info", None)
+        if isinstance(info, dict):
+            info[_TENANT_KEY_BOOTSTRAP] = True
+
+
+async def clear_rls_bootstrap_context(session: AsyncSession) -> None:
+    """Drop the bootstrap grant for the rest of the transaction.
+
+    Sets the GUC to ``'false'`` (not ``''``) so the state is explicit on every
+    backend; both fail the ``= 'true'`` policy arm. A statement on an ABORTED
+    transaction raises, so the failure is swallowed at debug level — the
+    transaction's own rollback discards a LOCAL GUC anyway, so there is nothing
+    to recover.
+    """
+    if not getattr(session, "in_transaction", lambda: False)():
+        return
+    try:
+        dialect = await _ensure_active_transaction(session)
+        if dialect == "postgresql":
+            await session.execute(
+                text("SELECT set_config(:name, 'false', true)"),
+                {"name": BOOTSTRAP_CONTEXT_GUC},
+            )
+        else:
+            info = getattr(session, "info", None)
+            if isinstance(info, dict):
+                info.pop(_TENANT_KEY_BOOTSTRAP, None)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _log.debug("rls.bootstrap_context_clear_failed — transaction already unwound", exc_info=True)
+
+
+@asynccontextmanager
+async def bootstrap_read(session: AsyncSession) -> AsyncIterator[None]:
+    """Scope the pre-auth bootstrap grant to one pinned lookup.
+
+    Usage (inside an already-open transaction)::
+
+        async with bootstrap_read(session):
+            row = await get_oauth_client_by_client_id(session, client_id)
+
+    The grant is set before the block and cleared after it, so a transaction
+    that resolves a pre-auth identity and then continues into org-scoped work
+    cannot carry the widening with it. Every call site pins an exact key
+    (``client_id`` / consent ``state`` / ``token hash`` / ``account + org``) —
+    the grant authorises the *lookup*, never a table-wide scan.
+    """
+    await set_rls_bootstrap_context(session)
+    try:
+        yield
+    finally:
+        await clear_rls_bootstrap_context(session)
 
 
 def register_rls_reset_hook(engine: AsyncEngine) -> None:

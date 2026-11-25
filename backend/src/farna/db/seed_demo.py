@@ -115,7 +115,7 @@ from farna.db.models.team_membership import TeamMembership
 from farna.db.models.trigger import Trigger
 from farna.db.models.trigger_event import TriggerEvent
 from farna.db.models.variant_group import VariantGroup
-from farna.db.rls import set_rls_execution_context, set_rls_org
+from farna.db.rls import bootstrap_read, set_rls_execution_context, set_rls_org
 from farna.db.soft_delete import include_soft_deleted
 from farna.settings import get_settings
 
@@ -3238,33 +3238,38 @@ async def seed_demo(session: AsyncSession) -> str | None:
     email, password = config
 
     # Org/account/membership writes follow the boot-seed pattern (system
-    # context, no org RLS) used by _seed_modulo_users / seed_demo_org.
-    org = await _get_or_create_demo_org(session)
-    account = await _seed_demo_account(session, email, password)
-    await _seed_demo_membership(session, account, org)
+    # context, no org RLS) used by _seed_modulo_users / seed_demo_org. The
+    # ``org_memberships`` touches therefore ride the explicit pre-auth bootstrap
+    # grant (ADR 070 §2, migration 0365) — the demo org is not bound yet, and the
+    # stray-membership scan below is deliberately CROSS-ORG. Both are pinned to
+    # ``account_id`` (+ the demo org), never a table-wide scan.
+    async with bootstrap_read(session):
+        org = await _get_or_create_demo_org(session)
+        account = await _seed_demo_account(session, email, password)
+        await _seed_demo_membership(session, account, org)
 
-    # Operator-misconfiguration observability: FARNA_CONTROL_DEMO_USER should name a
-    # dedicated account. If it named an existing account with memberships in
-    # other orgs, the demo endpoint still only ever mints the demo-org viewer
-    # session (see auth._resolve_demo_org_membership) — but flag the stray
-    # memberships loudly so the operator can point the env at a fresh account.
-    # The join filters soft-deleted orgs (deleted_at IS NULL) so resurrected
-    # or expired memberships cannot inflate other_org_count.
-    stray_org_ids = (
-        (
-            await session.execute(
-                select(OrgMembership.organisation_id)
-                .join(Organisation, Organisation.id == OrgMembership.organisation_id)
-                .where(
-                    OrgMembership.account_id == account.id,
-                    OrgMembership.organisation_id != org.id,
-                    Organisation.deleted_at.is_(None),
+        # Operator-misconfiguration observability: FARNA_CONTROL_DEMO_USER should name a
+        # dedicated account. If it named an existing account with memberships in
+        # other orgs, the demo endpoint still only ever mints the demo-org viewer
+        # session (see auth._resolve_demo_org_membership) — but flag the stray
+        # memberships loudly so the operator can point the env at a fresh account.
+        # The join filters soft-deleted orgs (deleted_at IS NULL) so resurrected
+        # or expired memberships cannot inflate other_org_count.
+        stray_org_ids = (
+            (
+                await session.execute(
+                    select(OrgMembership.organisation_id)
+                    .join(Organisation, Organisation.id == OrgMembership.organisation_id)
+                    .where(
+                        OrgMembership.account_id == account.id,
+                        OrgMembership.organisation_id != org.id,
+                        Organisation.deleted_at.is_(None),
+                    )
                 )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
     if stray_org_ids:
         _log.warning(
             "demo_seed.account_has_memberships_outside_demo_org",
