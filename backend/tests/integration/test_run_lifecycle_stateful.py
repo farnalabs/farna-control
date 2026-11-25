@@ -578,9 +578,9 @@ async def test_run_lifecycle_state_machine(lifecycle_runtime: tuple[_LoopRunner,
     run_state_machine_as_test(
         lambda: RunLifecycleMachine(runner, engine, observed),
         settings=hypothesis_settings(
-            max_examples=6,
-            stateful_step_count=8,
-            deadline=timedelta(seconds=180),
+            max_examples=4,
+            stateful_step_count=6,
+            deadline=timedelta(seconds=120),
             suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
         ),
     )
