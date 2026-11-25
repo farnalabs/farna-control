@@ -3225,15 +3225,18 @@ jobs:
             fi
           } >> "$NOTES_FILE"
 
+          # Two inventories, and the split is the replacement order for a recut:
+          # ASSETS holds every portable/binary artefact (openapi.json included),
+          # MANIFEST_ASSETS holds the checksum + manifest + signature trio, so
+          # the trio is written LAST: the manifest after every byte it covers and
+          # its signature after the manifest, so a VERIFIABLE manifest can only
+          # exist once the whole replacement has landed.
           ASSETS=(
               "release-artefacts/farna-control-${VERSION}-linux-amd64.tar.gz"
              "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg"
              "release-artefacts/FarnaControl-${VERSION}-macos-x86_64.dmg"
              "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
             "release-artefacts/farna-control_${VERSION}_amd64.deb"
-            "release-artefacts/SHA256SUMS"
-            "release-artefacts/RELEASE_MANIFEST.json"
-            "release-artefacts/RELEASE_MANIFEST.json.sig"
             "release-artefacts/openapi.json"
           )
           # RELEASE_MANIFEST.json + .sig are required by native-release-smoke.yml
@@ -3241,7 +3244,20 @@ jobs:
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
             ASSETS+=("release-artefacts/farna-control-${VERSION}-windows-amd64.exe")
           fi
-          for asset in "${ASSETS[@]}"; do
+          MANIFEST_ASSETS=(
+            "release-artefacts/SHA256SUMS"
+            "release-artefacts/RELEASE_MANIFEST.json"
+            "release-artefacts/RELEASE_MANIFEST.json.sig"
+          )
+          # The post-upload verification reads this exact inventory, so it proves
+          # what THIS run uploaded rather than a second, hand-maintained list
+          # that could drift away from the upload.
+          EXPECTED_ASSETS_FILE="${RUNNER_TEMP}/expected-release-assets.txt"
+          : > "$EXPECTED_ASSETS_FILE"
+          for asset in "${ASSETS[@]}" "${MANIFEST_ASSETS[@]}"; do
+            basename "$asset" >> "$EXPECTED_ASSETS_FILE"
+          done
+          for asset in "${ASSETS[@]}" "${MANIFEST_ASSETS[@]}"; do
             if [ ! -f "$asset" ]; then
               echo "::error::Expected release asset ${asset} is missing - refusing to publish an incomplete release."
               exit 1
@@ -3273,15 +3289,36 @@ jobs:
             PUBLISH_ARGS=(--prerelease=false --latest=false)
           fi
 
-          # NEVER --clobber an existing asset: a replaced release artifact
-          # invalidates every verify-against-the-manifest already downloaded.
-          # An existing release gets an upload (which fails loudly on an
-          # existing asset); a new one is created with its assets atomically.
+          # A first publish never clobbers: `gh release create` writes every
+          # asset exactly once, atomically, so there is no window where the
+          # public artefact is missing or stale.
+          #
+          # A recut of a version that already published a bundle must REPLACE
+          # its assets instead of refusing (FAR-2789): publication is idempotent
+          # so the documented recovery path needs no manual deletion. The
+          # release is never deleted or hidden - the public artefact stays
+          # visible throughout - and assets are replaced in the same order the
+          # create uploads them: the portable/binary set, then SHA256SUMS, then
+          # RELEASE_MANIFEST.json, then its signature LAST. The manifest covers
+          # every other asset and the signature covers the manifest, so a
+          # verifiable manifest can only exist once the whole replacement has
+          # landed - an interrupted recut fails verification rather than
+          # certifying a half-replaced release - and the verification step after
+          # this one proves the published assets and signature before the job
+          # passes.
+          #
+          # The replaced comment ("NEVER --clobber an existing asset") was right
+          # for a first publish and wrong for a same-version recut, where
+          # refusing left deleting the published release as the only way out.
           RELEASE_TITLE="Farna Control ${RC_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::warning::release ${TAG} already exists - uploading assets without clobbering"
+            echo "::warning::release ${TAG} already exists - replacing its assets in place (idempotent recut)"
             gh release edit "$TAG" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" "${PUBLISH_ARGS[@]}"
-            gh release upload "$TAG" "${ASSETS[@]}"
+            gh release upload "$TAG" "${ASSETS[@]}" \
+              --clobber
+            for manifest_asset in "${MANIFEST_ASSETS[@]}"; do
+              gh release upload "$TAG" "$manifest_asset" --clobber
+            done
           else
             # --target pins the tag to the checked-out RC commit instead of
             # relying on the repository default branch happening to be there.
@@ -3290,7 +3327,97 @@ jobs:
               --notes-file "$NOTES_FILE" \
               --target "$(git rev-parse HEAD)" \
               "${PUBLISH_ARGS[@]}" \
-              "${ASSETS[@]}"
+              "${ASSETS[@]}" \
+              "${MANIFEST_ASSETS[@]}"
+          fi
+
+      - name: Verify the published release assets and manifest signature
+        # FAR-2789: a recut replaces assets in place, so the publication must be
+        # proven, not assumed. Every asset this run intended to publish must be
+        # on the release with the local byte size, and the PUBLISHED manifest
+        # and signature must verify under the checked-in trust store against
+        # those local bytes. This runs for a first publish too: the check that
+        # makes a recut safe also proves a create dropped nothing.
+        # The published set must be exactly the uploaded inventory - a stale
+        # extra asset left by an older naming scheme is a loud failure rather
+        # than something an installer or /releases/latest could pick up.
+        if: steps.ticket-gate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          TAG: bundle-v${{ inputs.version }}
+          EXPECTED_KEY_ID: modulo-2026-a
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED_ASSETS_FILE="${RUNNER_TEMP}/expected-release-assets.txt"
+          if [ ! -s "$EXPECTED_ASSETS_FILE" ]; then
+            echo "::error::The publication step recorded no expected asset set - refusing to accept ${TAG} as complete."
+            exit 1
+          fi
+
+          PUBLISHED_ASSETS="${RUNNER_TEMP}/published-release-assets.txt"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[] | "\(.name) \(.size)"' > "$PUBLISHED_ASSETS"
+          published_count="$(wc -l < "$PUBLISHED_ASSETS")"
+          expected_count="$(wc -l < "$EXPECTED_ASSETS_FILE")"
+          if [ "$published_count" -ne "$expected_count" ]; then
+            echo "::error::release ${TAG} publishes ${published_count} asset(s) but this run uploaded ${expected_count} - refusing to accept an incomplete or unexplained asset set."
+            exit 1
+          fi
+
+          while IFS= read -r asset; do
+            [ -n "$asset" ] || continue
+            published_size="$(awk -v name="$asset" '$1 == name {print $2}' "$PUBLISHED_ASSETS")"
+            if [ -z "$published_size" ]; then
+              echo "::error::Expected asset ${asset} is missing from release ${TAG}."
+              exit 1
+            fi
+            local_size="$(stat -c %s "release-artefacts/${asset}")"
+            if [ "$published_size" != "$local_size" ]; then
+              echo "::error::Asset ${asset} is ${published_size} bytes on release ${TAG}, but the local file is ${local_size} bytes."
+              exit 1
+            fi
+          done < "$EXPECTED_ASSETS_FILE"
+          echo "Every published asset is present on ${TAG} with its local byte size."
+
+          MANIFEST_DIR="${RUNNER_TEMP}/published-manifest"
+          mkdir -p "$MANIFEST_DIR"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'RELEASE_MANIFEST.json' \
+            --pattern 'RELEASE_MANIFEST.json.sig' \
+            --dir "$MANIFEST_DIR" --clobber
+
+          if ! uv run --project backend --no-build --no-sync python - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "backend/src")
+          from farna.launcher import manifest as m
+
+          published = Path(os.environ["RUNNER_TEMP"]) / "published-manifest"
+          signature = m.read_signature_file(published / "RELEASE_MANIFEST.json.sig")
+          expected_key_id = os.environ["EXPECTED_KEY_ID"]
+          if signature["key_id"] != expected_key_id:
+              raise SystemExit(
+                  f"published manifest signature key_id {signature['key_id']!r} does not match expected {expected_key_id!r}"
+              )
+          verified_manifest = m.verify_release_from_files(
+              manifest_path=published / "RELEASE_MANIFEST.json",
+              signature_path=published / "RELEASE_MANIFEST.json.sig",
+              artifacts_root=Path("release-artefacts"),
+          )
+          if verified_manifest.release != f"bundle-v{os.environ['VERSION']}":
+              raise SystemExit(
+                  f"published manifest release is {verified_manifest.release!r}, not the requested version"
+              )
+          print(f"published manifest signature verified under checked-in key_id {signature['key_id']}")
+          PY
+          then
+            echo "::error::The RELEASE_MANIFEST.json / RELEASE_MANIFEST.json.sig pair published on ${TAG} does not verify against the checked-in trust store."
+            exit 1
           fi
 
       - name: Push the bundle tag
@@ -3311,6 +3438,11 @@ jobs:
           # into "absent".
           # The peel/rc-2 discrimination below is mirrored by the post-push
           # verification at the end of this step; keep the two in sync.
+          # A recut of an existing bundle release does not publish a tag (its
+          # release path only edits the release and replaces assets), so this
+          # step remains the one place a bundle tag is created. An existing tag
+          # at a different commit is still a hard failure: FAR-2789 made the
+          # ASSETS of a version replaceable, never its published tag.
           remote_tag_line=""
           tag_rc=0
           remote_tag_line="$(git ls-remote --exit-code origin "refs/tags/${BUNDLE_TAG}")" || tag_rc=$?
