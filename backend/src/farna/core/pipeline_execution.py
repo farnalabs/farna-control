@@ -4261,6 +4261,12 @@ async def _sweep_org_saq_zero_progress_runs(
     Runs inside the caller's RLS-scoped transaction (re-issues the org
     ``set_config`` and the hot-``runs`` row-lock bound so the helper is
     self-contained; both are idempotent transaction-scoped statements).
+    PRECONDITION (FAR-2782): the LangGraph ``checkpoints`` relation must exist.
+    The inherited zero-progress shape references it, and PostgreSQL resolves
+    relations at parse time, so calling this before the backend's boot-time
+    checkpointer DDL has run raises ``UndefinedTable`` for the whole statement
+    even when it would match no rows. The only caller gates on
+    ``checkpoint_schema_present`` (see :func:`langgraph_checkpoint_schema_present`).
     Appends each terminalised ``(run_id, org_id)`` to ``terminalised_run_ids``
     so the caller's post-commit machinery advances journeys and writes the
     compensating daily facts (FAR-143 follow-up / FAR-162 P6'), exactly like
@@ -4456,11 +4462,69 @@ async def _attribute_swept_run_derived_cost(
         )
 
 
+# FAR-2782: the LangGraph checkpoint tables (``checkpoints`` and its siblings)
+# are NOT created by Alembic - the BACKEND's boot-time saver DDL creates them
+# (``api.main._init_checkpointer`` -> ``ModuloPostgresSaver.setup``), inside the
+# app's lifespan and AFTER the migrations. ``saq-system`` on the other hand
+# starts as soon as ``db`` answers ``pg_isready``: it does not run
+# ``entrypoint.sh`` at all (its ``command`` replaces the image CMD) and nothing
+# orders it after the backend's lifespan. On a fresh install its 5-min sweeps
+# therefore tick against a fully-migrated database whose ``checkpoints`` table
+# does not exist yet. That is fatal for the zero-progress arm only: PostgreSQL
+# resolves every relation in a statement at parse/plan time, so the arm's
+# ``UPDATE runs ... WHERE ... NOT EXISTS (SELECT 1 FROM checkpoints cp ...)``
+# raises ``relation "checkpoints" does not exist`` even when it would match no
+# rows - and the wrapper then persisted that as the sweep's reported FAILURE
+# for the whole 15-min stale window, long after the table existed.
+#
+# The probe is a catalog lookup: ``to_regclass`` returns NULL for a missing
+# relation instead of raising, and it resolves through the session
+# ``search_path`` exactly as the unqualified ``checkpoints`` reference in the
+# arm's SQL does (hardcoding ``public.`` would diverge if a search_path were
+# ever set).
+_CHECKPOINT_SCHEMA_PROBE_SQL = text("SELECT to_regclass('checkpoints') IS NOT NULL")
+
+# FAR-2782: the coded deferral reason the sweep result / stats blob carries when
+# the zero-progress arm is skipped because the checkpointer schema does not
+# exist yet. A CODE (not prose) so the reader can branch on it and the health
+# detail stays short.
+_ZERO_PROGRESS_DEFERRED_CHECKPOINTER_SCHEMA = "checkpointer_schema_missing"
+
+
+async def langgraph_checkpoint_schema_present(async_engine: AsyncEngine) -> bool:
+    """True when the LangGraph ``checkpoints`` relation exists and is resolvable.
+
+    FAR-2782: the ``stale_run_recovery`` sweep's SAQ zero-progress arm embeds
+    ``cron_helpers._ZERO_PROGRESS_SHAPE_SQL``, whose ``NOT EXISTS (SELECT 1 FROM
+    checkpoints ...)`` leg makes the WHOLE statement unparseable while the
+    backend's boot-time checkpointer DDL has not yet created the table. A caller
+    that cannot yet see it passes the result as
+    ``stale_run_recovery_sweep(..., checkpoint_schema_present=False)`` so that
+    one arm is deferred (and reported as deferred) instead of the sweep
+    recording a failure it did not have.
+
+    Fail-open to True on a probe error: an unevaluable probe must leave the
+    sweep's behaviour exactly as it was - run the arm and report whatever the
+    real statements do - rather than silently suppressing a genuine failure.
+    The warning keeps an unexpected probe error visible.
+    """
+    try:
+        async with async_engine.connect() as conn:
+            present = await conn.scalar(_CHECKPOINT_SCHEMA_PROBE_SQL)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _log.warning("pipeline_execution.checkpoint_schema_probe_failed", exc_info=True)
+        return True
+    return bool(present)
+
+
 async def stale_run_recovery_sweep(
     async_engine: AsyncEngine,
     *,
     never_dispatched_window: int | None = None,
     worker_lost_window: int | None = None,
+    checkpoint_schema_present: bool = True,
 ) -> dict[str, Any]:
     """Sweep stale pending and running pipeline runs.
 
@@ -4503,6 +4567,15 @@ async def stale_run_recovery_sweep(
       nodeless router, sharing its predicate shape and knob
       (:func:`_sweep_org_saq_zero_progress_runs`). The ``status='running'``
       guard makes double-firing with the reconcile path a no-op.
+      FAR-2782: that arm is the ONLY arm whose SQL references the LangGraph
+      ``checkpoints`` table, which the backend's boot-time saver DDL creates
+      (Alembic never does). A caller that cannot yet see it - a fresh
+      install's first ticks, before the backend lifespan finishes - passes
+      ``checkpoint_schema_present=False``: the arm is SKIPPED for that tick and
+      the result carries ``zero_progress_deferred='checkpointer_schema_missing'``
+      so the deferral is reported rather than becoming a phantom
+      ``sweep_failed``. Every other arm still runs, so a genuine failure is
+      still a failure.
     - Every run terminalised by the sweep (never_dispatched / queue.expired /
       worker_lost / worker_orphaned / saq zero-progress) has its journeys advanced from its
       CREATE-STAMPED refs
@@ -4565,6 +4638,12 @@ async def stale_run_recovery_sweep(
     orphaned_count = 0
     queue_expired_count = 0
     zero_progress_count = 0
+    # FAR-2782: the coded reason the SAQ zero-progress arm did not run this
+    # tick (None when it ran). Reported in every return shape so the wrapper
+    # can persist a DEFERRAL instead of a failure — never an ``error``.
+    zero_progress_deferred: str | None = None
+    if not checkpoint_schema_present:
+        zero_progress_deferred = _ZERO_PROGRESS_DEFERRED_CHECKPOINTER_SCHEMA
     stranded_rows: list[Any] = []
     # Runs terminalised to ``failed`` by this sweep — (run_id, org_id) —
     # whose journeys must advance once the UPDATEs commit (FAR-143 follow-up).
@@ -4610,6 +4689,7 @@ async def stale_run_recovery_sweep(
                 "derived_cost_attempted": 0,
                 "derived_cost_deferred": 0,
                 "terminalised_run_ids": [],
+                "zero_progress_deferred": zero_progress_deferred,
             }
 
         for org_id in org_ids:
@@ -4634,12 +4714,18 @@ async def stale_run_recovery_sweep(
                 # the SAME per-org transaction, after the legacy branches (its
                 # row-lock bound and org set_config are re-issued — both
                 # idempotent transaction-scoped statements).
-                zero_progress_delta = await _sweep_org_saq_zero_progress_runs(
-                    conn,
-                    org_id=org_id,
-                    max_age_minutes=zero_progress_max_age,
-                    max_rows=zero_progress_max_rows,
-                    terminalised_run_ids=terminalised_run_ids,
+                # FAR-2782: skipped while the LangGraph ``checkpoints`` table
+                # does not exist yet — see ``checkpoint_schema_present`` above.
+                zero_progress_delta = (
+                    await _sweep_org_saq_zero_progress_runs(
+                        conn,
+                        org_id=org_id,
+                        max_age_minutes=zero_progress_max_age,
+                        max_rows=zero_progress_max_rows,
+                        terminalised_run_ids=terminalised_run_ids,
+                    )
+                    if checkpoint_schema_present
+                    else 0
                 )
                 never_count += never_delta
                 queue_expired_count += queue_expired_delta
@@ -4715,6 +4801,9 @@ async def stale_run_recovery_sweep(
             # (run_id, org_id) pair shape — stringified so the result stays
             # JSON-serialisable for the cron stats blob (/healthz/ready).
             "terminalised_run_ids": [_json_id_pair(run_id, org_id) for run_id, org_id in terminalised_run_ids],
+            # FAR-2782: a DEFERRAL, never an error — the arm simply could not
+            # run yet; the next tick retries it.
+            "zero_progress_deferred": zero_progress_deferred,
         }
     except asyncio.CancelledError:
         raise
@@ -4739,6 +4828,9 @@ async def stale_run_recovery_sweep(
             "derived_cost_attempted": 0,
             "derived_cost_deferred": 0,
             "terminalised_run_ids": [_json_id_pair(run_id, org_id) for run_id, org_id in terminalised_run_ids[:committed_terminalised_len]],
+            # FAR-2782: the deferral still holds on the error path — it is a
+            # fact about what this tick attempted, independent of the failure.
+            "zero_progress_deferred": zero_progress_deferred,
             "error": f"sweep_failed ({type(exc).__name__}: {exc})"[:200],
         }
 
