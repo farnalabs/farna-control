@@ -24,11 +24,12 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from farna.api.constants import MSG_DATABASE_ERROR_OCCURRED_PLEASE
+from farna.api.constants import MSG_DATABASE_ERROR_OCCURRED_PLEASE, MSG_RUN_NOT_FOUND
 from farna.api.db_error_handling import handle_db_errors, raise_session_contract_error
 from farna.api.dependencies import get_db_session, require_permission
 from farna.api.routes.evals import _PERMISSION_GATE_CREATE, _require_gate_action_permission
 from farna.api.routes.runs import pipeline_not_runnable_http
+from farna.api.run_scope import load_run_in_scope
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
@@ -42,6 +43,7 @@ from farna.core.feedback_manager import (
     FeedbackRecordRunNotFoundError,
     InvalidTransitionError,
 )
+from farna.db.crud.run import get_run
 from farna.db.models.eval import Eval
 from farna.db.models.feedback_record import FeedbackRecord
 from farna.db.models.pipeline import Pipeline
@@ -162,10 +164,13 @@ async def create_feedback(
     try:
         async with session.begin():
             await set_rls_org(session, principal.organisation_id)
-            run_result = await session.execute(select(Run).where(Run.id == run_id, Run.organisation_id == principal.organisation_id))
-            run = run_result.scalar_one_or_none()
+            # ADR 070 §4: the run is loaded through the shared per-run clamp, so
+            # a team-scoped credential outside the run's team boundary is served
+            # NOT FOUND and no feedback record (nor correction run) is created
+            # against another team's run.
+            run = await load_run_in_scope(session, principal, run_id, fetch=get_run)
             if run is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
             mgr = FeedbackManager(session, principal.organisation_id)
             record = await mgr.create_feedback_record(
@@ -543,7 +548,7 @@ async def _resolve_publish_context(
         )
     ).scalar_one_or_none()
     if run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
     if node_id is None:
         node_id = await _resolve_producing_node_uuid(session, record, run)
     if node_id is None:

@@ -73,7 +73,7 @@
           :title="$t('views.SettingsObservabilityView.otlp_headers')"
         >
           <template #headerActions>
-            <Button v-if="canManage" size="small" type="button" data-testid="settings-observability-add-header" @click="addHeader">
+            <Button v-if="canManage" size="sm" type="button" data-testid="settings-observability-add-header" @click="addHeader">
               {{ $t('views.SettingsObservabilityView.add_header') }}
             </Button>
           </template>
@@ -253,7 +253,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { X } from '@lucide/vue'
 
 type OtelSettingsResponse = components['schemas']['OtelSettingsResponse']

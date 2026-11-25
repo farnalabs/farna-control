@@ -37,7 +37,7 @@
 
         <div v-else-if="error" class="flex flex-col items-center justify-center h-32 gap-3">
           <p class="text-destructive text-sm">{{ error || 'Failed to load monitoring configuration' }}</p>
-          <Button size="small" severity="secondary" outlined @click="load()">{{ $t('views.SettingsMonitorConfigView.retry') }}</Button>
+          <Button size="sm" variant="secondary" @click="load()">{{ $t('views.SettingsMonitorConfigView.retry') }}</Button>
         </div>
 
         <template v-else>
@@ -91,7 +91,7 @@
               <span v-if="saving" class="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
               {{ $t('common.save') }}
             </Button>
-            <Button severity="secondary" outlined :disabled="!dirty" @click="reset">
+            <Button variant="secondary" :disabled="!dirty" @click="reset">
               {{ $t('common.reset') }}
             </Button>
           </div>
@@ -114,7 +114,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import FeatureGate from '../components/FeatureGate.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 
 const { t } = useI18n()
 

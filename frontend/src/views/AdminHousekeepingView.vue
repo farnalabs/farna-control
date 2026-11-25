@@ -5,7 +5,7 @@
         :subtitle="$t('views.AdminHousekeepingView.subtitle')"
       >
         <template #right>
-          <Button severity="secondary" outlined data-testid="hk-refresh" :disabled="loading" @click="scan">
+          <Button variant="secondary" data-testid="hk-refresh" :disabled="loading" @click="scan">
             {{ loading ? $t('views.AdminHousekeepingView.scanning') : $t('views.AdminHousekeepingView.refresh_scan') }}
           </Button>
         </template>
@@ -83,7 +83,7 @@
               {{ $t('views.AdminHousekeepingView.total_candidates', totalCount) }}
             </span>
             <div class="ml-auto">
-              <Button v-if="selectedCount > 0" severity="danger" data-testid="hk-delete-selected" @click="confirmDelete">
+              <Button v-if="selectedCount > 0" variant="danger" data-testid="hk-delete-selected" @click="confirmDelete">
                 {{ $t('views.AdminHousekeepingView.delete_selected', { count: selectedCount }) }}
               </Button>
             </div>
@@ -211,15 +211,15 @@
             />
             {{ $t('views.AdminHousekeepingView.checkpoint_day', { count: ckptMaxAge }) }}
           </label>
-          <Button v-if="!ckptConfirming" severity="danger" :disabled="ckptPurgeLoading || ckptMaxAge < 1" data-testid="hk-ckpt-purge" @click="ckptConfirming = true">
+          <Button v-if="!ckptConfirming" variant="danger" :disabled="ckptPurgeLoading || ckptMaxAge < 1" data-testid="hk-ckpt-purge" @click="ckptConfirming = true">
             {{ $t('views.AdminHousekeepingView.checkpoint_purge_button') }}
           </Button>
           <template v-else>
             <span class="text-sm text-muted-foreground">{{ $t('views.AdminHousekeepingView.checkpoint_confirm_prompt', { count: ckptMaxAge }) }}</span>
-            <Button severity="danger" :disabled="ckptPurgeLoading" data-testid="hk-ckpt-purge-confirm" @click="doCheckpointPurge">
+            <Button variant="danger" :disabled="ckptPurgeLoading" data-testid="hk-ckpt-purge-confirm" @click="doCheckpointPurge">
               {{ ckptPurgeLoading ? $t('views.AdminHousekeepingView.checkpoint_purging') : $t('views.AdminHousekeepingView.checkpoint_confirm_purge') }}
             </Button>
-            <Button severity="secondary" outlined :disabled="ckptPurgeLoading" data-testid="hk-ckpt-purge-cancel" @click="ckptConfirming = false">
+            <Button variant="secondary" :disabled="ckptPurgeLoading" data-testid="hk-ckpt-purge-cancel" @click="ckptConfirming = false">
               {{ $t('views.AdminHousekeepingView.cancel') }}
             </Button>
           </template>
@@ -261,7 +261,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '../composables/useApi'
 import type { components } from '../lib/api/schema'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import PageHeader from '../components/shared/PageHeader.vue'

@@ -209,6 +209,30 @@ const MOCK_PLAN = {
 }
 
 /**
+ * FAR-2761: the INSTANCE-admin feature-flags read model
+ * (`GET /api/v1/admin/feature-flags`), which is a DIFFERENT shape from the
+ * caller-scoped `/api/v1/plan` payload. AdminFeatureFlagsView groups its rows by
+ * `flag.tier` and labels each tier with `planStore.getTierLabel(tier)`, which
+ * calls `tierId.charAt(0)` — so a flag WITHOUT a `tier` throws
+ * `TypeError: Cannot read properties of undefined (reading 'charAt')` and the
+ * whole route subtree fails to render (the page is audited as a bare shell).
+ *
+ * Mirrors `backend/src/farna/api/routes/admin_feature_flags.py` (the GET
+ * handler): `{ license: {tier, has_license_key, is_valid}, flags: [{name,
+ * description, tier, currently_active, depends_on}], would_activate: [...] }`.
+ * Every flag carries a `tier` so `getTierLabel` never sees undefined.
+ */
+const MOCK_ADMIN_FEATURE_FLAGS = {
+  license: { tier: 'enterprise', has_license_key: true, is_valid: true },
+  flags: [
+    { name: 'assistant', description: 'Assistant (Remy) configuration', tier: 'community', currently_active: true, depends_on: null },
+    { name: 'sso', description: 'Single sign-on', tier: 'team', currently_active: true, depends_on: null },
+    { name: 'audit_viewer', description: 'Audit viewer', tier: 'team', currently_active: true, depends_on: null },
+  ],
+  would_activate: [],
+}
+
+/**
  * FAR-2713: the caller-scoped permission list the router gate and the sidebar
  * read (`GET /api/v1/auth/permissions` → `{ permissions: string[] }`, resolved
  * server-side from the backend permission registry). It is NOT the generic
@@ -410,24 +434,68 @@ export async function setupLocalMockApi(page: Page) {
         body: JSON.stringify({ permissions: MOCK_PERMISSIONS }),
       })
     }
-    if (url.includes('/api/v1/me')) {
+    if (method === 'GET' && new URL(url).pathname === '/api/v1/me/assistant/skills') {
+      // Bare array (`list[SkillResponse]`). UserAssistantSkillsView does
+      // `skills = computed(() => skillsResp ?? [])` and `v-for`s it, so an OBJECT
+      // body (e.g. the profile object this path used to inherit from the
+      // `includes('/api/v1/me')` catch-all) paints junk rows AND never satisfies
+      // `skills.length === 0`, so the real EmptyState never shows: the route
+      // renders wrong with no error (FAR-2761 minor A). Empty array = no skills.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    }
+    if (new URL(url).pathname === '/api/v1/me') {
+      // EXACT pathname, not `includes('/api/v1/me')`: the prefix match also
+      // swallowed every `/api/v1/me/*` sub-path (notably
+      // `/api/v1/me/assistant/skills`) and answered it with this profile object.
+      // Sub-paths have their own handlers above.
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: '1', email: 'admin@example.com', display_name: 'Admin' }) })
     }
     if (url.includes('/api/v1/pipelines') && method === 'GET') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [{ id: '1', name: 'Test Pipeline', organisation_id: '1', description: 'A test pipeline', visibility: 'org', status: 'idle', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), archived_at: null }], total: 1 }) })
     }
-    if (url.includes('/api/v1/plan') || url.includes('/api/v1/admin/feature-flags')) {
+    if (url.includes('/api/v1/plan')) {
       // planStore bootstraps from the caller-scoped GET /api/v1/plan (FAR-1809
       // collapsed the old instance-admin /api/v1/admin/feature-flags reads into
-      // it); the instance-admin endpoint still backs the admin feature-flags
-      // page, so answer both with the plan payload shape. FAR-2665: the payload
-      // also carries the entitlement grant — see MOCK_PLAN.
+      // it). FAR-2665: the payload also carries the entitlement grant — see
+      // MOCK_PLAN.
       // dev_mode: true so private_preview routes (evals, runs-diff, feedback
       // inbox, saved views, node categories, feature flags, monitoring,
       // error forwarders, runtime config, rate limits, ...) resolve on the
       // local mock-API target instead of redirecting to the dashboard. Local
       // e2e mirrors staging, which also runs with dev mode on.
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_PLAN) })
+    }
+    if (url.includes('/api/v1/admin/feature-flags') && method === 'GET') {
+      // The instance-admin feature-flags page reads its OWN read model, not the
+      // /plan payload it used to be conflated with (FAR-2761). Answering it with
+      // MOCK_PLAN left every flag without a `tier` and crashed the grouped render
+      // (getTierLabel -> tierId.charAt). See MOCK_ADMIN_FEATURE_FLAGS.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_ADMIN_FEATURE_FLAGS) })
+    }
+    if (url.includes('/api/v1/admin/assistant/skills') && method === 'GET') {
+      // Bare array (`list[SkillResponse]`, admin_assistant.py). AdminAssistantView
+      // assigns the body into `skills.value` and iterates it
+      // (`for (const skill of skills.value)`), so the generic `{items,total}`
+      // envelope throws `TypeError: skills.value is not iterable`.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+    }
+    if (url.includes('/api/v1/admin/assistant/available-providers') && method === 'GET') {
+      // Structured `{native, custom_types}` (AvailableProvidersResponse); the
+      // template does `availableProviders.native.map(...)` UNGUARDED, so the
+      // generic `{items,total}` envelope throws
+      // `TypeError: Cannot read properties of undefined (reading 'map')` and the
+      // whole route subtree fails to render.
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ native: [{ id: 'anthropic', label: 'Anthropic' }], custom_types: [] }),
+      })
+    }
+    if (new URL(url).pathname.endsWith('/api/v1/api-keys') && method === 'GET') {
+      // Bare array (SettingsMcpView checks Array.isArray); the envelope is
+      // page-fatal. `endsWith` (not `includes`) so `/api-keys/mcp-config` is NOT
+      // captured by this handler — it must still reach its own structured shape.
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     }
     if (url.includes('/api/v1/admin/license')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ expires_at: null, org_id: '1', tier: 'enterprise' }) })
