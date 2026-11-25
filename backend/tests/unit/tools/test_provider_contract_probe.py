@@ -206,6 +206,22 @@ def test_changed_shape_is_reported_not_auto_accepted(tmp_path: Path, monkeypatch
     assert goldens.read_text(encoding="utf-8") == before
 
 
+def test_load_goldens_rejects_unsupported_schema_version(tmp_path: Path) -> None:
+    """A manifest for another golden schema must fail loudly, not be accepted."""
+    path = tmp_path / "goldens.json"
+    path.write_text(json.dumps({"schema_version": probe.GOLDEN_SCHEMA_VERSION + 1, "goldens": {}}), encoding="utf-8")
+    with pytest.raises(probe.ProbeConfigError, match="schema_version"):
+        probe._load_goldens(path)
+
+
+def test_load_goldens_accepts_manifest_without_schema_version(tmp_path: Path) -> None:
+    """A manifest that predates the version field is still readable."""
+    path = tmp_path / "goldens.json"
+    path.write_text(json.dumps({"goldens": {"acme/ping": _golden_entry({"type": "object"})}}), encoding="utf-8")
+    manifest = probe._load_goldens(path)
+    assert manifest["goldens"]["acme/ping"]["shape"] == {"type": "object"}
+
+
 def test_check_shapes_actual_at_the_goldens_recorded_depth(tmp_path: Path, monkeypatch: Any) -> None:
     """The golden's recorded max_depth governs the actual shape in check mode.
 
@@ -299,6 +315,35 @@ def test_array_shape_unions_every_element() -> None:
     assert set(shape["items"]["keys"]) == {"id", "name"}
     # A key absent from one element is optional, so it is not later "missing".
     assert shape["items"]["keys"]["name"]["optional"] is True
+
+
+def test_array_shape_object_key_keeps_optional_on_present_absent_present() -> None:
+    """An optional object-valued key stays optional when a later element has it.
+
+    ``_merge_shapes`` used to return a fresh object node that dropped the
+    ``optional`` flag, so ``[{a:{x}}, {}, {a:{x}}]`` produced a *required* ``a``
+    and a response where every element omits ``a`` then reported false drift.
+    """
+    shape = probe.shape_of([{"a": {"x": 1}}, {}, {"a": {"x": 2}}], 0, 5)
+    key_a = shape["items"]["keys"]["a"]
+    assert key_a["type"] == "object"
+    assert key_a["optional"] is True
+
+
+def test_array_shape_array_key_keeps_optional_on_present_absent_present() -> None:
+    """The same loss for an optional array-valued key stays fixed."""
+    shape = probe.shape_of([{"a": [1]}, {}, {"a": [2]}], 0, 5)
+    key_a = shape["items"]["keys"]["a"]
+    assert key_a["type"] == "array"
+    assert key_a["optional"] is True
+
+
+def test_array_shape_mixed_key_keeps_optional() -> None:
+    """An optional key whose merged type widens to ``mixed`` stays optional."""
+    shape = probe.shape_of([{"a": {"x": 1}}, {}, {"a": [2]}], 0, 5)
+    key_a = shape["items"]["keys"]["a"]
+    assert key_a["type"] == "mixed"
+    assert key_a["optional"] is True
 
 
 def test_optional_key_absence_is_not_drift() -> None:

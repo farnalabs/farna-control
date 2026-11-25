@@ -343,6 +343,12 @@ def _merge_shapes(left: dict[str, Any] | None, right: dict[str, Any] | None) -> 
     if right is None:
         return left
 
+    # ``optional`` is a property of the merged key, not of any one branch:
+    # once either side is optional the union must stay optional, otherwise a
+    # key that was absent from an earlier element silently becomes required and
+    # its later absence is reported as drift (and the golden depends on order).
+    optional = bool(left.get("optional") or right.get("optional"))
+
     left_type = left.get("type")
     right_type = right.get("type")
     if left_type != right_type:
@@ -350,10 +356,10 @@ def _merge_shapes(left: dict[str, Any] | None, right: dict[str, Any] | None) -> 
         right_types = set(right.get("types") or [right_type])
         merged = left_types | right_types
         if len(merged) == 1:
-            return {"type": merged.pop()}
-        return {"type": "mixed", "types": sorted(merged)}
-
-    if left_type == "object":
+            result: dict[str, Any] = {"type": merged.pop()}
+        else:
+            result = {"type": "mixed", "types": sorted(merged)}
+    elif left_type == "object":
         left_keys = left.get("keys") or {}
         right_keys = right.get("keys") or {}
         keys: dict[str, Any] = {}
@@ -364,12 +370,15 @@ def _merge_shapes(left: dict[str, Any] | None, right: dict[str, Any] | None) -> 
                 keys[key] = _mark_optional(left_keys[key])
             else:
                 keys[key] = _mark_optional(right_keys[key])
-        return {"type": "object", "keys": keys}
+        result = {"type": "object", "keys": keys}
+    elif left_type == "array":
+        result = {"type": "array", "items": _merge_shapes(left.get("items"), right.get("items"))}
+    else:
+        result = left
 
-    if left_type == "array":
-        return {"type": "array", "items": _merge_shapes(left.get("items"), right.get("items"))}
-
-    return left
+    if optional:
+        return {**result, "optional": True}
+    return result
 
 
 def shape_of(value: Any, depth: int, max_depth: int) -> dict[str, Any]:
@@ -915,6 +924,9 @@ def _load_goldens(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))  # NOSONAR pythonsecurity:S8707
     if not isinstance(data, dict) or not isinstance(data.get("goldens"), dict):
         raise ProbeConfigError(f"golden manifest is malformed: {path}")
+    version = data.get("schema_version")
+    if version is not None and version != GOLDEN_SCHEMA_VERSION:
+        raise ProbeConfigError(f"golden manifest schema_version {version!r} is not supported (expected {GOLDEN_SCHEMA_VERSION}): {path}")
     return data
 
 
