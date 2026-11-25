@@ -100,9 +100,9 @@ _N_SCHEMA_SQL = (
     "CREATE SCHEMA public AUTHORIZATION pg_database_owner",
     "GRANT USAGE ON SCHEMA public TO PUBLIC",
     "CREATE TABLE public.organisations (id uuid PRIMARY KEY, name text NOT NULL)",
-    "CREATE TABLE public.modulo_journey_facts (id uuid PRIMARY KEY, organisation_id uuid NOT NULL REFERENCES public.organisations(id))",
+    "CREATE TABLE public.journey_facts_legacy (id uuid PRIMARY KEY, organisation_id uuid NOT NULL REFERENCES public.organisations(id))",
     "INSERT INTO public.organisations VALUES ('00000000-0000-0000-0000-0000000000aa', 'acme')",
-    "INSERT INTO public.modulo_journey_facts VALUES ('00000000-0000-0000-0000-0000000000bb', '00000000-0000-0000-0000-0000000000aa')",
+    "INSERT INTO public.journey_facts_legacy VALUES ('00000000-0000-0000-0000-0000000000bb', '00000000-0000-0000-0000-0000000000aa')",
     "CREATE TABLE public.alembic_version (version_num varchar(255) NOT NULL PRIMARY KEY)",
     f"INSERT INTO public.alembic_version VALUES ('{_N_REVISION}')",  # noqa: S608 - module constant, not user input
 )
@@ -113,9 +113,9 @@ _N_SCHEMA_SQL = (
 #: general shape: any migration that adds a constraint/FK onto a pre-existing
 #: PK or unique index blocks the old dump's ``DROP CONSTRAINT``.
 _FORWARD_MIGRATION_SQL = (
-    "ALTER TABLE public.modulo_journey_facts RENAME TO farna_journey_facts",
-    "ALTER TABLE public.farna_journey_facts RENAME CONSTRAINT modulo_journey_facts_pkey TO farna_journey_facts_pkey",
-    "ALTER TABLE public.farna_journey_facts RENAME CONSTRAINT modulo_journey_facts_organisation_id_fkey TO farna_journey_facts_organisation_id_fkey",
+    "ALTER TABLE public.journey_facts_legacy RENAME TO farna_journey_facts",
+    "ALTER TABLE public.farna_journey_facts RENAME CONSTRAINT journey_facts_legacy_pkey TO farna_journey_facts_pkey",
+    "ALTER TABLE public.farna_journey_facts RENAME CONSTRAINT journey_facts_legacy_organisation_id_fkey TO farna_journey_facts_organisation_id_fkey",
     "CREATE TABLE public.journey_events (id uuid PRIMARY KEY, organisation_id uuid NOT NULL REFERENCES public.organisations(id))",
     f"UPDATE public.alembic_version SET version_num = '{_N_PLUS_K_REVISION}'",  # noqa: S608 - module constant, not user input
 )
@@ -422,7 +422,7 @@ def test_a_snapshot_from_n_restores_over_a_database_at_n_plus_k(replay_env: _Clu
         backup_mod._run_psql(cluster.url(database), dump_path)
 
     tables = _table_names(cluster, database)
-    assert "modulo_journey_facts" in tables
+    assert "journey_facts_legacy" in tables
     assert "organisations" in tables
     assert "farna_journey_facts" not in tables
     assert "journey_events" not in tables
@@ -525,7 +525,7 @@ def test_the_shipped_compose_restore_helper_restores_the_pre_upgrade_snapshot(re
     assert "compose-rollback.sh" in result.stdout
 
     tables = _table_names(cluster, database)
-    assert "modulo_journey_facts" in tables
+    assert "journey_facts_legacy" in tables
     assert "farna_journey_facts" not in tables
     assert "journey_events" not in tables
     assert _schema_version(cluster, database) == _N_REVISION
