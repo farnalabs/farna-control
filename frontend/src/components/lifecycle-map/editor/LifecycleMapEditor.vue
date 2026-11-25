@@ -37,7 +37,7 @@
 
           <div class="ml-auto flex items-center gap-2">
             <span v-if="saveError" class="text-xs text-destructive">{{ saveError }}</span>
-            <Button :disabled="saving" size="small" class="text-xs" @click="handleSave">
+            <Button :disabled="saving" size="sm" class="text-xs" @click="handleSave">
               {{ saving ? 'Saving...' : 'Save' }}
             </Button>
           </div>
@@ -159,7 +159,7 @@ import { randomId } from '../../../lib/randomId'
 import { computeLifecycleMapLayout } from '../../../stores/lifecycleMaps'
 import { CANVAS_EDGE_STROKE } from '../../../constants/canvas'
 import type { StageType, LifecycleMap, LifecycleStage, LifecycleEdge, LifecycleMapVersion, PipelineSummary } from '../../../types/lifecycleMap'
-import Button from 'primevue/button'
+import Button from '../../ui/Button.vue'
 
 const props = defineProps<{
   mapId: string

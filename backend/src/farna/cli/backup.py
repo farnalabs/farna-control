@@ -2890,7 +2890,13 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
     "--verify-target-schema",
     is_flag=True,
     default=False,
-    help=("Refuse unless the TARGET database records exactly the schema revisions the archive was taken from. The compose recovery path's stand-in for the --data-dir instance-identity guard; --replace-cluster overrides it."),
+    help=(
+        "Refuse a TARGET database whose recorded revision is not in the archive's lineage "
+        "(a different release train, or not a Farna Control database at all). A target the "
+        "newer release has migrated PAST the archive is accepted, because that is the "
+        "rollback this archive exists for. The compose recovery path's stand-in for the "
+        "--data-dir instance-identity guard; --replace-cluster overrides it."
+    ),
 )
 def restore(
     backup_dir: Path,

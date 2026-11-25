@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from farna.api.dependencies import get_plan_context, get_settings
+from farna.api.dependencies import get_plan_context, get_plan_context_any_credential, get_settings
 from farna.api.main import app
 from farna.api.routes.system_maps import get_repo
 from farna.auth.dependencies import get_current_tenant_user, get_current_tenant_user_or_api_key, get_current_user
@@ -242,6 +242,9 @@ def developer_mode_disabled(client: Any) -> None:
 @given("the system maps feature is disabled on the plan")
 def system_maps_feature_disabled(client: Any) -> None:
     app.dependency_overrides[get_plan_context] = lambda: _NoSystemMapsPlan()
+    # FAR-2748: the system_maps feature gate can resolve through the
+    # any-credential plan context, so pin both variants for this scenario.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: _NoSystemMapsPlan()
 
 
 # ---------------------------------------------------------------------------

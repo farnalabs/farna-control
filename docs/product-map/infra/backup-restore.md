@@ -329,10 +329,13 @@ operator-facing contract lives in `docs/operations/backup.md`.
       <!-- behaviour: backup-restore-24 | tests: backend/tests/unit/cli/test_backup_restore_semantics.py -->
 - [x] The compose path's recovery VERIFIES before it destroys: the helper
       requires an explicit `--confirm` argument, verifies the archive with a
-      side-effect-free `restore --dry-run`, and refuses unless the TARGET
-      database records exactly the schema revisions the snapshot was taken from
-      (`--verify-target-schema`) — the stand-in for the data-dir instance
-      identity guard, which the old no-`--data-dir` invocation skipped
+      side-effect-free `restore --dry-run`, and refuses a TARGET database whose
+      recorded revision is not in the snapshot's lineage (a different release
+      train, or not a Farna Control database at all). A target the newer
+      release has migrated PAST the snapshot is accepted, because that is the
+      rollback the archive exists for (`--verify-target-schema`) — the stand-in
+      for the data-dir instance identity guard, which the old no-`--data-dir`
+      invocation skipped
       entirely. Every one-off container overrides the image ENTRYPOINT with
       `--entrypoint farna-control`, because the all-in-one image's
       `/entrypoint.sh` ignores its arguments, migrates and execs supervisord —

@@ -79,12 +79,16 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       stack is not reachable from a non-loopback interface.
       (`docker-compose.yml`; `test_compose_loopback_ports.py::test_default_compose_ports_are_loopback_only`).
       <!-- behaviour: container-deployment-01 | tests: backend/tests/architecture/test_compose_loopback_ports.py::test_default_compose_ports_are_loopback_only -->
-- [x] Every service that builds from `./backend` (and therefore runs the
-      credential-widening entrypoint) is given the same `POSTGRES_PASSWORD` as
-      the database service, so the `alembic_version` widening step and the
-      migrations cannot disagree about the credential.
-      (`docker-compose.yml`; `test_docker_compose_wiring.py::test_app_services_declare_postgres_password`).
-      <!-- behaviour: container-deployment-02 | tests: backend/tests/unit/test_docker_compose_wiring.py::test_app_services_declare_postgres_password -->
+- [x] The `db` service creates the cluster with `${POSTGRES_PASSWORD}`, and
+      every service that builds from `./backend` reaches it through database
+      URLs (`DATABASE_URL`, plus `DATABASE_ADMIN_URL` /
+      `FARNA_CONTROL_SYSTEM_DATABASE_URL` where present) that interpolate the
+      same project-level variable, so the URL credential and the cluster
+      credential cannot disagree. The entrypoint no longer runs a
+      password-authenticated widening step of its own (FAR-2777:
+      `migrations/env.py` pre-widens `alembic_version.version_num`).
+      (`docker-compose.yml`; `test_docker_compose_wiring.py::test_app_services_database_urls_share_the_db_service_password`).
+      <!-- behaviour: container-deployment-02 | tests: backend/tests/unit/test_docker_compose_wiring.py::test_app_services_database_urls_share_the_db_service_password -->
 - [x] The root and local Compose bring-up files refuse to start without a
       required `FERNET_KEY` interpolation whose message tells the operator how to
       generate one. The tests prove a generated value satisfies `Settings` and

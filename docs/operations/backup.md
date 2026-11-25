@@ -314,16 +314,18 @@ arbitrary file and print its digest. psql runs with `-X`, so an operator's
 zero.
 
 `--verify-target-schema` is the compose path's stand-in for the data-dir
-instance identity: it proceeds when the target records the snapshot's
-revisions, and also when the target has MIGRATED PAST them (the rollback the
-snapshot exists for), naming the migrations being rolled back. A target that is
-unrelated — a different revision train, or not a bootstrapped database — is
-refused; `--replace-cluster` overrides it. The disk pre-flight measures the
-DATABASE's filesystem — pass `--target-fs` (or set `DB_CAPACITY_PATH`, which
-the compose deployment does) when the archive is on a different volume from
-the database. The path is only `statvfs`'d, so it does not need to be readable;
-the compose database volume is not, and the pre-flight degrades with a loud
-warning when it cannot measure.
+instance identity: it refuses a target whose recorded revision is not in the
+archive's lineage (a different release train, or not a Farna Control database
+at all). A target the newer release has migrated PAST the archive is accepted,
+because that is the rollback the archive exists for: the restore returns the
+database to the archived revision with the archived data, naming the migrations
+being rolled back. `--replace-cluster` overrides the refusal.
+The disk pre-flight measures the DATABASE's filesystem — pass `--target-fs` (or
+set `DB_CAPACITY_PATH`, which the compose deployment does) when the archive is
+on a different volume from the database. The value only has to be a path on
+that volume: it is only `statvfs`'d, so it does not need to be readable — a
+permission the operator does not have is fine, and the pre-flight degrades with
+a loud warning when it cannot measure.
 
 Before the dump is applied, the replay recreates the target's `public` schema
 **in the same `psql` transaction as the dump**. pg_dump's `--clean` preamble
