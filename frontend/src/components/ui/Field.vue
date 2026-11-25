@@ -12,6 +12,7 @@ export interface FieldContext {
   describedBy: ComputedRef<string | undefined>
   invalid: ComputedRef<boolean>
   required: ComputedRef<boolean>
+  nativeRequired: ComputedRef<boolean>
 }
 
 export const FIELD_CONTEXT: InjectionKey<FieldContext> = Symbol('field')
@@ -38,8 +39,19 @@ const props = withDefaults(defineProps<{
   help?: string
   /** Validation message. Announced with aria-live="polite". */
   error?: string
-  /** Marks the field required both visually (marker) and semantically. */
+  /**
+   * Marks the field required semantically (`aria-required`) and visually (the
+   * marker). It deliberately does NOT render the native `required` attribute:
+   * native validation lets the browser block submit before the form's own
+   * handler runs, so the app's validation message would never render
+   * (FAR-2779). Opt into that behaviour explicitly with `native-required`.
+   */
   required?: boolean
+  /**
+   * Renders the native `required` attribute on the control as well, for the
+   * rare form that genuinely wants browser validation. Off by default.
+   */
+  nativeRequired?: boolean
   /** Extra ids a caller already wires into aria-describedby (e.g. a hint). */
   describedBy?: string
   /** Explicit ids, so a site can keep an existing association. */
@@ -61,6 +73,7 @@ const helpId = computed(() => props.helpId || `${fieldId.value}-help`)
 const errorId = computed(() => props.errorId || `${fieldId.value}-error`)
 const isInvalid = computed(() => Boolean(props.error))
 const isRequired = computed(() => Boolean(props.required))
+const isNativeRequired = computed(() => Boolean(props.nativeRequired))
 
 const describedBy = computed(() => {
   const ids = [props.describedBy]
@@ -77,6 +90,7 @@ provide(FIELD_CONTEXT, {
   describedBy,
   invalid: isInvalid,
   required: isRequired,
+  nativeRequired: isNativeRequired,
 })
 </script>
 
@@ -90,6 +104,7 @@ provide(FIELD_CONTEXT, {
       :described-by="describedBy"
       :invalid="isInvalid"
       :required="isRequired"
+      :native-required="isNativeRequired"
       :help-id="helpId"
       :error-id="errorId"
     />

@@ -96,16 +96,24 @@ describe('EnvironmentProfileForm — create mode', () => {
     expect(wrapper.findAll('[data-page-heading]')).toHaveLength(1)
   })
 
-  it('submit without a name shows the required error and never calls the API', async () => {
+  it('submit without a name runs the handler, shows the required error and never calls the API', async () => {
     const wrapper = mountForm()
     await flush()
+
+    const nameInput = wrapper.find('[data-testid="envprofile-form-name"]')
+    // FAR-2779: `Field required` marks the control with aria-required only.
+    // A native `required` would let the browser block submit before
+    // handleSubmit ran, so the app's own "Name is required" message below
+    // would never render (and jsdom's synthetic submit hides that regression).
+    expect(nameInput.attributes('aria-required')).toBe('true')
+    expect(nameInput.attributes('required')).toBeUndefined()
 
     await wrapper.find('form').trigger('submit')
     await flush()
 
     expect(wrapper.text()).toContain('Name is required')
     expect(postMock).not.toHaveBeenCalled()
-    expect(wrapper.find('[data-testid="envprofile-form-name"]').classes()).toContain('border-destructive')
+    expect(nameInput.classes()).toContain('border-destructive')
     // FAR-1614: the provider-required error announces itself (role="alert"),
     // mirroring the tier hint's role="status" — an error a screen reader
     // never hears is not surfaced at all.

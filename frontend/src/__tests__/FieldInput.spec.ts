@@ -68,15 +68,68 @@ describe('Field', () => {
     expect(input.attributes('aria-describedby')).toBe('email-error')
   })
 
-  it('marks a required field visually and semantically', () => {
+  it('marks a required field visually and with aria-required, never native validation', () => {
     const wrapper = mountHarness(`
       <Field label="Project" required>
         <FieldInput data-testid="control" />
       </Field>
     `)
 
+    const control = wrapper.get('[data-testid="control"]')
+
     expect(wrapper.get('label').text()).toBe('Project *')
-    expect(wrapper.get('[data-testid="control"]').attributes('required')).toBeDefined()
+    expect(control.attributes('aria-required')).toBe('true')
+    // Native `required` would let the browser block submit before the form's
+    // own handler ran, so the app's validation message would never render
+    // (FAR-2779). It is opt-in via `native-required`.
+    expect(control.attributes('required')).toBeUndefined()
+  })
+
+  it('still runs the submit handler and renders its message for an invalid required field', async () => {
+    const onSubmit = vi.fn()
+    const Host = defineComponent({
+      components: { Field, FieldInput: Input },
+      setup() {
+        const error = ref('')
+        function submit() {
+          onSubmit()
+          if (!error.value) error.value = 'Name is required'
+        }
+        return { error, submit }
+      },
+      template: `
+        <form @submit.prevent="submit">
+          <Field label="Name" required :error="error">
+            <FieldInput data-testid="control" />
+          </Field>
+          <button type="submit" data-testid="submit">Save</button>
+        </form>
+      `,
+    })
+    const wrapper = mount(Host)
+
+    // The mechanism that blocks a real browser submit is the native attribute.
+    // jsdom's synthetic submit bypasses native validation, so asserting its
+    // absence is what makes this test fail against the pre-fix primitive.
+    expect(wrapper.get('[data-testid="control"]').attributes('required')).toBeUndefined()
+
+    await wrapper.get('form').trigger('submit')
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('Name is required')
+  })
+
+  it('renders the native required attribute when native-required opts in', () => {
+    const wrapper = mountHarness(`
+      <Field label="Project" required native-required>
+        <FieldInput data-testid="control" />
+      </Field>
+    `)
+
+    const control = wrapper.get('[data-testid="control"]')
+
+    expect(control.attributes('required')).toBeDefined()
+    expect(control.attributes('aria-required')).toBe('true')
   })
 
   it('sets aria-invalid, announces the error politely and hides the help hint', () => {
@@ -379,7 +432,7 @@ describe('Textarea', () => {
     expect(control.attributes('required')).toBeDefined()
   })
 
-  it('inherits aria-invalid and required from an erroring required Field', () => {
+  it('inherits aria-invalid and aria-required from an erroring required Field', () => {
     const wrapper = mountHarness(`
       <Field label="Notes" error="Required" required>
         <FieldTextarea data-testid="control" />
@@ -389,7 +442,8 @@ describe('Textarea', () => {
     const control = wrapper.get('[data-testid="control"]')
 
     expect(control.attributes('aria-invalid')).toBe('true')
-    expect(control.attributes('required')).toBeDefined()
+    expect(control.attributes('aria-required')).toBe('true')
+    expect(control.attributes('required')).toBeUndefined()
   })
 
   it('honours explicit aria-invalid="false" and required="false" over the Field state', () => {
@@ -402,6 +456,9 @@ describe('Textarea', () => {
     const control = wrapper.get('[data-testid="control"]')
 
     expect(control.attributes('aria-invalid')).toBe('false')
+    // The Field still owns the semantic flag even when native validation is
+    // explicitly declined.
+    expect(control.attributes('aria-required')).toBe('true')
     expect(control.attributes('required')).toBeUndefined()
   })
 

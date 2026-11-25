@@ -431,7 +431,9 @@ describe('SettingsTriggersView — ongoing trigger (FAR-158)', () => {
     await flush()
 
     expect(api.POST).not.toHaveBeenCalled()
-    expect(wrapper.find('.text-destructive').exists()).toBe(true)
+    // Assert the error text itself: `.text-destructive` also matches the
+    // required-field asterisk in the Field label, so it proved nothing.
+    expect(wrapper.text()).toContain('A daily spend limit is required for ongoing triggers.')
   })
 
   it('edit: the form pre-fills target / interval / spend from the loaded ongoing trigger', async () => {

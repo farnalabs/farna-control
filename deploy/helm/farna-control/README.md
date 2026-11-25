@@ -367,14 +367,14 @@ kubectl delete namespace farna-control  # If namespace.create=true
   `v1.34.12-eks-9adbfea`, 2 x `m7i-flex.large` managed nodes (2 vCPU / 8 GiB
   each), chart `farna-control-0.3.330`, embedded Redis (`redis.embedded=true`,
   password set), Postgres `postgres:16` in the sibling namespace
-  `farna-control-db` with `modulo` as the admin (superuser) role, ingress
+  `farna-control-db` with the chart's default admin (superuser) role, ingress
   disabled. Images were built from the validated tree for `linux/amd64` and
-  pushed to ECR with tag `helm-validate-20261125`:
+  pushed to ECR in AWS account 365370368472 with tag `helm-validate-20261125`:
 
-  | Image | Digest |
-  |---|---|
-  | `365370368472.dkr.ecr.us-east-1.amazonaws.com/modulo/backend:helm-validate-20261125` | `sha256:51d4aec6795b28d203dfead5e40ff0f7c489b9b6abb3e1ee089404c27ab6d8d0` |
-  | `365370368472.dkr.ecr.us-east-1.amazonaws.com/modulo/frontend:helm-validate-20261125` | `sha256:80494a203b3da9b62caf7d6720304731d689bc222f36b97aa7c7350e82ec18fb` |
+  | Image | Tag | Digest |
+  |---|---|---|
+  | backend | `helm-validate-20261125` | `sha256:51d4aec6795b28d203dfead5e40ff0f7c489b9b6abb3e1ee089404c27ab6d8d0` |
+  | frontend | `helm-validate-20261125` | `sha256:80494a203b3da9b62caf7d6720304731d689bc222f36b97aa7c7350e82ec18fb` |
 
   Commands:
 
@@ -401,7 +401,6 @@ kubectl delete namespace farna-control  # If namespace.create=true
   and the release ended `failed` (`Progress deadline exceeded`):
 
   ```
-  === Bootstrapping modulo_app role ===
   Running database migrations...
   ERROR [alembic.util.messaging] Can't locate revision identified by '0001_v2_identity_org'
   FAILED: Can't locate revision identified by '0001_v2_identity_org'
