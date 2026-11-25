@@ -107,6 +107,7 @@ API surface ships and is gated by the `plugin_management` feature and the
       exposed through the registry API; the registry is read-only
       (`importlib.metadata` discovery at startup) and lifecycle stays
       pip-managed (unshipped deferral; see Known Gaps).
+      <!-- behaviour: plugins-13 | tests: none -->
 
 ## Known Gaps
 

@@ -222,10 +222,12 @@ organization's plan or tier.
       adoption metrics for system administrators; it renders only the
       transparency endpoint's delivery, consent and switch fields (unshipped
       deferral; see Known Gaps).
+      <!-- behaviour: product-analytics-17 | tests: none -->
 - [ ] An in-product analytics export or administration surface (self-serve
       downloadable org metrics, a configurable reporting schedule, or an
       in-app analytics warehouse) is not shipped; warehouse scope sits under
       `feat-analytics` (unshipped deferral; see Known Gaps).
+      <!-- behaviour: product-analytics-18 | tests: none -->
 
 ## Consent scoping (FAR-1635)
 

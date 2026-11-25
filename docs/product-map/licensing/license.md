@@ -303,6 +303,7 @@ trust-anchor caveat) are documented in
       surfaces (SSO administration, `/api/v1/teams`, the audit read surfaces
       and admin spend limits), not the whole feature registry (unshipped
       deferral; see Known Gaps).
+      <!-- behaviour: license-19 | tests: none -->
 
 ## Known Gaps
 
