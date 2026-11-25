@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 
 import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import SearchInput from '../components/ui/SearchInput.vue'
 
 function mountHarness(template: string, setupState: Record<string, unknown> = {}) {
@@ -108,5 +109,21 @@ describe('SearchInput', () => {
     expect(search.emitted('update:modelValue')).toEqual([['']])
     expect(search.emitted('clear')).toHaveLength(1)
     expect(wrapper.find('button').exists()).toBe(false)
+  })
+
+  it('treats an explicit null model value as empty for the clear affordance', () => {
+    const wrapper = mountHarness('<SearchInput :model-value="null" data-testid="control" clearable clear-label="Clear search" />')
+
+    expect(wrapper.find('button').exists()).toBe(false)
+    expect(inputOf(wrapper).classes()).toContain('pr-3')
+  })
+
+  it('normalises a null update from the control to an empty string', async () => {
+    const wrapper = mountHarness('<SearchInput data-testid="control" />')
+
+    wrapper.findComponent(Input).vm.$emit('update:model-value', null)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findComponent(SearchInput).emitted('update:modelValue')).toEqual([['']])
   })
 })
