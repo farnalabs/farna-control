@@ -26,14 +26,17 @@
           </Button>
         </div>
 
-        <div
+        <Notice
           v-if="!publicUrlConfigured"
-          class="rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm text-warning-text"
+          variant="warning"
+          live="polite"
+          :icon="false"
+          padding="sm"
+          class="text-sm"
           data-testid="settings-mcp-oauth-public-url-warning"
-          aria-live="polite"
         >
           {{ $t('views.SettingsMcpView.set_modulo_public_url_before_registering_oauth') }}
-        </div>
+        </Notice>
 
         <div
           v-if="listError"
@@ -339,6 +342,7 @@ import DataCard from '../ui/DataCard.vue'
 import { DataTable, type Column, type DataTableRow } from '../ui/data-table'
 import Dialog from 'primevue/dialog'
 import EmptyState from '../shared/EmptyState.vue'
+import Notice from '../shared/Notice.vue'
 import FormDialog from '../shared/FormDialog.vue'
 import { formatDateShort } from '../../lib/formatDate'
 import { useSecretReveal } from '../../composables/useSecretReveal'

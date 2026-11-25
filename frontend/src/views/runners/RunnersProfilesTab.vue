@@ -95,9 +95,11 @@
             {{ $t('views.RunnersProfilesTab.image_pull_hint') }}
           </output>
 
-          <div
+          <Notice
             v-if="row.drift.drifted"
-            class="rounded-lg border border-warning/40 bg-warning/10 p-3"
+            variant="warning"
+            :icon="false"
+            padding="sm"
             data-testid="runner-profile-drift"
           >
             <p class="text-xs font-medium text-warning-text">{{ $t('views.RunnersProfilesTab.template_updated') }}</p>
@@ -114,7 +116,7 @@
               {{ $t('views.RunnersProfilesTab.apply') }}
             </Button>
             <p v-if="applyErrorId === row.profile.id && applyError" class="mt-2 text-xs text-destructive">{{ applyError }}</p>
-          </div>
+          </Notice>
 
           <div class="flex items-center gap-2 mt-auto">
             <Button severity="secondary" outlined size="small" data-testid="envprofile-list-edit" @click="$router.push(`/admin/runners/profiles/${row.profile.id}/edit`)">
@@ -238,6 +240,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import LoadingSpinner from '../../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
+import Notice from '../../components/shared/Notice.vue'
 import EmptyState from '../../components/shared/EmptyState.vue'
 import BaseCard from '../../components/ui/BaseCard.vue'
 import { useEnvironmentProfilesStore, type EnvironmentProfileSummary } from '../../stores/environmentProfiles'

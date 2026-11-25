@@ -23,15 +23,17 @@
              enforces `system.config.manage`. Surface the established
              informational unavailable pattern instead of the raw permission
              exception; authorization stays enforced by the backend (FAR-2394). -->
-        <div
+        <Notice
           v-else-if="permissionDenied"
-          class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm"
+          variant="warning"
+          live="assertive"
+          :icon="false"
+          class="text-sm"
           data-testid="settings-monitor-permission-denied"
-          aria-live="assertive"
         >
           <p class="font-semibold">{{ $t('views.SettingsMonitorConfigView.permission_denied_title') }}</p>
           <p class="mt-1">{{ $t('views.SettingsMonitorConfigView.permission_denied_description') }}</p>
-        </div>
+        </Notice>
 
         <div v-else-if="error" class="flex flex-col items-center justify-center h-32 gap-3">
           <p class="text-destructive text-sm">{{ error || 'Failed to load monitoring configuration' }}</p>
@@ -109,6 +111,7 @@ import { getErrorTracker } from '../lib/error-tracking'
 import { loadBackends } from '../monitor'
 import type { MonitorConfig } from '../monitor/types'
 import PageHeader from '../components/shared/PageHeader.vue'
+import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import Button from 'primevue/button'

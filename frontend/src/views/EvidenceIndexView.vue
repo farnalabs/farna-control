@@ -44,7 +44,7 @@
           </table>
         </div>
       </DataCard>
-      <p v-if="store.index.missing_artifact_types.length" aria-live="polite" class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning-text">{{ $t('views.EvidenceIndexView.missing', { count: store.index.missing_artifact_types.length }) }}</p>
+      <Notice v-if="store.index.missing_artifact_types.length" variant="warning" live="polite" :icon="false" padding="sm" class="text-sm">{{ $t('views.EvidenceIndexView.missing', { count: store.index.missing_artifact_types.length }) }}</Notice>
     </template>
   </div>
 </template>
@@ -55,6 +55,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { useEvidenceStore } from '../stores/evidence'

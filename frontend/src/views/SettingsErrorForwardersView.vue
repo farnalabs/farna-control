@@ -235,21 +235,26 @@
               </Button>
             </div>
 
-            <div
+            <Notice
               v-if="testResults[fwd.forwarder_type]"
-              class="rounded-lg border p-3 text-sm"
-              :class="testResults[fwd.forwarder_type]?.ok ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text'"
+              :variant="testResults[fwd.forwarder_type]?.ok ? 'success' : 'danger'"
+              :icon="false"
+              padding="sm"
+              class="text-sm"
             >
               <p class="font-medium">{{ testResults[fwd.forwarder_type]?.ok ? $t('views.SettingsErrorForwardersView.connection_successful') : $t('views.SettingsErrorForwardersView.connection_failed') }}</p>
               <p class="mt-0.5">{{ testResults[fwd.forwarder_type]?.message }}</p>
-            </div>
+            </Notice>
 
-            <div
+            <Notice
               v-if="formSuccess[fwd.forwarder_type]"
-              class="rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+              variant="success"
+              :icon="false"
+              padding="sm"
+              class="text-sm"
             >
               {{ formSuccess[fwd.forwarder_type] }}
-            </div>
+            </Notice>
             <!-- Save action error: no refetch loader; the forwarder's own Save
                  button is the retry path. -->
             <ErrorAlert
@@ -275,6 +280,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'

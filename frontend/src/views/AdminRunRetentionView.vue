@@ -56,33 +56,42 @@
         :message="exportIncomplete"
         :retryable="false"
       />
-      <div
+      <Notice
         v-if="exportSuccess"
-        class="mb-4 rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+        variant="success"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-run-retention-export-result"
       >
         {{ exportSuccess }}
-      </div>
+      </Notice>
       <!-- FAR-1924: the NDJSON export ends with a {"_complete":true} sentinel
            ONLY when the stream ran to exhaustion. Its absence means the body
            was truncated mid-stream (HTTP 200, no error), so warn rather than
            let a consumer treat a partial compliance artefact as complete.
            Non-blocking: the download already happened. -->
-      <div
+      <Notice
         v-if="exportWarning"
-        class="mb-4 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm text-warning-text"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-run-retention-export-warning"
-        aria-live="polite"
       >
         {{ exportWarning }}
-      </div>
-      <div
+      </Notice>
+      <Notice
         v-if="purgeResult"
-        class="mb-4 rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+        variant="success"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-run-retention-purge-result"
       >
         {{ $t('views.AdminRunRetentionView.purge_result', { runs: purgeResult.purged_runs, checkpoints: purgeResult.purged_checkpoints, bytes: formatBytes(purgeResult.freed_estimated_bytes) }) }}
-      </div>
+      </Notice>
 
       <DataCard
         heading-level="h2"
@@ -182,9 +191,9 @@
           </div>
       </DataCard>
 
-      <div class="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm" data-testid="admin-run-retention-warning">
+      <Notice variant="warning" :icon="false" padding="sm" class="mb-4 text-sm" data-testid="admin-run-retention-warning">
         {{ $t('views.AdminRunRetentionView.warning_terminal_only') }}
-      </div>
+      </Notice>
 
       <DataCard
         heading-level="h2"
@@ -262,6 +271,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import FormDialog from '../components/shared/FormDialog.vue'

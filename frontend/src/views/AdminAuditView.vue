@@ -58,11 +58,11 @@
       :aria-labelledby="isSystemAdmin ? 'admin-audit-tab-org' : undefined"
       class="space-y-4"
     >
-    <div v-if="chainResult" class="rounded-lg border px-4 py-3 text-sm" :class="chainResult.valid ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text'" aria-live="polite" data-testid="admin-audit-chain-result">
+    <Notice v-if="chainResult" :variant="chainResult.valid ? 'success' : 'danger'" :icon="false" padding="none" live="polite" class="px-4 py-3 text-sm" data-testid="admin-audit-chain-result">
       <strong>{{ chainResult.valid ? $t('views.AdminAuditView.chain_valid') : $t('views.AdminAuditView.chain_broken') }}</strong>
       <span v-if="chainResult.checked_events" class="ml-2">— {{ $t('views.AdminAuditView.events_verified', { count: chainResult.checked_events }) }}</span>
       <span v-if="chainResult.error" class="ml-2">— {{ chainResult.error }}</span>
-    </div>
+    </Notice>
 
     <BaseCard padding="md">
       <FilterBar
@@ -528,6 +528,7 @@ import StateTabs, { type StateTab } from '../components/shared/StateTabs.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
+import Notice from '../components/shared/Notice.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'

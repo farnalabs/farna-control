@@ -19,15 +19,17 @@
         </template>
       </PageHeader>
 
-      <div
+      <Notice
         v-if="killSwitchEnabled"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        class="mb-4"
         data-testid="settings-guardrails-kill-switch-banner"
-        aria-live="polite"
-        class="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-4"
       >
         <p class="text-sm font-medium">{{ $t('views.SettingsGuardrailsView.kill_switch_banner') }}</p>
         <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.SettingsGuardrailsView.kill_switch_banner_body') }}</p>
-      </div>
+      </Notice>
 
       <LoadingSpinner v-if="!loaded" />
 
@@ -273,6 +275,7 @@ import { useCurrentUser } from '../composables/useCurrentUser'
 import { formatApiError } from '../lib/api/formatError'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
+import Notice from '../components/shared/Notice.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'

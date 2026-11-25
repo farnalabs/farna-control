@@ -51,10 +51,12 @@
       </p>
     </fieldset>
 
-    <div
+    <Notice
       v-if="!isInstanceScope && starvationItems.length > 0"
+      variant="warning"
+      :icon="false"
+      class="mb-4"
       data-testid="scheduler-starvation"
-      class="rounded-lg border border-warning/50 bg-warning/10 p-4 mb-4"
     >
       <div class="font-medium mb-1">{{ $t('views.AdminErrorsView.scheduler_starvation') }}</div>
       <p class="text-sm text-muted-foreground mb-3">
@@ -74,7 +76,7 @@
         <span class="font-mono">{{ item.pending_count }}</span>
         <span class="font-mono whitespace-nowrap">{{ formatStarvationAge(item.oldest_age_minutes) }}</span>
       </div>
-    </div>
+    </Notice>
 
     <FilterBar
       :search="{ placeholder: $t('views.AdminErrorsView.search_error_messages') }"
@@ -232,6 +234,7 @@ import {
 import { useCurrentUser } from '../composables/useCurrentUser'
 import { useDataFetch } from '../composables/useDataFetch'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import { shortId } from '../utils/format'
 import { buildErrorGroupSupportReference } from '../lib/supportReference'
 import {

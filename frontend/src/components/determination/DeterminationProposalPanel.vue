@@ -29,9 +29,9 @@
     </p>
 
     <template v-else>
-      <p class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm" data-testid="determination-proposal-not-activated">
+      <Notice variant="warning" :icon="false" padding="sm" class="text-sm" data-testid="determination-proposal-not-activated">
         {{ $t('views.DeterminationView.proposal_not_activated') }}
-      </p>
+      </Notice>
 
       <section class="space-y-2" data-testid="determination-observed-facts">
         <h3 class="text-sm font-medium">
@@ -227,6 +227,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
+import Notice from '../shared/Notice.vue'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
 import DataCard from '../ui/DataCard.vue'
 import DeterminationEvidencePanel from './DeterminationEvidencePanel.vue'
