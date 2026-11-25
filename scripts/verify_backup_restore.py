@@ -976,7 +976,7 @@ def main(argv: list[str] | None = None) -> int:
         "[11/11] Restoring a pre-upgrade snapshot over a FORWARD-migrated database "
         "(snapshot at N, target at N+1 with an FK to an existing PK — FAR-2763)"
     )
-    drift_snapshot = Path(tempfile.mkdtemp(prefix="modulo-dr-gate-upgrade-"))
+    drift_snapshot = Path(tempfile.mkdtemp(prefix="farna-dr-gate-upgrade-"))
     try:
         # An upgrade snapshots the database BEFORE it migrates, so the snapshot
         # must genuinely be behind the schema the restore replays over: step

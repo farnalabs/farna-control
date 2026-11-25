@@ -1757,7 +1757,7 @@ class TestTheReplayResetsPublicFirst:
         assert "GRANT USAGE ON SCHEMA public TO PUBLIC" in sql
         # No other schema is touched: a non-public schema is dumped as
         # DROP SCHEMA IF EXISTS + CREATE SCHEMA and needs no help here.
-        assert "modulo_internal" not in sql
+        assert "farna_internal" not in sql
 
     def test_psql_replays_the_reset_then_the_dump_in_one_transaction(self, tmp_path: Path) -> None:
         """Two separate -f files, one psql invocation, so -1 spans both."""

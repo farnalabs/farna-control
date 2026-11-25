@@ -490,7 +490,7 @@ def assert_plain_dump_complete(dump_path: Path) -> None:
 #:
 #: WHICH schema: only ``public``. It is the one schema pg_dump does NOT recreate
 #: (it is a system schema), so it must be reset here; a non-public schema (this
-#: product's ``modulo_internal``) is dumped as ``DROP SCHEMA IF EXISTS`` +
+#: product's ``farna_internal``) is dumped as ``DROP SCHEMA IF EXISTS`` +
 #: ``CREATE SCHEMA`` and already transformed that way by every replay. The
 #: recreated schema is given the pristine PostgreSQL 15+ defaults
 #: (``pg_database_owner``, ``USAGE`` for ``PUBLIC``) — the restore's own
