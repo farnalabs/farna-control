@@ -235,28 +235,56 @@ def test_create_user_binds_org_rls_before_membership_insert(
     Migration 0367 fail-closes ``org_memberships``: its ``FOR ALL USING`` clause
     is also the INSERT WITH CHECK, so a membership INSERT with no
     ``app.organisation_id`` GUC raises ``InsufficientPrivilege`` (surfaced as a
-    ``ProgrammingError`` -> HTTP 501 ``migration_required``). This proves the
-    tenant ``POST /admin/users`` route sets the org scope BEFORE the INSERT;
-    without the ``set_rls_org`` call at the top of the transaction the only call
-    happens in the audit block AFTER ``create_membership`` and this ordering
-    assertion fails.
+    ``ProgrammingError`` -> HTTP 501 ``migration_required``).
+
+    The route opens TWO separate transactions - the read-side conflict check in
+    ``_existing_account_or_conflict`` and the write-side create/adopt in
+    ``_create_or_adopt_account`` - and ``set_config(..., is_local=true)`` is
+    transaction-local, so the binding in the READ transaction does NOT carry
+    into the WRITE transaction. A single global ordering assertion therefore
+    passes even when the write-side ``set_rls_org`` is reverted (the read-side
+    call still precedes the INSERT). To prove the actual bug, the spy events are
+    partitioned per ``session.begin`` transaction and the ordering assertion is
+    scoped to the SAME transaction as ``create_membership``.
     """
-    client, _ = api
+    client, session = api
     account = _account(id=uuid.uuid4(), email="new@test", display_name="New")
     membership = _membership(role="runner")
     monkeypatch.setattr(admin, "get_account_by_email", AsyncMock(return_value=None))
     monkeypatch.setattr(admin.account_crud, "create_account", AsyncMock(return_value=account))
     monkeypatch.setattr(admin, "append_audit_event", AsyncMock())
 
-    events: list[tuple[str, Any]] = []
+    # Partition every spied event into the ``session.begin`` transaction it ran
+    # inside, so a binding in one transaction can never satisfy an assertion
+    # about another. ``session.begin`` is a plain callable on the mock, so wrap
+    # it per *call* rather than re-using one context manager.
+    transactions: list[list[tuple[str, Any]]] = []
+    active: list[list[tuple[str, Any]]] = []
+
+    class _TxnBuffer:
+        async def __aenter__(self) -> None:
+            buffer: list[tuple[str, Any]] = []
+            transactions.append(buffer)
+            active.append(buffer)
+
+        async def __aexit__(self, *_exc: object) -> bool:
+            active.pop()
+            return False
+
+    session.begin = MagicMock(side_effect=lambda: _TxnBuffer())
+
+    def _record(kind: str, org_id: Any) -> None:
+        assert active, f"{kind} ran outside a session.begin transaction"
+        active[-1].append((kind, org_id))
+
     real_set_rls_org = admin.set_rls_org
 
     async def _spy_set_rls_org(sess: Any, org_id: uuid.UUID) -> None:
-        events.append(("set_rls_org", org_id))
+        _record("set_rls_org", org_id)
         await real_set_rls_org(sess, org_id)
 
     async def _spy_create_membership(*args: Any, **kwargs: Any) -> Any:
-        events.append(("create_membership", kwargs.get("org_id")))
+        _record("create_membership", kwargs.get("org_id"))
         return membership
 
     monkeypatch.setattr(admin, "set_rls_org", _spy_set_rls_org)
@@ -268,11 +296,20 @@ def test_create_user_binds_org_rls_before_membership_insert(
     )
 
     assert resp.status_code == 201, resp.text
-    kinds = [name for name, _ in events]
-    assert "create_membership" in kinds
-    first_rls = next(index for index, (name, _) in enumerate(events) if name == "set_rls_org")
-    assert first_rls < kinds.index("create_membership")
-    assert all(org_id == _ORG_ID for name, org_id in events if name == "set_rls_org")
+    # The route must actually have opened the two transactions this regression
+    # turns on - otherwise the partitioning proves nothing.
+    assert len(transactions) == 2, transactions
+    insert_txns = [txn for txn in transactions if any(kind == "create_membership" for kind, _ in txn)]
+    assert len(insert_txns) == 1, transactions
+    insert_txn = insert_txns[0]
+    kinds = [kind for kind, _ in insert_txn]
+    # The org GUC must be bound in THIS transaction, before the membership
+    # INSERT. Reverting the write-side ``set_rls_org`` leaves this transaction
+    # with ``create_membership`` alone (the read-side binding lives in the other
+    # transaction) and fails here.
+    assert "set_rls_org" in kinds, insert_txn
+    assert kinds.index("set_rls_org") < kinds.index("create_membership"), insert_txn
+    assert all(org_id == _ORG_ID for txn in transactions for kind, org_id in txn if kind == "set_rls_org")
 
 
 # NOTE: admin_create_user catches IntegrityError itself (TOCTOU race guard:
