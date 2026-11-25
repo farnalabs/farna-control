@@ -1,5 +1,5 @@
 /**
- * Architecture gate: the design-system card/header contract cannot drift (FAR-2710).
+ * Architecture gate: the design-system contract cannot drift (FAR-2710, FAR-2774).
  *
  * The 2026-11-23 design-system audit found views and components hand-rolling card
  * shells, card headers and raw PrimeVue dialogs instead of composing the shared
@@ -17,7 +17,10 @@
  * guard exists to prevent. The frontend unit suite is the right home - it runs
  * on every frontend-touching PR, and a baseline-only change under `frontend/`
  * triggers that job, whereas the backend architecture suite skips frontend-only
- * changes.
+ * changes. The detectors themselves live in one shared module,
+ * `frontend/src/test-utils/design-system-detectors.ts`, used by both this guard
+ * and the baseline writer below, so the baseline can never be produced by a
+ * different scanner from the one that enforces it.
  *
  * Two rules
  * ---------
@@ -25,7 +28,7 @@
  *    carries BOTH a title attribute and `padding="none"` fails. That is the
  *    exact defect FAR-2694 fixed: the card renders its own header, so the
  *    padding override leaves that header flush against the card edge.
- * 2. Shrinking ratchet. Three objective drift fingerprints are counted per file
+ * 2. Shrinking ratchet. Six objective drift fingerprints are counted per file
  *    and compared with the checked-in baseline. A file's count may equal or
  *    fall below its baseline; it may never exceed it. A baseline entry whose
  *    count has fallen to zero must be deleted (the ratchet only shrinks). A
@@ -33,8 +36,11 @@
  *    warning so it is visible in the test output. A file absent from the
  *    baseline has baseline 0.
  *
- * The three ratchet patterns (one-line example each)
- * -------------------------------------------------
+ * The six ratchet patterns (one-line example each)
+ * ------------------------------------------------
+ * Markup patterns scan the TEMPLATE only: `<script>` and `<style>` blocks and
+ * HTML comments are stripped first, so a tag named in a script string, a CSS
+ * rule or a commented-out block is not counted.
  * - `card_container` - a hand-rolled card shell:
  *   `<div class="rounded-lg border border-border p-4">`. Matches a `<div>` whose
  *   class carries the standalone `card` token, or carries a `rounded`/`rounded-*`
@@ -42,8 +48,17 @@
  * - `card_header` - a hand-rolled CardHeader title:
  *   `<h3 class="text-base font-semibold">`. Matches an `<h2>`/`<h3>` whose class
  *   carries `font-semibold` together with `text-base` or `text-lg`.
+ * - `raw_button` - a raw HTML button: `<button type="button">Save</button>`.
+ *   Matches a literal, case-sensitive `<button` opening tag. `<Button>` (the
+ *   PrimeVue component) is not counted.
+ * - `raw_input` - a raw HTML input: `<input v-model="value" />`. Matches a
+ *   literal, case-sensitive `<input` opening tag. `<InputText>` and AppSelect's
+ *   rendered combobox are not counted.
+ * Import patterns scan the script block.
  * - `raw_dialog` - a raw PrimeVue dialog import: `import Dialog from 'primevue/dialog'`
  *   (default, named, namespace, aliased or bare import forms all match).
+ * - `primevue_badge` - a raw PrimeVue badge import: `import Badge from 'primevue/badge'`
+ *   (same import forms; a commented-out import does not match).
  *
  * Anti-false-positive discipline: these patterns are deliberately objective, not
  * semantic. A legitimate design call that happens to match (canvas nodes, diff
@@ -51,21 +66,33 @@
  * stop NEW drift, not to relitigate the audit. Files under
  * `frontend/src/components/ui` and `frontend/src/components/shared` (the
  * primitives themselves), plus `frontend/src/components/PageTabs.vue` and
- * `frontend/src/__tests__` are out of scope by construction.
+ * `frontend/src/__tests__` are out of scope by construction - a spec's `stubs`
+ * and slot fixtures author raw markup as test doubles, not product surfaces.
  *
  * Regenerating the baseline after a sweep
  * ---------------------------------------
  * `frontend/design-system-baseline.json` is generated from the current tree by
- * this spec's own scanner (`collectCounts()`), with only non-zero entries, sorted
- * deterministically per pattern. After a sweep lowers counts, regenerate it and
- * delete entries that reached zero (the ratchet fails on a stale zero entry):
+ * this spec's own scanner (`collectCounts()`, which calls the shared
+ * `countPatterns()`), with only non-zero entries, sorted deterministically per
+ * pattern. After a sweep lowers counts for ANY of the six patterns, regenerate it
+ * and delete entries that reached zero (the ratchet fails on a stale zero entry):
  *
  *     cd frontend
  *     DS_GUARD_WRITE_BASELINE=1 pnpm exec vitest run src/__tests__/design-system-guard.spec.ts
+ *
+ * Run it twice on the same tree: the second run must produce no diff. The writer
+ * is the only supported way to change the baseline.
  */
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { join, relative, extname, sep, resolve } from 'path'
+import {
+  PATTERNS,
+  countPatterns,
+  emptyCounts,
+  titledCardsWithoutPadding,
+  type Counts,
+} from '../test-utils/design-system-detectors'
 
 const SRC_DIR = join(__dirname, '..')
 const FRONTEND_ROOT = resolve(SRC_DIR, '..')
@@ -79,20 +106,6 @@ const EXCLUDED_DIRS = [
   join(SRC_DIR, '__tests__'),
 ]
 const EXCLUDED_FILES = new Set([join(SRC_DIR, 'components', 'PageTabs.vue')])
-
-const PATTERNS = ['card_container', 'card_header', 'raw_dialog'] as const
-type Pattern = (typeof PATTERNS)[number]
-
-const HTML_COMMENT = /<!--[\s\S]*?-->/g
-const CLASS_ATTR = /(?<![-\w])(?::class|class)\s*=\s*(?:"([^"]*)"|'([^']*)')/gs
-const CLASS_TOKEN_SEPARATORS = /[\s,]+/
-const CLASS_TOKEN_NOISE = /[\[\]'"`{}()]/g
-const PADDING_TOKEN = /^p-(?:\d+(?:\.\d+)?|px|\[[^\]]+\])$/
-const TITLE_ATTR = /(?<![-\w])title\s*=/
-const PADDING_NONE = /(?<![-\w])padding\s*=\s*(?:"none"|'none'|"'none'"|'"none"')/
-const RAW_DIALOG_IMPORT = /^\s*import\s+(?:[^\n]*?\bfrom\s+)?["']primevue\/dialog["']/gm
-
-type Counts = Record<Pattern, Record<string, number>>
 
 function walkVue(dir: string): string[] {
   const files: string[] = []
@@ -120,72 +133,9 @@ function repoRelative(path: string): string {
   return relative(REPO_ROOT, path).split(sep).join('/')
 }
 
-function stripHtmlComments(text: string): string {
-  return text.replace(HTML_COMMENT, '')
-}
-
-/** Return every `<name ...>` opening tag, quote-aware so `>` in a value is safe. */
-function openingTags(text: string, names: readonly string[]): string[] {
-  const tags: string[] = []
-  const pattern = new RegExp(`<(?:${names.join('|')})(?=[\\s/>])`, 'gi')
-  for (const match of text.matchAll(pattern)) {
-    let index = (match.index ?? 0) + match[0].length
-    let quote: string | null = null
-    while (index < text.length) {
-      const char = text[index]
-      if (quote !== null) {
-        if (char === quote) quote = null
-      } else if (char === '"' || char === "'") {
-        quote = char
-      } else if (char === '>') {
-        break
-      }
-      index += 1
-    }
-    tags.push(text.slice(match.index, index + 1))
-  }
-  return tags
-}
-
-/** Split every static/dynamic `class` value on the tag into bare tokens. */
-function classTokens(tag: string): Set<string> {
-  const tokens = new Set<string>()
-  for (const match of tag.matchAll(CLASS_ATTR)) {
-    const raw = match[1] !== undefined ? match[1] : match[2]
-    for (const token of raw.replace(CLASS_TOKEN_NOISE, ' ').split(CLASS_TOKEN_SEPARATORS)) {
-      if (token) tokens.add(token)
-    }
-  }
-  return tokens
-}
-
-function isCardContainer(tag: string): boolean {
-  const tokens = classTokens(tag)
-  if (tokens.has('card')) return true
-  const rounded = [...tokens].some((token) => token === 'rounded' || token.startsWith('rounded-'))
-  const bordered = [...tokens].some((token) => token === 'border' || token.startsWith('border-'))
-  const padded = [...tokens].some((token) => PADDING_TOKEN.test(token))
-  return rounded && bordered && padded
-}
-
-function isCardHeader(tag: string): boolean {
-  const tokens = classTokens(tag)
-  return tokens.has('font-semibold') && (tokens.has('text-base') || tokens.has('text-lg'))
-}
-
-/** Count the three ratchet fingerprints in one `.vue` file's source text. */
-function countPatterns(text: string): Record<Pattern, number> {
-  const stripped = stripHtmlComments(text)
-  return {
-    card_container: openingTags(stripped, ['div']).filter(isCardContainer).length,
-    card_header: openingTags(stripped, ['h2', 'h3']).filter(isCardHeader).length,
-    raw_dialog: (stripped.match(RAW_DIALOG_IMPORT) ?? []).length,
-  }
-}
-
 /** Per-pattern, per-file counts with non-zero entries only (the baseline shape). */
 function collectCounts(): Counts {
-  const counts: Counts = { card_container: {}, card_header: {}, raw_dialog: {} }
+  const counts = emptyCounts()
   for (const path of scannedFiles()) {
     const perFile = countPatterns(readFileSync(path, 'utf-8'))
     for (const pattern of PATTERNS) {
@@ -199,10 +149,6 @@ function collectCounts(): Counts {
     )
   }
   return counts
-}
-
-function emptyCounts(): Counts {
-  return { card_container: {}, card_header: {}, raw_dialog: {} }
 }
 
 /** Validate a parsed baseline JSON value, rejecting unknown patterns / bad counts. */
@@ -275,24 +221,15 @@ function evaluateRatchet(baseline: Counts, actual: Counts): RatchetResult {
   return { regressions, reductions, zeroed }
 }
 
-/** Offending DataCard/SectionCard tags that combine a title with padding="none". */
-function titledCardsWithoutPadding(text: string): string[] {
-  const offenders: string[] = []
-  for (const tag of openingTags(stripHtmlComments(text), ['DataCard', 'SectionCard'])) {
-    if (!TITLE_ATTR.test(tag)) continue
-    if (!PADDING_NONE.test(tag)) continue
-    offenders.push(tag.split(/\s+/).join(' '))
-  }
-  return offenders
-}
-
 function lines(values: string[]): string {
   return values.map((value) => `  ${value}`).join('\n')
 }
 
 // Regeneration path (replaces the Python generator deleted with the duplicate
 // backend guard in FAR-2749): `collectCounts()` already emits the exact baseline
-// shape - non-zero entries only, sorted per pattern.
+// shape - non-zero entries only, sorted per pattern. The guard and the writer
+// share the same detectors (`countPatterns()`), so this cannot drift from what
+// the ratchet enforces.
 if (process.env.DS_GUARD_WRITE_BASELINE === '1') {
   writeFileSync(BASELINE_PATH, `${JSON.stringify(collectCounts(), null, 2)}\n`)
 }
@@ -316,19 +253,91 @@ describe('design-system conformance guard (FAR-2710)', () => {
     expect(countPatterns("<script>import X from 'primevue/button'</script>").raw_dialog).toBe(0)
   })
 
-  it('counts all three drift patterns per file', () => {
+  it('flags every raw primevue/badge import form, and nothing else', () => {
+    // Positive control: the four import spellings, and the bare side-effect form.
+    expect(countPatterns("import Badge from 'primevue/badge'").primevue_badge).toBe(1)
+    expect(countPatterns('import Badge from "primevue/badge"').primevue_badge).toBe(1)
+    expect(countPatterns("import * as Badge from 'primevue/badge'").primevue_badge).toBe(1)
+    expect(countPatterns("import { Badge } from 'primevue/badge'").primevue_badge).toBe(1)
+    expect(countPatterns("import { Badge as B } from 'primevue/badge'").primevue_badge).toBe(1)
+    expect(countPatterns("import 'primevue/badge'").primevue_badge).toBe(1)
+    // Negative controls: a sibling module, a commented-out import, and the
+    // template mention are not imports.
+    expect(countPatterns("import Badge from 'primevue/badgex'").primevue_badge).toBe(0)
+    expect(countPatterns("import Badge from 'primevue/message'").primevue_badge).toBe(0)
+    expect(countPatterns("<script>\n// import Badge from 'primevue/badge'\n</script>").primevue_badge).toBe(0)
+    expect(countPatterns('<!-- import Badge from \'primevue/badge\' -->').primevue_badge).toBe(0)
+    expect(countPatterns('<script>const mod = "primevue/badge"</script>').primevue_badge).toBe(0)
+    expect(countPatterns("<style>@import 'primevue/badge';</style>").primevue_badge).toBe(0)
+  })
+
+  it('counts a raw <button> in a template, and ignores comments, scripts, styles and components', () => {
+    // Positive control, including multi-line tags and every closing spelling.
+    expect(countPatterns('<template><button type="button">Save</button></template>').raw_button).toBe(1)
+    expect(countPatterns('<template><button /><button class="x"></button></template>').raw_button).toBe(2)
+    expect(countPatterns('<template>\n  <button\n    type="button"\n    @click="go"\n  >\n    Go\n  </button>\n</template>').raw_button).toBe(1)
+    // Negative controls: the drift is a raw HTML element, not a component.
+    expect(countPatterns('<template><Button label="Save" /></template>').raw_button).toBe(0)
+    expect(countPatterns('<template><buttonish /></template>').raw_button).toBe(0)
+    // ...and none of these are template markup.
+    expect(countPatterns('<template><!-- <button /> --></template>').raw_button).toBe(0)
+    expect(countPatterns('<template><div /></template><script>const tpl = \'<button />\'</script>').raw_button).toBe(0)
+    expect(countPatterns('<template><div /></template><style>.x::after { content: "<button>" }</style>').raw_button).toBe(0)
+  })
+
+  it('counts a raw <input> in a template, and ignores comments, scripts, styles and components', () => {
+    // Positive control, in the forms the app authors.
+    expect(countPatterns('<template><input v-model="value" /></template>').raw_input).toBe(1)
+    expect(countPatterns('<template><input type="checkbox" :checked="on" /><input type="text" /></template>').raw_input).toBe(2)
+    // Negative controls: PrimeVue components, its siblings, and non-template text.
+    expect(countPatterns('<template><InputText v-model="value" /></template>').raw_input).toBe(0)
+    expect(countPatterns('<template><inputmask v-model="value" /></template>').raw_input).toBe(0)
+    expect(countPatterns('<template><!-- <input /> --></template>').raw_input).toBe(0)
+    expect(countPatterns('<template><div /></template><script>const tpl = \'<input />\'</script>').raw_input).toBe(0)
+    expect(countPatterns('<template><div /></template><style>.y::before { content: "<input>" }</style>').raw_input).toBe(0)
+  })
+
+  it("does not count AppSelect's internals as a raw input", () => {
+    // AppSelect documents that PrimeVue's combobox is not an <input>, and that
+    // mention sits inside a template comment, so it is not a raw input...
+    const appSelect = join(SRC_DIR, 'components', 'shared', 'AppSelect.vue')
+    expect(countPatterns(readFileSync(appSelect, 'utf-8')).raw_input).toBe(0)
+    // ...and the shared primitives directory is out of scan scope entirely.
+    expect(scannedFiles()).not.toContain(appSelect)
+  })
+
+  it('never scans a spec, so a stubbed template is not counted', () => {
+    // A spec's `stubs`/slot fixtures author raw markup as test doubles. Prove
+    // the fixture really contains one, then that no spec is ever scanned.
+    const stubFixture = join(SRC_DIR, '__tests__', 'primevue-component-dom.spec.ts')
+    expect(countPatterns(readFileSync(stubFixture, 'utf-8')).raw_button).toBeGreaterThan(0)
+    expect(scannedFiles()).not.toContain(stubFixture)
+    expect(scannedFiles().some((path) => path.startsWith(join(SRC_DIR, '__tests__') + sep))).toBe(false)
+  })
+
+  it('counts all six drift patterns per file', () => {
     // Positive control for the per-file counts the ratchet compares.
     const counts = countPatterns(
       [
+        '<template>',
         '<div class="rounded-lg border border-border p-4"></div>',
         '<div class="card"></div>',
         '<h3 class="text-base font-semibold">Title</h3>',
+        '<button type="button">Save</button>',
+        '<input v-model="value" />',
+        '</template>',
+        '<script setup lang="ts">',
         "import Dialog from 'primevue/dialog'",
+        "import Badge from 'primevue/badge'",
+        '</script>',
       ].join('\n'),
     )
     expect(counts.card_container).toBe(2)
     expect(counts.card_header).toBe(1)
     expect(counts.raw_dialog).toBe(1)
+    expect(counts.raw_button).toBe(1)
+    expect(counts.raw_input).toBe(1)
+    expect(counts.primevue_badge).toBe(1)
   })
 
   it('has no DataCard/SectionCard that combines a title with padding="none"', () => {
@@ -397,7 +406,7 @@ describe('design-system conformance guard (FAR-2710)', () => {
       )
     }
 
-    const grewTitle = `A file gained more hand-rolled card/header/dialog drift than ${BASELINE_NAME} allows. Use the shared primitives (DataCard/SectionCard/CardHeader and the shared dialog wrapper) instead of raising the baseline:`
+    const grewTitle = `A file gained more hand-rolled card/header/dialog/button/input/badge drift than ${BASELINE_NAME} allows. Use the shared primitives (DataCard/SectionCard/CardHeader, the shared dialog wrapper, AppSelect-style wrappers) instead of raising the baseline:`
     const zeroTitle = `A baseline entry has fallen to zero, so the ratchet must shrink. Delete these entries from ${BASELINE_NAME} (the sweep has landed, or the pattern was renamed - fix the baseline rather than leaving a stale allowance):`
     expect(regressions, `${grewTitle}\n${lines(regressions)}`).toEqual([])
     expect(zeroed, `${zeroTitle}\n${lines(zeroed)}`).toEqual([])
