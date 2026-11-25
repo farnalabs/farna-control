@@ -329,7 +329,12 @@ class Evidence:
         """Redact configured credential values from text bound for a log or error."""
         return _redact(text, self._secrets)
 
-    def record(self, result: CommandResult, *, outcome: str) -> None:
+    def record(self, result: CommandResult, *, outcome: str) -> str:
+        """Write one command's evidence and return the counter-prefixed stem.
+
+        The stem is the on-disk file prefix (``NN-<name>``); a failure message
+        must name ``<stem>.stderr`` so the file it points at actually exists.
+        """
         self._counter += 1
         stem = f"{self._counter:02d}-{result.name}"
         stdout = _redact(result.stdout, self._secrets)
@@ -349,6 +354,7 @@ class Evidence:
         }
         with self.transcript.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
+        return stem
 
     def write_metadata(self, *, old_tag: str, new_tag: str, project_name: str, compose_file: Path) -> None:
         metadata = {
@@ -428,9 +434,15 @@ class Matrix:
             check=False,
         )
         captured = CommandResult(name, tuple(argv), result.returncode, result.stdout or "", result.stderr or "")
-        self.evidence.record(captured, outcome=expected if result.returncode == 0 else f"failed:{result.returncode}")
+        stem = self.evidence.record(captured, outcome=expected if result.returncode == 0 else f"failed:{result.returncode}")
         if expected == "success" and result.returncode != 0:
-            raise ValidationError(f"{name} failed with exit {result.returncode}; see evidence/{name}.stderr")
+            # Name the cause in the failure itself, not only in the artefact:
+            # the step name alone ("restore failed with exit 2") leaves the
+            # operator to download and open evidence/ to learn why. The stem
+            # is the counter-prefixed name actually written, so the path in the
+            # message resolves.
+            cause = _tail_excerpt(self.evidence.redact(captured.stderr))
+            raise ValidationError(f"{name} failed with exit {result.returncode}: {cause}; see evidence/{stem}.stderr")
         if expected == "failure" and result.returncode == 0:
             raise ValidationError(f"{name} unexpectedly succeeded; the failed-upgrade proof is absent")
         return captured

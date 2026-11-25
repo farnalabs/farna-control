@@ -886,3 +886,52 @@ def test_matrix_records_failed_compose_commands_as_failures(tmp_path: Path) -> N
     rows = [json.loads(line) for line in matrix.evidence.transcript.read_text(encoding="utf-8").splitlines()]
     assert rows[0]["returncode"] == 1
     assert rows[0]["outcome"] == "failed:1"
+
+
+def test_a_failed_command_names_its_cause_and_the_evidence_file_that_exists(tmp_path: Path) -> None:
+    """A loud failure must name the cause AND a path an operator can open.
+
+    The evidence files are counter-prefixed (``01-<name>.stderr``); a message
+    that says ``evidence/<name>.stderr`` points at a file that does not exist,
+    so the real cause is only found by digging through the artefact by hand.
+    """
+
+    def runner(argv: list[str], **kwargs: Any) -> SimpleNamespace:
+        if argv[0] == "docker" and "version" in argv:
+            return SimpleNamespace(
+                returncode=2,
+                stdout="",
+                stderr="Error: Invalid value for '--target-fs': Path '/var/lib/farna/db-volume' is not readable.\n",
+            )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    matrix = _matrix(tmp_path, runner, timeout=10)
+    with pytest.raises(ValidationError) as excinfo:
+        matrix.run()
+
+    message = str(excinfo.value)
+    assert "docker-version failed with exit 2" in message
+    # The cause is in the message, not only in the evidence directory.
+    assert "is not readable" in message
+    # The path named in the message is the file actually written.
+    assert "see evidence/01-docker-version.stderr" in message
+    assert (matrix.evidence.directory / "01-docker-version.stderr").is_file()
+
+
+def test_a_failed_command_redacts_the_cause_it_names(tmp_path: Path) -> None:
+    """The cause surfaced in a failure message must never leak a credential."""
+
+    def runner(argv: list[str], **kwargs: Any) -> SimpleNamespace:
+        if argv[0] == "docker" and "version" in argv:
+            return SimpleNamespace(returncode=1, stdout="", stderr="auth failed for supersecretvalue\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    matrix = _matrix(tmp_path, runner, timeout=10)
+    matrix.evidence.add_secrets({"supersecretvalue"})
+    with pytest.raises(ValidationError) as excinfo:
+        matrix.run()
+
+    message = str(excinfo.value)
+    assert "supersecretvalue" not in message
+    assert "[REDACTED]" in message
+    assert "auth failed" in message
