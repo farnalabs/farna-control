@@ -51,7 +51,7 @@ type PromptAction = {
   key: string
   labelKey: string
   testid: string
-  variant: 'button-secondary' | 'button' | 'text'
+  variant: 'button-secondary' | 'text'
   action: 'accept' | 'decline' | 'dismiss'
 }
 
@@ -74,12 +74,10 @@ const buildPromptActions = (defs: PromptActionDef[]): PromptAction[] =>
 
 const promptActions = computed<PromptAction[]>(() => buildPromptActions(standardActions))
 
-// The shared Button's four variants express the three action styles this
-// prompt declares: secondary (outlined), ghost (text) and primary.
-function buttonVariant(action: PromptAction): 'primary' | 'secondary' | 'ghost' {
-  if (action.variant === 'button-secondary') return 'secondary'
-  if (action.variant === 'text') return 'ghost'
-  return 'primary'
+// The shared Button's variants express the two action styles this prompt
+// declares: secondary (outlined) and ghost (text).
+function buttonVariant(action: PromptAction): 'secondary' | 'ghost' {
+  return action.variant === 'button-secondary' ? 'secondary' : 'ghost'
 }
 
 onMounted(() => {
