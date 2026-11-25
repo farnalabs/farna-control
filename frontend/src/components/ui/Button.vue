@@ -8,7 +8,7 @@
     :label="label"
     :icon="icon"
     :loading="loading"
-    :disabled="disabled"
+    :disabled="disabled || loading"
     @click="onClick"
   >
     <slot />
@@ -46,6 +46,12 @@
  * Attribute fall-through: `class` (layout: width, borders), `data-testid`,
  * `aria-pressed`, `as`/`href`/`target`/`rel` for link buttons, and any other
  * attribute land on the PrimeVue root, exactly as they did before adoption.
+ *
+ * Loading: `loading` must also disable the button, and the primitive binds
+ * `:disabled="disabled || loading"` to get it. PrimeVue computes its own
+ * `disabled` as `$attrs.disabled || loading`, but it merges incoming attrs
+ * AFTER that computation, so a bare `:disabled="disabled"` (false by default)
+ * overwrites the computed `true` and leaves a loading button clickable.
  */
 import { computed, onBeforeMount, useAttrs, useSlots } from 'vue'
 import PrimeButton from 'primevue/button'

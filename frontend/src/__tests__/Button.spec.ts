@@ -55,11 +55,20 @@ describe('Button', () => {
     expect(small.attributes('data-p')).toBe('small')
   })
 
-  it('passes loading through to PrimeVue and renders its loading icon', () => {
+  it('keeps a loading button disabled and unclickable, and renders its loading icon', async () => {
     const wrapper = mount(Button, { props: { label: 'Save', loading: true } })
 
     expect(wrapper.attributes('data-p-disabled')).toBe('true')
     expect(wrapper.find('.p-button-loading-icon').exists()).toBe(true)
+    // PrimeVue merges incoming attrs AFTER its own `disabled || loading`, so a
+    // bound `:disabled="false"` overwrites the computed `true`. The primitive
+    // must bind `disabled || loading` itself or the button is only visually
+    // disabled: no native attribute, and a click still fires.
+    expect(wrapper.attributes('disabled')).toBeDefined()
+    expect((wrapper.element as HTMLButtonElement).disabled).toBe(true)
+
+    await wrapper.trigger('click')
+    expect(wrapper.emitted('click')).toBeUndefined()
   })
 
   it('passes disabled through to the underlying button', () => {
