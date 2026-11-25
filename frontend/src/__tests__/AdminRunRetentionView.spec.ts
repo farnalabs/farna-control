@@ -168,6 +168,22 @@ describe('AdminRunRetentionView', () => {
     expect(result.text()).toContain('Purged 2 run(s)')
   })
 
+  it('cancels the purge dialog without calling the purge endpoint', async () => {
+    const wrapper = await mountView()
+    await wrapper.find('[data-testid="admin-run-retention-purge"]').trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    const cancelBtn = document.body.querySelector('[data-testid="admin-run-retention-purge-cancel"]') as HTMLElement
+    expect(cancelBtn).not.toBeNull()
+    cancelBtn.click()
+    for (let i = 0; i < 5; i++) await flushPromises()
+
+    expect(document.body.querySelector('[data-testid="admin-run-retention-confirm-dialog"]')).toBeNull()
+    const purgeCall = (api.POST as Mock).mock.calls.find((c: unknown[]) => c[0] === '/api/v1/admin/run-retention/purge')
+    expect(purgeCall).toBeUndefined()
+  })
+
   it('clears the stale purge-result banner when candidates are reloaded', async () => {
     const wrapper = await mountView()
     await wrapper.find('[data-testid="admin-run-retention-purge"]').trigger('click')

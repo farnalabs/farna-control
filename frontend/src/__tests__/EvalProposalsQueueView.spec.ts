@@ -518,3 +518,24 @@ describe('EvalProposalsQueueView', () => {
     })
   })
 })
+
+describe('EvalProposalsQueueView — publish dialog open change', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    loadingState.value = false
+    mockPlanStore.userPermissions = ['feedback.review', 'gate.create', 'feedback.update']
+    mockGet.mockResolvedValue({ data: sampleResponse, error: undefined })
+  })
+
+  it('only runs the close teardown when the dialog reports closed', async () => {
+    const wrapper = mountView()
+    await flush()
+    const vm = wrapper.vm as unknown as { onPublishDialogOpenChange: (open: boolean | undefined) => void }
+
+    // Opening (a truthy flag) must not run the close teardown; closing must.
+    expect(() => vm.onPublishDialogOpenChange(true)).not.toThrow()
+    expect(() => vm.onPublishDialogOpenChange(false)).not.toThrow()
+    expect(() => vm.onPublishDialogOpenChange(undefined)).not.toThrow()
+  })
+})

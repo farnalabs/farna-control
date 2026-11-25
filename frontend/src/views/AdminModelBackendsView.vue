@@ -316,7 +316,7 @@
                                   </tr>
                                 </thead>
                                 <tbody class="divide-y divide-border">
-                                  <tr v-for="ref in refsState[backend.id]!.data!.items" :key="`${ref.pipeline_id}-${ref.agent_id ?? 'direct'}`" class="hover:bg-muted/30">
+                                  <tr v-for="ref in refsState[backend.id]?.data?.items ?? []" :key="`${ref.pipeline_id}-${ref.agent_id ?? 'direct'}`" class="hover:bg-muted/30">
                                     <td class="table-cell font-medium">{{ ref.pipeline_name }}</td>
                                     <td class="table-cell text-muted-foreground">{{ ref.agent_name || '\u2014' }}</td>
                                     <td class="table-cell">

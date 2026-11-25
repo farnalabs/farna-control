@@ -250,7 +250,7 @@ const evalCount = computed(() => props.evalDefinitions.length);
           max="5"
           step="1"
           :value="localRetries"
-          class="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-indigo-500"
+          class="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-node-port"
           aria-label="Max validation retries"
           @input="updateRetries"
         />

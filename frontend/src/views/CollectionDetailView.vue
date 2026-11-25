@@ -219,10 +219,10 @@
                     class="inline-block h-2 w-2 rounded-full"
                     :class="
                       entry.status === 'configured+bound'
-                        ? 'bg-green-500'
+                        ? 'bg-success'
                         : entry.status === 'configured'
                           ? 'bg-yellow-500'
-                          : 'bg-red-500'
+                          : 'bg-destructive'
                     "
                   />
                   <span class="font-mono text-xs">{{ entry.connector_type_id }}</span>
@@ -245,7 +245,7 @@
             </div>
 
             <!-- Runnability -->
-            <div v-if="install.runnable" class="text-xs text-green-600 dark:text-green-400">
+            <div v-if="install.runnable" class="text-xs text-success-text">
               {{ $t('views.CollectionDetail.runnable') }}
             </div>
             <div v-else class="text-xs text-muted-foreground">

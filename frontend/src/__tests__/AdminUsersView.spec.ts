@@ -534,6 +534,27 @@ describe('AdminUsersView', () => {
     expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(false)
   })
 
+  it('renders the add-user mode tabs through StateTabs and switches them from the keyboard', async () => {
+    const wrapper = mountView()
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="admin-users-add-user"]').exists()).toBe(true)
+    })
+    await wrapper.find('[data-testid="admin-users-add-user"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="admin-users-mode-create"]').attributes('role')).toBe('tab')
+    expect(wrapper.get('[data-testid="admin-users-mode-create"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="admin-users-mode-create"]').attributes('tabindex')).toBe('0')
+    expect(wrapper.get('[data-testid="admin-users-mode-invite"]').attributes('tabindex')).toBe('-1')
+    expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="admin-users-mode-create"]').trigger('keydown', { key: 'ArrowRight' })
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="admin-users-mode-invite"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="admin-users-create-password"]').exists()).toBe(false)
+  })
+
   it('submits an invite and surfaces the single-use invite link', async () => {
     mockPost.mockResolvedValue({
       id: 'inv-2',
@@ -778,5 +799,26 @@ describe('generateStrongPassword', () => {
       expect(pw).toMatch(/[A-Z]/)
       expect(pw).toMatch(/\d/)
     }
+  })
+})
+
+describe('AdminUsersView — create mode guard', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    baseMocks()
+  })
+
+  it('ignores an unknown create mode id and honours the two declared modes', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { createMode: string; onCreateModeSelected: (id: string) => void }
+
+    vm.onCreateModeSelected('create')
+    expect(vm.createMode).toBe('password')
+    vm.onCreateModeSelected('invite')
+    expect(vm.createMode).toBe('invite')
+    vm.onCreateModeSelected('bogus')
+    expect(vm.createMode).toBe('invite')
   })
 })

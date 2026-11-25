@@ -287,7 +287,7 @@ function levelDotClass(level: string): string {
     case "error":
       return "bg-destructive";
     case "warning":
-      return "bg-amber-500";
+      return "bg-warning";
     case "info":
       return "bg-blue-500";
     default:

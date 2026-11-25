@@ -1130,6 +1130,34 @@ describe('AdminAuditView — system ledger (system admin)', () => {
     expect(wrapper.find('[data-testid="admin-audit-event-row-evt-1"]').exists()).toBe(true)
   })
 
+  it('renders the source tabs through the shared StateTabs primitive', async () => {
+    const wrapper = await mountLoaded()
+    const tablist = wrapper.get('[data-testid="admin-audit-source-tabs"]')
+
+    expect(tablist.attributes('role')).toBe('tablist')
+    expect(tablist.attributes('aria-label')).toBeTruthy()
+    expect(tablist.attributes('aria-orientation')).toBe('horizontal')
+    // Roving tabindex: only the active tab is in the tab order.
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('tabindex')).toBe('0')
+    expect(wrapper.get('[data-testid="admin-audit-tab-system"]').attributes('tabindex')).toBe('-1')
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-controls')).toBe('admin-audit-source-org')
+  })
+
+  it('switches the audit source from the keyboard (ArrowRight/Home)', async () => {
+    const wrapper = await mountLoaded()
+
+    await wrapper.get('[data-testid="admin-audit-tab-org"]').trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="admin-audit-tab-system"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="admin-audit-system-section"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="admin-audit-tab-system"]').trigger('keydown', { key: 'Home' })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-selected')).toBe('true')
+  })
+
   it('renders the shared table skeleton while the ledger loads (VIS-3/STATE-3)', async () => {
     ;(api.GET as Mock).mockImplementation(async (url: string) => {
       if (url === '/api/v1/admin/system-audit') return new Promise(() => {})
@@ -1429,5 +1457,24 @@ describe('AdminAuditView — table spacing (FAR-2584)', () => {
     expect(panel.classes()).toContain('space-y-4')
     expect(panel.find('.card').exists()).toBe(true)
     expect(panel.find('.table-wrapper').exists()).toBe(true)
+  })
+})
+
+describe('AdminAuditView — audit source guard', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('honours the two declared sources and ignores an unknown id', async () => {
+    mockAuditGet([])
+    const wrapper = mountView()
+    await nextTick()
+    const vm = wrapper.vm as unknown as { auditSource: string; onAuditSourceSelected: (id: string) => void }
+
+    vm.onAuditSourceSelected('system')
+    expect(vm.auditSource).toBe('system')
+    vm.onAuditSourceSelected('bogus')
+    expect(vm.auditSource).toBe('system')
   })
 })
