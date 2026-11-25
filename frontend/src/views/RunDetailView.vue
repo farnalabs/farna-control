@@ -384,13 +384,15 @@
            the sandbox attempt (raw-output marker store). Rendered whenever the
            run detail carries triage entries — typically a node-deadline
            watchdog kill, where no node envelope exists to show instead. -->
-      <div
+      <BaseCard
         v-if="deadlineTriageEntries.length > 0"
+        padding="md"
+        variant="muted"
+        class="mb-4"
         data-testid="run-detail-deadline-triage"
-        class="rounded-lg border border-border bg-muted/40 p-4 mb-4"
       >
-        <h3 class="text-sm font-semibold mb-1">{{ $t('views.RunDetailView.deadline_triage_title') }}</h3>
-        <p class="text-xs text-muted-foreground mb-3">{{ $t('views.RunDetailView.deadline_triage_help') }}</p>
+        <CardHeader heading-level="h2" header-class="mb-0!" :title="$t('views.RunDetailView.deadline_triage_title')" />
+        <p class="mt-1 text-xs text-muted-foreground mb-3">{{ $t('views.RunDetailView.deadline_triage_help') }}</p>
         <div
           v-for="(entry, entryIndex) in deadlineTriageEntries"
           :key="entry.attempt_key ?? entry.node_id ?? String(entryIndex)"
@@ -416,29 +418,31 @@
             <pre class="mt-1 text-xs whitespace-pre-wrap font-mono">{{ entry.raw_output_head }}</pre>
           </details>
         </div>
-      </div>
+      </BaseCard>
 
       <!-- Cancellation reason (FAR-1233): WHY this run was cancelled.
            Rendered for every cancelled run — the reason itself degrades to a
            neutral "not recorded" message when the run predates the
            cancel-reason columns (cancelReasonMessage handles the fallback). -->
-      <div
+      <BaseCard
         v-if="run.status === 'cancelled'"
+        padding="md"
+        variant="muted"
+        class="mb-4"
         data-testid="run-detail-cancel-reason"
-        class="mb-4 rounded-lg border border-border bg-muted/40 p-4"
       >
-        <h3 class="text-sm font-semibold mb-1">{{ $t('views.RunDetailView.cancel_reason_title') }}</h3>
+        <CardHeader heading-level="h2" header-class="mb-0!" :title="$t('views.RunDetailView.cancel_reason_title')" />
         <output
           data-testid="run-detail-cancel-reason-message"
           aria-live="polite"
-          class="block text-sm text-muted-foreground"
+          class="mt-1 block text-sm text-muted-foreground"
         >{{ cancelReasonMessage }}</output>
         <p
           v-if="cancelledByLabel"
           data-testid="run-detail-cancelled-by"
           class="mt-1 text-xs text-muted-foreground"
         >{{ cancelledByLabel }}</p>
-      </div>
+      </BaseCard>
 
       <!-- FAR-706: curated known-fix entries matched against the raw error detail -->
       <KnownFixesPanel :fixes="run.known_fixes" />
