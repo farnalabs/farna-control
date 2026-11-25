@@ -69,6 +69,11 @@ jobs:
       # deploy that happened. Consumed by deploy-throttle-status.
       skip_reason: ${{ steps.check.outputs.skip_reason }}
       next_deploy: ${{ steps.check.outputs.next_deploy }}
+      # FAR-954: the created_at of the last run whose production deploy JOB
+      # concluded success - the same anchor the interval throttle uses. Passed
+      # through so the status summary can say WHEN the last real deploy was
+      # without re-deriving it (and therefore without ever disagreeing).
+      last_deploy: ${{ steps.check.outputs.last_deploy }}
       # Run identity, resolved ONCE below and consumed by every downstream
       # job via needs.deploy-throttle.outputs.* — so all jobs in one run
       # report the same RUN_SHA instead of each re-deriving it.
@@ -227,17 +232,84 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           }
 
+          # FAR-954: the single-line verdict is the FIRST line of this step's
+          # log on every path, so `gh run view --log` (or the step log) shows
+          # "deployed / did not deploy" without expanding anything. Every other
+          # line this step emits - the anchor timestamp, the hours-since
+          # figure, annotations - is printed afterwards by log_detail() or
+          # after the verdict, so it can never push the verdict off the top.
+          log_detail() {
+            echo "last_deploy_attempt=${LAST:-none}"
+          }
+
+          # FAR-954 (legibility): force_deploy is the emergency bypass, so it
+          # must never wait on the Actions API. It runs FIRST, before the anchor
+          # scan below (1 + up to 50 Actions reads): a forced run reports
+          # last_deploy as unknown and jumps straight to the bypass, matching the
+          # pre-FAR-954 guarantee that force performed no Actions read.
+          LAST=""
           if [ "$FORCE_DEPLOY" = "true" ]; then
             {
               echo "should_deploy=true"
               echo "deployed=true"
               echo "skip_reason="
               echo "next_deploy="
+              echo "last_deploy=${LAST}"
             } >> "$GITHUB_OUTPUT"
+            echo "DEPLOY VERDICT: YES (forced - throttle bypassed)"
+            log_detail
             echo "Force deploy requested — bypassing throttle."
             write_verdict "YES (forced - throttle bypassed)" "workflow_dispatch force_deploy=true" ""
             exit 0
           fi
+
+          # Anchor the throttle on the most recent run that ACTUALLY deployed to
+          # production — the "Deploy to control.farna.dev" job concluded with success.
+          # A run that was itself throttled (all jobs skipped), failed pre-deploy or
+          # staging E2E, was cancelled, or is still in progress must NOT count as an
+          # attempt; using it as the anchor would push the window forward on every
+          # push and starve real deploys (observed 2026-08-08: prod stuck on the
+          # 10:52 build for 4h while every later run skipped against the previous
+          # skipped run).
+          #
+          # FAR-2152: the anchor is a JOB conclusion, never the RUN conclusion.
+          # This is what makes the livelock (a throttled success resetting the
+          # window that throttled it) impossible: on a throttled run the
+          # "Deploy to control.farna.dev" job is SKIPPED, so it can never be the
+          # anchor. Verified against the 2026-10-25 run history: the throttle
+          # anchored on run 40183128848 (created 10:02:33Z, deploy job
+          # `success`), skipped four re-dispatch runs at 11:24-12:44Z, then
+          # passed at 13:02:14Z — anchor + 3h, exactly. The repeated throttled
+          # runs were the deploy watchdog's ~35-min re-dispatches, not
+          # self-perpetuation. A structural test pins this input so a future
+          # edit cannot swap in a run-level read.
+          #
+          # FAR-954 (legibility): this observation is hoisted ABOVE the remaining
+          # decision branches (in-progress skip, commit-fix bypass, interval) so
+          # each can report WHEN the last real deploy was. It is an observation
+          # only: those conditions evaluate in the same order as before.
+          # force_deploy is the documented exception (it reports last_deploy
+          # unknown) because its bypass must not wait on Actions.
+          #
+          # Each Actions read is bounded by `timeout` so a slow or hung API
+          # degrades to "no anchor" (deploy proceeds) instead of stalling the
+          # throttle check.
+          for RID in $(timeout 20 gh run list --repo "${{ github.repository }}" \
+            --workflow "Deploy: Staging + Prod" \
+            --limit 50 \
+            --json databaseId --jq '.[].databaseId' 2>/dev/null || echo ""); do
+            [ "$RID" = "${{ github.run_id }}" ] && continue
+            # per_page=100: the deploy job must be found even if the job list
+            # grows past the API's default page of 30 (a silent miss would
+            # anchor on a stale/failed run instead of the real deploy).
+            DEPLOY_JOB_CONCLUSION="$(timeout 20 gh api "repos/${{ github.repository }}/actions/runs/$RID/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name == "Deploy to control.farna.dev") | .conclusion] | .[0] // empty' 2>/dev/null || echo "")"
+            if [ "$DEPLOY_JOB_CONCLUSION" = "success" ]; then
+              LAST="$(timeout 20 gh api "repos/${{ github.repository }}/actions/runs/$RID" \
+                --jq '.created_at' 2>/dev/null || echo "")"
+              break
+            fi
+          done
           # If a deploy run is already in progress, batch this one - do not cancel/compete.
           # FAR-492 (documented, accepted): a push and a workflow_dispatch can fire
           # near-simultaneously; both register as in-progress within seconds, so this
@@ -262,11 +334,14 @@ jobs:
               echo "should_deploy=false"
               echo "deployed=false"
               echo "skip_reason=in_progress"
+              echo "last_deploy=${LAST}"
             } >> "$GITHUB_OUTPUT"
             # Next deploy: as soon as the in-progress run concludes - an exact
             # time is unknowable from here, so say what it is instead of a
             # fabricated timestamp.
             echo "next_deploy=after run ${IN_PROGRESS} finishes (it is deploying now)" >> "$GITHUB_OUTPUT"
+            echo "DEPLOY VERDICT: NO DEPLOY — batched behind an in-progress run (FAR-954)"
+            log_detail
             echo "::notice::A deploy run is already in progress (run $IN_PROGRESS) - batching; skipping this run so it does not cancel the in-progress deploy. This run will NOT deploy; expected next deploy: after run $IN_PROGRESS finishes."
             write_verdict "NO DEPLOY — batched behind an in-progress run (FAR-954)" "another deploy run is already in progress (run ${IN_PROGRESS}); batching instead of competing with it" "after run ${IN_PROGRESS} finishes (it is deploying now)"
             exit 0
@@ -280,68 +355,37 @@ jobs:
               echo "deployed=true"
               echo "skip_reason="
               echo "next_deploy="
+              echo "last_deploy=${LAST}"
             } >> "$GITHUB_OUTPUT"
+            echo "DEPLOY VERDICT: YES (deploy/CI-fix commit - throttle bypassed)"
+            log_detail
             echo "Deploy/CI-fix commit — bypassing throttle."
             write_verdict "YES (deploy/CI-fix commit - throttle bypassed)" "commit message matches the fix(deploy)/fix(ci)/ci: bypass pattern" ""
             exit 0
           fi
-          # Anchor the throttle on the most recent run that ACTUALLY deployed to
-          # production — the "Deploy to control.farna.dev" job concluded with success.
-          # A run that was itself throttled (all jobs skipped), failed pre-deploy or
-          # staging E2E, was cancelled, or is still in progress must NOT count as an
-          # attempt; using it as the anchor would push the window forward on every
-          # push and starve real deploys (observed 2026-08-08: prod stuck on the
-          # 10:52 build for 4h while every later run skipped against the previous
-          # skipped run).
-          #
-          # FAR-2152: the anchor is a JOB conclusion, never the RUN conclusion.
-          # This is what makes the livelock (a throttled success resetting the
-          # window that throttled it) impossible: on a throttled run the
-          # "Deploy to control.farna.dev" job is SKIPPED, so it can never be the
-          # anchor. Verified against the 2026-10-25 run history: the throttle
-          # anchored on run 40183128848 (created 10:02:33Z, deploy job
-          # `success`), skipped four re-dispatch runs at 11:24-12:44Z, then
-          # passed at 13:02:14Z — anchor + 3h, exactly. The repeated throttled
-          # runs were the deploy watchdog's ~35-min re-dispatches, not
-          # self-perpetuation. A structural test pins this input so a future
-          # edit cannot swap in a run-level read.
-          LAST=""
-          for RID in $(gh run list --repo "${{ github.repository }}" \
-            --workflow "Deploy: Staging + Prod" \
-            --limit 50 \
-            --json databaseId --jq '.[].databaseId' 2>/dev/null || echo ""); do
-            [ "$RID" = "${{ github.run_id }}" ] && continue
-            # per_page=100: the deploy job must be found even if the job list
-            # grows past the API's default page of 30 (a silent miss would
-            # anchor on a stale/failed run instead of the real deploy).
-            DEPLOY_JOB_CONCLUSION="$(gh api "repos/${{ github.repository }}/actions/runs/$RID/jobs?per_page=100" \
-              --jq '[.jobs[] | select(.name == "Deploy to control.farna.dev") | .conclusion] | .[0] // empty' 2>/dev/null || echo "")"
-            if [ "$DEPLOY_JOB_CONCLUSION" = "success" ]; then
-              LAST="$(gh api "repos/${{ github.repository }}/actions/runs/$RID" \
-                --jq '.created_at' 2>/dev/null || echo "")"
-              break
-            fi
-          done
-          echo "last_deploy_attempt=${LAST:-none}"
+
           if [ -z "$LAST" ]; then
             {
               echo "should_deploy=true"
               echo "deployed=true"
               echo "skip_reason="
               echo "next_deploy="
+              echo "last_deploy=${LAST}"
             } >> "$GITHUB_OUTPUT"
+            echo "DEPLOY VERDICT: YES"
+            log_detail
             echo "No previous deploy attempt - deploying."
             write_verdict "YES" "no previous deploy attempt found to anchor the throttle on" ""
           else
             LAST_TS=$(date -u -d "$LAST" +%s)
             NOW_TS=$(date -u +%s)
             DIFF_H=$(( (NOW_TS - LAST_TS) / 3600 ))
-            echo "hours_since_deploy=${DIFF_H}"
             if [ "$DIFF_H" -lt "$INTERVAL_HOURS" ]; then
               {
                 echo "should_deploy=false"
                 echo "deployed=false"
                 echo "skip_reason=interval_throttled"
+                echo "last_deploy=${LAST}"
               } >> "$GITHUB_OUTPUT"
               # Next eligible deploy = anchor + interval, computed from the
               # SAME anchor the skip just used (never re-derived - see the
@@ -349,6 +393,9 @@ jobs:
               NEXT_TS=$((LAST_TS + INTERVAL_HOURS * 3600))
               NEXT_AT="$(date -u -d "@$NEXT_TS" +%Y-%m-%dT%H:%MZ)"
               echo "next_deploy=${NEXT_AT} (last deploy + ${INTERVAL_HOURS}h interval)" >> "$GITHUB_OUTPUT"
+              echo "DEPLOY VERDICT: NO DEPLOY — throttled (FAR-954)"
+              log_detail
+              echo "hours_since_deploy=${DIFF_H}"
               echo "::notice::Last deploy attempt ${DIFF_H}h ago (< ${INTERVAL_HOURS}h) - skipping deploy. This run will NOT deploy; next deploy eligible at ${NEXT_AT} (UTC). Use workflow_dispatch force_deploy=true to bypass now."
               write_verdict "NO DEPLOY — throttled (FAR-954)" "last production deploy was ${DIFF_H}h ago, under the ${INTERVAL_HOURS}h throttle interval" "${NEXT_AT} UTC (last deploy + ${INTERVAL_HOURS}h); sooner only via workflow_dispatch force_deploy=true"
             else
@@ -357,7 +404,11 @@ jobs:
                 echo "deployed=true"
                 echo "skip_reason="
                 echo "next_deploy="
+                echo "last_deploy=${LAST}"
               } >> "$GITHUB_OUTPUT"
+              echo "DEPLOY VERDICT: YES"
+              log_detail
+              echo "hours_since_deploy=${DIFF_H}"
               echo "Deploying (${DIFF_H}h since last deploy attempt)."
               write_verdict "YES" "${DIFF_H}h since last deploy attempt (>= ${INTERVAL_HOURS}h interval)" ""
             fi
@@ -4250,22 +4301,111 @@ jobs:
     if: always()
     runs-on: ubicloud-standard-2
     steps:
+      - name: Gather deploy state (read-only)
+        id: state
+        shell: bash
+        env:
+          # github.token + the workflow's `contents: read` permission are enough
+          # for the commits/compare reads. FAR-528: a PAT without Actions scope
+          # returns 404 for resources it cannot see, so use github.token.
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # Read-only state for the summary below. Every read is best-effort:
+          # a failure renders "unknown", never a red run and never a fabricated
+          # value. Nothing here touches the throttle's decision - by the time
+          # this job runs, deploy-throttle has already decided.
+          PROD_SHA=""
+          MAIN_SHA=""
+          COMMITS_BEHIND=""
+          PROD_JSON="$(curl -fsS -m 10 'https://control.farna.dev/api/v1/deployment' 2>/dev/null || true)"
+          if [ -n "$PROD_JSON" ]; then
+            PROD_SHA="$(printf '%s' "$PROD_JSON" | python3 -c 'import json,sys; print((json.load(sys.stdin) or {}).get("git_sha") or "")' 2>/dev/null || true)"
+          fi
+          MAIN_SHA="$(gh api "repos/$REPOSITORY/commits/main" --jq '.sha // empty' 2>/dev/null || true)"
+          if [ -n "$PROD_SHA" ] && [ -n "$MAIN_SHA" ]; then
+            if [ "$PROD_SHA" = "$MAIN_SHA" ]; then
+              COMMITS_BEHIND="0"
+            else
+              COMMITS_BEHIND="$(gh api "repos/$REPOSITORY/compare/${PROD_SHA}...${MAIN_SHA}" --jq '.ahead_by // empty' 2>/dev/null || true)"
+            fi
+          fi
+          {
+            echo "prod_sha=${PROD_SHA}"
+            echo "main_sha=${MAIN_SHA}"
+            echo "commits_behind=${COMMITS_BEHIND}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Production build: ${PROD_SHA:-unknown}; origin/main: ${MAIN_SHA:-unknown}; main is ahead by: ${COMMITS_BEHIND:-unknown} commit(s)."
+
       - name: Write throttle/deploy summary annotation
         shell: bash
         env:
           SHOULD_DEPLOY: ${{ needs.deploy-throttle.outputs.should_deploy }}
           SKIP_REASON: ${{ needs.deploy-throttle.outputs.skip_reason }}
           NEXT_DEPLOY: ${{ needs.deploy-throttle.outputs.next_deploy }}
+          LAST_DEPLOY: ${{ needs.deploy-throttle.outputs.last_deploy }}
+          PROD_SHA: ${{ steps.state.outputs.prod_sha }}
+          MAIN_SHA: ${{ steps.state.outputs.main_sha }}
+          COMMITS_BEHIND: ${{ steps.state.outputs.commits_behind }}
           FORCE_DEPLOY: ${{ github.event.inputs.force_deploy }}
           DEPLOY_SHA: ${{ github.sha }}
+          TRIGGERED_BY: ${{ github.event_name == 'push' && 'push to main' || 'manual dispatch' }}
         run: |
           SHORT_SHA="${DEPLOY_SHA:0:7}"
+          short() { printf '%s' "${1:-}" | cut -c1-7; }
+
+          # "when the last real deploy was" - LAST_DEPLOY is the created_at of
+          # the last run whose production deploy JOB succeeded, passed through
+          # from the throttle job (the SAME anchor it throttles on), never
+          # re-derived here.
+          LAST_AGE=""
+          LAST_LINE="**Last real deploy:** unknown on this path (see the Deploy throttle job log)"
+          LAST_TEXT="unknown"
+          if [ -n "$LAST_DEPLOY" ]; then
+            LAST_TS="$(date -u -d "$LAST_DEPLOY" +%s 2>/dev/null || true)"
+            if [ -n "$LAST_TS" ]; then
+              NOW_EPOCH="$(date -u +%s)"
+              AGE_MIN=$(( (NOW_EPOCH - LAST_TS) / 60 ))
+              LAST_AGE="$((AGE_MIN / 60))h $((AGE_MIN % 60))m ago"
+            fi
+            LAST_LINE="**Last real deploy:** ${LAST_DEPLOY} (${LAST_AGE:-age unknown})"
+            LAST_TEXT="${LAST_DEPLOY}"
+            if [ -n "$LAST_AGE" ]; then
+              LAST_TEXT="${LAST_TEXT} (${LAST_AGE})"
+            fi
+          fi
+
+          # "the gap between production's deployed SHA and origin/main", read
+          # once by the previous step. Handles prod == main, prod behind main,
+          # and either side unreadable.
+          GAP_LINE="**Production build:** unknown (production metadata and origin/main both unreadable)"
+          GAP_TEXT="Production build unknown, origin/main unknown"
+          if [ -n "$PROD_SHA" ] && [ -n "$MAIN_SHA" ]; then
+            if [ "$PROD_SHA" = "$MAIN_SHA" ]; then
+              GAP_LINE="**Production build:** $(short "$PROD_SHA") - current with origin/main $(short "$MAIN_SHA")"
+              GAP_TEXT="Production build $(short "$PROD_SHA"), current with origin/main"
+            elif [ -n "$COMMITS_BEHIND" ]; then
+              GAP_LINE="**Production build:** $(short "$PROD_SHA") - origin/main $(short "$MAIN_SHA") is **${COMMITS_BEHIND} commit(s) ahead**"
+              GAP_TEXT="Production build $(short "$PROD_SHA"), origin/main $(short "$MAIN_SHA") ${COMMITS_BEHIND} commit(s) ahead"
+            else
+              GAP_LINE="**Production build:** $(short "$PROD_SHA") - origin/main $(short "$MAIN_SHA") (gap unknown: compare API unavailable)"
+              GAP_TEXT="Production build $(short "$PROD_SHA"), origin/main $(short "$MAIN_SHA") (gap unknown)"
+            fi
+          elif [ -n "$PROD_SHA" ]; then
+            GAP_LINE="**Production build:** $(short "$PROD_SHA") - origin/main unreadable"
+            GAP_TEXT="Production build $(short "$PROD_SHA"), origin/main unreadable"
+          elif [ -n "$MAIN_SHA" ]; then
+            GAP_LINE="**Production build:** unreadable - origin/main is $(short "$MAIN_SHA")"
+            GAP_TEXT="Production build unreadable, origin/main $(short "$MAIN_SHA")"
+          fi
+
           if [ "$SHOULD_DEPLOY" = "true" ]; then
             if [ "$FORCE_DEPLOY" = "true" ]; then
               THROTTLE_LINE="**Throttle:** bypassed - force_deploy=true"
             else
               THROTTLE_LINE="**Throttle:** passed - this run is deploying"
             fi
+            echo "DEPLOY VERDICT: YES - this run is deploying ${SHORT_SHA}."
             echo "::notice::THIS RUN IS DEPLOYING: deploy pipeline will run pre-deploy tests, staging deploy, staging E2E, production deploy, and prod smoke tests. Deployed SHA will be ${SHORT_SHA}."
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## Deploy Pipeline: ACTIVELY DEPLOYING
@@ -4273,7 +4413,9 @@ jobs:
           **Status:** The deploy throttle passed — this run is executing the full deploy pipeline.
           ${THROTTLE_LINE}
           **Deploying SHA:** ${SHORT_SHA}
-          **Triggered by:** ${{ github.event_name == 'push' && 'push to main' || 'manual dispatch' }}
+          ${LAST_LINE}
+          ${GAP_LINE}
+          **Triggered by:** ${TRIGGERED_BY}
 
           All pre-deploy gates, staging E2E, production deploy, and prod smoke tests will run.
           EOF
@@ -4282,20 +4424,27 @@ jobs:
             # before deciding (it fails LOUD on an unknown throttle state -
             # see its FAR-528 comment), so the run is already red. Say what
             # happened rather than mislabeling it as a deliberate throttle.
+            echo "DEPLOY VERDICT: THROTTLE CHECK FAILED - no verdict produced; nothing deployed."
             echo "::warning::THROTTLE CHECK FAILED — no deploy verdict was produced; see the Deploy throttle job log. This run did NOT deploy."
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## Deploy Pipeline: THROTTLE CHECK FAILED — NO DEPLOY
 
           **Status:** The \`deploy-throttle\` job did not produce a verdict (it failed - see its log). **No deployment happened.**
           **Next step:** fix the Deploy throttle job, or dispatch with \`force_deploy=true\` to bypass it.
+          ${GAP_LINE}
 
-          **Triggered by:** ${{ github.event_name == 'push' && 'push to main' || 'manual dispatch' }}
+          **Triggered by:** ${TRIGGERED_BY}
           EOF
           else
-            # Not deploying: say WHY (batched behind an in-progress run vs
-            # throttle interval) and WHEN the next deploy is expected. Both
+            # Not deploying: say WHY and WHEN the next deploy is expected. Both
             # values are computed by the throttle job from the same anchor it
             # skipped on - never re-derived here, so they cannot disagree.
+            #
+            # `hold` has no producer today (the SAQ_HOLD gate was retired
+            # 2026-08-05, see docs/configuration-reference.md). The case is
+            # kept so that if a deploy hold is reintroduced, the summary names
+            # it explicitly instead of falling into the generic "reason not
+            # recorded" bucket - the throttle decision itself is unchanged.
             case "$SKIP_REASON" in
               in_progress)
                 REASON="Another deploy run is already in progress; this run was batched behind it instead of competing."
@@ -4303,26 +4452,30 @@ jobs:
               interval_throttled)
                 REASON="Last production deploy was under the throttle interval; this run is batching."
                 ;;
+              hold)
+                REASON="A deploy hold is set; deploys are paused until the hold is cleared."
+                ;;
               *)
                 REASON="The deploy throttle skipped this run (reason not recorded - see the Deploy throttle job log)."
                 ;;
             esac
             NEXT_LINE="${NEXT_DEPLOY:-unknown - see the Deploy throttle job log}"
-            PROD_SHA="$(curl -fsS -m 10 'https://control.farna.dev/api/v1/deployment' 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("git_sha","unknown")[:7])' 2>/dev/null || echo 'unknown')"
             # ::warning:: not ::notice:: - the run is green but deployed
             # nothing, which is exactly the state that reads as success at a
             # glance. A warning-level annotation carries a yellow marker in
             # the run's annotation list; it does NOT change the run's
             # conclusion (annotations never do).
-            echo "::warning::THROTTLED — NO DEPLOYMENT PERFORMED. Production is unchanged (running ${PROD_SHA}). Reason: ${REASON} Next deploy expected: ${NEXT_LINE}. This run will conclude SUCCESS but NO deployment happened. Use workflow_dispatch force_deploy=true to deploy now."
+            echo "DEPLOY VERDICT: NO DEPLOY — throttled (FAR-954)."
+            echo "::warning::THROTTLED — NO DEPLOYMENT PERFORMED. ${GAP_TEXT}. Last real deploy: ${LAST_TEXT}. Reason: ${REASON} Next deploy expected: ${NEXT_LINE}. This run will conclude SUCCESS but NO deployment happened. Use workflow_dispatch force_deploy=true to deploy now."
             cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           ## NO DEPLOY — throttled (FAR-954)
 
           **Status:** This run was **THROTTLED** and **NO DEPLOYMENT was performed**.
           **Reason:** ${REASON}
+          ${LAST_LINE}
           **Next deploy expected:** ${NEXT_LINE}
-          **Production build:** ${PROD_SHA} (unchanged)
-          **Triggered by:** ${{ github.event_name == 'push' && 'push to main' || 'manual dispatch' }}
+          ${GAP_LINE}
+          **Triggered by:** ${TRIGGERED_BY}
 
           > **This run succeeded WITHOUT deploying.** Production is serving the previous build.
           > A green checkmark here does NOT mean production was updated.
