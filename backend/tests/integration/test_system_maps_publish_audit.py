@@ -22,7 +22,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from farna.api.dependencies import get_db_session, get_plan_context
+from farna.api.dependencies import get_db_session, get_plan_context, get_plan_context_any_credential
 from farna.api.main import app
 from farna.auth.dependencies import get_current_tenant_user_or_api_key, get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
@@ -346,6 +346,9 @@ async def integration_client_with_audit(
     app.dependency_overrides[_get_engine] = lambda: app_engine
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[get_plan_context] = _all_features_ctx
+    # FAR-2748: the system-maps router feature gate resolves the plan through the
+    # any-credential variant, so the JWT-only override above no longer applies.
+    app.dependency_overrides[get_plan_context_any_credential] = _all_features_ctx
     app.dependency_overrides[audit_session] = override_audit_session
     app.dependency_overrides[get_current_tenant_user_or_api_key] = override_auth
     app.dependency_overrides[get_current_user] = override_current_user
