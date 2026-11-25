@@ -834,6 +834,12 @@ async def _existing_account_or_conflict(
     inline (extracted to keep the route's control flow shallow, S3776).
     """
     async with session.begin():
+        # Migration 0367 fail-closes org_memberships with no org GUC, and the
+        # org context is transaction-local (set_config is_local=true) so it does
+        # not survive into this transaction. Bind it before the membership read
+        # or RLS filters every row and the duplicate-membership conflict is
+        # missed.
+        await set_rls_org(session, org_id)
         existing = await get_account_by_email(session, req.email)
         if existing is not None:
             membership = await get_membership_by_account_and_org(session, existing.id, org_id)
@@ -866,6 +872,12 @@ async def _create_or_adopt_account(
     (SonarQube S3776). Returns ``(account, membership)``.
     """
     async with session.begin():
+        # Migration 0367 fail-closes org_memberships inserts with no org GUC,
+        # and the org context is transaction-local (set_config is_local=true) so
+        # it does not survive into this transaction. Bind it first or the
+        # membership INSERT violates the policy and surfaces as HTTP 501
+        # migration_required (mirrors admin_orgs.admin_create_org_user).
+        await set_rls_org(session, current_user.organisation_id)
         if existing is not None:
             account = existing
             # SECURITY (#1185): only allow password hash overwrite for
@@ -899,9 +911,9 @@ async def _create_or_adopt_account(
 
         # Audit is fail-open-with-alert (mirrors me.change_password): the
         # user creation ALWAYS commits; a failed audit write is loudly
-        # logged and never rolls back the change.
+        # logged and never rolls back the change. The org RLS context is
+        # already bound at the top of this transaction.
         try:
-            await set_rls_org(session, current_user.organisation_id)
             await append_audit_event(
                 session,
                 org_id=current_user.organisation_id,

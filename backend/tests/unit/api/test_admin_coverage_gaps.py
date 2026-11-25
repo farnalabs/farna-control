@@ -252,6 +252,54 @@ def test_create_user_db_error_mapping(
     assert resp.status_code == expected
 
 
+def test_create_user_binds_org_rls_before_membership_insert(api: tuple[TestClient, AsyncMock], monkeypatch: pytest.MonkeyPatch) -> None:
+    """The tenant create-user route binds org RLS before the membership INSERT.
+
+    Migration 0367 fail-closes ``org_memberships`` when no org GUC is bound, and
+    the org context is transaction-local (``set_config`` is_local), so each
+    ``session.begin()`` in the create-user flow starts unscoped. The mocked
+    membership INSERT models that policy: it raises ``ProgrammingError`` (the
+    DB's RLS violation, which the route maps to 501 migration_required) unless
+    ``set_rls_org`` ran earlier in the SAME transaction. Without the fix the
+    create/adopt transaction inserts a membership unscoped and this test fails
+    with 501 instead of 201.
+    """
+    client, session = api
+    bound: dict[str, object] = {}
+
+    class _Begin:
+        async def __aenter__(self) -> None:
+            # A fresh transaction starts with no org GUC (set_config is_local).
+            bound.clear()
+
+        async def __aexit__(self, *_exc: object) -> bool:
+            return False
+
+    session.begin = MagicMock(return_value=_Begin())
+
+    async def record_set_rls(_session: object, org_id: object) -> None:
+        bound["org"] = org_id
+
+    async def guarded_create_membership(_session: object, **_kw: object) -> MagicMock:
+        if "org" not in bound:
+            raise ProgrammingError("stmt", {}, Exception("new row violates row-level security policy"))
+        return _membership()
+
+    monkeypatch.setattr(admin, "set_rls_org", record_set_rls)
+    monkeypatch.setattr(admin, "get_account_by_email", AsyncMock(return_value=None))
+    monkeypatch.setattr(admin.account_crud, "create_account", AsyncMock(return_value=_account()))
+    monkeypatch.setattr(admin, "create_membership", guarded_create_membership)
+    monkeypatch.setattr(admin, "append_audit_event", AsyncMock(return_value=None))
+
+    resp = client.post(
+        "/api/v1/admin/users",
+        json={"email": "new@test", "display_name": "New", "password": "Sup3r-Secret!", "org_role": "runner"},
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert bound["org"] == _ORG_ID
+
+
 # ── POST /teams (create team) + audit-event branches ──
 
 
