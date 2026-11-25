@@ -123,6 +123,12 @@ class FakeAsyncSession:
     def __init__(self) -> None:
         self._store: dict[type, list] = {}
         self.added: list = []
+        self.info: dict[str, object] = {}
+
+    def in_transaction(self) -> bool:
+        # ``bootstrap_read`` requires an active transaction; the seeder runs
+        # inside the caller's ``async with session.begin()`` block.
+        return True
 
     def add(self, obj) -> None:
         # Mirror SQLAlchemy's client-side default: a flushed row gets a UUID

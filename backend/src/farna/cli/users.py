@@ -293,7 +293,7 @@ async def _add_user(url: str, email: str, password: str, as_admin: bool) -> str:
             # Bind the seeding org before the membership insert/read: the CLI
             # runs as the non-BYPASSRLS app role with no request context, and
             # ``org_memberships`` no longer carries a fail-open NULL arm (ADR 070
-            # §2, migration 0367). Mirrors ``seed_modulo_users``; without it the
+            # §2, migration 0367). Mirrors the boot seeder; without it the
             # membership INSERT fails RLS WITH CHECK and the follow-up SELECT
             # sees no row.
             await set_rls_org(session, org.id)
