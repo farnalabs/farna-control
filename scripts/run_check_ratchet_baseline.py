@@ -35,6 +35,8 @@ test_test_suite_quality.py EXCLUDED_PACKAGES an added package
 .semgrepignore                               an added entry
 sonar-project.properties coverage.exclusions an added pattern
 read_credential_jwt_only_allowlist.txt       an added route, or a changed kind
+backend/tests/architecture/transport_policy_baseline.json
+                                             an added violation fingerprint
 ===========================================  ==================================
 
 Tightening any of them passes: a removed entry, a lowered count, a raised
@@ -798,6 +800,37 @@ class ReadCredentialAllowlist:
     counts: dict[str, int]
 
 
+def _parse_transport_policy_violations(text: str, source: str) -> frozenset[tuple[str, str, str]]:
+    """The ``(nodeid, kind, fingerprint)`` identities a strict-policy baseline records.
+
+    Comparing identities rather than per-node counts is what stops one closed
+    hole being re-opened by editing a node's kind list: an added fingerprint is
+    an added tolerated violation. A removed one is a tightening and passes.
+    """
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RatchetError(f"{source}: not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise RatchetError(f"{source}: expected a JSON object")
+    violations = payload.get("violations")
+    if not isinstance(violations, dict):
+        raise RatchetError(f"{source}: 'violations' must be an object")
+    tokens: set[tuple[str, str, str]] = set()
+    for node, entries in violations.items():
+        if not isinstance(node, str) or not isinstance(entries, list):
+            raise RatchetError(f"{source}: malformed violations entry for {node!r}")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise RatchetError(f"{source}: {node!r} entry {entry!r} is not an object (legacy kind-only entry)")
+            kind = entry.get("kind")
+            fingerprint = entry.get("fingerprint")
+            if not isinstance(kind, str) or not isinstance(fingerprint, str) or not fingerprint:
+                raise RatchetError(f"{source}: {node!r} entry {entry!r} needs a kind and a fingerprint")
+            tokens.add((node, kind, fingerprint))
+    return frozenset(tokens)
+
+
 def _read_credential_header_counts(text: str, source: str) -> dict[str, int]:
     """The frozen counts from the ``#`` header block, exactly one of each."""
     header = "\n".join(line for line in text.splitlines() if line.lstrip().startswith("#"))
@@ -1103,6 +1136,13 @@ RATCHETS: tuple[Ratchet, ...] = (
         "read routes exempt from mk_ capability (added route or changed kind = looser)",
         _parse_read_credential_allowlist,
         _read_credential_loosenings,
+    ),
+    Ratchet(
+        "transport-policy",
+        f"{_ARCH}/transport_policy_baseline.json",
+        "tolerated strict-transport violation fingerprints (add = looser)",
+        _parse_transport_policy_violations,
+        _added_set_loosenings,
     ),
 )
 

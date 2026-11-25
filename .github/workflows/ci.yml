@@ -950,9 +950,15 @@ jobs:
     # and fails on a violation the baseline does not already record:
     #   * a request that matches no registered route (silently auto-mocked by
     #     respx when assert_all_mocked is off), or
-    #   * a registered route that was never called.
-    # The baseline (backend/tests/architecture/transport_policy_baseline.json)
-    # is shrink-only. docs/testing/transport-policy.md is the reference.
+    #   * a registered route that was never called, or
+    #   * a write to /api/ without Authorization + Idempotency-Key.
+    # Findings are keyed by (nodeid, kind, detail fingerprint) and baselined
+    # findings do NOT fail their test, so the runner can treat ANY pytest rc
+    # outside {0, 5} as a real failure. The baseline
+    # (backend/tests/architecture/transport_policy_baseline.json) is shrink-only
+    # and is itself compared against the base revision by
+    # scripts/run_check_ratchet_baseline.py (so a PR cannot loosen it).
+    # docs/testing/transport-policy.md is the reference.
     if: needs.current-head-gate.outputs.current == 'true'
     needs: [current-head-gate]
     name: Strict transport policy (changed test modules)
@@ -994,25 +1000,28 @@ jobs:
             --timeout 300 \
             --report "$RUNNER_TEMP/transport-strict-report.jsonl"
       - name: Ratchet (architecture gate over the same report)
+        # UNCONDITIONAL: the runner always writes the report (an empty one when
+        # no test module changed), so a missing file means the runner did not
+        # run. The architecture test fails - not skips - on that, which is why
+        # this step must never be wrapped in a conditional.
         shell: bash
         env:
           FARNA_STRICT_TRANSPORT_REPORT: ${{ runner.temp }}/transport-strict-report.jsonl
-        run: |
-          if [ -s "$FARNA_STRICT_TRANSPORT_REPORT" ] || ls "$FARNA_STRICT_TRANSPORT_REPORT"* >/dev/null 2>&1; then
-            uv run --no-sync pytest tests/architecture/test_transport_policy.py -q --tb=short --timeout=300
-          else
-            echo "No strict report produced (no changed test module) - ratchet is a no-op."
-          fi
+        run: uv run --no-sync pytest tests/architecture/test_transport_policy.py -q --tb=short --timeout=300
 
   contract-roundtrip:
     # FAR-2702: call a small, explicit sample of GET routes through the ASGI app
     # against Postgres and check each LIVE response against the OpenAPI schema
     # AND the generated frontend type (frontend/src/lib/api/schema.ts). This is
     # the executable half of "a stub was never diffed against a real response".
-    # It cannot detect provider drift (see docs/testing/transport-policy.md).
+    # The sample is paired with a ratchet over the app's whole OpenAPI
+    # inventory: a route whose handler module this PR changed must have a case
+    # or be listed in tests/architecture/contract_roundtrip_baseline.json.
+    # Neither mechanism detects provider drift (see
+    # docs/testing/transport-policy.md).
     if: needs.current-head-gate.outputs.current == 'true'
     needs: [current-head-gate]
-    name: Contract round-trip (changed API routes)
+    name: Contract round-trip ratchet (sampled live routes)
     runs-on: ubicloud-standard-2
     defaults:
       run:
@@ -1042,7 +1051,9 @@ jobs:
           else
             BASE="HEAD^"
           fi
-          CHANGED="$(git diff --name-only "$BASE" HEAD -- 'backend/src/farna/api/' 'frontend/src/lib/api/schema.ts' 'backend/tests/integration/test_contract_roundtrip.py' || true)"
+          # NO `|| true`: a failed diff must fail this job, not turn the
+          # contract ratchet into a silent skip.
+          CHANGED="$(git diff --name-only "$BASE" HEAD -- 'backend/src/farna/api/' 'frontend/src/lib/api/schema.ts' 'backend/tests/integration/test_contract_roundtrip.py' 'backend/tests/architecture/contract_roundtrip_baseline.json')"
           if [ -n "$CHANGED" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "Changed API contract files:"
@@ -1051,6 +1062,15 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "No API route/schema files changed - skipping."
           fi
+          # The handler modules this PR changed, for the round-trip ratchet.
+          # Same diff, but API source only: the ratchet asks which ROUTES these
+          # files define, and maps them through each endpoint's __module__.
+          API_FILES="$(git diff --name-only "$BASE" HEAD -- 'backend/src/farna/api/')"
+          {
+            echo "api_files<<EOF"
+            printf '%s\n' "$API_FILES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Run contract round-trip
         if: steps.changed.outputs.run == 'true'
         shell: bash
@@ -1061,6 +1081,7 @@ jobs:
           # Testcontainers provisions its own Postgres; the round-trip needs
           # Docker only (available on these runners, like integration-changed).
           TESTCONTAINERS_RYUK_DISABLED: "true"
+          FARNA_CONTRACT_CHANGED_API_FILES: ${{ steps.changed.outputs.api_files }}
 
   tier1b-light:
     # Tier 1b connectors (FAR-934): container-hosted LIGHT set only.

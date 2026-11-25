@@ -183,6 +183,10 @@ _PYPROJECT_MYPY_BASE = '[tool.mypy]\nstrict = true\n\n[[tool.mypy.overrides]]\nm
 _PYPROJECT_MYPY_LOOSENED = '[tool.mypy]\nstrict = true\n\n[[tool.mypy.overrides]]\nmodule = ["a", "b"]\nignore_missing_imports = true\n'
 _PYPROJECT_MYPY_TIGHTENED = '[tool.mypy]\nstrict = true\n\n[[tool.mypy.overrides]]\nmodule = "a"\n'
 
+_TRANSPORT_BASE = '{"version": 2, "modules": ["tests/x.py"], "violations": {"tests/x.py::test_a": [{"kind": "unused_route", "fingerprint": "aaaaaaaaaaaaaaaa"}]}}\n'
+_TRANSPORT_LOOSENED = '{"version": 2, "modules": ["tests/x.py"], "violations": {"tests/x.py::test_a": [{"kind": "unused_route", "fingerprint": "aaaaaaaaaaaaaaaa"}, {"kind": "unused_route", "fingerprint": "bbbbbbbbbbbbbbbb"}]}}\n'
+_TRANSPORT_TIGHTENED = '{"version": 2, "modules": ["tests/x.py"], "violations": {}}\n'
+
 #: ``(key, base text, loosened text, tightened text)`` for every registry entry.
 _CASES: dict[str, tuple[str, str, str]] = {
     "brand-consistency": ("a.md\t2\n", "a.md\t3\n", "a.md\t1\n"),
@@ -231,6 +235,7 @@ _CASES: dict[str, tuple[str, str, str]] = {
         _READ_CREDENTIAL_LOOSENED,
         _READ_CREDENTIAL_TIGHTENED,
     ),
+    "transport-policy": (_TRANSPORT_BASE, _TRANSPORT_LOOSENED, _TRANSPORT_TIGHTENED),
 }
 
 
@@ -466,6 +471,7 @@ _RATCHET_FIXTURES: dict[str, str] = {
     ".semgrepignore": "node_modules/\n",
     "sonar-project.properties": "sonar.coverage.exclusions=tests/**\n",
     READ_CREDENTIAL_ALLOWLIST: _READ_CREDENTIAL_BASE,
+    f"{ARCH}/transport_policy_baseline.json": _TRANSPORT_BASE,
 }
 
 

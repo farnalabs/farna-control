@@ -54,6 +54,7 @@ os.environ.setdefault("FERNET_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 # test, ``tests/unit/library_sync/test_coverage_source_import_guard.py``, was
 # removed along with its subject; this import is kept as the defence.)
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pydantic.root_model  # noqa: F401
@@ -144,9 +145,14 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     that architecture test fails if this hook is removed, if a suite is wrongly
     added to or dropped from ``GATED_SUITE_ROOTS``, or if the matching ``-W``
     flag is dropped from any CI command that runs a gated suite.
+
+    The same hook carries the strict-transport write-header opt-out: the marker
+    is read from the item here (the instrumentation never sees the item) and
+    consulted by ``_transport_strict`` when it inspects a request.
     """
     if _gated_item(item):
         warnings.filterwarnings("error", category=pytest.PytestUnraisableExceptionWarning)
+    _transport_strict.set_write_header_exempt(item.get_closest_marker(_transport_strict.WRITE_HEADER_EXEMPT_MARKER) is not None)
 
 
 #: The module whose ``_verify_identity`` the FAR-1631 leak guard protects.
@@ -464,8 +470,26 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 # concerns stay separate and neither hook has to know about the other.
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    """Register the strict-transport opt-out markers.
+
+    They are registered here rather than in ``pyproject.toml`` because this
+    conftest is their only consumer, and the allowlist for the FAR-2702 change
+    did not extend to the project configuration file.
+    """
+    config.addinivalue_line(
+        "markers",
+        f"{_transport_strict.WRITE_HEADER_EXEMPT_MARKER}: do not require Authorization/Idempotency-Key on this test's writes to /api/",
+    )
+    config.addinivalue_line(
+        "markers",
+        f"{_transport_strict.LIVE_HTTP_MARKER}: allow this test's real (unmocked) HTTP calls under the strict transport policy",
+    )
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
-    """Open/truncate the strict-transport report file, if one is configured."""
+    """Load the baseline and open/truncate the strict-transport report file."""
+    _transport_strict.configure_baseline()
     _transport_strict.start_session()
 
 
@@ -474,9 +498,45 @@ def pytest_runtest_logstart(nodeid: str, location: tuple[str, int, str]) -> None
     _transport_strict.start_test(nodeid)
 
 
+def pytest_runtest_call(item: pytest.Item) -> None:
+    """Snapshot the respx singleton AFTER fixture setup, BEFORE the test body.
+
+    Snapshotting at ``logstart`` would be too early: a module- or session-scoped
+    fixture registers routes during setup, and restoring the logstart snapshot
+    at teardown would delete them. This hook runs once all setup for the item is
+    complete, so the snapshot contains every fixture-owned route.
+    """
+    _transport_strict.snapshot_singleton()
+
+
+@pytest.fixture(autouse=True)
+def _strict_transport_sentinel(request: pytest.FixtureRequest) -> Iterator[None]:
+    """In strict mode, force an unmatched request to fail instead of reaching out.
+
+    The router registers no routes and uses ``assert_all_mocked=True``, so any
+    request no test router matches raises ``AllMockedAssertionError`` - a raw
+    ``httpx`` call with no router fails rather than hitting the network. A test
+    that deliberately makes a live call opts out with
+    ``@pytest.mark.transport_allow_live_http``.
+    """
+    if not _transport_strict.enabled() or request.node.get_closest_marker(_transport_strict.LIVE_HTTP_MARKER) is not None:
+        yield None
+        return
+    _transport_strict.start_sentinel()
+    try:
+        yield None
+    finally:
+        _transport_strict.stop_sentinel()
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
-    """Fail a test whose respx usage broke the strict transport policy.
+    """Fail a test for a strict-transport violation the baseline does not record.
+
+    Baselined findings are still recorded (drained and persisted to the report)
+    but never fail the test. That distinction is what makes pytest's exit code
+    trustworthy: a non-zero exit means a NEW violation or a genuine assertion
+    failure, never the ordinary presence of a known, baselined finding.
 
     The call phase is checked first so the common case (a router stopped in the
     test body) is reported as a FAILED test, not a teardown ERROR. Anything a
@@ -498,7 +558,28 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]):
             return
     else:
         return
-    if not violations:
+    new = _transport_strict.unbaselined(violations)
+    if not new:
         return
     report.outcome = "failed"
-    report.longrepr = _transport_strict.format_failure(violations)
+    report.longrepr = _transport_strict.format_failure(new)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """Fail the session for a strict finding attributed to no test item.
+
+    Session- and module-scoped routers register before any test exists (and are
+    stopped after the last one), and a session fixture can make requests during
+    setup. Those findings have no node id to fail, so they are collected in a
+    session bucket and turned into a non-zero exit here.
+    """
+    if not _transport_strict.enabled():
+        return
+    violations = _transport_strict.finish_session()
+    new = _transport_strict.unbaselined(violations)
+    if not new:
+        return
+    sys.stderr.write(_transport_strict.format_failure(new) + "\n")
+    sys.stderr.write("::error::strict transport policy (FAR-2702): findings outside any test item are not baselined.\n")
+    if session.exitstatus == 0:
+        session.exitstatus = 1

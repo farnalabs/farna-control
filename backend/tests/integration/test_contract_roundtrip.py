@@ -14,9 +14,18 @@ The sample is deliberately tiny and deterministic. It is not an attempt to
 cover every route: a broad sweep belongs to the schema-freshness gate; this is
 the executable proof that a wire key and its declared type agree end-to-end.
 
+Because a fixed sample would never touch the route a PR actually changed, the
+sample is paired with a RATCHET. The inventory is every operation in the app's
+OpenAPI document, each mapped to the module that defines its handler. A route
+that belongs to an API module changed by this PR must either have a round-trip
+case or be listed in ``tests/architecture/contract_roundtrip_baseline.json`` as
+"no case yet". That baseline is shrink-only in practice: a new route in a
+changed module cannot be silently excluded by a gate that never looks at it.
+
 A negative case proves the checker actually catches the defect class it exists
 for: a camelCase key where the contract declares snake_case (and vice versa) is
-reported, never silently accepted.
+reported, never silently accepted. A second, pure test proves the ratchet
+predicate itself fails on an uncovered changed route.
 
 The limitation is real and documented in ``docs/testing/transport-policy.md``:
 this catches OUR drift. It cannot see a provider changing its payload — that is
@@ -26,8 +35,10 @@ FAR-2703.
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +51,16 @@ pytestmark = pytest.mark.integration
 
 _VALID_32 = "a" * 32
 _SCHEMA_TS = Path(__file__).resolve().parents[3] / "frontend" / "src" / "lib" / "api" / "schema.ts"
+_ROUNDTRIP_BASELINE = Path(__file__).resolve().parents[1] / "architecture" / "contract_roundtrip_baseline.json"
+
+#: CI sets this to the newline-separated repo paths of the API files this PR
+#: changed (``backend/src/farna/api/...``). When it is unset no module is
+#: considered changed, so the ratchet is a no-op locally - the pure predicate
+#: test below still proves the rule.
+CHANGED_API_FILES_ENV = "FARNA_CONTRACT_CHANGED_API_FILES"
+
+#: The OpenAPI path-item keys that name an operation.
+_OPENAPI_METHODS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
 
 #: The sample. Every entry must keep a response model AND a generated
 #: frontend type; ``test_sampled_routes_have_a_generated_frontend_type``
@@ -181,6 +202,113 @@ def _openapi_response_schema(app_schema: dict[str, Any], path: str, method: str)
 
 
 # ---------------------------------------------------------------------------
+# Inventory and ratchet
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True, order=True)
+class ApiRoute:
+    """One OpenAPI operation and the module that defines its handler."""
+
+    method: str  # lowercase, as it appears in the OpenAPI document
+    path: str
+    module: str  # ``farna.api.routes.foo``, or "" when it cannot be resolved
+
+    @property
+    def route_id(self) -> str:
+        return f"{self.method} {self.path}"
+
+
+def _endpoint_modules(routes: Any) -> dict[tuple[str, str], str]:
+    """``{(method, path): module}`` from the live route table.
+
+    FastAPI 0.12x wraps included routers in a lazy ``_IncludedRouter`` whose
+    real routes live on ``original_router``; recursing covers that and any
+    future nesting.
+    """
+    from fastapi.routing import APIRoute
+
+    found: dict[tuple[str, str], str] = {}
+
+    def walk(items: Any) -> None:
+        for route in items:
+            if isinstance(route, APIRoute):
+                module = getattr(route.endpoint, "__module__", "") or ""
+                for method in route.methods:
+                    found[(method.lower(), route.path)] = module
+            elif hasattr(route, "original_router"):
+                walk(route.original_router.routes)
+            elif hasattr(route, "routes"):
+                walk(route.routes)
+
+    walk(routes)
+    return found
+
+
+def api_inventory() -> list[ApiRoute]:
+    """Every operation the app publishes, each mapped to its handler module."""
+    from farna.api.main import app
+
+    app_schema = app.openapi()
+    modules = _endpoint_modules(app.routes)
+    routes: list[ApiRoute] = []
+    for path, operations in app_schema["paths"].items():
+        for method in operations:
+            if method.lower() not in _OPENAPI_METHODS:
+                continue
+            routes.append(ApiRoute(method=method.lower(), path=path, module=modules.get((method.lower(), path), "")))
+    return sorted(routes)
+
+
+def _covered_route_ids() -> set[str]:
+    return {f"{sample['method'].lower()} {sample['path']}" for sample in SAMPLED_ROUTES}
+
+
+def _load_roundtrip_baseline() -> set[str]:
+    payload = json.loads(_ROUNDTRIP_BASELINE.read_text(encoding="utf-8"))
+    return set(payload["uncovered_routes"])
+
+
+def _module_matches(route_module: str, changed_module: str) -> bool:
+    """True when *route_module* is *changed_module* or lives inside it."""
+    return route_module == changed_module or route_module.startswith(f"{changed_module}.")
+
+
+def ratchet_findings(
+    inventory: list[ApiRoute],
+    covered: set[str],
+    baseline: set[str],
+    changed_modules: set[str],
+) -> list[str]:
+    """Routes that a changed module owns but neither a case nor the baseline covers.
+
+    Pure by design: the negative test drives it with synthetic data, so the rule
+    is proven even when a local run changes no API file.
+    """
+    findings: list[str] = []
+    for route in inventory:
+        if route.route_id in covered or route.route_id in baseline:
+            continue
+        if any(_module_matches(route.module, changed) for changed in changed_modules):
+            findings.append(f"{route.route_id} (handler in {route.module or '<unknown>'}): no round-trip case and not in {_ROUNDTRIP_BASELINE.name}")
+    return findings
+
+
+def changed_api_modules() -> set[str]:
+    """The handler modules this PR touched, from the CI-provided file list."""
+    raw = os.environ.get(CHANGED_API_FILES_ENV, "")
+    modules: set[str] = set()
+    for line in raw.replace(",", "\n").splitlines():
+        path = line.strip()
+        if not path.startswith("backend/src/") or not path.endswith(".py"):
+            continue
+        relative = path[len("backend/src/") : -len(".py")]
+        parts = relative.split("/")
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        modules.add(".".join(parts))
+    return modules
+
+
+# ---------------------------------------------------------------------------
 # Non-network tests: the sample is real and the checker catches the defect class
 # ---------------------------------------------------------------------------
 def test_sampled_routes_have_a_generated_frontend_type() -> None:
@@ -284,6 +412,60 @@ def test_sampled_routes_validate_a_representative_payload() -> None:
         node = _openapi_response_schema(app_schema, path, "get")
         problems.extend(f"{path}: {problem}" for problem in wire_mismatches(app_schema, node, payload))
     assert not problems, "\n".join(problems)
+
+
+# ---------------------------------------------------------------------------
+# Ratchet: a changed route cannot dodge the round-trip by not being sampled
+# ---------------------------------------------------------------------------
+def test_roundtrip_baseline_only_lists_real_uncovered_routes() -> None:
+    """The baseline names real routes, none of which is already covered."""
+    inventory = api_inventory()
+    by_id = {route.route_id for route in inventory}
+    covered = _covered_route_ids()
+    baseline = _load_roundtrip_baseline()
+
+    unknown = sorted(baseline - by_id)
+    assert not unknown, f"{_ROUNDTRIP_BASELINE.name} names routes that no longer exist in the OpenAPI document - remove them (shrink-only):\n  " + "\n  ".join(unknown)
+
+    now_covered = sorted(baseline & covered)
+    assert not now_covered, f"{_ROUNDTRIP_BASELINE.name} still lists routes that now have a round-trip case - remove them:\n  " + "\n  ".join(now_covered)
+
+    uncovered = sorted(by_id - covered)
+    assert baseline <= set(uncovered), "baseline entries must be routes without a case"
+
+
+def test_ratchet_flags_an_uncovered_route_in_a_changed_module() -> None:
+    """The predicate: changed module + no case + not baselined == failure.
+
+    Synthetic data on purpose - this proves the rule on every run, including a
+    local one where no API file changed.
+    """
+    inventory = [
+        ApiRoute("get", "/api/v1/touched", "farna.api.routes.touched"),
+        ApiRoute("get", "/api/v1/touched/baselined", "farna.api.routes.touched"),
+        ApiRoute("get", "/api/v1/untouched", "farna.api.routes.untouched"),
+    ]
+    covered = {"get /api/v1/untouched", "get /api/v1/touched/baselined"}
+    baseline = {"get /api/v1/touched/baselined"}
+
+    findings = ratchet_findings(inventory, covered, baseline, {"farna.api.routes.touched"})
+    assert findings == ["get /api/v1/touched (handler in farna.api.routes.touched): no round-trip case and not in contract_roundtrip_baseline.json"]
+
+    # A package change covers everything beneath it.
+    assert ratchet_findings(inventory, covered, baseline, {"farna.api.routes"}) == findings
+
+    # No changed module: nothing to ratchet.
+    assert not ratchet_findings(inventory, covered, baseline, set())
+
+
+def test_changed_api_routes_are_covered_or_baselined() -> None:
+    """Gate: every route in a changed API module has a case or a baseline entry."""
+    changed = changed_api_modules()
+    if not changed:
+        pytest.skip(f"no {CHANGED_API_FILES_ENV} supplied - no API module changed, so there is nothing to ratchet")
+
+    findings = ratchet_findings(api_inventory(), _covered_route_ids(), _load_roundtrip_baseline(), changed)
+    assert not findings, "A route in a changed API module has no contract round-trip case:\n  " + "\n  ".join(findings) + "\nAdd it to SAMPLED_ROUTES (with a real payload) or, only for a pre-existing gap outside this change's scope, to contract_roundtrip_baseline.json and say why in the PR."
 
 
 # ---------------------------------------------------------------------------

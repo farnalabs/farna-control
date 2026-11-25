@@ -20,10 +20,18 @@ Usage (from anywhere; the script runs pytest from ``backend/``)::
 Deterministic and LLM-free: the only inputs are the test files, the report and
 the baseline.
 
+The plugin fails a test ONLY for a violation the baseline does not record;
+baselined findings are still recorded in the report but never fail the test.
+That is what makes pytest's exit code trustworthy: any exit code outside
+``{0, 5}`` is a real problem (a new violation, or a genuine assertion failure),
+never the ordinary consequence of running a module with known findings.
+
 Exit codes:
-    0   no violation outside the baseline
-    1   a new violation, or a test module failed for a non-transport reason
-    2   the invocation itself was unusable (no modules, bad ref)
+    0   no violation outside the baseline, and pytest itself exited 0 or 5
+    1   a new violation, or pytest exited with any other non-zero code
+        (a real test failure)
+    2   the invocation itself was unusable (unresolvable base ref, failed git
+        diff, or modules selected but no report produced)
 """
 
 from __future__ import annotations
@@ -57,13 +65,37 @@ def _relative(path: Path) -> str:
         return resolved.as_posix()
 
 
+class BaseRefError(RuntimeError):
+    """The base revision (or the diff against it) is unusable.
+
+    Distinct from "no changed modules": returning ``[]`` for a failed diff made
+    the whole policy a silent no-op whenever git or the base ref misbehaved,
+    which is exactly the failure mode the policy cannot afford.
+    """
+
+
 def _load_baseline(path: Path) -> dict:
     if not path.exists():
-        return {"version": 1, "modules": [], "violations": {}}
+        return {"version": 2, "modules": [], "violations": {}}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _changed_modules(base_ref: str) -> list[Path]:
+def _baseline_keys(baseline: dict) -> set[tuple[str, str, str]]:
+    return {(node, entry["kind"], entry["fingerprint"]) for node, entries in baseline.get("violations", {}).items() for entry in entries}
+
+
+def _git_diff_changed_modules(base_ref: str) -> list[Path]:
+    if not base_ref or base_ref.startswith("-"):
+        raise BaseRefError(f"base ref {base_ref!r} is empty or option-like")
+    resolved = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if resolved.returncode != 0 or not resolved.stdout.strip():
+        raise BaseRefError(f"base ref {base_ref!r} does not resolve to a commit in this repository")
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{base_ref}...HEAD", "--", "backend/tests"],
         cwd=REPO_ROOT,
@@ -72,8 +104,7 @@ def _changed_modules(base_ref: str) -> list[Path]:
         check=False,
     )
     if result.returncode != 0:
-        print(f"::error::git diff against {base_ref} failed: {result.stderr.strip()}", file=sys.stderr)
-        return []
+        raise BaseRefError(f"git diff against {base_ref} failed: {result.stderr.strip() or result.stdout.strip()}")
     modules = []
     for raw_line in result.stdout.splitlines():
         line = raw_line.strip()
@@ -94,9 +125,9 @@ def _baseline_modules(baseline: dict) -> list[Path]:
     return modules
 
 
-def _read_report(path: Path) -> dict[str, set[str]]:
+def _read_report(path: Path) -> set[tuple[str, str, str]]:
     """Merge the JSON-lines report and every per-process shard beside it."""
-    found: dict[str, set[str]] = {}
+    found: set[tuple[str, str, str]] = set()
     for shard in [path, *sorted(path.parent.glob(f"{path.name}.*.jsonl"))]:
         if not shard.exists():
             continue
@@ -105,15 +136,32 @@ def _read_report(path: Path) -> dict[str, set[str]]:
             if not line:
                 continue
             payload = json.loads(line)
-            found.setdefault(payload["test"], set()).add(payload["kind"])
+            fingerprint = payload.get("fingerprint") or _fingerprint(payload.get("detail", ""))
+            found.add((payload["test"], payload["kind"], fingerprint))
     return found
+
+
+def _fingerprint(detail: str) -> str:
+    """Local copy of the instrumentation's fingerprint (keeps this script import-free)."""
+    import hashlib
+    import re
+
+    normalised = re.sub(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", "<uuid>", detail)
+    normalised = re.sub(r"0x[0-9a-fA-F]+", "<addr>", normalised)
+    normalised = re.sub(r"\b[0-9a-fA-F]{16,}\b", "<hex>", normalised)
+    normalised = re.sub(r"\b\d+\b", "<n>", normalised)
+    return hashlib.sha1(" ".join(normalised.split()).encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def _module_of(nodeid: str) -> str:
     return nodeid.split("::", 1)[0]
 
 
-def _run_pytest(modules: list[Path], report: Path, timeout: int, jobs: int) -> int:
+def _report_produced(path: Path) -> bool:
+    return path.exists() or any(path.parent.glob(f"{path.name}.*.jsonl"))
+
+
+def _run_pytest(modules: list[Path], report: Path, timeout: int, jobs: int, baseline_path: Path) -> int:
     relative = []
     for module in modules:
         try:
@@ -123,6 +171,10 @@ def _run_pytest(modules: list[Path], report: Path, timeout: int, jobs: int) -> i
     env = dict(os.environ)
     env[ENV_FLAG] = "1"
     env[ENV_REPORT] = str(report)
+    # The in-test hooks must compare against the SAME baseline the runner is
+    # about to compare against, or a baselined finding would fail its test and
+    # every run over a module with known findings would exit non-zero.
+    env["FARNA_STRICT_TRANSPORT_BASELINE"] = str(baseline_path)
     # ``-p no:randomly`` is a no-op when the plugin is absent; it keeps ordering
     # stable when it is present. --jobs > 1 is for local baseline generation
     # only: each xdist worker writes its own report shard, and every finding is
@@ -157,23 +209,35 @@ def _respx_modules() -> list[str]:
     return modules
 
 
-def _write_baseline(path: Path, baseline: dict, report: dict[str, set[str]], scanned_modules: set[str], *, replace: bool) -> None:
+def _write_baseline(path: Path, baseline: dict, report: set[tuple[str, str, str]], scanned_modules: set[str], *, replace: bool) -> None:
+    """Write the v2 (fingerprinted) baseline for the scanned modules.
+
+    ``report`` is the set of ``(nodeid, kind, fingerprint)`` identities the run
+    observed. Every identity is preserved - two dead stubs in one test are two
+    entries, which is the whole point of fingerprinting.
+    """
     # Refresh the module inventory too: a new respx-using module must be
     # enumerated for the policy scan to cover it, and a module that stopped
     # importing respx must leave (shrink-only).
+    baseline["version"] = 2
     baseline["modules"] = _respx_modules()
-    violations: dict[str, list[str]] = {node: sorted(kinds) for node, kinds in baseline.get("violations", {}).items()}
+    # A v1 entry is a bare kind with no fingerprint. It cannot be carried over,
+    # but ``--all`` re-scans every module below, so it is re-derived with a
+    # fingerprint instead of being lost.
+    entries: dict[str, set[tuple[str, str]]] = {node: {(entry["kind"], entry["fingerprint"]) for entry in node_entries if isinstance(entry, dict)} for node, node_entries in baseline.get("violations", {}).items()}
+    entries = {node: node_entries for node, node_entries in entries.items() if node_entries}
     if replace:
-        for node in list(violations):
+        for node in list(entries):
             if _module_of(node) in scanned_modules:
-                del violations[node]
-    for node, kinds in report.items():
+                del entries[node]
+    for node, kind, fingerprint in report:
         if _module_of(node) in scanned_modules:
-            violations[node] = sorted(kinds)
+            entries.setdefault(node, set()).add((kind, fingerprint))
     known = set(baseline["modules"])
-    baseline["violations"] = {node: sorted(violations[node]) for node in sorted(violations) if _module_of(node) in known}
+    baseline["violations"] = {node: [{"kind": kind, "fingerprint": fingerprint} for kind, fingerprint in sorted(entries[node])] for node in sorted(entries) if _module_of(node) in known or node.startswith("<")}
     path.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"baseline written: {path} ({len(baseline['modules'])} module(s), {len(baseline['violations'])} violation(s))")
+    total = sum(len(entries[node]) for node in baseline["violations"])
+    print(f"baseline written: {path} ({len(baseline['modules'])} module(s), {total} violation(s))")
 
 
 def _resolve_arg(raw: str) -> Path:
@@ -218,10 +282,21 @@ def main(argv: list[str] | None = None) -> int:
     elif args.all:
         modules = _baseline_modules(baseline)
     else:
-        modules = _changed_modules(args.base_ref)
+        try:
+            modules = _git_diff_changed_modules(args.base_ref)
+        except BaseRefError as exc:
+            print(f"::error::strict transport policy cannot select changed modules: {exc}. Refusing to pass with an unusable base ref.", file=sys.stderr)
+            return 2
 
     modules = [m for m in modules if m.exists() and _is_collectable(m.name)]
     if not modules:
+        # Still create the report when one was requested: CI runs the ratchet
+        # architecture test unconditionally against that path, and a missing
+        # file must mean "the runner never ran", never "nothing changed".
+        if args.report is not None:
+            args.report.parent.mkdir(parents=True, exist_ok=True)
+            args.report.write_text("", encoding="utf-8")
+            print(f"report: {args.report} (empty)")
         print("No collectable test modules to check - strict transport policy is a no-op for this change.")
         return 0
 
@@ -235,52 +310,73 @@ def main(argv: list[str] | None = None) -> int:
         for stale_shard in args.report.parent.glob(f"{args.report.name}.*.jsonl"):
             stale_shard.unlink(missing_ok=True)
         report_path = args.report
-        pytest_rc = _run_pytest(modules, report_path, args.timeout, args.jobs)
-        report = _read_report(report_path)
+        pytest_rc = _run_pytest(modules, report_path, args.timeout, args.jobs, args.baseline)
         print(f"report: {report_path}")
+        produced = _report_produced(report_path)
+        report = _read_report(report_path)
     else:
         with tempfile.TemporaryDirectory(prefix="farna-strict-transport-") as tmp:
             report_path = Path(tmp) / "report.jsonl"
-            pytest_rc = _run_pytest(modules, report_path, args.timeout, args.jobs)
+            pytest_rc = _run_pytest(modules, report_path, args.timeout, args.jobs, args.baseline)
+            produced = _report_produced(report_path)
             report = _read_report(report_path)
+
+    if not produced:
+        # Modules were selected and pytest ran, but the instrumentation wrote
+        # nothing - not even the empty file start_session creates. The policy
+        # did not actually run; that must never look like a clean pass.
+        print(
+            f"::error::strict transport policy selected {len(modules)} module(s) but no report was produced (pytest rc={pytest_rc}). The instrumentation did not run.",
+            file=sys.stderr,
+        )
+        return 2
 
     if args.write_baseline:
         _write_baseline(args.baseline, baseline, report, scanned_modules, replace=True)
         return 0
 
-    baseline_violations: dict[str, set[str]] = {node: set(kinds) for node, kinds in baseline.get("violations", {}).items()}
+    baseline_keys = _baseline_keys(baseline)
 
-    new_violations: list[tuple[str, str]] = [(node, kind) for node in sorted(report) for kind in sorted(report[node]) if kind not in baseline_violations.get(node, set())]
+    new_violations = sorted(report - baseline_keys)
 
-    stale: list[tuple[str, str]] = [(node, kind) for node, kinds in sorted(baseline_violations.items()) if _module_of(node) in scanned_modules for kind in sorted(kinds) if kind not in report.get(node, set())]
+    stale = sorted((node, kind, fingerprint) for node, kind, fingerprint in baseline_keys if _module_of(node) in scanned_modules and (node, kind, fingerprint) not in report)
 
-    for node, kind in stale:
-        print(f"  baseline may shrink: {node} [{kind}] no longer reproduces")
+    for node, kind, fingerprint in stale:
+        print(f"  baseline may shrink: {node} [{kind}] {fingerprint} no longer reproduces")
 
     if args.shrink_baseline:
-        shrunk = {node: sorted(kind for kind in kinds if (node, kind) not in set(stale)) for node, kinds in baseline_violations.items()}
-        baseline["violations"] = {node: sorted(shrunk[node]) for node in sorted(shrunk) if shrunk[node]}
+        remaining = baseline_keys - set(stale)
+        by_node: dict[str, set[tuple[str, str]]] = {}
+        for node, kind, fingerprint in remaining:
+            by_node.setdefault(node, set()).add((kind, fingerprint))
+        baseline["version"] = 2
+        baseline["violations"] = {node: [{"kind": kind, "fingerprint": fingerprint} for kind, fingerprint in sorted(by_node[node])] for node in sorted(by_node)}
         args.baseline.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        print(f"baseline shrunk: {args.baseline} ({len(baseline['violations'])} violation(s))")
+        print(f"baseline shrunk: {args.baseline} ({sum(len(v) for v in by_node.values())} violation(s))")
 
     if new_violations:
         print("\nNew strict-transport violations (not in the baseline):")
-        for node, kind in new_violations:
-            print(f"  {node} [{kind}]")
+        for node, kind, fingerprint in new_violations:
+            print(f"  {node} [{kind}] {fingerprint}")
         print(
-            "\nFix the test (use every registered route, stub every outbound request) or, only for a pre-existing defect outside this change's scope, record it deliberately with --write-baseline and say why in the PR.",
+            "\nFix the test (use every registered route, stub every outbound request, send the write headers) or, only for a pre-existing defect outside this change's scope, record it deliberately with --write-baseline and say why in the PR.",
         )
         return 1
 
     if report:
-        print(f"\n{sum(len(kinds) for kinds in report.values())} violation(s) reproduced, all already in the baseline.")
+        print(f"\n{len(report)} violation(s) reproduced, all already in the baseline.")
     else:
         print("\nNo strict-transport violations.")
 
-    if pytest_rc != 0 and not report:
-        # A failure with no transport finding is a genuine test failure; the
-        # caller must see it rather than a green "policy clean" line.
-        print("::error::pytest failed and reported no transport violation - this is a real test failure.", file=sys.stderr)
+    if pytest_rc not in (0, 5):
+        # Baselined findings no longer fail their tests, so any non-zero code
+        # other than "no tests collected" (5) is a genuine test failure. Never
+        # infer this from whether the report looks clean: a module with one real
+        # assertion failure and no transport finding used to slip through here.
+        print(
+            f"::error::pytest exited {pytest_rc}; that is outside {{0, 5}} and means a real test failure (a new violation or a failed assertion), not a baselined finding.",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

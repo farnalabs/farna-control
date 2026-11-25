@@ -1,6 +1,6 @@
 """Architecture: the strict respx transport policy is enumerated and ratcheted (FAR-2702).
 
-127 test modules fake 3,396 tests through respx, and no stub was ever diffed
+124 test modules fake 3,300+ tests through respx, and no stub was ever diffed
 against a real provider response, so a green test can prove our own assumption.
 ``tests/_transport_strict.py`` makes that visible when
 ``FARNA_STRICT_TRANSPORT=1``. This module is the ratchet that lets the policy
@@ -16,6 +16,11 @@ land incrementally and never grow:
   (``scripts/run_transport_strict.py``) performs the same comparison for a
   human; this test makes it a gate even if the runner is bypassed.
 
+Violations are keyed ``(nodeid, kind, fingerprint)``. The fingerprint is a
+stable hash of the finding's detail, so a test that already carries a baselined
+``unused_route`` cannot quietly grow a second dead stub: the second stub has a
+different fingerprint and is a new violation.
+
 Shrinking is always allowed: a violation whose test no longer reproduces is
 reported as "baseline may shrink" and never fails the run.
 """
@@ -26,6 +31,7 @@ import ast
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -73,8 +79,12 @@ def respx_test_modules() -> list[str]:
     return modules
 
 
-def _load_baseline() -> dict:
+def _load_baseline() -> dict[str, Any]:
     return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+
+
+def _baseline_keys(baseline: dict[str, Any]) -> set[tuple[str, str, str]]:
+    return {(node, entry["kind"], entry["fingerprint"]) for node, entries in baseline["violations"].items() for entry in entries}
 
 
 def _defined_names(path: Path) -> set[str]:
@@ -100,38 +110,46 @@ def test_every_respx_module_is_enumerated() -> None:
 
 def test_baseline_entries_are_well_formed() -> None:
     baseline = _load_baseline()
+    assert baseline.get("version") == 2, f"{BASELINE_PATH.name} must be version 2 (fingerprinted violations); regenerate it with `python scripts/run_transport_strict.py --all --write-baseline`"
     declared_modules = set(baseline["modules"])
-    violations: dict[str, list[str]] = baseline["violations"]
+    violations: dict[str, list[dict[str, str]]] = baseline["violations"]
 
     problems: list[str] = []
-    for node, kinds in sorted(violations.items()):
-        module, _, rest = node.partition("::")
-        if module not in declared_modules:
-            problems.append(f"{node}: module is not in the baseline's modules list")
-            continue
-        if not kinds:
+    for node, entries in sorted(violations.items()):
+        if node == _transport_strict.SESSION_NODEID:
+            # Findings outside any test item name no module and no test.
+            pass
+        else:
+            module, _, rest = node.partition("::")
+            if module not in declared_modules:
+                problems.append(f"{node}: module is not in the baseline's modules list")
+            elif not rest:
+                problems.append(f"{node}: no test name (node ids are '<module>::<test>')")
+            else:
+                module_path = TESTS_ROOT.parent / module
+                if not module_path.exists():
+                    problems.append(f"{node}: module file does not exist")
+                elif "tests/bdd/" not in f"{module}/":
+                    # pytest-BDD generates the test function from the Gherkin
+                    # scenario at collection time, so it does not exist in the
+                    # steps module's AST. Module existence is the check that
+                    # applies there.
+                    name = rest.split(_PARAM_SUFFIX, 1)[0]
+                    leaf = name.split("::")[-1]
+                    if leaf not in _defined_names(module_path):
+                        problems.append(f"{node}: no function/class named {leaf!r} in {module}")
+        if not entries:
             problems.append(f"{node}: empty violation list")
-        unknown = sorted(set(kinds) - _transport_strict.VIOLATION_KINDS)
-        if unknown:
-            problems.append(f"{node}: unknown violation kind(s) {unknown}")
-        if not rest:
-            problems.append(f"{node}: no test name (node ids are '<module>::<test>')")
-            continue
-        module_path = TESTS_ROOT.parent / module
-        if not module_path.exists():
-            problems.append(f"{node}: module file does not exist")
-            continue
-        if "tests/bdd/" in f"{module}/":
-            # pytest-BDD generates the test function from the Gherkin scenario
-            # at collection time, so it does not exist in the steps module's
-            # AST. Module existence is the check that applies here.
-            continue
-        name = rest
-        if _PARAM_SUFFIX in name:
-            name = name.split(_PARAM_SUFFIX, 1)[0]
-        leaf = name.split("::")[-1]
-        if leaf not in _defined_names(module_path):
-            problems.append(f"{node}: no function/class named {leaf!r} in {module}")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                problems.append(f"{node}: entry {entry!r} is not an object (a legacy kind-only entry; regenerate the baseline)")
+                continue
+            kind = entry.get("kind")
+            fingerprint = entry.get("fingerprint")
+            if kind not in _transport_strict.VIOLATION_KINDS:
+                problems.append(f"{node}: unknown violation kind {kind!r}")
+            if not isinstance(fingerprint, str) or not fingerprint:
+                problems.append(f"{node}: entry {kind!r} has no fingerprint")
 
     assert not problems, "Transport-policy baseline is malformed:\n  " + "\n  ".join(problems)
 
@@ -141,26 +159,126 @@ def test_baseline_ratchet_against_strict_report() -> None:
 
     The report path comes from ``FARNA_STRICT_TRANSPORT_REPORT`` and is produced
     by ``scripts/run_transport_strict.py``. When the env var is unset the test
-    is a no-op: the runner already enforces the same rule on its own.
+    is a no-op: the runner already enforces the same rule on its own. When it IS
+    set the report must exist - a missing report means the runner did not do its
+    job, and skipping here used to hide exactly that.
     """
     raw = os.environ.get("FARNA_STRICT_TRANSPORT_REPORT", "").strip()
     if not raw:
         pytest.skip("no FARNA_STRICT_TRANSPORT_REPORT supplied - the runner enforces the ratchet")
 
     report_path = Path(raw)
-    if not report_path.exists():
-        pytest.skip(f"strict report {report_path} does not exist")
+    assert report_path.exists(), f"FARNA_STRICT_TRANSPORT_REPORT is set to {report_path} but the file does not exist: the strict runner did not produce a report, so the ratchet cannot be checked"
 
     baseline = _load_baseline()
-    baseline_kinds = {node: set(kinds) for node, kinds in baseline["violations"].items()}
+    baseline_keys = _baseline_keys(baseline)
     declared_modules = set(baseline["modules"])
-    report = _transport_strict.collect_report_violations(report_path)
+    report_keys = _transport_strict.collect_report_keys(report_path)
 
     new: list[str] = []
-    for node, kinds in sorted(report.items()):
-        if node.split("::", 1)[0] not in declared_modules:
+    for node, kind, fingerprint in sorted(report_keys - baseline_keys):
+        if node.split("::", 1)[0] not in declared_modules and node != _transport_strict.SESSION_NODEID:
             continue
-        for kind in sorted(kinds - baseline_kinds.get(node, set())):
-            new.append(f"{node} [{kind}]")
+        new.append(f"{node} [{kind}] {fingerprint}")
 
     assert not new, "Strict transport violations not recorded in the baseline (the ratchet is shrink-only):\n  " + "\n  ".join(new) + "\nFix the test, or record a pre-existing violation deliberately with `python scripts/run_transport_strict.py --write-baseline` and justify it in the PR."
+
+
+# ---------------------------------------------------------------------------
+# Meta-test: prove the instrumentation is live, not merely imported
+# ---------------------------------------------------------------------------
+def test_fingerprint_ratchet_distinguishes_a_second_stub_in_one_test(tmp_path: Path) -> None:
+    """A test with ONE baselined dead stub must fail when it grows a SECOND one.
+
+    Keying on ``(nodeid, kind)`` was the original hole: any number of unused
+    routes in an already-baselined test passed. The fingerprint makes the second
+    stub a distinct identity, so the baseline comparison reports it.
+    """
+    node = "tests/unit/example/test_example.py::test_with_one_baselined_stub"
+    first = _transport_strict.Violation(node, _transport_strict.UNUSED_ROUTE, "GET https://a.example/one")
+    second = _transport_strict.Violation(node, _transport_strict.UNUSED_ROUTE, "GET https://a.example/two")
+
+    baseline_file = tmp_path / "baseline.json"
+    baseline_file.write_text(
+        json.dumps({"version": 2, "modules": ["tests/unit/example/test_example.py"], "violations": {node: [{"kind": first.kind, "fingerprint": first.fingerprint}]}}),
+        encoding="utf-8",
+    )
+
+    _transport_strict.configure_baseline(baseline_file)
+    try:
+        assert _transport_strict.unbaselined([first]) == []
+        assert _transport_strict.unbaselined([first, second]) == [second]
+        assert _transport_strict.unbaselined([second]) == [second]
+    finally:
+        _transport_strict.configure_baseline(_transport_strict.DEFAULT_BASELINE)
+
+
+def test_sentinel_router_makes_an_unmocked_request_fail() -> None:
+    """Requirement (a): a raw httpx call with no router must fail in strict mode.
+
+    The autouse fixture installs this router for every strict test; this drives
+    it directly so the proof does not depend on the env flag.
+    """
+    import httpx
+    from respx.models import AllMockedAssertionError
+
+    _transport_strict.install(force=True)
+    _transport_strict.start_sentinel()
+    try:
+        with pytest.raises(AllMockedAssertionError):
+            httpx.get("https://sentinel.example/unmocked", timeout=5)
+    finally:
+        _transport_strict.stop_sentinel()
+
+
+def test_findings_outside_a_test_go_to_the_session_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Requirement: session-scoped activity is not dropped.
+
+    ``_record`` with no current test used to return silently. A module- or
+    session-scoped router stopped outside any item is a real finding, so it is
+    bucketed and failed at session finish.
+    """
+    _transport_strict.install(force=True)
+    monkeypatch.setattr(_transport_strict, "_report_path", None)
+    monkeypatch.setattr(_transport_strict._state, "test", None)
+    _transport_strict.finish_session()  # start clean
+
+    _transport_strict._record(_transport_strict.UNUSED_ROUTE, "session-scoped detail")
+    violations = _transport_strict.finish_session()
+
+    assert [(violation.test, violation.kind) for violation in violations] == [(_transport_strict.SESSION_NODEID, _transport_strict.UNUSED_ROUTE)]
+
+
+def test_instrumentation_records_every_violation_kind() -> None:
+    """Drive the mechanism directly: one dead stub, one unmatched, one bare write.
+
+    Without this, every other test here could pass while the hooks were never
+    installed (or never recorded anything), because a report with zero rows also
+    satisfies the ratchet. ``install(force=True)`` makes the test independent of
+    the opt-in env flag.
+    """
+    import httpx
+    import respx
+
+    _transport_strict.install(force=True)
+    assert _transport_strict.enabled() or _transport_strict._installed
+
+    router = respx.MockRouter(assert_all_mocked=False, assert_all_called=False)
+    router.start()
+    try:
+        router.get("https://meta.example/unused")  # registered, never called
+        router.post("https://meta.example/api/v1/thing", json={"ok": True})
+        httpx.get("https://meta.example/unmatched", timeout=5)
+        httpx.post("https://meta.example/api/v1/thing", json={"ok": True}, timeout=5)
+    finally:
+        router.stop()
+
+    # Drain inside the test so the report hook does not also fail it; the
+    # findings are persisted either way (drain persists), which is what puts
+    # this test's fingerprint in the baseline.
+    violations = _transport_strict.drain_violations()
+    kinds = {violation.kind for violation in violations}
+
+    assert _transport_strict.UNMATCHED_REQUEST in kinds, violations
+    assert _transport_strict.UNUSED_ROUTE in kinds, violations
+    assert _transport_strict.MISSING_WRITE_HEADERS in kinds, violations

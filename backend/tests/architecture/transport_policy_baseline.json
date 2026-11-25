@@ -1,5 +1,6 @@
 {
   "modules": [
+    "tests/architecture/test_transport_policy.py",
     "tests/bdd/steps/test_apply_cli.py",
     "tests/bdd/steps/test_azure_key_vault_connector.py",
     "tests/bdd/steps/test_azure_pipelines_connector.py",
@@ -126,595 +127,5413 @@
     "tests/unit/test_guardrail_compensation.py",
     "tests/unit/tools/test_provider_contract_probe.py"
   ],
-  "version": 1,
+  "version": 2,
   "violations": {
+    "tests/architecture/test_transport_policy.py::test_instrumentation_records_every_violation_kind": [
+      {
+        "fingerprint": "2eb630e5d9b527be",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "41e84fddb53a7782",
+        "kind": "unmatched_request"
+      },
+      {
+        "fingerprint": "73e2b46dcd3a86af",
+        "kind": "unused_route"
+      }
+    ],
     "tests/bdd/steps/test_apply_cli.py::test_a_storedbutbroken_backend_credential_is_never_reported_as_plain_success": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/bdd/steps/test_apply_cli.py::test_declaredbutabsent_entities_are_drift": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/bdd/steps/test_apply_cli.py::test_drift_mode_is_a_readonly_report_labelled_drift": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/bdd/steps/test_apply_cli.py::test_dryrun_returns_a_dryrun_report_with_no_blockers_for_a_wellformed_config": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/bdd/steps/test_apply_cli.py::test_real_apply_is_blocked_when_a_secret_ref_cannot_resolve": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/apply/test_system_map_apply.py::TestSystemMapUpdateMethod::test_update_body_validates_against_real_update_model": [
-      "unused_route"
+      {
+        "fingerprint": "89ced221602e4d2b",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "46890846694eae25",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/apply/test_system_map_apply.py::TestSystemMapUpdateMethod::test_update_uses_put_and_the_map_url": [
-      "unused_route"
+      {
+        "fingerprint": "89ced221602e4d2b",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "46890846694eae25",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestCreate::test_create_sends_the_declared_endpoint": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestCreate::test_credential_ref_cannot_create_a_custom_endpoint": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestCreate::test_plain_http_endpoint_sends_the_opt_in": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestCreate::test_plain_http_no_drift_when_the_flat_opt_in_is_echoed": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestCreate::test_rerun_with_the_same_endpoint_is_a_no_op": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestPlanTimeValidation::test_invalid_endpoint_blocks_at_plan[metadata_hostname]": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestPlanTimeValidation::test_invalid_endpoint_blocks_at_plan[metadata_ipv4]": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestPlanTimeValidation::test_invalid_endpoint_blocks_at_plan[non_canonical_ip]": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestPlanTimeValidation::test_invalid_endpoint_blocks_at_plan[plain_http_without_opt_in]": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestPlanTimeValidation::test_invalid_endpoint_blocks_at_plan[query_string]": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestPlanTimeValidation::test_server_without_endpoint_support_blocks_instead_of_no_op": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_changed_endpoint_is_drift_and_patches": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_changed_endpoint_patches_with_the_endpoint_and_literal_key": [
-      "unused_route"
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "32dca6deb25fe1ac",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_explicit_null_clears_the_endpoint": [
-      "unused_route"
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "32dca6deb25fe1ac",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_http_endpoint_against_a_live_https_drifts_on_both_fields": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_https_with_the_flag_declared_has_no_drift": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_omitted_endpoint_leaves_a_live_endpoint_untouched": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_omitted_endpoint_patches_without_the_endpoint_or_credential": [
-      "unused_route"
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "32dca6deb25fe1ac",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_unchanged_endpoint_allows_a_vault_ref_to_update_other_fields": [
-      "unused_route"
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "32dca6deb25fe1ac",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_base_url.py::TestUpdate::test_vault_reference_cannot_change_an_endpoint": [
-      "unused_route"
+      {
+        "fingerprint": "087d716887272e86",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestExecution::test_create_omits_undeclared_threshold": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestExecution::test_create_sends_declared_threshold": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestExecution::test_update_declared_null_clears_threshold": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestExecution::test_update_of_other_field_leaves_undeclared_threshold_alone": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestExecution::test_update_patches_declared_threshold": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestPlan::test_declared_null_against_set_threshold_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestPlan::test_different_threshold_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestPlan::test_matching_threshold_is_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestPlan::test_undeclared_threshold_never_drifts": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestServerSidePermissionRefusal::test_update_clear_refused_by_server_fails_entity": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestServerSidePermissionRefusal::test_update_lower_still_applies": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_circuit_breaker.py::TestServerSidePermissionRefusal::test_update_raise_refused_by_server_fails_entity": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_cli.py::TestBlockedExitCode::test_real_apply_blocked_exits_1": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_cli.py::TestExecutorPhaseErrors::test_404_becomes_older_version_message": [
-      "unused_route"
+      {
+        "fingerprint": "c125bab6d09c1cfc",
+        "kind": "unused_route"
+      }
+    ],
+    "tests/unit/cli/test_apply_credential_ref.py::TestApplyTimeTypedError::test_credential_ref_sent_as_secretref_in_create": [
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      }
     ],
     "tests/unit/cli/test_apply_credential_ref.py::TestApplyTimeTypedError::test_server_typed_422_surfaced_verbatim": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_credential_ref.py::TestPlanTimeValidation::test_config_without_credential_ref_never_lists_vault": [
-      "unused_route"
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6ce33c9818f67209",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_credential_ref.py::TestPlanTimeValidation::test_missing_key_blocks_the_plan": [
-      "unused_route"
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_credential_ref.py::TestPlanTimeValidation::test_present_key_plans_normally": [
-      "unused_route"
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_credential_ref.py::TestPlanTimeValidation::test_unverifiable_listing_blocks_fail_closed": [
-      "unused_route"
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_drift.py::TestDiffExitCodes::test_diff_table_says_drift_summary": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_drift.py::TestDiffExitCodes::test_drift_exits_1": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_drift.py::TestDiffNeverWrites::test_drift_mode_makes_no_mutating_requests": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "a3fe6e98cf7d9a97",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "d0b6ab9d186d5bdb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_drift.py::TestDriftReportShape::test_drift_detected_on_modified_config": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_drift.py::TestNodeLevelPipelineDrift::test_added_and_removed_nodes": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_drift.py::TestNodeLevelPipelineDrift::test_modified_node_is_reported": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_drift.py::TestNodeLevelPipelineDrift::test_unrelated_field_drift_gets_no_graph_entry": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestExecution::test_create_binds_through_the_follow_up_patch_not_the_post": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestExecution::test_create_omitting_the_key_never_patches_to_bind": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestExecution::test_update_omitting_the_key_never_sends_it": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestExecution::test_update_sends_a_declared_id": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestExecution::test_update_sends_a_declared_null_to_clear": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestPlan::test_declared_id_against_an_unbound_pipeline_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestPlan::test_declared_id_differing_from_the_live_binding_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestPlan::test_declared_id_matching_the_live_binding_is_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestPlan::test_declared_null_against_a_bound_pipeline_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestPlan::test_omitted_against_an_unbound_pipeline_is_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_environment_profile.py::TestPlan::test_omitted_never_reports_drift_against_a_ui_set_binding": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestContractRoundTrip::test_backend_payload_validates_against_api_model": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestDryRunPlan::test_dry_run_makes_no_mutations": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestDryRunPlan::test_dry_run_reports_all_outcomes": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
+    ],
+    "tests/unit/cli/test_apply_executor.py::TestFailureIsolation::test_connect_error_isolates_entity": [
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/cli/test_apply_executor.py::TestFailureIsolation::test_created_schema_version_post_failure_keeps_created_entry": [
+      {
+        "fingerprint": "0b7616c2047ca7c5",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/cli/test_apply_executor.py::TestFailureIsolation::test_later_entities_still_apply_after_failure": [
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/cli/test_apply_executor.py::TestFailureIsolation::test_schema_400_isolates_entity": [
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/cli/test_apply_executor.py::TestFailureIsolation::test_schema_409_isolates_entity_with_hint": [
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/cli/test_apply_executor.py::TestFailureIsolation::test_schema_500_isolates_entity": [
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestHealthCheckSurfaced::test_health_check_403_keeps_finding_out_of_failed_when_parent_write_failed": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestHealthCheckSurfaced::test_unhealthy_health_check_moves_created_backend_to_failed": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestRealApply::test_created_then_unchanged_on_rerun": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestRealApply::test_creates_schema_and_backend": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestRealApply::test_patch_sent_when_fields_differ": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "4486dd11f5f447b0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestRealApply::test_provider_mismatch_blocks_apply": [
-      "unused_route"
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestRefForwarding::test_missing_vault_key_surfaces_server_typed_error": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestRefForwarding::test_secretref_forwarded_to_server": [
-      "unused_route"
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestRefResolution::test_unresolved_env_ref_blocks_entity": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestSystemMapFetch::test_fetch_current_fetches_system_maps_when_declared": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestVersionImmutability::test_conflicting_version_string_blocks": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestVersionImmutability::test_identical_version_is_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_executor.py::TestVersionsCreate::test_version_posted_on_schema_create": [
-      "unused_route"
+      {
+        "fingerprint": "0b7616c2047ca7c5",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestDiffMode::test_diff_detects_cleared_owner": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestDiffMode::test_diff_detects_owner_change": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestDiffMode::test_diff_no_drift_when_owner_matches": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestExecution::test_create_posts_resolved_owner_ids": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestExecution::test_omitted_owner_sends_explicit_null": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestExecution::test_update_patches_resolved_owner_id": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestPlan::test_changed_owner_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestPlan::test_omitted_owner_clears_live_owner_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestPlan::test_resolved_owner_matching_live_is_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestPlan::test_unresolvable_email_blocks_loudly": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_owners.py::TestPlan::test_users_directory_failure_blocks_owner_pipelines": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_create_posts_and_applies_graph": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_create_without_graph_skips_patch": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_graph_patch_failure_blocks_dependent_trigger": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_update_declared_null_ceiling_is_patched_as_null": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_update_omitted_ceiling_is_not_patched": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_update_patches_top_fields_and_unchanged_graph_is_omitted": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_update_sends_declared_max_autonomy_level": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_update_with_graph_drift_sends_graph_json": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestExecution::test_updated_pipeline_patch_failure_keeps_id_for_dependent_trigger": [
-      "unused_route"
+      {
+        "fingerprint": "0c968932b5a5225f",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestFailureIsolation::test_connect_error_isolates_entity": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestFailureIsolation::test_one_failure_applies_sibling_and_exits_nonzero": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestFailureIsolation::test_patch_failure_isolates_entity": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestFailureIsolation::test_post_400_isolates_entity": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestFailureIsolation::test_post_409_isolates_entity_with_hint": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestFailureIsolation::test_post_500_isolates_entity": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphRefreshSecrets::test_drift_refresh_secrets_reports_updated_without_node_noise": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphRefreshSecrets::test_drift_refresh_secrets_secret_free_pipeline_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphRefreshSecrets::test_refresh_secrets_leaves_secret_free_graphs_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphRefreshSecrets::test_refresh_secrets_never_writes_masked_placeholder": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphRefreshSecrets::test_refresh_secrets_re_sends_secret_graph_json": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphSecretEnvVarConvergence::test_created_graph_secret_env_var_writes_declared_value": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphSecretEnvVarConvergence::test_masked_graph_secret_env_var_does_not_re_patch_graph": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphSecretEnvVarConvergence::test_masked_graph_secret_env_var_reports_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphSecretEnvVarConvergence::test_non_secret_graph_env_drift_still_patches_graph": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphSecretParity::test_masked_server_graph_origin_never_reapplies": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphSecretParity::test_masked_server_graph_plans_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphSecretParity::test_true_secret_rotation_re_differs": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestGraphlessUpdateDoesNotDriftOnGraph::test_graphless_config_is_unchanged_even_with_ui_graph": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestHitlReviewWindowPayloads::test_create_payload_includes_hitl_review_window": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestHitlReviewWindowPayloads::test_double_apply_with_hitl_review_window_converges": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestHitlReviewWindowPayloads::test_omitted_field_patches_null_and_still_converges": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestHitlReviewWindowPayloads::test_patch_payload_includes_hitl_review_window": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestMixedKindsPhaseOrder::test_backend_pipeline_and_schema_report_order": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "140fb0f317c61e3d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2a12ab936f8343a0",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "f744f99408a8785e",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "71d1717db10c670a",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_agent_free_config_never_fetches_agents": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_agent_ref_config_fetches_agents": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_changed_top_level_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_created_when_absent": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_duplicate_agent_names_block_the_pipeline": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_duplicate_pipeline_names_block_the_entity": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_graph_drift_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_graphless_config_never_fetches_graphs": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_invalid_sandbox_node_blocked_client_side": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_missing_agent_ref_blocks_entity": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_unchanged_rerun": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestPlanDecisions::test_unreadable_current_graph_blocks_only_that_pipeline": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestQueueTimeoutPayloads::test_create_payload_includes_queue_timeout": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestQueueTimeoutPayloads::test_double_apply_with_queue_timeout_converges": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestQueueTimeoutPayloads::test_omitted_queue_timeout_patches_null_and_still_converges": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestQueueTimeoutPayloads::test_patch_payload_includes_queue_timeout": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestRuntimeLimitPayloads::test_create_payload_includes_runtime_limits": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestRuntimeLimitPayloads::test_declared_limits_absent_from_create_payload_when_omitted": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestRuntimeLimitPayloads::test_double_apply_with_runtime_limits_converges": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestRuntimeLimitPayloads::test_omitted_limits_leave_live_values_untouched": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestRuntimeLimitPayloads::test_patch_payload_includes_runtime_limits": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestStdoutRetentionConfigPayloads::test_create_payload_includes_stdout_retention_config": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestStdoutRetentionConfigPayloads::test_double_apply_with_stdout_retention_converges": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_pipeline.py::TestStdoutRetentionConfigPayloads::test_patch_payload_includes_stdout_retention_config": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_policy_gate.py::TestApplyReport::test_apply_records_added_gate_change": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_policy_gate.py::TestApplyReport::test_apply_records_removed_gate_change": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "034c290dac4e52a3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_policy_gate.py::TestApplyReport::test_double_apply_is_idempotent": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_policy_gate.py::TestApplyReport::test_missing_eval_blocks_pipeline_without_writing": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestExecution::test_create_declaring_false_pauses_the_new_pipeline": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "e2ecd39b75f2b8e6",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestExecution::test_create_omitting_run_enabled_never_pauses": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "e3b731001a5707dd",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestExecution::test_update_already_paused_with_declared_false_makes_no_writes": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "e3b731001a5707dd",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestExecution::test_update_declaring_false_pauses_after_the_patch": [
-      "unused_route"
+      {
+        "fingerprint": "875a94c42469b9cd",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "e2ecd39b75f2b8e6",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestExecution::test_update_omitting_leaves_a_live_pause_untouched": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "e3b731001a5707dd",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestPlan::test_declared_false_against_paused_pipeline_is_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestPlan::test_declared_false_against_running_pipeline_is_updated": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestPlan::test_omitted_against_running_pipeline_is_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_run_enabled.py::TestPlan::test_omitted_leaves_a_live_pause_untouched": [
-      "unused_route"
+      {
+        "fingerprint": "1d7a4547dbf247cb",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "2f0b472311d8bd39",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "92ccaf484848e7f4",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestExecution::test_create_contract_and_env_resolution": [
-      "unused_route"
+      {
+        "fingerprint": "0c968932b5a5225f",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestExecution::test_missing_pipeline_id_at_execute_is_contained": [
-      "unused_route"
+      {
+        "fingerprint": "0577bc59c3f2758d",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestExecution::test_update_payload_validates_against_real_model": [
-      "unused_route"
+      {
+        "fingerprint": "7f752ef883681e57",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
+    ],
+    "tests/unit/cli/test_apply_trigger.py::TestExtractedTriggerHelpers::test_resolves_config_when_not_preseeded_and_creates": [
+      {
+        "fingerprint": "0c968932b5a5225f",
+        "kind": "missing_write_headers"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestFailureIsolation::test_create_400_isolates_entity": [
-      "unused_route"
+      {
+        "fingerprint": "0c968932b5a5225f",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestFailureIsolation::test_create_409_hint_and_connect_error": [
-      "unused_route"
+      {
+        "fingerprint": "0c968932b5a5225f",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestFailureIsolation::test_create_500_isolates_entity": [
-      "unused_route"
+      {
+        "fingerprint": "0c968932b5a5225f",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestFailureIsolation::test_ongoing_validation_rejection_surfaces_server_reason": [
-      "unused_route"
+      {
+        "fingerprint": "0c968932b5a5225f",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestFailureIsolation::test_put_failure_isolates_entity": [
-      "unused_route"
+      {
+        "fingerprint": "7f752ef883681e57",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestPlanDecisions::test_created_when_pipeline_declared_in_same_config": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestPlanDecisions::test_created_when_pipeline_exists_in_org": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestPlanDecisions::test_duplicate_live_trigger_name_blocks": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestPlanDecisions::test_env_ref_config_converges_on_second_apply": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestPlanDecisions::test_forward_reference_within_one_document_is_allowed": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestPlanDecisions::test_missing_pipeline_blocks_with_hint": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestPlanDecisions::test_pipeline_blocked_upstream_blocks_trigger": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestPlanDecisions::test_unchanged_rerun_including_masked_secrets": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestRefResolution::test_empty_env_ref_blocking_reason": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestRefResolution::test_secretref_blocked_at_plan_time": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestRefResolution::test_unresolved_env_ref_blocks_entity": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestRefreshSecrets::test_refresh_secrets_leaves_secret_free_triggers_unchanged": [
-      "unused_route"
+      {
+        "fingerprint": "3f878f66b15195e7",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/cli/test_apply_trigger.py::TestRefreshSecrets::test_refresh_secrets_re_sends_masked_secret_config": [
-      "unused_route"
+      {
+        "fingerprint": "7f752ef883681e57",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "446945e830ec1998",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "6c43ddb7ca39b050",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "927604866bc4bdf3",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "9e1349805631320d",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "b5af17ebad440914",
+        "kind": "unused_route"
+      },
+      {
+        "fingerprint": "ca051018855f89fb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/connectors/test_connector_fuzz.py::test_github_single_issue_fuzz": [
-      "unused_route"
+      {
+        "fingerprint": "dbc5d945f4365ebb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/connectors/test_connector_fuzz.py::test_github_single_issue_mutated_fuzz": [
-      "unused_route"
+      {
+        "fingerprint": "dbc5d945f4365ebb",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/connectors/test_github.py::test_write_commit_move_binary_file_raises_descriptive_error": [
-      "unused_route"
+      {
+        "fingerprint": "90b88d975a8f42a7",
+        "kind": "unused_route"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_health_check_warms_write_scope_cache": [
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_allowed_with_api_scope": [
+      {
+        "fingerprint": "72b6daf1f9df222d",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_allowed_with_write_repository_scope": [
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
     ],
     "tests/unit/connectors/test_gitlab.py::test_write_file_blocked_without_write_repository_scope": [
-      "unused_route"
+      {
+        "fingerprint": "b0ceb3db34ef1a12",
+        "kind": "unused_route"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_create_conflict_falls_back_to_update": [
+      {
+        "fingerprint": "3ccaf83f23e1b4fe",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_create_conflict_updates_without_sha_when_reprobe_fails": [
+      {
+        "fingerprint": "3ccaf83f23e1b4fe",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_create_when_new": [
+      {
+        "fingerprint": "4a4938ad8220af97",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_delete": [
+      {
+        "fingerprint": "c0e983767b51aa48",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_delete_defaults_ref": [
+      {
+        "fingerprint": "55b01e0081ed7228",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_delete_error_response": [
+      {
+        "fingerprint": "55b01e0081ed7228",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_delete_missing_branch_defaults_main": [
+      {
+        "fingerprint": "55b01e0081ed7228",
+        "kind": "missing_write_headers"
+      }
     ],
     "tests/unit/connectors/test_gitlab.py::test_write_file_explicit_sha_skips_probe": [
-      "unused_route"
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "820602aea49c2127",
+        "kind": "unused_route"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_honors_branch_key": [
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
     ],
     "tests/unit/connectors/test_gitlab.py::test_write_file_unrelated_create_error_is_not_swallowed": [
-      "unused_route"
+      {
+        "fingerprint": "3ccaf83f23e1b4fe",
+        "kind": "missing_write_headers"
+      },
+      {
+        "fingerprint": "b0ceb3db34ef1a12",
+        "kind": "unused_route"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_file_update_when_exists": [
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_files_batch_commit": [
+      {
+        "fingerprint": "fb0c5d1f05b8f352",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_files_custom_branch_message": [
+      {
+        "fingerprint": "fb0c5d1f05b8f352",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_files_move_action": [
+      {
+        "fingerprint": "fb0c5d1f05b8f352",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_mr": [
+      {
+        "fingerprint": "72b6daf1f9df222d",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_mr_approval_request": [
+      {
+        "fingerprint": "cc316b438fb821cb",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_mr_approval_request_by_email": [
+      {
+        "fingerprint": "cc316b438fb821cb",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_mr_approve": [
+      {
+        "fingerprint": "ddd35df65918223f",
+        "kind": "missing_write_headers"
+      }
     ],
     "tests/unit/connectors/test_gitlab.py::test_write_mr_blocked_without_api_scope": [
-      "unused_route"
+      {
+        "fingerprint": "65bce5ad4d5f5e5f",
+        "kind": "unused_route"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_mr_comment": [
+      {
+        "fingerprint": "c5e9d42a5e6eac45",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_mr_labels": [
+      {
+        "fingerprint": "b931ada0699bf965",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_mr_merge": [
+      {
+        "fingerprint": "9a2b8659406ceea9",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_mr_note": [
+      {
+        "fingerprint": "c5e9d42a5e6eac45",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_proceeds_when_scopes_unavailable": [
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_proceeds_when_token_info_network_error": [
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
+    ],
+    "tests/unit/connectors/test_gitlab.py::test_write_scope_cache_avoids_reprobe": [
+      {
+        "fingerprint": "7e36044670479676",
+        "kind": "missing_write_headers"
+      }
     ],
     "tests/unit/connectors/test_jenkins.py::test_list_runs_missing_pipeline_id": [
-      "unused_route"
+      {
+        "fingerprint": "a608f3b4df8efc61",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/connectors/test_jenkins.py::test_query_builds_missing_job_name": [
-      "unused_route"
+      {
+        "fingerprint": "a608f3b4df8efc61",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/connectors/test_jenkins.py::test_trigger_run_missing_pipeline_id": [
-      "unused_route"
+      {
+        "fingerprint": "d995e3f1f18d5d4e",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/connectors/test_jenkins.py::test_write_missing_job_name": [
-      "unused_route"
+      {
+        "fingerprint": "d995e3f1f18d5d4e",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/tools/test_provider_contract_probe.py::test_missing_credential_fails_by_default": [
-      "unused_route"
+      {
+        "fingerprint": "91d5b131982f3e4e",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/tools/test_provider_contract_probe.py::test_unrecorded_golden_fails_by_default": [
-      "unused_route"
+      {
+        "fingerprint": "91d5b131982f3e4e",
+        "kind": "unused_route"
+      }
     ],
     "tests/unit/tools/test_provider_contract_probe.py::test_zero_attempts_fails_even_when_every_skip_is_excused": [
-      "unused_route"
+      {
+        "fingerprint": "91d5b131982f3e4e",
+        "kind": "unused_route"
+      }
     ]
   }
 }
