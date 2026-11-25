@@ -239,7 +239,7 @@ def _posix_shells(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module.shutil, "which", lambda name: f"/usr/bin/{name}")
 
 
-def _matrix(tmp_path: Path, runner: Any, *, timeout: int = 5) -> Any:
+def _matrix(tmp_path: Path, runner: Any, *, timeout: int = 5, evidence_dir: Path | None = None) -> Any:
     return Matrix(
         compose_file=tmp_path / "docker-compose.prod.yml",
         compose_dir=tmp_path,
@@ -247,11 +247,18 @@ def _matrix(tmp_path: Path, runner: Any, *, timeout: int = 5) -> Any:
         project_name="proof-123",
         old_tag="v1.0.0",
         new_tag="v1.1.0",
-        evidence=Evidence(tmp_path / "evidence"),
+        evidence=Evidence(evidence_dir if evidence_dir is not None else tmp_path / "evidence"),
         port="18080",
         timeout=timeout,
         runner=runner,
     )
+
+
+def _named_evidence_path(message: str) -> Path:
+    """Extract the evidence path a failure message names after ``see ``."""
+    named = message.rsplit("see ", 1)[1].strip()
+    path = Path(named)
+    return path if path.is_absolute() else Path.cwd() / path
 
 
 def _rows(matrix: Any) -> dict[str, dict[str, Any]]:
@@ -913,9 +920,36 @@ def test_a_failed_command_names_its_cause_and_the_evidence_file_that_exists(tmp_
     assert "docker-version failed with exit 2" in message
     # The cause is in the message, not only in the evidence directory.
     assert "is not readable" in message
-    # The path named in the message is the file actually written.
-    assert "see evidence/01-docker-version.stderr" in message
-    assert (matrix.evidence.directory / "01-docker-version.stderr").is_file()
+    # The path named in the message IS the file actually written.
+    written = matrix.evidence.directory / "01-docker-version.stderr"
+    assert written.is_file()
+    assert _named_evidence_path(message).resolve() == written.resolve()
+
+
+def test_a_failed_command_names_a_non_default_evidence_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The named path must follow ``--evidence-dir``, not a hardcoded prefix.
+
+    The documented invocation is ``--evidence-dir evidence/compose-upgrade``.
+    A message that hardcodes ``evidence/<stem>.stderr`` names a file that does
+    not exist, because the evidence lives one directory deeper.
+    """
+    monkeypatch.chdir(tmp_path)
+
+    def runner(argv: list[str], **kwargs: Any) -> SimpleNamespace:
+        if argv[0] == "docker" and "version" in argv:
+            return SimpleNamespace(returncode=2, stdout="", stderr="daemon unavailable\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    evidence_dir = tmp_path / "evidence" / "compose-upgrade"
+    matrix = _matrix(tmp_path, runner, timeout=10, evidence_dir=evidence_dir)
+    with pytest.raises(ValidationError) as excinfo:
+        matrix.run()
+
+    message = str(excinfo.value)
+    assert "see evidence/compose-upgrade/01-docker-version.stderr" in message
+    written = evidence_dir / "01-docker-version.stderr"
+    assert written.is_file()
+    assert _named_evidence_path(message).resolve() == written.resolve()
 
 
 def test_a_failed_command_redacts_the_cause_it_names(tmp_path: Path) -> None:
