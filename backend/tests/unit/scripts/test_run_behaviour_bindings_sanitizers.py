@@ -1,10 +1,9 @@
 """Sanitiser tests for ``scripts/run_behaviour_bindings_baseline.py`` (FAR-2701).
 
-The binding gate hands a base revision and a repo-relative path to ``git`` and
-writes derived statuses back into product-map entries. Both now route through
-regex allow-lists and filesystem confinement, so no scanned or caller value can
-steer a subprocess argument or a write outside the tree
-(pythonsecurity:S8705 / S2083).
+The binding gate writes derived statuses back into product-map entries. The
+write target is now regex-bounded to a repo-relative path and required to
+resolve under ``docs/product-map``, so no scanned value can steer a write
+outside the map (pythonsecurity:S2083).
 """
 
 from __future__ import annotations
@@ -40,48 +39,17 @@ _loader.exec_module(_bindings)
     [
         "backend/tests/architecture/behaviour_bindings_baseline.json",
         "docs/product-map/probe-entry.md",
-        "HEAD",
-        "origin/main",
-        "v1.2.3",
-        "a1b2c3d4e5f6",
+        "docs/product-map/auth/sso-provider-ui.md",
     ],
 )
-def test_sanitize_relpath_accepts_repo_relative_paths_and_refs(good: str):
+def test_sanitize_relpath_accepts_repo_relative_paths(good: str):
     assert _bindings._sanitize_relpath(good, "path") == good
 
 
-@pytest.mark.parametrize("bad", ["../etc/passwd", "/etc/passwd", "-x", "a/../../b", "a/./b", ".", ".."])
+@pytest.mark.parametrize("bad", ["../etc/passwd", "/etc/passwd", "-x", "a/../../b", "a/./b", ".", "..", "a//b"])
 def test_sanitize_relpath_rejects_traversal_absolute_paths_and_flags(bad: str):
     with pytest.raises(ValueError, match="not a safe relative path"):
         _bindings._sanitize_relpath(bad, "path")
-
-
-# --- _sanitize_git_object / _sanitize_committish ---------------------------
-
-
-def test_sanitize_git_object_builds_a_bounded_spec():
-    spec = _bindings._sanitize_git_object("HEAD", "backend/tests/architecture/behaviour_bindings_baseline.json")
-    assert spec == "HEAD:backend/tests/architecture/behaviour_bindings_baseline.json"
-
-
-@pytest.mark.parametrize(
-    ("rev", "relpath"),
-    [("-x", "a/b.md"), ("HEAD", "../secret"), ("HEAD", "/abs/path"), ("HEAD; rm -rf /", "ok.md")],
-)
-def test_sanitize_git_object_rejects_flag_and_traversal_payloads(rev: str, relpath: str):
-    with pytest.raises(ValueError, match="object spec"):
-        _bindings._sanitize_git_object(rev, relpath)
-
-
-def test_sanitize_committish_builds_the_rev_parse_argument():
-    assert _bindings._sanitize_committish("HEAD") == "HEAD^{commit}"
-    assert _bindings._sanitize_committish("a" * 40) == f"{'a' * 40}^{{commit}}"
-
-
-@pytest.mark.parametrize("bad", ["-x", "HEAD; rm -rf /", "HEAD^{tree}", ""])
-def test_sanitize_committish_rejects_non_revisions(bad: str):
-    with pytest.raises(ValueError, match="as a revision"):
-        _bindings._sanitize_committish(bad)
 
 
 # --- _contained_entry_path --------------------------------------------------
@@ -95,7 +63,17 @@ def test_contained_entry_path_accepts_an_entry_under_the_product_map(tmp_path: P
     assert _bindings._contained_entry_path(tmp_path, "docs/product-map/probe.md") == entry.resolve()
 
 
-@pytest.mark.parametrize("bad", ["docs/product-map/../../../evil.md", "/etc/passwd", "docs/product-map/../evil.md"])
-def test_contained_entry_path_rejects_escapes(bad: str, tmp_path: Path):
+def test_contained_entry_path_rejects_a_repo_path_outside_the_product_map(tmp_path: Path):
+    """A regex-valid relative path still cannot escape the map."""
+    other = tmp_path / "backend" / "tests" / "escape.md"
+    other.parent.mkdir(parents=True)
+    other.write_text("x", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="outside docs/product-map"):
+        _bindings._contained_entry_path(tmp_path, "backend/tests/escape.md")
+
+
+@pytest.mark.parametrize("bad", ["docs/product-map/../../../evil.md", "/etc/passwd", "docs/product-map/../evil.md", "-x"])
+def test_contained_entry_path_rejects_traversal_and_flags(bad: str, tmp_path: Path):
     with pytest.raises(ValueError, match="entry path"):
         _bindings._contained_entry_path(tmp_path, bad)

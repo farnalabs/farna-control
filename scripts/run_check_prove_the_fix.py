@@ -47,6 +47,7 @@ import ast
 import re
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 #: A change to these trees changes product behaviour and needs a proving test.
@@ -80,6 +81,11 @@ _TS_TEST_CALL_RE = re.compile(r"\b(?:it|test)(?:\.[A-Za-z_$][\w$]*(?:\s*\((?:[^(
 #: itself carries no ``.skip`` modifier.
 _DESCRIBE_SKIP_RE = re.compile(r"\bdescribe\s*\.\s*(?:skip|skipIf)\s*\(")
 
+#: A test-call modifier that tells Vitest/Playwright not to run the test. The
+#: prove-the-fix gate and the product-map binding resolver share this so neither
+#: can treat a skipped/fixme/todo test as proof.
+_SPEC_SKIP_MODIFIER_RE = re.compile(r"\.(?:skip|fixme|todo)\b")
+
 #: Fenced markdown code blocks and HTML comments: documenting the convention
 #: must not satisfy it.
 _FENCE_RE = re.compile(r"(?P<fence>```|~~~).*?(?P=fence)", re.DOTALL)
@@ -92,16 +98,17 @@ _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 #: pytest-only pattern silently missed. ``expectedFailure`` passes whether or not
 #: the fix exists, so it is exactly as vacuous as ``xfail``.
 _SKIP_MARKER_RE = re.compile(r"^(?:pytest\.mark\.(?:skip|skipif|xfail)|unittest\.skip(?:If|Unless)?|unittest\.expectedFailure)\b")
-_SKIP_BODY_CALLS = frozenset({"pytest.skip", "pytest.xfail"})
+_PYTEST_SKIP = "pytest.skip"
+_SKIP_BODY_CALLS = frozenset({_PYTEST_SKIP, "pytest.xfail"})
 
 #: Calls made at module scope that skip collection of the whole module, so every
 #: test in it is vacuous however clean its own decorators and body are.
-_MODULE_SKIP_CALLS = frozenset({"pytest.skip", "pytest.importorskip"})
+_MODULE_SKIP_CALLS = frozenset({_PYTEST_SKIP, "pytest.importorskip"})
 
 
 #: Allow-list for a caller-supplied input path.  The value is derived through
-#: ``fullmatch(...).group(0)``, so the taint analyser sees a string bounded to
-#: safe path characters before it reaches the filesystem
+#: ``fullmatch(...).group(0)`` and then resolved, so the taint analyser sees a
+#: string bounded to safe path characters before it reaches the filesystem
 #: (pythonsecurity:S8707).
 _PATH_CHARS_RE = re.compile(r"[A-Za-z0-9._/\\:-]+", re.ASCII)
 
@@ -113,8 +120,7 @@ def _allowed_read_roots(repo_root: Path) -> tuple[Path, ...]:
     temp directory (``/tmp`` in CI) and runs the gate from the checkout, so those
     two roots are the whole legitimate surface.
     """
-    roots = {Path(tempfile.gettempdir()).resolve(), repo_root.resolve()}
-    return tuple(roots)
+    return (Path(tempfile.gettempdir()).resolve(), repo_root.resolve())
 
 
 def _sanitize_read_path(value: str, name: str, repo_root: Path) -> Path:
@@ -223,19 +229,32 @@ def _is_within(path: Path, base: Path) -> bool:
     return True
 
 
+def _is_named_function(node: ast.AST, name: str) -> bool:
+    """True when *node* is a (sync or async) function called *name*."""
+    return isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+
+
 def _find_test(tree: ast.Module, name: str, owner: str | None) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, ast.ClassDef | None] | None:
     """The test function *name* (optionally inside class *owner*), and its class.
 
     The enclosing class is returned too: a ``@pytest.mark.skip`` on the class
     skips every method in it, so the caller must see the class decorators.
     """
-    for node in tree.body:
-        if owner is None and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
-            return node, None
-        if isinstance(node, ast.ClassDef) and (owner is None or node.name == owner):
-            for child in node.body:
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == name:
-                    return child, node
+    if owner is None:
+        # A bare node id (``module.py::test_name``) only names a module-level
+        # function. A class member requires its owner (``::Class::test_name``),
+        # exactly as pytest collects it - otherwise a node id pytest cannot
+        # collect would resolve as proof.
+        for node in tree.body:
+            if _is_named_function(node, name):
+                return node, None
+        return None
+    owner_class = next((node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == owner), None)
+    if owner_class is None:
+        return None
+    for child in owner_class.body:
+        if _is_named_function(child, name):
+            return child, owner_class
     return None
 
 
@@ -313,6 +332,40 @@ def _module_level_skip(tree: ast.Module) -> str | None:
     return None
 
 
+def _first_skip_marker(decorators: list[ast.expr]) -> str | None:
+    """The decorator name of the first skip-ish decorator, else ``None``."""
+    for decorator in decorators:
+        text = _skip_marker(decorator)
+        if text is not None:
+            return text.split("(")[0]
+    return None
+
+
+def _pytestmark_skip(body: list[ast.stmt]) -> str | None:
+    """The marker name of the first skip-ish ``pytestmark`` in *body*, else ``None``."""
+    for marker in _pytestmark_markers(body):
+        text = _skip_marker(marker)
+        if text is not None:
+            return text.split("(")[0]
+    return None
+
+
+def _body_opening_skip(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
+    """Why *fn*'s body opens with a skip/xfail call, or ``None``."""
+    body = list(fn.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+        body = body[1:]
+    if not body or not isinstance(body[0], ast.Expr) or not isinstance(body[0].value, ast.Call):
+        return None
+    try:
+        callee = ast.unparse(body[0].value.func)
+    except (ValueError, RecursionError):  # pragma: no cover - defensive
+        return None
+    if callee in _SKIP_BODY_CALLS:
+        return f"its body starts with {callee}()"
+    return None
+
+
 def _skip_reason(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
     owner_class: ast.ClassDef | None,
@@ -327,37 +380,23 @@ def _skip_reason(
     ``pytest.importorskip()`` that aborts collection, and a
     ``pytest.skip()``/``xfail()`` opening the body.
     """
-    for decorator in fn.decorator_list:
-        text = _skip_marker(decorator)
-        if text is not None:
-            return f"it is decorated with @{text.split('(')[0]}"
+    decorated = _first_skip_marker(fn.decorator_list)
+    if decorated is not None:
+        return f"it is decorated with @{decorated}"
     if owner_class is not None:
-        for decorator in owner_class.decorator_list:
-            text = _skip_marker(decorator)
-            if text is not None:
-                return f"its class is decorated with @{text.split('(')[0]}"
-        for marker in _pytestmark_markers(owner_class.body):
-            text = _skip_marker(marker)
-            if text is not None:
-                return f"its class sets pytestmark = {text.split('(')[0]}"
-    for marker in _pytestmark_markers(tree.body):
-        text = _skip_marker(marker)
-        if text is not None:
-            return f"its module sets pytestmark = {text.split('(')[0]}"
+        class_decorated = _first_skip_marker(owner_class.decorator_list)
+        if class_decorated is not None:
+            return f"its class is decorated with @{class_decorated}"
+        class_mark = _pytestmark_skip(owner_class.body)
+        if class_mark is not None:
+            return f"its class sets pytestmark = {class_mark}"
+    module_mark = _pytestmark_skip(tree.body)
+    if module_mark is not None:
+        return f"its module sets pytestmark = {module_mark}"
     module_skip = _module_level_skip(tree)
     if module_skip is not None:
         return module_skip
-    body = list(fn.body)
-    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
-        body = body[1:]
-    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Call):
-        try:
-            callee = ast.unparse(body[0].value.func)
-        except (ValueError, RecursionError):  # pragma: no cover - defensive
-            callee = ""
-        if callee in _SKIP_BODY_CALLS:
-            return f"its body starts with {callee}()"
-    return None
+    return _body_opening_skip(fn)
 
 
 def _verify_pytest_ref(ref: str, match: re.Match[str], module: Path) -> str | None:
@@ -378,6 +417,45 @@ def _verify_pytest_ref(ref: str, match: re.Match[str], module: Path) -> str | No
     return None
 
 
+def _skip_comment(source: str, index: int) -> int | None:
+    """Index just past a ``//`` or ``/* */`` comment at *index*, else ``None``."""
+    if source.startswith("//", index):
+        newline = source.find("\n", index)
+        return len(source) if newline == -1 else newline
+    if source.startswith("/*", index):
+        end = source.find("*/", index + 2)
+        return len(source) if end == -1 else end + 1
+    return None
+
+
+def _consume_quoted(source: str, index: int, quote: str) -> tuple[int, str | None]:
+    """Advance one step through a quoted string, honouring backslash escapes."""
+    char = source[index]
+    if char == "\\":
+        return index + 2, quote
+    if char == quote:
+        return index + 1, None
+    return index + 1, quote
+
+
+def _paren_step(source: str, index: int, quote: str | None) -> tuple[int, str | None, int]:
+    """Consume one character; return ``(next_index, quote, depth_delta)``."""
+    char = source[index]
+    if quote is not None:
+        next_index, next_quote = _consume_quoted(source, index, quote)
+        return next_index, next_quote, 0
+    if char in "'\"`":
+        return index + 1, char, 0
+    comment_end = _skip_comment(source, index)
+    if comment_end is not None:
+        return comment_end, None, 0
+    if char == "(":
+        return index + 1, None, 1
+    if char == ")":
+        return index + 1, None, -1
+    return index + 1, None, 0
+
+
 def _matching_paren(source: str, open_index: int) -> int | None:
     """Index of the ``)`` closing the ``(`` at *open_index*.
 
@@ -389,30 +467,10 @@ def _matching_paren(source: str, open_index: int) -> int | None:
     index = open_index
     quote: str | None = None
     while index < len(source):
-        char = source[index]
-        if quote is not None:
-            if char == "\\":
-                index += 2
-                continue
-            if char == quote:
-                quote = None
-        elif char in "'\"`":
-            quote = char
-        elif char == "/" and source.startswith("//", index):
-            newline = source.find("\n", index)
-            index = len(source) if newline == -1 else newline
-            continue
-        elif char == "/" and source.startswith("/*", index):
-            end = source.find("*/", index + 2)
-            index = len(source) if end == -1 else end + 1
-            continue
-        elif char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return index
-        index += 1
+        index, quote, delta = _paren_step(source, index, quote)
+        depth += delta
+        if delta == -1 and depth == 0:
+            return index - 1
     return None
 
 
@@ -434,26 +492,47 @@ def _skipped_describe_ranges(source: str) -> list[tuple[int, int]]:
     return ranges
 
 
+def iter_spec_test_calls(source: str) -> Iterator[tuple[str, str | None]]:
+    """Yield ``(title, skip_reason)`` for every spec test call in *source*.
+
+    ``describe(...)`` calls are suite titles, not tests, so they are skipped
+    entirely. ``skip_reason`` is ``None`` when the test actually runs, otherwise a
+    short description of why it cannot prove anything. The prove-the-fix gate and
+    the product-map binding resolver both consume this so a skipped/fixme/todo
+    test, or a test inside a ``describe.skip`` block, can never resolve as proof.
+    """
+    skipped_ranges = _skipped_describe_ranges(source)
+    for call in _TS_TEST_CALL_RE.finditer(source):
+        text = call.group(0)
+        prefix = text[: text.index(call.group("quote"))]
+        if "describe" in prefix:
+            continue
+        reason: str | None = None
+        if _SPEC_SKIP_MODIFIER_RE.search(prefix):
+            reason = "it is marked skipped/fixme/todo"
+        elif any(start <= call.start() <= end for start, end in skipped_ranges):
+            reason = "it sits inside a describe.skip block"
+        yield call.group("name"), reason
+
+
+def runnable_spec_titles(source: str) -> set[str]:
+    """Titles of spec tests that can actually run (never skipped/describe titles)."""
+    return {title for title, reason in iter_spec_test_calls(source) if reason is None}
+
+
 def _verify_spec_ref(ref: str, match: re.Match[str], module: Path) -> str | None:
     try:
         source = module.read_text(encoding="utf-8")
     except OSError as exc:
         return f"{ref!r} names a spec that cannot be read: {exc}"
     name = match.group("name").strip()
-    skipped_ranges = _skipped_describe_ranges(source)
     found = False
-    for call in _TS_TEST_CALL_RE.finditer(source):
-        text = call.group(0)
-        prefix = text[: text.index(call.group("quote"))]
-        if "describe" in prefix:
-            continue
-        if call.group("name") != name:
+    for title, reason in iter_spec_test_calls(source):
+        if title != name:
             continue
         found = True
-        if re.search(r"\.(?:skip|fixme|todo)\b", prefix):
-            return f"{ref!r} names a spec test that cannot prove anything: it is marked skipped/fixme/todo"
-        if any(start <= call.start() <= end for start, end in skipped_ranges):
-            return f"{ref!r} names a spec test that cannot prove anything: it sits inside a describe.skip block"
+        if reason is not None:
+            return f"{ref!r} names a spec test that cannot prove anything: {reason}"
     if not found:
         return f"{ref!r} names a test title that is not defined in {match.group('file')}"
     return None
@@ -530,15 +609,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.repo_root).resolve() if args.repo_root else _repo_root()
+    body_path = Path(args.pr_body)
     try:
-        body = _read_text(Path(args.pr_body), "pr-body", root)
-        changed = _read_lines(Path(args.changed_files), root)
+        body = _read_text(body_path, "pr-body", root)
+    except OSError as exc:
+        print(f"prove-the-fix: FAILED - cannot read the PR body file {body_path}: {exc}", file=sys.stderr)
+        return 2
     except ValueError as exc:
         print(f"prove-the-fix: FAILED - {exc}", file=sys.stderr)
         return 2
-    except OSError as exc:
-        print(f"prove-the-fix: FAILED - cannot read an input file: {exc}", file=sys.stderr)
-        return 2
+    changed = _read_lines(Path(args.changed_files), root)
     return evaluate(body, changed, root)
 
 
