@@ -68,6 +68,15 @@ DEFAULT_CONFIG = REPO_ROOT / "configs" / "provider-contract-probes.yaml"
 DEFAULT_GOLDENS = REPO_ROOT / "contract-goldens" / "provider-shapes.json"
 DEFAULT_REPORT = REPO_ROOT / "contract-goldens" / "report.json"
 
+#: The only paths this script reads or writes come from its own
+#: ``--config`` / ``--goldens`` / ``--report`` arguments, which the nightly
+#: workflow pins to fixed repo paths. A caller that can pass an argument can
+#: already read and write that path directly, so Sonar's path-traversal taint
+#: flows below are false positives - the same class suppressed the same way in
+#: ``scripts/validate_release_tag.py``, ``scripts/render_validation_compose.py``
+#: and ``.github/scripts/deploy_run_attempts.py``. Each sink carries a NOSONAR
+#: marker with its rule key.
+
 GOLDEN_SCHEMA_VERSION = 1
 VOLATILE = "<volatile>"
 NULLABLE = "<null>"
@@ -486,7 +495,7 @@ def _validate_allow_list(config: dict[str, Any], name: str) -> dict[str, str]:
 def load_config(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise ProbeConfigError(f"config not found: {path}")
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))  # NOSONAR pythonsecurity:S8707
     if not isinstance(data, dict):
         raise ProbeConfigError("config must be a mapping")
     if data.get("version") != 1:
@@ -903,7 +912,7 @@ def _golden_key(provider: str, operation: str) -> str:
 def _load_goldens(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"schema_version": GOLDEN_SCHEMA_VERSION, "goldens": {}}
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"))  # NOSONAR pythonsecurity:S8707
     if not isinstance(data, dict) or not isinstance(data.get("goldens"), dict):
         raise ProbeConfigError(f"golden manifest is malformed: {path}")
     return data
@@ -912,8 +921,8 @@ def _load_goldens(path: Path) -> dict[str, Any]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")  # NOSONAR pythonsecurity:S8707
+    tmp.replace(path)  # NOSONAR pythonsecurity:S8707
 
 
 def _is_compact(node: Any) -> bool:
@@ -951,8 +960,8 @@ def _write_goldens(path: Path, manifest: dict[str, Any]) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(_format_json(manifest, 0) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    tmp.write_text(_format_json(manifest, 0) + "\n", encoding="utf-8")  # NOSONAR pythonsecurity:S2083
+    tmp.replace(path)  # NOSONAR pythonsecurity:S8707
 
 
 def _record_golden(manifest: dict[str, Any], key: str, status_class: str, max_depth: int, shape: dict[str, Any]) -> None:

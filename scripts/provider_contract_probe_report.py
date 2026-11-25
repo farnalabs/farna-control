@@ -108,10 +108,16 @@ def build_body(report_path: Path, run_url: str) -> str:
 
     ``""`` is returned only for the bootstrap red. Everything else - including a
     run that died before writing a report - produces a non-empty body.
+
+    ``report_path`` is a CLI argument fixed by the calling workflow
+    (``contract-goldens/report.json``), so Sonar's S8707 path-traversal taint
+    flow is a false positive: a caller that can pass the argument can already
+    read that path directly. Same convention as
+    ``scripts/validate_release_tag.py``.
     """
     header = _header(run_url)
     try:
-        report = json.loads(Path(report_path).read_text(encoding="utf-8"))
+        report = json.loads(Path(report_path).read_text(encoding="utf-8"))  # NOSONAR pythonsecurity:S8707
     except (OSError, ValueError):
         # The probe never got to write: install or setup failed. The job is red
         # for a reason a human still has to see.
@@ -150,7 +156,11 @@ def main(argv: list[str] | None = None) -> int:
         # An empty body file is the caller's signal to raise nothing.
         return 0
     try:
-        body_path.write_text(body, encoding="utf-8")
+        # ``body_path`` is a CLI argument the workflow points at a ``mktemp``
+        # file, so Sonar's S8707 taint flow is a false positive (the caller can
+        # already write that path directly). Same convention as
+        # ``scripts/render_validation_compose.py``.
+        body_path.write_text(body, encoding="utf-8")  # NOSONAR pythonsecurity:S8707
     except OSError as exc:
         print(f"error: could not write the issue body to {body_path}: {exc}", file=sys.stderr)
         return 1
