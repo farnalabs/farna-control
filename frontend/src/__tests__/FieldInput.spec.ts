@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
+import InputText from 'primevue/inputtext'
+import PrimeTextarea from 'primevue/textarea'
 
 import Field from '../components/ui/Field.vue'
 import Input from '../components/ui/Input.vue'
@@ -106,6 +108,31 @@ describe('Field', () => {
     expect(help.text()).toBe('Only used for receipts')
     expect(help.attributes('aria-live')).toBeUndefined()
     expect(wrapper.get('[data-testid="control"]').attributes('aria-invalid')).toBeUndefined()
+  })
+
+  it('merges a caller-supplied describedby with the field help id', () => {
+    const wrapper = mountHarness(`
+      <Field label="Email" help="Hint" described-by="external-hint">
+        <FieldInput data-testid="control" />
+      </Field>
+    `)
+
+    const id = wrapper.get('[data-testid="control"]').attributes('id')
+
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-describedby')).toBe(
+      `external-hint ${id}-help`,
+    )
+  })
+
+  it('renders no label element when the label prop is omitted', () => {
+    const wrapper = mountHarness(`
+      <Field>
+        <FieldInput aria-label="Search" data-testid="control" />
+      </Field>
+    `)
+
+    expect(wrapper.find('label').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-label')).toBe('Search')
   })
 })
 
@@ -217,6 +244,81 @@ describe('Input', () => {
     expect(wrapper.get('[data-testid="control"]').attributes('id')).toBe('standalone')
     expect(wrapper.element.tagName).toBe('INPUT')
   })
+
+  it('forwards a caller aria-describedby when there is no Field', () => {
+    const wrapper = mount(Input, {
+      props: { modelValue: 'solo' },
+      attrs: { 'aria-describedby': 'solo-hint', 'data-testid': 'control' },
+    })
+
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-describedby')).toBe('solo-hint')
+  })
+
+  it('renders an empty control for a null model value', () => {
+    const wrapper = mount(Input, { props: { modelValue: null } })
+
+    expect((wrapper.get('input').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('honours an explicit aria-invalid string over the Field error state', () => {
+    const wrapper = mountHarness(`
+      <Field label="Email" error="Required">
+        <FieldInput data-testid="control" aria-invalid="grammar" />
+      </Field>
+    `)
+
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-invalid')).toBe('grammar')
+  })
+
+  it('honours an explicit boolean aria-invalid over the Field error state', () => {
+    const wrapper = mountHarness(`
+      <Field label="Email" error="Required">
+        <FieldInput data-testid="control" :aria-invalid="false" />
+      </Field>
+    `)
+
+    expect(wrapper.get('[data-testid="control"]').attributes('aria-invalid')).toBe('false')
+  })
+
+  it('honours an explicit required attribute without a Field', () => {
+    const wrapper = mount(Input, {
+      props: { modelValue: '' },
+      attrs: { required: true, 'data-testid': 'control' },
+    })
+
+    expect(wrapper.get('[data-testid="control"]').attributes('required')).toBeDefined()
+  })
+
+  it('honours an explicit required="false" even inside a required Field', () => {
+    const wrapper = mountHarness(`
+      <Field label="Project" required>
+        <FieldInput data-testid="control" :required="false" />
+      </Field>
+    `)
+
+    expect(wrapper.get('[data-testid="control"]').attributes('required')).toBeUndefined()
+  })
+
+  it('casts to a number for type="number" even without the .number modifier', async () => {
+    const value = ref<number | string>('')
+    const wrapper = mountHarness(
+      '<Field label="Count"><FieldInput v-model="value" type="number" data-testid="control" /></Field>',
+      { value },
+    )
+
+    await wrapper.get('[data-testid="control"]').setValue('7')
+
+    expect(value.value).toBe(7)
+  })
+
+  it('normalises a cleared (undefined) value to an empty string', async () => {
+    const wrapper = mount(Input, { props: { modelValue: 'x' } })
+
+    wrapper.findComponent(InputText).vm.$emit('update:modelValue', undefined)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([''])
+  })
 })
 
 describe('Textarea', () => {
@@ -250,5 +352,65 @@ describe('Textarea', () => {
 
     expect(value.value).toBe('edited')
     expect(onBlur).toHaveBeenCalledTimes(1)
+  })
+
+  it('works without a Field, forwarding id and aria-describedby and rendering null as empty', () => {
+    const wrapper = mount(Textarea, {
+      props: { modelValue: null, rows: 3 },
+      attrs: { id: 'standalone', 'aria-describedby': 'solo-hint', 'data-testid': 'control' },
+    })
+
+    const control = wrapper.get('[data-testid="control"]')
+
+    expect(control.attributes('id')).toBe('standalone')
+    expect(control.attributes('aria-describedby')).toBe('solo-hint')
+    expect((control.element as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('honours explicit aria-invalid and required attributes', () => {
+    const wrapper = mount(Textarea, {
+      props: { modelValue: 'x' },
+      attrs: { 'aria-invalid': 'spelling', required: true, 'data-testid': 'control' },
+    })
+
+    const control = wrapper.get('[data-testid="control"]')
+
+    expect(control.attributes('aria-invalid')).toBe('spelling')
+    expect(control.attributes('required')).toBeDefined()
+  })
+
+  it('inherits aria-invalid and required from an erroring required Field', () => {
+    const wrapper = mountHarness(`
+      <Field label="Notes" error="Required" required>
+        <FieldTextarea data-testid="control" />
+      </Field>
+    `)
+
+    const control = wrapper.get('[data-testid="control"]')
+
+    expect(control.attributes('aria-invalid')).toBe('true')
+    expect(control.attributes('required')).toBeDefined()
+  })
+
+  it('honours explicit aria-invalid="false" and required="false" over the Field state', () => {
+    const wrapper = mountHarness(`
+      <Field label="Notes" error="Required" required>
+        <FieldTextarea data-testid="control" :aria-invalid="false" :required="false" />
+      </Field>
+    `)
+
+    const control = wrapper.get('[data-testid="control"]')
+
+    expect(control.attributes('aria-invalid')).toBe('false')
+    expect(control.attributes('required')).toBeUndefined()
+  })
+
+  it('normalises a cleared (undefined) value to an empty string', async () => {
+    const wrapper = mount(Textarea, { props: { modelValue: 'x' } })
+
+    wrapper.findComponent(PrimeTextarea).vm.$emit('update:modelValue', undefined)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([''])
   })
 })
