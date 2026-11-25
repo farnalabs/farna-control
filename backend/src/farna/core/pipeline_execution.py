@@ -4464,7 +4464,7 @@ async def _attribute_swept_run_derived_cost(
 
 # FAR-2782: the LangGraph checkpoint tables (``checkpoints`` and its siblings)
 # are NOT created by Alembic - the BACKEND's boot-time saver DDL creates them
-# (``api.main._init_checkpointer`` -> ``ModuloPostgresSaver.setup``), inside the
+# (``api.main._init_checkpointer`` -> the saver's ``setup``), inside the
 # app's lifespan and AFTER the migrations. ``saq-system`` on the other hand
 # starts as soon as ``db`` answers ``pg_isready``: it does not run
 # ``entrypoint.sh`` at all (its ``command`` replaces the image CMD) and nothing

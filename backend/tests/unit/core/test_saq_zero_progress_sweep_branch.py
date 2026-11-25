@@ -15,6 +15,7 @@ dispatcher_reconcile the Error Dashboard group is still fed.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -540,7 +541,7 @@ class TestPreCheckpointSchemaTick:
         assert len([s for s in conn.statements if "dispatcher='saq'" in s]) == 1
         assert result["zero_progress_deferred"] is None
 
-    async def test_probe_asks_the_catalog_instead_of_referencing_the_relation(self) -> None:
+    def test_probe_asks_the_catalog_instead_of_referencing_the_relation(self) -> None:
         """The probe must not name ``checkpoints`` as a FROM/UPDATE target —
         that is exactly what raises. ``to_regclass`` is a catalog lookup that
         returns NULL for a missing relation and resolves through the session
@@ -574,3 +575,18 @@ class TestPreCheckpointSchemaTick:
                 raise RuntimeError("connection pool exhausted")
 
         assert await pe.langgraph_checkpoint_schema_present(_ExplodingEngine()) is True  # type: ignore[arg-type]
+
+    async def test_probe_lets_cancellation_propagate(self) -> None:
+        """Cancellation is never swallowed by the fail-open path: a cancelled
+        tick must stay cancelled so the worker can stop, not be reported as a
+        healthy sweep."""
+
+        class _CancellingEngine:
+            def connect(self) -> object:
+                raise asyncio.CancelledError
+
+        try:
+            await pe.langgraph_checkpoint_schema_present(_CancellingEngine())  # type: ignore[arg-type]
+        except asyncio.CancelledError:
+            return
+        raise AssertionError("CancelledError must propagate, not be caught by the fail-open path")
