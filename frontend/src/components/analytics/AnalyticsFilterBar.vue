@@ -197,17 +197,18 @@
         </AppSelect>
       </div>
 
-      <label class="block">
-        <span class="text-xs font-medium text-muted-foreground">{{ $t("views.AnalyticsView.filter_error_code") }}</span>
-        <input
-          :value="filters.errorCode ?? ''"
-          type="text"
-          class="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+      <Field
+        :label="$t('views.AnalyticsView.filter_error_code')"
+        label-class="text-xs font-medium text-muted-foreground"
+      >
+        <SearchInput
+          :model-value="filters.errorCode ?? ''"
+          class="mt-1"
           data-testid="analytics-filter-error-code"
           :placeholder="$t('views.AnalyticsView.filter_error_code_placeholder')"
-          @input="onErrorCodeInput"
+          @update:model-value="onErrorCodeInput"
         />
-      </label>
+      </Field>
     </div>
   </BaseCard>
 </template>
@@ -217,6 +218,8 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import AppSelect from "../shared/AppSelect.vue";
 import BaseCard from "../ui/BaseCard.vue";
+import Field from "../ui/Field.vue";
+import SearchInput from "../ui/SearchInput.vue";
 import type { components } from "../../lib/api/schema";
 import {
   MEASURES,
@@ -348,8 +351,8 @@ function onStatusChange(value: unknown): void {
   emitFilters({ status: selectValue(value) || null });
 }
 
-function onErrorCodeInput(e: Event): void {
-  const value = (e.target as HTMLInputElement).value.trim();
-  emitFilters({ errorCode: value || null });
+function onErrorCodeInput(value: string): void {
+  const trimmed = value.trim();
+  emitFilters({ errorCode: trimmed || null });
 }
 </script>

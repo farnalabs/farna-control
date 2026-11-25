@@ -18,24 +18,28 @@
 </Select>
     </div>
 
-    <div>
-      <label for="edgeconfigpanel-field-4" class="mb-1 block text-sm font-medium">{{ $t('components.lifecycle-map.editor.EdgeConfigPanel.description') }}</label>
-      <textarea id="edgeconfigpanel-field-4"
+    <Field
+      id="edgeconfigpanel-field-4"
+      :label="$t('components.lifecycle-map.editor.EdgeConfigPanel.description')"
+    >
+      <Textarea
         v-model="form.description"
         rows="2"
         class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         placeholder="Describe the trigger condition"
       />
-    </div>
+    </Field>
 
-    <div>
-      <label for="edgeconfigpanel-field-3" class="mb-1 block text-sm font-medium">{{ $t('components.lifecycle-map.editor.EdgeConfigPanel.condition_expression_jmespath') }}</label>
-      <input id="edgeconfigpanel-field-3"
+    <Field
+      id="edgeconfigpanel-field-3"
+      :label="$t('components.lifecycle-map.editor.EdgeConfigPanel.condition_expression_jmespath')"
+    >
+      <Input
         v-model="form.condition_expression"
         class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         placeholder="e.g. result.status == 'success'"
       />
-    </div>
+    </Field>
 
     <div>
       <label for="edgeconfigpanel-field-2" class="mb-1 block text-sm font-medium">{{ $t('components.lifecycle-map.editor.EdgeConfigPanel.estimated_frequency') }}</label>
@@ -55,20 +59,25 @@
 </Select>
     </div>
 
-    <div>
-      <label for="edgeconfigpanel-field-1" class="mb-1 block text-sm font-medium">{{ $t('components.lifecycle-map.editor.EdgeConfigPanel.trigger_link_optional') }}</label>
-      <input id="edgeconfigpanel-field-1"
+    <Field
+      id="edgeconfigpanel-field-1"
+      :label="$t('components.lifecycle-map.editor.EdgeConfigPanel.trigger_link_optional')"
+    >
+      <Input
         v-model="form.trigger_link"
         class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         placeholder="Link to Farna Control trigger config"
       />
-    </div>
+    </Field>
   </div>
 </template>
 
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
 import Select from '../../shared/AppSelect.vue'
+import Field from '../../ui/Field.vue'
+import Input from '../../ui/Input.vue'
+import Textarea from '../../ui/Textarea.vue'
 import type { TriggerType, EstimatedFrequency } from '../../../types/lifecycleMap'
 
 interface FormModel {

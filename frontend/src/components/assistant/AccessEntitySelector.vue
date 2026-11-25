@@ -1,8 +1,9 @@
 <template>
   <div class="space-y-3">
     <div class="relative">
-      <input :aria-label="placeholder"
-        ref="inputRef"
+      <Input
+        :aria-label="placeholder"
+        :ref="setInputRef"
         v-model="query"
         type="text"
         class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -80,6 +81,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
+import Input from '../ui/Input.vue'
 
 const props = withDefaults(defineProps<{
   modelValue: string[]
@@ -106,6 +108,13 @@ const emit = defineEmits<{
 const query = ref('')
 const isOpen = ref(false)
 const inputRef = ref<HTMLInputElement | null>(null)
+
+// `Input` renders a PrimeVue InputText, so a template ref resolves to the
+// component instance; keep the native element for the imperative focus call.
+function setInputRef(el: unknown): void {
+  const root = (el as { $el?: unknown } | null)?.$el
+  inputRef.value = (root ?? el) as HTMLInputElement | null
+}
 
 const selectedIds = computed({
   get: () => props.modelValue,

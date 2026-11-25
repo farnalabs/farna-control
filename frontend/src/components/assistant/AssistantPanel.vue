@@ -16,9 +16,9 @@
     >
       <div class="flex items-center gap-2 flex-1 min-w-0">
         <template v-if="editingName && store.activeSession">
-          <input
+          <Input
             id="assistantpanel-name-input"
-            ref="nameInputRef"
+            :ref="setNameInputRef"
             v-model="editNameValue"
             :aria-label="$t('components.assistant.AssistantPanel.session_label')"
             class="assistant-name-input text-sm font-semibold"
@@ -267,6 +267,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { shortId } from "@/utils/format";
 import { useAssistantStore } from "@/composables/useAssistantStore";
 import { useAssistantContext } from "@/composables/useAssistantContext";
+import Input from "../ui/Input.vue";
 import AssistantChat from "./AssistantChat.vue";
 import AssistantSessionDrawer from "./AssistantSessionDrawer.vue";
 import AssistantSkillManager from "./AssistantSkillManager.vue";
@@ -287,6 +288,13 @@ const activeTab = ref<"chat" | "skills" | "sessions" | "sources">("chat");
 const editingName = ref(false)
 const editNameValue = ref('')
 const nameInputRef = ref<HTMLInputElement | null>(null)
+
+// `Input` renders a PrimeVue InputText, so a template ref resolves to the
+// component instance; keep the native element for the imperative focus/select.
+function setNameInputRef(el: unknown): void {
+  const root = (el as { $el?: unknown } | null)?.$el
+  nameInputRef.value = (root ?? el) as HTMLInputElement | null
+}
 
 function startEditName() {
   if (!store.activeSession) return

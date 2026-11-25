@@ -98,26 +98,30 @@
         :description="$t('views.AdminRunRetentionView.filters_subtitle')"
       >
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <label class="mb-1.5 block text-xs font-medium text-muted-foreground" for="rr-date-from">{{ $t('views.AdminRunRetentionView.from_label') }}</label>
-              <input
-                id="rr-date-from"
+            <Field
+              id="rr-date-from"
+              :label="$t('views.AdminRunRetentionView.from_label')"
+              label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+            >
+              <Input
                 v-model="dateFrom"
                 type="datetime-local"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 data-testid="admin-run-retention-date-from"
               />
-            </div>
-            <div>
-              <label class="mb-1.5 block text-xs font-medium text-muted-foreground" for="rr-date-to">{{ $t('views.AdminRunRetentionView.to_label') }}</label>
-              <input
-                id="rr-date-to"
+            </Field>
+            <Field
+              id="rr-date-to"
+              :label="$t('views.AdminRunRetentionView.to_label')"
+              label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+            >
+              <Input
                 v-model="dateTo"
                 type="datetime-local"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 data-testid="admin-run-retention-date-to"
               />
-            </div>
+            </Field>
             <div>
               <label class="mb-1.5 block text-xs font-medium text-muted-foreground" for="rr-pipeline">{{ $t('views.AdminRunRetentionView.pipeline_label') }}</label>
               <Select
@@ -268,6 +272,8 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'

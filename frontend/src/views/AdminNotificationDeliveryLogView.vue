@@ -126,24 +126,30 @@
             </button>
           </output>
         </div>
-        <div>
-          <label for="adminnotificationdeliverylogview-field-2" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminNotificationDeliveryLogView.from') }}</label>
-          <input id="adminnotificationdeliverylogview-field-2"
+        <Field
+          id="adminnotificationdeliverylogview-field-2"
+          :label="$t('views.AdminNotificationDeliveryLogView.from')"
+          label-class="mb-1 block text-xs font-medium text-muted-foreground"
+        >
+          <Input
             v-model="filterDateFrom"
             type="date"
             data-testid="admin-notification-log-date-from"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
-        </div>
-        <div>
-          <label for="adminnotificationdeliverylogview-field-1" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminNotificationDeliveryLogView.to') }}</label>
-          <input id="adminnotificationdeliverylogview-field-1"
+        </Field>
+        <Field
+          id="adminnotificationdeliverylogview-field-1"
+          :label="$t('views.AdminNotificationDeliveryLogView.to')"
+          label-class="mb-1 block text-xs font-medium text-muted-foreground"
+        >
+          <Input
             v-model="filterDateTo"
             type="date"
             data-testid="admin-notification-log-date-to"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
-        </div>
+        </Field>
         <div class="flex items-end gap-2">
           <Button data-testid="admin-notification-log-apply" @click="applyFilters">
             {{ $t('views.AdminNotificationDeliveryLogView.apply') }}
@@ -402,6 +408,8 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import { ChevronRight } from '@lucide/vue'
