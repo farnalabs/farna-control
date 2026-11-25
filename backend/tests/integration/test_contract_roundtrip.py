@@ -232,7 +232,7 @@ def test_checker_catches_camelcase_snake_case_mismatch() -> None:
         "is_system_admin": False,
         "must_change_password": False,
     }
-    assert wire_mismatches(app_schema, node, good) == []
+    assert not wire_mismatches(app_schema, node, good)
 
     camel_cased = dict(good)
     camel_cased["displayName"] = camel_cased.pop("display_name")
