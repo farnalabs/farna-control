@@ -14,6 +14,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      # A cold first start runs initdb, the entrypoint's CREATE DATABASE and a
+      # full shutdown/checkpoint before the server accepts connections (~80s
+      # measured on a Windows/Docker Desktop host), which is past the 25s the
+      # retry budget allows. Failures inside start_period do not count against
+      # `retries`, so a first-run init cannot mark the DB unhealthy; a live DB
+      # that later dies is still caught by the unchanged 5s x 5 retries.
+      start_period: 120s
 
   redis:
     image: redis:8-alpine

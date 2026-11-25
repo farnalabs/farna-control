@@ -14,3 +14,8 @@ services:
       interval: 2s
       timeout: 5s
       retries: 10
+      # Same cold-first-start grace as the root compose's `db` (see the long
+      # rationale there): a first-run initdb outlasts the 20s this retry budget
+      # allows, even on the tmpfs data dir. start_period keeps that init from
+      # marking the container unhealthy; steady-state detection is unchanged.
+      start_period: 120s
