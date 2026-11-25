@@ -1,14 +1,21 @@
-"""Verify docker-compose wiring for the alembic_version widening step.
+"""Verify the docker-compose POSTGRES_PASSWORD wiring shared by the app services.
 
-`backend/entrypoint.sh` widens `alembic_version.version_num` to VARCHAR(64)
-using `PGPASSWORD=${POSTGRES_PASSWORD:-modulo}`. That password must match the
-one configured on the `db` service, otherwise the ALTER silently fails (the
-step is swallowed by `|| true`) and a later `alembic upgrade heads` fails on
-revision IDs longer than 32 chars.
+`docker-compose.yml` derives every app service's database URL from the same
+`POSTGRES_PASSWORD` the `db` service creates the cluster with: `DATABASE_URL`,
+`DATABASE_ADMIN_URL` and `FARNA_CONTROL_SYSTEM_DATABASE_URL` all interpolate
+`${POSTGRES_PASSWORD:-changeme}`. Each service built from `./backend` therefore
+has to declare that variable with the `db` service's value, or its connection
+URL points at a password the cluster rejects.
 
-Any service that builds from `./backend` (and therefore runs entrypoint.sh —
-`backend`, `saq-runner`, `saq-system`) must declare `POSTGRES_PASSWORD` so it
-sees the same value as the `db` service.
+The assertions below pin exactly that contract: the `db` service declares
+`POSTGRES_PASSWORD`, and `backend`, `saq-runner` and `saq-system` (the services
+built from `./backend`, which therefore run `backend/entrypoint.sh`) declare
+the same value.
+
+The container entrypoint no longer runs a password-authenticated psql step of
+its own (FAR-2777: `migrations/env.py` pre-widens
+`alembic_version.version_num`), so this test guards the URL/password contract
+across the compose file rather than a wiring link into the entrypoint.
 """
 
 from __future__ import annotations

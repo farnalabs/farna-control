@@ -16,7 +16,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 _GUARD_CALL = "farna.db.alignment"
 
 _ENTRYPOINTS = {
-    "backend/entrypoint.sh": ("python -m farna.db.alignment", "alembic upgrade 0001_v2_identity_org"),
+    "backend/entrypoint.sh": ("python -m farna.db.alignment", "alembic upgrade heads"),
     "deploy/supervisor/entrypoint.sh": ("python -m farna.db.alignment", "alembic upgrade heads"),
     "deploy/fly/entrypoint.sh": ("python3 -m farna.db.alignment", "alembic upgrade heads"),
     # The Fly [release] command is the AUTHORITATIVE migrator (it runs before
@@ -61,7 +61,7 @@ _SNAPSHOT_ENTRYPOINTS = {
     # migration: a database from a NEWER release is refused before anything is
     # dumped, and a snapshot that cannot be taken aborts before anything is
     # migrated.
-    "backend/entrypoint.sh": ("python -m farna.db.alignment", "python -m farna.launcher.upgrade", "alembic upgrade 0001_v2_identity_org"),
+    "backend/entrypoint.sh": ("python -m farna.db.alignment", "python -m farna.launcher.upgrade", "alembic upgrade heads"),
     "deploy/supervisor/entrypoint.sh": ("python -m farna.db.alignment", "python -m farna.launcher.upgrade", "alembic upgrade heads"),
     # deploy/fly/entrypoint.sh is deliberately ABSENT: its [release] command
     # (deploy/fly/release.sh) is the single migrator and runs before any

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "=== Bootstrapping modulo_app role ==="
+echo "=== Bootstrapping the runtime DB roles (farna_control_app, farna_control_migrate, farna_control_breakglass, farna_control_system) ==="
 python -m farna.db.bootstrap_role
 
 # FAR-2659: refuse a database from a newer release BEFORE any migration runs.
