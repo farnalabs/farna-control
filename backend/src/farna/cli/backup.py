@@ -57,6 +57,7 @@ import socket
 import stat
 import subprocess  # nosec B404 -- subprocess is used only to shell out to pg_dump/psql with a hardcoded argv list (never shell=True, never user-supplied commands); see _run_pg_dump/_run_psql
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -471,7 +472,71 @@ def assert_plain_dump_complete(dump_path: Path) -> None:
         raise RuntimeError(str(exc)) from exc
 
 
-def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
+#: FAR-2763: the replay's schema reset, applied in the SAME psql transaction as
+#: the dump (a separate ``-f``, never a separate connection: if the replay
+#: fails, the reset rolls back with it and the target is left as it was).
+#:
+#: WHY a reset at all: a plain ``--clean --if-exists`` dump can only drop the
+#: objects it KNOWS ABOUT. A snapshot taken at revision N, replayed over a
+#: database a later release migrated to N+k, therefore cannot drop a pre-existing
+#: constraint that a N+k object depends on — observed: ``cannot drop constraint
+#: organisations_pkey ... because other objects depend on it`` when a later
+#: migration added ``farna_journey_facts.organisation_id`` referencing that PK
+#: index. Any upgrade whose migrations add a foreign key to an existing PK or
+#: unique index breaks the replay that way, so the recovery point stops being a
+#: recovery point. Dropping the schema first makes every DROP in the dump's
+#: preamble a no-op (they are all ``IF EXISTS``) and leaves the dump to recreate
+#: exactly the state it captured.
+#:
+#: WHICH schema: only ``public``. It is the one schema pg_dump does NOT recreate
+#: (it is a system schema), so it must be reset here; a non-public schema (this
+#: product's ``modulo_internal``) is dumped as ``DROP SCHEMA IF EXISTS`` +
+#: ``CREATE SCHEMA`` and already transformed that way by every replay. The
+#: recreated schema is given the pristine PostgreSQL 15+ defaults
+#: (``pg_database_owner``, ``USAGE`` for ``PUBLIC``) — the restore's own
+#: role-posture step re-grants the application roles afterwards, exactly as it
+#: does for the tables.
+#:
+#: WHAT IT COSTS: extensions installed in ``public`` are dropped by CASCADE and
+#: recreated by the dump's own ``CREATE EXTENSION IF NOT EXISTS ... WITH SCHEMA
+#: public`` (pg_dump dumps extensions), and an extension the snapshot never had
+#: is removed — which is the meaning of a ``--clean`` replay (the database ends
+#: where the snapshot ended). Extensions that live in another schema (e.g. the
+#: bundled ``plpgsql`` in ``pg_catalog``) are untouched by a ``public`` reset.
+#: FAR-2763: this installation ships no extensions of its own, verified against a
+#: real database, so the CASCADE has nothing but the drift to remove today.
+_PUBLIC_SCHEMA_RESET_SQL = """\
+DROP SCHEMA IF EXISTS public CASCADE;
+CREATE SCHEMA public AUTHORIZATION pg_database_owner;
+GRANT USAGE ON SCHEMA public TO PUBLIC;
+"""
+
+
+def _write_restore_preamble(preamble_sql: str) -> Path:
+    """Write the replay preamble to a private (0600) temp file psql can ``-f``."""
+    fd, name = tempfile.mkstemp(prefix=".farna-restore-reset.", suffix=".sql")
+    path = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(preamble_sql)
+    except OSError:
+        # A cleanup failure must never replace the write error the caller needs
+        # to see (on Windows the half-written file can still be held open).
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
+        raise
+    return path
+
+
+def _run_psql(raw_url: str, input_path: Path, timeout: int = 600, *, preamble_sql: str | None = None) -> None:
+    """Replay ``input_path`` through psql, optionally after a ``preamble_sql``.
+
+    The preamble travels as a SECOND ``-f`` file in the same psql invocation, so
+    ``-1`` still wraps the reset and the whole dump in ONE transaction
+    (verified: a failure in the second file rolls the first file's statements
+    back too). Keeping the dump as its own file means a multi-GB archive is
+    never copied or read into memory to add the reset.
+    """
     _check_tool("psql")
     from farna.db.url_utils import pg_child_env
 
@@ -483,15 +548,23 @@ def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     # -1 (single transaction): the --clean dump replays its DROPs and CREATEs
     # atomically — a mid-import failure leaves the target database exactly as
     # it was, not half-dropped. Combined with the pre-restore safety dump
-    # (see _take_safety_dump) a failed restore stays recoverable.
-    cmd = ["psql", "-X", "-q", "-1", "-v", "ON_ERROR_STOP=1", url_without_password]
+    # (see _take_safety_dump) a failed restore stays recoverable. The optional
+    # schema reset (see _PUBLIC_SCHEMA_RESET_SQL) is inside that same
+    # transaction, so a failed replay cannot leave the target schema-less.
+    cmd = ["psql", "-X", "-q", "-1", "-v", "ON_ERROR_STOP=1"]
+    preamble_path = _write_restore_preamble(preamble_sql) if preamble_sql is not None else None
     try:
-        with input_path.open("rb") as f:
-            result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
-                cmd, stdin=f, capture_output=True, check=False, timeout=timeout, env=pg_child_env(password)
-            )
+        if preamble_path is not None:
+            cmd += ["-f", str(preamble_path)]
+        cmd += ["-f", str(input_path), url_without_password]
+        result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
+            cmd, capture_output=True, check=False, timeout=timeout, env=pg_child_env(password)
+        )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"psql restore timed out after {timeout}s") from exc
+    finally:
+        if preamble_path is not None:
+            preamble_path.unlink(missing_ok=True)
     if result.returncode != 0:
         # psql is handed a password-free URL (the password reaches it as
         # PGPASSWORD), but libpq warnings can still quote a connection string,
@@ -2130,7 +2203,7 @@ def _preview_db_restore(backup_dir: Path) -> None:
     """Describe the full-DB restore step of a dry run."""
     db_sql = backup_dir / _DB_SQL_FILE
     if db_sql.exists():
-        click.echo(f"  WOULD restore database schema and data via psql from {db_sql.name}")
+        click.echo(f"  WOULD reset the public schema, then restore schema and data via psql from {db_sql.name}")
     else:
         click.echo("  No database.sql found — WOULD skip full DB restore")
 
@@ -2507,10 +2580,13 @@ def _safety_dump(opts: _RestoreOptions, raw_url: str) -> None:
 def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, keys: _RestoreKeys) -> None:
     """Restore the database cluster from the archive.
 
-    Applies the SQL dump via psql, re-inserts the checkpoint_blobs /
-    checkpoints / checkpoint_writes JSON exports, re-encrypts credentials
-    when the FERNET_KEY has changed (ORDERING locked by contract: the
-    ``--previous-fernet-key`` re-encryption runs AFTER the checkpoint JSON
+    Applies the SQL dump via psql after resetting the ``public`` schema in the
+    same transaction (FAR-2763 — a dump taken at revision N must replay over a
+    database later migrated to N+k, whose extra objects the dump's own drops
+    cannot remove; see ``_PUBLIC_SCHEMA_RESET_SQL``), re-inserts the
+    checkpoint_blobs / checkpoints / checkpoint_writes JSON exports, re-encrypts
+    credentials when the FERNET_KEY has changed (ORDERING locked by contract:
+    the ``--previous-fernet-key`` re-encryption runs AFTER the checkpoint JSON
     exports and BEFORE the collation drift check), then checks
     collation-version drift when a database.sql was applied.
     """
@@ -2518,7 +2594,7 @@ def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: s
     db_sql = backup_dir / _DB_SQL_FILE
     if db_sql.exists():
         click.echo("Restoring database schema and data via psql...")
-        _run_psql(raw_url, db_sql)
+        _run_psql(raw_url, db_sql, preamble_sql=_PUBLIC_SCHEMA_RESET_SQL)
         click.echo("  Database restored from SQL dump")
     else:
         click.echo("  No database.sql found — skipping full DB restore")
@@ -2828,10 +2904,26 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
 )
 @click.option(
     "--target-fs",
-    type=click.Path(path_type=Path),
+    # readable=False is LOAD-BEARING (FAR-2763). click.Path defaults to
+    # readable=True and runs os.access(R_OK) at option parsing, before any of
+    # this command's own checks. The compose deployment ships
+    # DB_CAPACITY_PATH=/var/lib/farna/db-volume — the postgres-owned 0700 data
+    # volume, mounted read-only for the capacity monitor — so the app user
+    # (www-data) cannot read it and every restore died at option parsing with
+    # "Invalid value for '--target-fs': Path ... is not readable", exit 2,
+    # long before the documented recovery could run. The value is only ever
+    # statvfs'd by the disk pre-flight, which already degrades with a loud
+    # warning when the path cannot be measured (see _disk_preflight), so the
+    # readability check belongs there, not here.
+    type=click.Path(path_type=Path, readable=False),
     envvar="DB_CAPACITY_PATH",
     default=None,
-    help=("A path on the DATABASE's own filesystem, used by the disk pre-flight. Without it (and without --data-dir) the pre-flight measures the archive's filesystem, which may be a different volume. The compose deployment sets DB_CAPACITY_PATH to its database volume."),
+    help=(
+        "A path on the DATABASE's own filesystem, used by the disk pre-flight (it is only measured, never read, so an "
+        "unreadable database volume is accepted). Without it (and without --data-dir) the pre-flight measures the "
+        "archive's filesystem, which may be a different volume. The compose deployment sets DB_CAPACITY_PATH to its "
+        "database volume."
+    ),
 )
 @click.option(
     "--verify-target-schema",
@@ -2858,8 +2950,10 @@ def restore(
     Verifies BEFORE it wipes (manifest shape + version, instance identity,
     database-emptiness probe for fresh targets, schema downgrade guard, disk
     pre-flight, file integrity), takes a pre-restore safety dump of the
-    target (or --no-safety-dump), restores the database via psql in a single
-    transaction, re-inserts checkpoint_blobs from the JSON export,
+    target (or --no-safety-dump), resets the ``public`` schema and restores the
+    database via psql in a single transaction (so the archive replays cleanly
+    over a schema a later release has migrated past — FAR-2763), re-inserts
+    checkpoint_blobs from the JSON export,
     re-encrypts credentials if the FERNET_KEY has changed, re-ADOPTS the
     launcher artefacts only after the database restore SUCCEEDS, re-runs the
     promoted bootstrap role-posture check for the APPLICATION role — resolved

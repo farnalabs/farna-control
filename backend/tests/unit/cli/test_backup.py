@@ -2115,7 +2115,7 @@ class TestRestoreIntegrity:
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
         assert "DRY RUN" in result.output
-        assert "WOULD restore database schema and data via psql" in result.output
+        assert "WOULD reset the public schema, then restore schema and data via psql" in result.output
         assert "WOULD restore 2 checkpoint blob records" in result.output
         assert "WOULD restore 1 checkpoint records" in result.output
         assert "WOULD restore 0 checkpoint write records" in result.output
