@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-# Vendored from Repos/devtools/harness/tools/copy_consistency.py (canonical). Keep in sync; do not edit the rule logic here without changing the canonical copy.
+# Vendored from Repos/devtools/harness/tools/copy_consistency.py (canonical). Keep in sync.
 # copy-consistency: allow-file
 """Check customer-facing copy for defects that have shipped more than once.
 
-Usage:
-    python scripts/copy_consistency.py --customer-copy <paths...>
-    python scripts/copy_consistency.py <paths...> [--allow-modulo-run]
-    python scripts/copy_consistency.py --self-test
+Usage (run from the directory that holds the script - harness/tools in
+devtools, scripts in a consumer repo):
+    python copy_consistency.py --customer-copy <paths...>
+    python copy_consistency.py <paths...> [--allow-modulo-run]
+    python copy_consistency.py --self-test
 
 Intended invocations:
     website customer copy:  --customer-copy src
@@ -236,49 +237,6 @@ def _file_marker_present(lines: list[str]) -> bool:
     return any(FILE_MARKER in line for line in lines[:FILE_MARKER_WINDOW])
 
 
-def _rule_applies(
-    rule: Rule,
-    *,
-    customer_copy: bool,
-    allow_modulo_run: bool,
-) -> bool:
-    """True when this rule is in scope for the current scan mode."""
-    if rule.customer_copy_only and not customer_copy:
-        return False
-    return not (allow_modulo_run and rule.name in MODULO_RUN_RULES)
-
-
-def _match_is_reported(rule: Rule, line: str, match: re.Match[str]) -> bool:
-    """True unless this is an exempt identifier, not a brand use."""
-    if rule.name != "retired-product-name":
-        return True
-    token = _brand_token(line, match.start(), match.end())
-    return not _brand_exempt(token, line[match.end() :])
-
-
-def _line_findings(
-    line: str,
-    number: int,
-    path: str,
-    *,
-    customer_copy: bool,
-    allow_modulo_run: bool,
-) -> list[Violation]:
-    """Every violation a single line carries under the current scan mode."""
-    findings: list[Violation] = []
-    for rule in RULES:
-        if not _rule_applies(
-            rule,
-            customer_copy=customer_copy,
-            allow_modulo_run=allow_modulo_run,
-        ):
-            continue
-        for match in rule.pattern.finditer(line):
-            if _match_is_reported(rule, line, match):
-                findings.append(Violation(str(path), number, rule.name, match.group(0)))
-    return findings
-
-
 def scan_text(
     text: str,
     path: str,
@@ -294,15 +252,17 @@ def scan_text(
     for number, line in enumerate(lines, 1):
         if LINE_MARKER in line:
             continue
-        findings.extend(
-            _line_findings(
-                line,
-                number,
-                path,
-                customer_copy=customer_copy,
-                allow_modulo_run=allow_modulo_run,
-            )
-        )
+        for rule in RULES:
+            if rule.customer_copy_only and not customer_copy:
+                continue
+            if allow_modulo_run and rule.name in MODULO_RUN_RULES:
+                continue
+            for match in rule.pattern.finditer(line):
+                if rule.name == "retired-product-name":
+                    token = _brand_token(line, match.start(), match.end())
+                    if _brand_exempt(token, line[match.end() :]):
+                        continue
+                findings.append(Violation(str(path), number, rule.name, match.group(0)))
     return findings
 
 
@@ -413,172 +373,132 @@ Modulo appears here only as a quoted example. <!-- copy-consistency: allow -->
 """
 
 
-def _build_fixtures(docs: Path) -> tuple[Path, Path, Path]:
-    """Write the bad, clean and marker fixtures and return their paths."""
-    docs.mkdir()
-    bad_path = docs / "bad-copy.md"
-    bad_path.write_text(BAD_FIXTURE, encoding="utf-8")
-    clean_path = docs / "clean-copy.md"
-    clean_path.write_text(CLEAN_FIXTURE, encoding="utf-8")
-    marked_path = docs / "marked-copy.md"
-    marked_path.write_text(MARKED_FIXTURE, encoding="utf-8")
-    return bad_path, clean_path, marked_path
-
-
-def _check_rule_sets(
-    bad_path: Path,
-    universal: set[str],
-    customer_only: set[str],
-) -> list[str]:
-    """Only universal rules run without the flag; every rule runs with it."""
-    problems: list[str] = []
-    plain_findings, bad_files = scan_paths([str(bad_path)])
-    plain_rules = {finding.rule for finding in plain_findings}
-    if plain_rules != universal:
-        problems.append(
-            f"default scan rules: {sorted(plain_rules)} (expected {sorted(universal)})"
-        )
-    if bad_files != 1:
-        problems.append(f"bad fixture scan count: {bad_files} (expected 1)")
-    copy_findings, _ = scan_paths([str(bad_path)], customer_copy=True)
-    copy_rules = {finding.rule for finding in copy_findings}
-    if copy_rules != universal | customer_only:
-        problems.append(
-            f"--customer-copy rules: {sorted(copy_rules)} "
-            f"(expected {sorted(universal | customer_only)})"
-        )
-    return problems
-
-
-def _check_exemptions_and_markers(clean_path: Path, marked_path: Path) -> list[str]:
-    """The clean fixture stays clean and both markers suppress their text."""
-    problems: list[str] = []
-    clean_findings, _ = scan_paths([str(clean_path)], customer_copy=True)
-    for finding in clean_findings:
-        problems.append(f"exempt string reported: {finding.render()}")
-    marked_findings, _ = scan_paths([str(marked_path)], customer_copy=True)
-    for finding in marked_findings:
-        problems.append(f"line marker ignored: {finding.render()}")
-    return problems
-
-
-def _check_allow_modulo_run(
-    bad_path: Path,
-    universal: set[str],
-    customer_only: set[str],
-) -> list[str]:
-    """--allow-modulo-run removes exactly one rule and nothing else."""
-    problems: list[str] = []
-    allowed_findings, _ = scan_paths(
-        [str(bad_path)], customer_copy=True, allow_modulo_run=True
-    )
-    allowed_rules = {finding.rule for finding in allowed_findings}
-    for name in sorted(MODULO_RUN_RULES & allowed_rules):
-        problems.append(f"--allow-modulo-run did not suppress: {name}")
-    for name in sorted((universal | customer_only) - MODULO_RUN_RULES - allowed_rules):
-        problems.append(f"--allow-modulo-run suppressed too much: {name}")
-    return problems
-
-
-def _check_directory_scan(
-    docs: Path,
-    universal: set[str],
-    customer_only: set[str],
-) -> list[str]:
-    """A directory scan reports every rule and prunes nested skip dirs."""
-    problems: list[str] = []
-    directory_findings, directory_files = scan_paths(
-        [str(docs)], customer_copy=True
-    )
-    if directory_files != 3:
-        problems.append(f"directory scan found {directory_files} files (expected 3)")
-    if {finding.rule for finding in directory_findings} != universal | customer_only:
-        problems.append("directory scan did not report every rule")
-
-    # A nested skip directory must be pruned, not counted.
-    nested_skip = docs / "node_modules" / "pkg"
-    nested_skip.mkdir(parents=True)
-    (nested_skip / "copy.md").write_text(BAD_FIXTURE, encoding="utf-8")
-    pruned_findings, pruned_files = scan_paths([str(docs)], customer_copy=True)
-    if pruned_files != 3:
-        problems.append(
-            f"nested skip directory was scanned: {pruned_files} files (expected 3)"
-        )
-    for finding in pruned_findings:
-        if "node_modules" in finding.path:
-            problems.append(f"nested skip directory reported: {finding.render()}")
-    return problems
-
-
-def _check_worktree_scan(
-    root: Path,
-    universal: set[str],
-    customer_only: set[str],
-) -> list[str]:
-    """A scan root under .agents/worktrees is still scanned, in both modes."""
-    problems: list[str] = []
-    worktree_src = root / ".agents" / "worktrees" / "demo" / "src"
-    worktree_src.mkdir(parents=True)
-    (worktree_src / "copy.md").write_text(BAD_FIXTURE, encoding="utf-8")
-    worktree_findings, worktree_files = scan_paths([str(worktree_src)])
-    if worktree_files != 1:
-        problems.append(
-            f"worktree path scan found {worktree_files} files (expected 1)"
-        )
-    if {finding.rule for finding in worktree_findings} != universal:
-        problems.append(
-            "worktree path default rules: "
-            f"{sorted({finding.rule for finding in worktree_findings})} "
-            f"(expected {sorted(universal)})"
-        )
-    worktree_copy_findings, _ = scan_paths([str(worktree_src)], customer_copy=True)
-    if {finding.rule for finding in worktree_copy_findings} != (
-        universal | customer_only
-    ):
-        problems.append("worktree path ignored --customer-copy")
-    return problems
-
-
-def _check_empty_scans(root: Path) -> list[str]:
-    """A directory with nothing scannable is a usage error, never a pass."""
-    problems: list[str] = []
-    empty_dir = root / "empty"
-    empty_dir.mkdir()
-    try:
-        scan_paths([str(empty_dir)])
-    except EmptyScanError:
-        pass
-    else:
-        problems.append("empty directory scanned without EmptyScanError")
-
-    suffixes_only = root / "binaries"
-    suffixes_only.mkdir()
-    (suffixes_only / "logo.png").write_bytes(b"\x89PNG\r\n")
-    try:
-        scan_paths([str(suffixes_only)])
-    except EmptyScanError:
-        pass
-    else:
-        problems.append("unsupported-suffix directory scanned without error")
-    return problems
-
-
 def run_self_test() -> int:
     """Prove every rule fires in its mode and every exemption stays quiet."""
+    problems: list[str] = []
     universal = {rule.name for rule in RULES if not rule.customer_copy_only}
     customer_only = {rule.name for rule in RULES if rule.customer_copy_only}
     with tempfile.TemporaryDirectory(prefix="copy-consistency-") as tmp:
         root = Path(tmp)
         docs = root / "docs"
-        bad_path, clean_path, marked_path = _build_fixtures(docs)
-        problems = [
-            *_check_rule_sets(bad_path, universal, customer_only),
-            *_check_exemptions_and_markers(clean_path, marked_path),
-            *_check_allow_modulo_run(bad_path, universal, customer_only),
-            *_check_directory_scan(docs, universal, customer_only),
-            *_check_worktree_scan(root, universal, customer_only),
-            *_check_empty_scans(root),
-        ]
+        docs.mkdir()
+        bad_path = docs / "bad-copy.md"
+        bad_path.write_text(BAD_FIXTURE, encoding="utf-8")
+        clean_path = docs / "clean-copy.md"
+        clean_path.write_text(CLEAN_FIXTURE, encoding="utf-8")
+        marked_path = docs / "marked-copy.md"
+        marked_path.write_text(MARKED_FIXTURE, encoding="utf-8")
+
+        # Without --customer-copy only the universal rules run, whatever the
+        # path is called. With the flag every rule runs.
+        plain_findings, bad_files = scan_paths([str(bad_path)])
+        plain_rules = {finding.rule for finding in plain_findings}
+        if plain_rules != universal:
+            problems.append(
+                f"default scan rules: {sorted(plain_rules)} "
+                f"(expected {sorted(universal)})"
+            )
+        if bad_files != 1:
+            problems.append(f"bad fixture scan count: {bad_files} (expected 1)")
+
+        copy_findings, _ = scan_paths([str(bad_path)], customer_copy=True)
+        copy_rules = {finding.rule for finding in copy_findings}
+        if copy_rules != universal | customer_only:
+            problems.append(
+                f"--customer-copy rules: {sorted(copy_rules)} "
+                f"(expected {sorted(universal | customer_only)})"
+            )
+
+        # The clean fixture must be clean in the stricter mode too.
+        clean_findings, _ = scan_paths([str(clean_path)], customer_copy=True)
+        for finding in clean_findings:
+            problems.append(f"exempt string reported: {finding.render()}")
+
+        marked_findings, _ = scan_paths([str(marked_path)], customer_copy=True)
+        for finding in marked_findings:
+            problems.append(f"line marker ignored: {finding.render()}")
+
+        # --allow-modulo-run removes exactly one rule and nothing else.
+        allowed_findings, _ = scan_paths(
+            [str(bad_path)], customer_copy=True, allow_modulo_run=True
+        )
+        allowed_rules = {finding.rule for finding in allowed_findings}
+        for name in sorted(MODULO_RUN_RULES & allowed_rules):
+            problems.append(f"--allow-modulo-run did not suppress: {name}")
+        for name in sorted(
+            (universal | customer_only) - MODULO_RUN_RULES - allowed_rules
+        ):
+            problems.append(f"--allow-modulo-run suppressed too much: {name}")
+
+        # The flag, not the path name, decides: the same file is scanned in
+        # both modes and only the mode changes the rule set.
+        directory_findings, directory_files = scan_paths(
+            [str(docs)], customer_copy=True
+        )
+        if directory_files != 3:
+            problems.append(
+                f"directory scan found {directory_files} files (expected 3)"
+            )
+        if {
+            finding.rule for finding in directory_findings
+        } != universal | customer_only:
+            problems.append("directory scan did not report every rule")
+
+        # A nested skip directory must be pruned, not counted.
+        nested_skip = docs / "node_modules" / "pkg"
+        nested_skip.mkdir(parents=True)
+        (nested_skip / "copy.md").write_text(BAD_FIXTURE, encoding="utf-8")
+        pruned_findings, pruned_files = scan_paths([str(docs)], customer_copy=True)
+        if pruned_files != 3:
+            problems.append(
+                f"nested skip directory was scanned: {pruned_files} files (expected 3)"
+            )
+        for finding in pruned_findings:
+            if "node_modules" in finding.path:
+                problems.append(f"nested skip directory reported: {finding.render()}")
+
+        # A scan root under .agents/worktrees must still be scanned: every
+        # delivery worktree lives there and a no-op scan must never read clean.
+        worktree_src = root / ".agents" / "worktrees" / "demo" / "src"
+        worktree_src.mkdir(parents=True)
+        (worktree_src / "copy.md").write_text(BAD_FIXTURE, encoding="utf-8")
+        worktree_findings, worktree_files = scan_paths([str(worktree_src)])
+        if worktree_files != 1:
+            problems.append(
+                f"worktree path scan found {worktree_files} files (expected 1)"
+            )
+        if {finding.rule for finding in worktree_findings} != universal:
+            problems.append(
+                "worktree path default rules: "
+                f"{sorted({f.rule for f in worktree_findings})} "
+                f"(expected {sorted(universal)})"
+            )
+        worktree_copy_findings, _ = scan_paths([str(worktree_src)], customer_copy=True)
+        if {finding.rule for finding in worktree_copy_findings} != (
+            universal | customer_only
+        ):
+            problems.append("worktree path ignored --customer-copy")
+
+        # A directory with nothing scannable is a usage error, never a pass.
+        empty_dir = root / "empty"
+        empty_dir.mkdir()
+        try:
+            scan_paths([str(empty_dir)])
+        except EmptyScanError:
+            pass
+        else:
+            problems.append("empty directory scanned without EmptyScanError")
+
+        suffixes_only = root / "binaries"
+        suffixes_only.mkdir()
+        (suffixes_only / "logo.png").write_bytes(b"\x89PNG\r\n")
+        try:
+            scan_paths([str(suffixes_only)])
+        except EmptyScanError:
+            pass
+        else:
+            problems.append("unsupported-suffix directory scanned without error")
+
     if problems:
         for problem in problems:
             print(f"self-test FAIL: {problem}")
