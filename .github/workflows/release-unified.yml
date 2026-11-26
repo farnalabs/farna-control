@@ -214,13 +214,14 @@ jobs:
         env:
           MODE: ${{ inputs.mode }}
           RESUME: ${{ inputs.resume }}
+          VERSION: ${{ inputs.version }}
           TARGET_SHA: ${{ steps.resolve.outputs.target_sha }}
           TARGET_PINNED: ${{ steps.resolve.outputs.target_pinned }}
         shell: bash
         run: |
           set -euo pipefail
           if [ "${RESUME:-false}" = "true" ]; then
-            source="the frozen GA tag v${{ inputs.version }} (resume)"
+            source="the frozen GA tag v${VERSION} (resume)"
           elif [ "$TARGET_PINNED" = "true" ]; then
             source="pinned via the target_sha workflow input"
           else
@@ -4498,6 +4499,7 @@ jobs:
           # must match this build exactly (skip); anything else fails closed.
           JSON_FILE="$(mktemp)"
           STATUS="$(curl --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
             --output "$JSON_FILE" --write-out '%{http_code}' \
             "https://pypi.org/pypi/farna-control/${VERSION}/json")"
           case "$STATUS" in
