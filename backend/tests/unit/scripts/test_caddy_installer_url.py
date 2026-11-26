@@ -1,8 +1,11 @@
 """FAR-2827: the stable and version-pinned native-installer entry points.
 
 ``deploy/caddy/Caddyfile`` publishes ``/install.sh`` for a Caddy-fronted
-deployment. These checks read the *real* Caddyfile and pin the two things that
-make the advertised URL trustworthy:
+deployment, and the two nginx configs that actually serve the app —
+``deploy/fly/nginx.conf`` (the Fly ingress behind ``control.farna.dev``) and
+``deploy/nginx/all-in-one.conf`` (the self-hosted all-in-one image) — publish
+the same entry point. These checks read the *real* config files and pin the
+things that make the advertised URL trustworthy:
 
 * an exact-path ``/install.sh`` handler that redirects to the checked-in
   ``scripts/install.sh`` on the default branch, plus a ``?version=<X.Y.Z>`` form
@@ -36,8 +39,16 @@ def _repo_root() -> Path:
 
 _REPO_ROOT = _repo_root()
 _CADDYFILE = _REPO_ROOT / "deploy" / "caddy" / "Caddyfile"
+_FLY_NGINX = _REPO_ROOT / "deploy" / "fly" / "nginx.conf"
+_ALLINONE_NGINX = _REPO_ROOT / "deploy" / "nginx" / "all-in-one.conf"
 _INSTALLER = _REPO_ROOT / "scripts" / "install.sh"
 _RELEASE_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "release-unified.yml"
+
+#: The two nginx configs that actually serve Farna Control (Fly ingress and the
+#: self-hosted all-in-one image). Each is a server-block include, so the same
+#: exact-match installer block must appear in both.
+_NGINX_INSTALLER_OPENING = "\n    location = /install.sh {"
+_NGINX_CONFIGS = (_FLY_NGINX, _ALLINONE_NGINX)
 
 #: Directive order that must be preserved: the installer handle sits after every
 #: backend route and before the SPA catch-all, so it can neither shadow nor be
@@ -76,6 +87,13 @@ def _brace_block(text: str, opening: str) -> str:
 def _installer_block() -> str:
     """The real ``handle @installer`` block from the checked-in Caddyfile."""
     return _brace_block(_read(_CADDYFILE), "\n    handle @installer {")
+
+
+def _nginx_installer_block(path: Path) -> str:
+    """The real ``location = /install.sh`` block from a checked-in nginx config."""
+    text = _read(path)
+    assert text.count(_NGINX_INSTALLER_OPENING) == 1, f"{path} must declare exactly one `location = /install.sh` block"
+    return _brace_block(text, _NGINX_INSTALLER_OPENING)
 
 
 def _redirect_targets(block: str) -> list[str]:
@@ -178,3 +196,70 @@ def test_three_release_tags_carry_the_checked_in_installer() -> None:
             timeout=30,
         )
         assert present.returncode == 0, f"{tag} does not ship scripts/install.sh"
+
+
+@pytest.mark.parametrize("config", _NGINX_CONFIGS, ids=["fly-nginx", "all-in-one-nginx"])
+def test_nginx_installer_location_is_exact_match(config: Path) -> None:
+    """The nginx installer is an ``=`` exact match that can neither shadow nor be shadowed."""
+    text = _read(config)
+
+    assert text.count(_NGINX_INSTALLER_OPENING) == 1
+    # No prefix or regex form, which would behave differently from an exact match.
+    assert "location /install.sh" not in text
+    assert "location ~ /install.sh" not in text
+    assert "location ^~ /install.sh" not in text
+
+    # The static-asset extension regex must not capture the ``.sh`` suffix.
+    extension_regex = re.search(r"location\s+~\*\s+\\\.\(([^)]*)\)\$", text)
+    assert extension_regex is not None, f"{config} has no static-extension regex to check"
+    assert "sh" not in extension_regex.group(1).split("|")
+
+    # Every protected upstream the exact match must leave untouched is still declared.
+    protected_locations = (
+        "location /api/",
+        "location /.well-known/",
+        "location /ws",
+        "location /mcp",
+        "location = /robots.txt",
+        "location = /runtime-config.js",
+        "\n    location / {",
+    )
+    for protected in protected_locations:
+        assert protected in text, f"{config} lost protected location {protected!r}"
+    has_health_route = ("location /healthz" in text) or ("location /health" in text)
+    assert has_health_route, f"{config} lost its health route"
+
+
+@pytest.mark.parametrize("config", _NGINX_CONFIGS, ids=["fly-nginx", "all-in-one-nginx"])
+def test_nginx_installer_redirects_and_refuses_bad_version(config: Path) -> None:
+    """Stable and pinned forms redirect to scripts/install.sh; a bad version is refused."""
+    block = _nginx_installer_block(config)
+
+    assert "return 302 https://raw.githubusercontent.com/farnalabs/farna-control/main/scripts/install.sh;" in block
+    assert "return 302 https://raw.githubusercontent.com/farnalabs/farna-control/bundle-v$arg_version/scripts/install.sh;" in block
+    assert "return 400" in block
+    assert "X.Y.Z" in block
+
+    # No `version` parameter -> main; a PRESENT but empty `?version=` matches
+    # `(^|&)version=` and is then validated (and refused) rather than falling through.
+    assert 'if ($args !~ "(^|&)version=")' in block
+    version_guard = re.search(r'if \(\$arg_version !~ "([^"]+)"\)', block)
+    assert version_guard is not None
+    version_pattern = version_guard.group(1)
+    assert re.fullmatch(version_pattern, "0.3.329")
+    assert re.fullmatch(version_pattern, "0.0.1")
+    assert re.fullmatch(version_pattern, "0.3") is None
+    assert re.fullmatch(version_pattern, "0.3.329-rc.1") is None
+    assert re.fullmatch(version_pattern, "../evil") is None
+    assert re.fullmatch(version_pattern, "") is None
+
+
+@pytest.mark.parametrize("config", _NGINX_CONFIGS, ids=["fly-nginx", "all-in-one-nginx"])
+def test_nginx_pinned_target_uses_the_bundle_tag_prefix(config: Path) -> None:
+    """The nginx redirect uses the same bundle-v<version> tag the release pipeline creates."""
+    block = _nginx_installer_block(config)
+    installer = _read(_INSTALLER)
+    consumer = re.search(r"\$\{RELEASE_TAG#([A-Za-z0-9-]+)\}", installer)
+    assert consumer is not None, "scripts/install.sh no longer derives the version from a bundle tag"
+    tag_prefix = consumer.group(1)
+    assert f"/{tag_prefix}$arg_version/" in block
