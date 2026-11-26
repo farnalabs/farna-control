@@ -40,14 +40,15 @@
     >
       <p class="text-base font-semibold">{{ $t('views.PipelineEditorView.version_missing_title') }}</p>
       <p class="text-sm text-muted-foreground">{{ $t('views.PipelineEditorView.version_missing_body') }}</p>
-      <button
+      <Button
         type="button"
-        :class="btnToolbarSecondary"
+        variant="secondary"
+        size="xs"
         data-testid="pipeline-editor-version-missing-open-latest"
         @click="viewLatest"
       >
         {{ $t('views.PipelineEditorView.version_missing_open_latest') }}
-      </button>
+      </Button>
     </div>
     <div v-else-if="pageError" class="flex flex-1 items-center justify-center">
       <ErrorAlert :message="pageError" :on-retry="reloadPage" />
@@ -79,9 +80,18 @@
           <!-- Group: identity -->
           <div class="flex min-w-0 items-center gap-1.5" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_identity')" data-testid="pipeline-editor-toolbar-group-identity">
             <h2 class="truncate text-sm font-semibold">{{ pipeline?.name || $t('views.PipelineEditorView.pipeline_editor') }}</h2>
-            <button v-if="!isViewing" type="button" :class="btnToolbarIcon" :aria-label="$t('views.PipelineEditorView.rename_pipeline')" :title="$t('views.PipelineEditorView.rename_pipeline')" data-testid="pipeline-editor-rename" @click="openRenameDialog">
-              <PencilIcon class="h-3 w-3" aria-hidden="true" />
-            </button>
+            <Button
+              v-if="!isViewing"
+              type="button"
+              variant="secondary-text"
+              size="xs"
+              :aria-label="$t('views.PipelineEditorView.rename_pipeline')"
+              :title="$t('views.PipelineEditorView.rename_pipeline')"
+              data-testid="pipeline-editor-rename"
+              @click="openRenameDialog"
+            >
+              <template #icon><PencilIcon class="h-3 w-3" aria-hidden="true" /></template>
+            </Button>
             <span v-if="pipeline?.archived_at" class="shrink-0 rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-medium text-warning-text">{{ $t('views.PipelineEditorView.archived') }}</span>
             <span v-if="folderPath.length > 0" class="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
               <span v-for="(f, i) in folderPath" :key="f.id" class="truncate">
@@ -126,25 +136,40 @@
           <span :class="groupDividerClass" />
           <!-- Group: graph file actions -->
           <div class="flex items-center gap-1.5" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_primary_actions')" data-testid="pipeline-editor-toolbar-group-file">
-            <button v-if="!isViewing" type="button" :class="btnToolbarSecondary" :disabled="savingGraph" data-testid="pipeline-editor-save" @click="saveGraph">
+            <Button
+              v-if="!isViewing"
+              type="button"
+              variant="secondary"
+              size="xs"
+              :disabled="savingGraph"
+              data-testid="pipeline-editor-save"
+              @click="saveGraph"
+            >
               <LoaderCircleIcon v-if="savingGraph" class="h-3 w-3 animate-spin" aria-hidden="true" />
               {{ savingGraph ? $t('views.PipelineEditorView.saving_graph') : $t('views.PipelineEditorView.save') }}
-            </button>
-            <button type="button" :class="btnToolbarSecondary" data-testid="pipeline-editor-version-timeline" @click="showVersionTimeline = !showVersionTimeline">
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              data-testid="pipeline-editor-version-timeline"
+              @click="showVersionTimeline = !showVersionTimeline"
+            >
               {{ $t('views.PipelineEditorView.versions') }}
-            </button>
+            </Button>
             <div v-if="!isViewing" class="relative" @click.stop @keydown.enter.stop @keydown.space.prevent.stop>
-              <button
+              <Button
                 ref="saveAsDropdownTriggerRef"
                 type="button"
-                :class="btnToolbarSecondary"
+                variant="secondary"
+                size="xs"
                 :aria-expanded="showSaveAsDropdown"
                 aria-haspopup="menu"
                 data-testid="pipeline-editor-save-as-template"
                 @click="toggleSaveAsDropdown()"
               >
                 {{ $t('views.PipelineEditorView.save_as_template') }}
-              </button>
+              </Button>
               <div
                 v-if="showSaveAsDropdown"
                 ref="saveAsDropdownRef"
@@ -179,11 +204,19 @@
             <span :class="groupDividerClass" />
             <!-- Group: run -->
             <div class="flex items-center gap-1.5" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_run_actions')" data-testid="pipeline-editor-toolbar-group-run">
-              <button type="button" :class="btnToolbarPrimary" :disabled="running || flowNodes.length === 0" :title="flowNodes.length === 0 ? $t('views.PipelineEditorView.no_nodes_to_run') : ''" ref="runDialogTriggerRef"
-                data-testid="pipeline-editor-run" @click="openRunDialog">
+              <Button
+                type="button"
+                variant="action"
+                size="xs"
+                :disabled="running || flowNodes.length === 0"
+                :title="flowNodes.length === 0 ? $t('views.PipelineEditorView.no_nodes_to_run') : ''"
+                ref="runDialogTriggerRef"
+                data-testid="pipeline-editor-run"
+                @click="openRunDialog"
+              >
                 <PlayIcon class="h-3 w-3" aria-hidden="true" />
                 {{ running ? $t('views.PipelineEditorView.running') : $t('views.PipelineEditorView.run_pipeline') }}
-              </button>
+              </Button>
               <span v-if="saveGraphError" class="max-w-40 truncate text-xs text-destructive" :title="saveGraphError" data-testid="pipeline-editor-save-error">{{ saveGraphError }}</span>
             </div>
           </template>
@@ -192,10 +225,12 @@
           <!-- Group: pipeline settings -->
           <div class="flex w-full flex-wrap items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 p-1.5 md:w-auto" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_settings')" data-testid="pipeline-editor-toolbar-group-settings">
             <span class="sr-only">{{ $t('views.PipelineEditorView.toolbar_settings') }}</span>
-            <button
+            <Button
               ref="settingsToggleRef"
               type="button"
-              :class="[btnToolbarSecondary, 'md:hidden']"
+              variant="secondary"
+              size="xs"
+              class="md:hidden"
               :aria-expanded="settingsOpen"
               :aria-controls="pipelineEditorSettingsControlsId"
               data-testid="pipeline-editor-settings-toggle"
@@ -203,7 +238,7 @@
               @keydown.escape.prevent="closeSettingsDisclosure"
             >
               {{ $t('views.PipelineEditorView.toolbar_settings_toggle') }}
-            </button>
+            </Button>
             <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions --><!-- settings controls: Escape collapses the disclosure, except while a nested panel dialog owns the keypress -->
             <div
               :id="pipelineEditorSettingsControlsId"
@@ -211,8 +246,23 @@
               :class="['flex flex-wrap items-center gap-1.5', { 'max-md:hidden': !settingsOpen }]"
               @keydown.escape="onSettingsControlsKeydown"
             >
-            <button v-if="!pipeline?.archived_at" ref="firstSettingsControlRef" type="button" :class="btnToolbarSecondary" data-testid="pipeline-editor-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</button>
-            <button v-else type="button" :class="btnToolbarSecondary" data-testid="pipeline-editor-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</button>
+            <Button
+              v-if="!pipeline?.archived_at"
+              ref="firstSettingsControlRef"
+              type="button"
+              variant="secondary"
+              size="xs"
+              data-testid="pipeline-editor-archive"
+              @click="handleArchive"
+            >{{ $t('views.PipelineEditorView.archive') }}</Button>
+            <Button
+              v-else
+              type="button"
+              variant="secondary"
+              size="xs"
+              data-testid="pipeline-editor-unarchive"
+              @click="handleUnarchive"
+            >{{ $t('views.PipelineEditorView.unarchive') }}</Button>
             <!-- FAR-1530: per-pipeline Paused execution state. Paused is a
                  visible state, not an archived one - the pipeline stays in the
                  list and in the editor, it just starts no runs. Pause/Resume
@@ -221,23 +271,32 @@
                  pairing above uses): an archived pipeline offers Unarchive,
                  never a pause toggle. The two conditions are mutually
                  exclusive, so exactly one of the pair renders when it should. -->
-            <button
+            <Button
               v-if="pipeline && !pipeline.archived_at && pipeline.run_enabled !== false"
               type="button"
-              :class="btnToolbarSecondary"
+              variant="secondary"
+              size="xs"
               data-testid="pipeline-editor-pause"
               @click="handlePause"
-            >{{ $t('views.PipelineEditorView.pause') }}</button>
-            <button
+            >{{ $t('views.PipelineEditorView.pause') }}</Button>
+            <Button
               v-else-if="pipeline && !pipeline.archived_at && pipeline.run_enabled === false"
               type="button"
-              :class="btnToolbarSecondary"
+              variant="secondary"
+              size="xs"
               :disabled="pipeline?.run_disabled_reason === 'circuit_breaker'"
               :title="pipeline?.run_disabled_reason === 'circuit_breaker' ? $t('views.PipelineEditorView.resume_blocked_circuit_breaker') : undefined"
               data-testid="pipeline-editor-resume"
               @click="handleResume"
-            >{{ $t('views.PipelineEditorView.resume') }}</button>
-            <button type="button" :class="btnToolbarDestructive" data-testid="pipeline-editor-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</button>
+            >{{ $t('views.PipelineEditorView.resume') }}</Button>
+            <Button
+              type="button"
+              variant="danger"
+              outlined
+              size="xs"
+              data-testid="pipeline-editor-delete"
+              @click="showDeleteConfirm = true"
+            >{{ $t('common.delete') }}</Button>
             <div class="flex items-center gap-1">
               <label for="pipeline-max-duration" class="whitespace-nowrap text-[10px] text-muted-foreground">{{ $t('views.PipelineEditorView.max_duration_s') }}:</label>
               <input id="pipeline-max-duration"
@@ -273,16 +332,17 @@
               data-testid="pipeline-editor-circuit-breaker-tripped"
             >
               <output class="badge badge-status-destructive whitespace-nowrap" :title="$t('views.PipelineEditorView.circuit_breaker_tripped_help')">{{ $t('views.PipelineEditorView.circuit_breaker_tripped') }}</output>
-              <button
+              <Button
                 v-if="canResetCircuitBreaker"
                 type="button"
-                :class="btnToolbarSecondary"
+                variant="secondary"
+                size="xs"
                 :disabled="resettingCircuitBreaker"
                 @click="resetCircuitBreaker"
                 data-testid="pipeline-editor-circuit-breaker-reset"
               >
                 {{ resettingCircuitBreaker ? $t('views.PipelineEditorView.circuit_breaker_resetting') : $t('views.PipelineEditorView.circuit_breaker_reset') }}
-              </button>
+              </Button>
             </div>
             <div class="flex items-center gap-1">
               <label
@@ -314,10 +374,11 @@
                  and carries the admin/owner manual demote / promote actions;
                  a successful change refetches the pipeline below. -->
             <div class="relative">
-              <button
+              <Button
                 type="button"
                 ref="autonomyPanelToggleRef"
-                :class="btnToolbarSecondary"
+                variant="secondary"
+                size="xs"
                 :aria-expanded="autonomyPanelOpen"
                 aria-haspopup="dialog"
                 :aria-controls="autonomyPanelDialogId"
@@ -325,7 +386,7 @@
                 @click="toggleAutonomyPanel"
               >
                 {{ $t('views.PipelineEditorView.autonomy_panel_toggle') }}
-              </button>
+              </Button>
               <dialog
                 v-if="autonomyPanelOpen"
                 open
@@ -349,14 +410,15 @@
                   @changed="onAutonomyChanged"
                 />
                 <div class="mt-3 flex justify-end">
-                  <button
+                  <Button
                     type="button"
-                    :class="btnToolbarSecondary"
+                    variant="secondary"
+                    size="xs"
                     data-testid="pipeline-editor-autonomy-panel-close"
                     @click="closeAutonomyPanel"
                   >
                     {{ $t('common.close') }}
-                  </button>
+                  </Button>
                 </div>
               </dialog>
             </div>
@@ -510,11 +572,12 @@
               <span id="pipeline-queue-timeout-help" class="sr-only">{{ $t('views.PipelineEditorView.queue_timeout_help') }}</span>
             </div>
             <div class="relative">
-              <button
+              <Button
                 type="button"
                 ref="retryPolicyToggleRef"
                 :id="retryPolicyToggleId"
-                :class="btnToolbarSecondary"
+                variant="secondary"
+                size="xs"
                 @click="toggleRetryPolicy"
                 :aria-expanded="retryPolicyOpen"
                 aria-haspopup="dialog"
@@ -522,7 +585,7 @@
                 data-testid="pipeline-editor-retry-policy-toggle"
               >
                 {{ $t('views.PipelineEditorView.retry_policy') }}
-              </button>
+              </Button>
               <dialog
                 v-if="retryPolicyOpen"
                 open
@@ -709,19 +772,21 @@
                 :title="$t('views.PipelineEditorView.new_node_type_hint')"
                 data-testid="pipeline-editor-node-type-select"
               />
-              <button
+              <Button
                 type="button"
-                :class="btnToolbarSecondary"
+                variant="secondary"
+                size="xs"
                 :title="$t('views.PipelineEditorView.add_node')"
                 data-testid="pipeline-editor-add-node"
                 @click="addNode()"
               >
                 <PlusIcon class="h-3 w-3" aria-hidden="true" />
                 {{ $t('views.PipelineEditorView.add_node') }}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                :class="btnToolbarSecondary"
+                variant="secondary"
+                size="xs"
                 :disabled="flowNodes.length === 0"
                 :title="$t('views.PipelineEditorView.arrange_graph_hint')"
                 data-testid="pipeline-editor-arrange-graph"
@@ -729,28 +794,30 @@
               >
                 <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h6M4 12h10M4 18h6" /><path d="M16 4l4 2-4 2M16 16l4 2-4 2" /></svg>
                 {{ $t('views.PipelineEditorView.arrange_graph') }}
-              </button>
-              <button
+              </Button>
+              <Button
                 v-if="arrangeUndo"
                 type="button"
-                :class="btnToolbarSecondary"
+                variant="secondary"
+                size="xs"
                 :title="$t('views.PipelineEditorView.undo_arrange_hint')"
                 data-testid="pipeline-editor-undo-arrange"
                 @click="undoArrangeGraph"
               >
                 {{ $t('views.PipelineEditorView.undo_arrange') }}
-              </button>
+              </Button>
             </template>
-            <button
+            <Button
               type="button"
-              :class="btnToolbarSecondary"
+              variant="secondary"
+              size="xs"
               :title="$t('views.PipelineEditorView.fit_to_view')"
               data-testid="pipeline-editor-fit-view"
               @click="() => fitView()"
             >
               <Maximize2Icon class="h-3 w-3" aria-hidden="true" />
               {{ $t('views.PipelineEditorView.fit_to_view') }}
-            </button>
+            </Button>
           </div>
         </div>
         <!-- Folder-list load failure. In-flow directly beneath the toolbar —
@@ -798,42 +865,46 @@
           </p>
           <p class="mt-0.5">{{ $t('views.PipelineEditorView.historic_banner_body') }}</p>
           <div class="mt-1.5 flex flex-wrap items-center gap-2">
-            <button
+            <Button
               type="button"
-              :class="btnToolbarSecondary"
+              variant="secondary"
+              size="xs"
               data-testid="pipeline-editor-historic-restore"
               @click="openRestoreConfirm()"
             >
               {{ $t('views.PipelineEditorView.historic_restore') }}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              :class="btnToolbarSecondary"
+              variant="secondary"
+              size="xs"
               data-testid="pipeline-editor-historic-view-latest"
               @click="viewLatest"
             >
               {{ $t('views.PipelineEditorView.historic_view_latest') }}
-            </button>
+            </Button>
             <!-- FAR-1818: one-click entry into semantic-led compare mode
                  (viewed version vs the latest). Hidden while the viewed
                  version IS the latest — that would be a self-compare. -->
-            <button
+            <Button
               v-if="resolvedSnapshotId !== latestSnapshotId"
               type="button"
-              :class="btnToolbarSecondary"
+              variant="secondary"
+              size="xs"
               data-testid="pipeline-editor-historic-compare"
               @click="openCompare"
             >
               {{ $t('views.PipelineEditorView.historic_compare') }}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              :class="btnToolbarSecondary"
+              variant="secondary"
+              size="xs"
               data-testid="pipeline-editor-historic-copy-link"
               @click="copyHistoricLink"
             >
               {{ linkCopied ? $t('views.PipelineEditorView.historic_copy_link_copied') : $t('views.PipelineEditorView.historic_copy_link') }}
-            </button>
+            </Button>
             <span
               v-if="copyLinkError"
               class="text-destructive"
@@ -1016,15 +1087,16 @@
           >
             <div class="flex items-center justify-between">
               <h2 class="text-base font-semibold text-foreground">{{ $t('views.PipelineEditorView.run_dialog_title') }}</h2>
-              <button
+              <Button
                 type="button"
-                class="text-muted-foreground hover:text-foreground transition-colors"
+                variant="secondary-text"
+                size="xs"
                 @click="closeRunDialog"
                 data-testid="pipeline-editor-run-dialog-close"
                 :aria-label="$t('views.PipelineEditorView.close')"
               >
-                <XIcon class="h-5 w-5" aria-hidden="true" />
-              </button>
+                <template #icon><XIcon class="h-5 w-5" aria-hidden="true" /></template>
+              </Button>
             </div>
             <p class="text-sm text-muted-foreground">
               {{ $t('views.PipelineEditorView.run_label') }} <span class="font-medium text-foreground">{{ pipeline?.name }}</span>
@@ -1147,15 +1219,17 @@
       >
         <div class="mb-4 flex items-center justify-between">
           <h2 :id="NODE_SHEET_TITLE_ID" class="text-base font-semibold">{{ $t('views.PipelineEditorView.node_properties') }}</h2>
-          <button
+          <Button
             type="button"
-            class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
+            variant="secondary-text"
+            size="xs"
+            class="md:hidden"
             :aria-label="$t('common.close')"
             data-testid="pipeline-editor-node-props-close"
             @click="onPaneClick"
           >
-            <XIcon class="h-4 w-4" aria-hidden="true" />
-          </button>
+            <template #icon><XIcon class="h-4 w-4" aria-hidden="true" /></template>
+          </Button>
         </div>
         <dl class="space-y-4 text-sm">
           <div>
@@ -1439,15 +1513,17 @@
                   </AppSelect>
                   <span v-else class="text-xs text-muted-foreground">—</span>
                 </div>
-                <button
+                <Button
                   v-if="!isViewing"
                   type="button"
-                  class="mt-1 text-xs text-action-link hover:text-action-link-hover"
+                  variant="action-link"
+                  size="xs"
+                  class="mt-1"
                   data-testid="pipeline-save-param-set"
                   @click="saveAsNewParamSet"
                 >
                   {{ $t('views.PipelineEditorView.save_as_new_set') }}
-                </button>
+                </Button>
               </dd>
             </div>
           </template>
@@ -1550,12 +1626,13 @@
               <!-- Reset to unrestricted -->
               <div v-if="!isViewing" class="flex items-center justify-between gap-2">
                 <span v-if="!doesNodeHaveCapabilityScope(selectedNodeData)" class="text-[11px] text-muted-foreground">{{ $t('views.PipelineEditorView.capability_scope_unrestricted') }}</span>
-                <button
+                <Button
                   type="button"
-                  class="text-[11px] text-action-link hover:text-action-link-hover"
+                  variant="action-link"
+                  size="xs"
                   @click="resetCapabilityScope"
                   data-testid="pipeline-editor-scope-reset"
-                >{{ $t('views.PipelineEditorView.capability_scope_reset') }}</button>
+                >{{ $t('views.PipelineEditorView.capability_scope_reset') }}</Button>
               </div>
             </dd>
           </div>
@@ -1713,15 +1790,17 @@
       >
         <div class="mb-4 flex items-center justify-between">
           <h2 :id="EDGE_SHEET_TITLE_ID" class="text-base font-semibold">{{ $t('views.PipelineEditorView.edge_properties') }}</h2>
-          <button
+          <Button
             type="button"
-            class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground md:hidden"
+            variant="secondary-text"
+            size="xs"
+            class="md:hidden"
             :aria-label="$t('common.close')"
             data-testid="pipeline-editor-edge-props-close"
             @click="selectedEdgeData = null"
           >
-            <XIcon class="h-4 w-4" aria-hidden="true" />
-          </button>
+            <template #icon><XIcon class="h-4 w-4" aria-hidden="true" /></template>
+          </Button>
         </div>
         <dl class="space-y-3 text-sm">
           <div>
@@ -2363,6 +2442,13 @@ import Select from '../components/shared/AppSelect.vue'
 import { Pencil as PencilIcon, LoaderCircle as LoaderCircleIcon, Download as DownloadIcon, Play as PlayIcon, Plus as PlusIcon, Maximize2 as Maximize2Icon, X as XIcon } from '@lucide/vue'
 import PipelineGovernanceVisibility from '../components/pipeline/PipelineGovernanceVisibility.vue'
 
+/**
+ * The shared Button exposes its element (`el`) and a `focus()`, so a toolbar
+ * trigger that used to hold a raw `<button>` ref keeps the same anchoring and
+ * focus-return wiring.
+ */
+type ButtonInstance = InstanceType<typeof Button>
+
 // The legacy useApi `post` helper aborted every request after 30s; the typed
 // client has no deadline of its own, so the archive/pause toggles keep the
 // same bound and still surface an error if the request stalls.
@@ -2447,7 +2533,7 @@ watch(canvasPaletteQuery, () => {
   canvasPaletteIndex.value = 0
 })
 const showSaveAsDropdown = ref(false)
-const saveAsDropdownTriggerRef = ref<HTMLButtonElement | null>(null)
+const saveAsDropdownTriggerRef = ref<ButtonInstance | null>(null)
 const saveAsDropdownRef = ref<HTMLElement | null>(null)
 const saveAsDropdownStyle = ref<Record<string, string>>({})
 // markRaw keeps the component objects out of Vue's reactivity system: VueFlow
@@ -2551,13 +2637,9 @@ const nodeProvenance = ref<ProvenanceMap>({})
 const connectionAnnouncement = ref('')
 const canvasAnnouncement = ref('')
 
-// Docked-toolbar styling: one height/radius/spacing per action class so the
-// menu bar reads as one consistent control set (presentation only).
-const btnToolbarBase = 'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50'
-const btnToolbarSecondary = `${btnToolbarBase} border border-input bg-background hover:bg-accent`
-const btnToolbarPrimary = `${btnToolbarBase} bg-action-build text-white hover:bg-action-build-hover`
-const btnToolbarDestructive = `${btnToolbarBase} border border-destructive/50 bg-destructive/10 text-destructive-text hover:bg-destructive/20`
-const btnToolbarIcon = 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
+// Docked-toolbar divider. The toolbar's action classes are gone: every control
+// is the shared Button at `size="xs"`, which pins the same 1.75rem row and
+// padding these constants used to hand-write (see components/ui/Button.vue).
 const groupDividerClass = 'mx-0.5 hidden h-5 w-px shrink-0 bg-border md:block'
 
 // Fit the graph as soon as the canvas is ready and nodes exist, so the whole
@@ -2623,14 +2705,14 @@ const showRevertDialog = ref(false)
 const showSaveAsComposite = ref(false)
 const showVersionTimeline = ref(false)
 const settingsOpen = ref(false)
-const settingsToggleRef = ref<HTMLButtonElement | null>(null)
+const settingsToggleRef = ref<ButtonInstance | null>(null)
 const settingsControlsRef = ref<HTMLElement | null>(null)
-const firstSettingsControlRef = ref<HTMLButtonElement | null>(null)
+const firstSettingsControlRef = ref<ButtonInstance | null>(null)
 const pipelineEditorSettingsControlsId = 'pipeline-editor-settings-controls'
 
 function focusFirstSettingsControl() {
   nextTick(() => {
-    const firstControl = firstSettingsControlRef.value ?? settingsControlsRef.value?.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')
+    const firstControl = firstSettingsControlRef.value?.el ?? settingsControlsRef.value?.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')
     firstControl?.focus({ preventScroll: true })
   })
 }
@@ -2692,7 +2774,7 @@ const deleteError = ref<string | null>(null)
 const savingGraph = ref(false)
 const saveGraphError = ref<string | null>(null)
 const showRunDialog = ref(false)
-const runDialogTriggerRef = ref<HTMLButtonElement | null>(null)
+const runDialogTriggerRef = ref<ButtonInstance | null>(null)
 const runDialogRef = ref<HTMLDialogElement | null>(null)
 const runPrompt = ref('')
 const running = ref(false)
@@ -2952,7 +3034,7 @@ const retryPolicyMultiplier = ref(2)
 const retryPolicyScheduleWarning = ref<string | null>(null)
 const retryPolicyLegacyBackoff = ref<number | undefined>(undefined)
 const retryPolicyError = ref<string | null>(null)
-const retryPolicyToggleRef = ref<HTMLButtonElement | null>(null)
+const retryPolicyToggleRef = ref<ButtonInstance | null>(null)
 const retryPolicyPanelRef = ref<HTMLElement | null>(null)
 const retryPolicyPanelStyle = ref<Record<string, string>>({})
 const retryPolicyToggleId = 'pipeline-editor-retry-policy-toggle'
@@ -2960,7 +3042,7 @@ const retryPolicyPanelId = 'pipeline-editor-retry-policy-panel'
 
 function positionRetryPolicyPanel() {
   retryPolicyPanelStyle.value = anchoredPopoverStyle(
-    retryPolicyToggleRef.value,
+    retryPolicyToggleRef.value?.el ?? null,
     RETRY_POLICY_PANEL_METRICS.widthPx,
   )
 }
@@ -3226,13 +3308,13 @@ onBeforeUnmount(() => {
 // dialog id so AT can announce the controlled element).
 const autonomyPanelDialogId = 'pipeline-editor-autonomy-panel-dialog'
 const autonomyPanelOpen = ref(false)
-const autonomyPanelToggleRef = ref<HTMLButtonElement | null>(null)
+const autonomyPanelToggleRef = ref<ButtonInstance | null>(null)
 const autonomyPanelDialogRef = ref<HTMLDialogElement | null>(null)
 const autonomyPanelStyle = ref<Record<string, string>>({})
 
 function positionAutonomyPanel() {
   autonomyPanelStyle.value = anchoredPopoverStyle(
-    autonomyPanelToggleRef.value,
+    autonomyPanelToggleRef.value?.el ?? null,
     AUTONOMY_PANEL_METRICS.widthPx,
   )
 }
@@ -3303,7 +3385,7 @@ onBeforeUnmount(() => {
 // hence the explicit `align`.
 function positionSaveAsDropdown() {
   saveAsDropdownStyle.value = anchoredPopoverStyle(
-    saveAsDropdownTriggerRef.value,
+    saveAsDropdownTriggerRef.value?.el ?? null,
     SAVE_AS_DROPDOWN_METRICS.widthPx,
     'left',
   )

@@ -1759,6 +1759,35 @@ describe('EvalEditorView — policy gate (FAR-1106 chunk 6, spec §7a)', () => {
     expect(lastFocus).not.toHaveBeenCalled()
   })
 
+  it('returns focus to the Delete control through the Button focus() it exposes (FAR-2825)', async () => {
+    // The inline delete-confirm strip replaces the trigger with the confirm
+    // pair, and cancelling must put focus back on the Delete control. That
+    // control is now the shared Button, whose template ref resolves to the
+    // component instance rather than the <button> - the wiring survives only
+    // because the primitive exposes `focus()`.
+    evalsList = [evalItem({ id: 'eval-1' })]
+    gateResponses['eval-1'] = ok({ id: 'g1', action: 'block', version: 1 })
+    const wrapper = mountView()
+    await flush()
+    await selectPipeline(wrapper)
+    await flush()
+    await openEditor(wrapper, 'eval-1')
+
+    await wrapper.find('[data-testid="policy-gate-delete"]').trigger('click')
+    await nextTick()
+
+    // The re-rendered trigger is the element focus must return to, so spy on
+    // the shared-Button instance's element for the post-cancel render.
+    const triggerFocus = vi.spyOn(HTMLElement.prototype, 'focus')
+    await wrapper.find('[data-testid="policy-gate-cancel-delete"]').trigger('click')
+    await flush()
+
+    const deleteButton = wrapper.find('[data-testid="policy-gate-delete"]')
+    expect(deleteButton.exists()).toBe(true)
+    expect(triggerFocus.mock.instances).toContain(deleteButton.element)
+    triggerFocus.mockRestore()
+  })
+
   it('ignores other keys in the toggle dialog (F9)', async () => {
     const wrapper = await openWithGate({
       id: 'gate-1',

@@ -52,15 +52,16 @@
                 <td class="table-cell">v{{ schema.version }}</td>
                 <td class="table-cell">{{ schema.parameters?.length ?? 0 }}</td>
                 <td class="table-cell-numeric">
-                  <button
+                  <Button
                     type="button"
-                    class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
+                    variant="danger-text"
+                    size="xs"
                     :aria-label="$t('views.ParameterSchemasView.delete')"
                     data-testid="paramschema-delete"
                     @click.stop="confirmDelete(schema)"
                   >
-                    <Trash2 class="h-4 w-4" aria-hidden="true" />
-                  </button>
+                    <template #icon><Trash2 class="h-4 w-4" aria-hidden="true" /></template>
+                  </Button>
                 </td>
               </tr>
             </tbody>
@@ -300,15 +301,16 @@
                             :placeholder="$t('views.ParameterSchemasView.option_placeholder')"
                             :data-testid="`paramschema-param-option-${idx}-${oi}`"
                           />
-                          <button
+                          <Button
                             type="button"
-                            class="rounded p-1 text-muted-foreground hover:text-destructive"
+                            variant="danger-text"
+                            size="xs"
                             :aria-label="$t('views.ParameterSchemasView.remove_option')"
                             data-testid="paramschema-remove-option"
                             @click="(param.options ?? []).splice(oi, 1)"
                           >
-                            <X class="h-3 w-3" aria-hidden="true" />
-                          </button>
+                            <template #icon><X class="h-3 w-3" aria-hidden="true" /></template>
+                          </Button>
                         </div>
                         <Button
                           type="button"
@@ -365,15 +367,17 @@
                       <span v-else class="text-sm text-muted-foreground">—</span>
                     </div>
                   </div>
-                  <button
+                  <Button
                     type="button"
-                    class="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
+                    variant="danger-text"
+                    size="xs"
+                    class="shrink-0"
                     :aria-label="$t('views.ParameterSchemasView.remove_param')"
                     @click="removeParameter(idx)"
                     data-testid="paramschema-remove-param"
                   >
-                    <X class="h-4 w-4" aria-hidden="true" />
-                  </button>
+                    <template #icon><X class="h-4 w-4" aria-hidden="true" /></template>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -443,15 +447,16 @@
                   >
                     {{ $t('views.ParameterSchemasView.clone') }}
                   </button>
-                  <button
+                  <Button
                     type="button"
-                    class="rounded px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
+                    variant="danger-text"
+                    size="xs"
                     :aria-label="$t('views.ParameterSchemasView.delete')"
                     data-testid="paramschema-delete-set"
                     @click="confirmDeleteSet(set)"
                   >
-                    <Trash2 class="h-3 w-3" aria-hidden="true" />
-                  </button>
+                    <template #icon><Trash2 class="h-3 w-3" aria-hidden="true" /></template>
+                  </Button>
                 </div>
               </div>
             </div>

@@ -1,6 +1,8 @@
 <template>
   <PrimeButton
+    ref="primeButton"
     v-bind="forwardedAttrs"
+    :class="[variantClass, sizeClass]"
     :severity="severity"
     :outlined="outlined"
     :text="text"
@@ -12,6 +14,13 @@
     :disabled="disabled || loading"
     @click="onClick"
   >
+    <!-- Forwarded only when the caller supplies it: an always-present icon slot
+         would make PrimeVue treat every slot-content button as icon-only (its
+         test is `hasIcon && !label && !badge`, so it does not look at the
+         default slot) and hide the label. -->
+    <template v-if="slots.icon" #icon>
+      <slot name="icon" />
+    </template>
     <slot />
   </PrimeButton>
 </template>
@@ -36,6 +45,26 @@
  *                     label on hover) - deliberately distinct from `text`
  *   danger         -> severity="danger", solid
  *   warning        -> severity="warn", solid (the warning token pair)
+ *   danger-text    -> text + the app's destructive ink, with a
+ *                     destructive/10 hover tint. Carries `ui-button-danger-text`;
+ *                     the tinted hover is not expressible as a PrimeVue flag.
+ *   plain          -> text + the default foreground ink with an accent hover.
+ *                     Distinct from `ghost` (primary-tinted hover) and from
+ *                     `secondary-text` (the muted secondary ink). Carries
+ *                     `ui-button-plain`.
+ *   action         -> solid `--action-build` (the pipeline toolbar's build
+ *                     action hue - indigo - which is NOT `--primary`). Carries
+ *                     `ui-button-action`; the colour is app tokens, not a
+ *                     PrimeVue severity.
+ *   action-link    -> link tone in `--action-link` (transparent background,
+ *                     action-hue ink, brighter on hover, label underlined on
+ *                     hover like `link`). Carries `ui-button-action-link`.
+ *
+ * The four variants with no PrimeVue severity are styled from the SFC's scoped
+ * style block against the app's semantic tokens. A Tailwind utility on the
+ * element cannot do it: PrimeVue injects its component CSS unlayered, so it
+ * beats every `@layer utilities` declaration, and the scoped rules below win on
+ * specificity instead (`.p-button.ui-button-*` vs `.p-button`).
  *
  * `secondary-text` is the text-button form of `secondary`: it keeps the
  * secondary severity's resting colour instead of the primary one. `link` is the
@@ -67,12 +96,25 @@
  * `disabled` as `$attrs.disabled || loading`, but it merges incoming attrs
  * AFTER that computation, so a bare `:disabled="disabled"` (false by default)
  * overwrites the computed `true` and leaves a loading button clickable.
+ *
+ * Sizes: `md` (default), `sm` (PrimeVue `small`) and `xs` - the compact
+ * toolbar/titlebar density: `small`'s 0.75rem label plus a pinned 1.75rem row,
+ * 0.625rem inline padding and a 0.375rem gap, which is exactly the pipeline
+ * toolbar's metric. The icon-only `xs` form is a 1.75rem square with its padding
+ * zeroed, so a caller never hand-writes `p-1`/`h-7`/`w-7` to get a compact icon
+ * button. Both are pinned in the scoped style block below (see the note there).
+ *
+ * Element access: the component exposes the underlying element (`el`) and a
+ * `focus()` that focuses it, so a caller holding a template ref can keep using
+ * it - including the generic `querySelector`/geometry/focus code that used to
+ * receive a raw `<button>` ref. `$el` is read here because a template ref on a
+ * component resolves to the instance, not the element.
  */
-import { computed, onBeforeMount, useAttrs, useSlots } from 'vue'
+import { computed, onBeforeMount, ref, useAttrs, useSlots } from 'vue'
 import PrimeButton from 'primevue/button'
 
-type ButtonVariant = 'primary' | 'secondary' | 'secondary-text' | 'ghost' | 'link' | 'danger' | 'warning'
-type ButtonSize = 'sm' | 'md'
+type ButtonVariant = 'primary' | 'secondary' | 'secondary-text' | 'ghost' | 'link' | 'danger' | 'warning' | 'danger-text' | 'plain' | 'action' | 'action-link'
+type ButtonSize = 'xs' | 'sm' | 'md'
 
 const props = withDefaults(defineProps<{
   variant?: ButtonVariant
@@ -116,6 +158,30 @@ const VARIANT_FLAGS: Record<ButtonVariant, { severity?: 'secondary' | 'danger' |
   link: { severity: undefined, outlined: false, text: false, link: true },
   danger: { severity: 'danger', outlined: false, text: false, link: false },
   warning: { severity: 'warn', outlined: false, text: false, link: false },
+  'danger-text': { severity: undefined, outlined: false, text: true, link: false },
+  plain: { severity: undefined, outlined: false, text: true, link: false },
+  action: { severity: undefined, outlined: false, text: false, link: false },
+  'action-link': { severity: undefined, outlined: false, text: false, link: true },
+}
+
+/**
+ * The app-token variants have no PrimeVue severity: `danger-text`, `plain`,
+ * `action` and `action-link` are painted from the scoped style block below, and
+ * this class is what selects those rules. `undefined` for every variant that is
+ * fully expressed by a PrimeVue flag.
+ */
+const VARIANT_CLASS: Record<ButtonVariant, string | undefined> = {
+  primary: undefined,
+  secondary: undefined,
+  'secondary-text': undefined,
+  ghost: undefined,
+  link: undefined,
+  danger: undefined,
+  warning: undefined,
+  'danger-text': 'ui-button-danger-text',
+  plain: 'ui-button-plain',
+  action: 'ui-button-action',
+  'action-link': 'ui-button-action-link',
 }
 
 const variantFlags = computed(() => VARIANT_FLAGS[props.variant])
@@ -123,10 +189,18 @@ const severity = computed(() => variantFlags.value.severity)
 const outlined = computed(() => props.outlined ?? variantFlags.value.outlined)
 const text = computed(() => variantFlags.value.text)
 const link = computed(() => variantFlags.value.link)
-const primeSize = computed(() => (props.size === 'sm' ? 'small' : undefined))
+const variantClass = computed(() => VARIANT_CLASS[props.variant])
+
+// Both compact sizes render PrimeVue `small` (the 0.75rem label); `xs` adds the
+// class that pins its own 1.75rem row and padding (see the style block).
+const primeSize = computed(() => (props.size === 'sm' || props.size === 'xs' ? 'small' : undefined))
+const sizeClass = computed(() => (props.size === 'xs' ? 'ui-button-xs' : undefined))
 
 const hasDefaultSlot = computed(() => !!slots.default)
-const isIconOnly = computed(() => !!props.icon && !props.label && !hasDefaultSlot.value)
+// Mirrors PrimeVue's own icon-only test (`hasIcon && !label && !badge`): an icon
+// supplied either by the `icon` prop or by the `#icon` slot counts.
+const hasIcon = computed(() => !!props.icon || !!slots.icon)
+const isIconOnly = computed(() => hasIcon.value && !props.label && !hasDefaultSlot.value)
 
 // A caller may pass `aria-label` directly (several pre-adoption sites do). Vue
 // matches that kebab-case attribute to this camelCase `ariaLabel` prop, so it
@@ -163,4 +237,138 @@ onBeforeMount(() => {
 function onClick(event: MouseEvent): void {
   emit('click', event)
 }
+
+// A template ref on a component resolves to the instance, so the element is read
+// off `$el`. Exposed (not just internal) because call sites that used to hold a
+// raw `<button>` ref need the element for geometry, `querySelector` and focus.
+const primeButton = ref<InstanceType<typeof PrimeButton> | null>(null)
+
+const el = computed<HTMLElement | null>(() => {
+  const instance = primeButton.value as unknown as { $el?: unknown } | null
+  const node = instance?.$el
+  return node instanceof HTMLElement ? node : null
+})
+
+/** Focus the underlying element (the pre-adoption `ref.focus()` call shape). */
+function focus(options?: FocusOptions): void {
+  el.value?.focus(options)
+}
+
+defineExpose({ el, focus })
 </script>
+
+<style scoped>
+/*
+ * App-token variants. Tailwind utilities cannot paint these: PrimeVue injects its
+ * component CSS UNLAYERED, which beats every `@layer utilities` declaration, so
+ * the app's own rules have to win on specificity instead - two classes here
+ * (`.p-button.ui-button-*`) against PrimeVue's one.
+ *
+ * `--action-build` / `--action-link` are raw colour values (oklch), not hsl
+ * triplets, so they are used unwrapped; `--destructive` / `--foreground` /
+ * `--accent` are hsl triplets and are wrapped.
+ */
+
+/* Solid build action (the pipeline toolbar's Run): indigo, deliberately not
+   `--primary`. */
+.p-button.ui-button-action {
+  background: var(--action-build);
+  border-color: var(--action-build);
+  color: #fff;
+}
+
+.p-button.ui-button-action:not(:disabled):hover {
+  background: var(--action-build-hover);
+  border-color: var(--action-build-hover);
+  color: #fff;
+}
+
+.p-button.ui-button-action:not(:disabled):active {
+  background: var(--action-build-hover);
+  border-color: var(--action-build-hover);
+  color: #fff;
+}
+
+/* Link tone in the build hue: transparent at rest, brighter on hover. The label
+   underline comes from PrimeVue's `link` flag, exactly as the `link` variant. */
+.p-button.ui-button-action-link {
+  background: transparent;
+  border-color: transparent;
+  color: var(--action-link);
+}
+
+.p-button.ui-button-action-link:not(:disabled):hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--action-link-hover);
+}
+
+.p-button.ui-button-action-link:not(:disabled):active {
+  background: transparent;
+  border-color: transparent;
+  color: var(--action-link-hover);
+}
+
+/* Destructive ink with a destructive/10 hover tint (the delete/remove icon
+   action). A PrimeVue severity tint would use Aura's own red scale, not ours. */
+.p-button.ui-button-danger-text {
+  background: transparent;
+  border-color: transparent;
+  color: hsl(var(--destructive));
+}
+
+.p-button.ui-button-danger-text:not(:disabled):hover {
+  background: hsl(var(--destructive) / 0.1);
+  border-color: transparent;
+  color: hsl(var(--destructive));
+}
+
+.p-button.ui-button-danger-text:not(:disabled):active {
+  background: hsl(var(--destructive) / 0.1);
+  border-color: transparent;
+  color: hsl(var(--destructive));
+}
+
+/* Default foreground ink with an accent hover - the confirmation pair's
+   "cancel/stay" action. Distinct from `ghost` (primary ink + primary tint) and
+   from `secondary-text` (muted ink). */
+.p-button.ui-button-plain {
+  background: transparent;
+  border-color: transparent;
+  color: hsl(var(--foreground));
+}
+
+.p-button.ui-button-plain:not(:disabled):hover {
+  background: hsl(var(--accent));
+  border-color: transparent;
+  color: hsl(var(--foreground));
+}
+
+.p-button.ui-button-plain:not(:disabled):active {
+  background: hsl(var(--accent));
+  border-color: transparent;
+  color: hsl(var(--foreground));
+}
+
+/*
+ * `xs` - the compact toolbar/titlebar density. `small` already supplies the
+ * 0.75rem label; this pins the toolbar's own geometry (1.75rem row, 0.625rem
+ * inline padding, 0.375rem icon gap) so a toolbar control lines up with the
+ * hand-written `h-7 px-2.5 text-xs gap-1.5` it replaces, and the icon-only form
+ * is a 1.75rem square with its padding zeroed - no `p-1`/`h-7`/`w-7` at the
+ * call site. Two classes beat `.p-button-sm` on specificity; the extra
+ * `.p-button-icon-only` beats `.p-button-sm.p-button-icon-only`.
+ */
+.p-button-sm.ui-button-xs {
+  height: 1.75rem;
+  padding: 0 0.625rem;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+
+.p-button-sm.ui-button-xs.p-button-icon-only {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+}
+</style>

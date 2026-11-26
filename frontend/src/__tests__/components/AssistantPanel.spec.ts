@@ -157,12 +157,14 @@ describe('AssistantPanel', () => {
     const wrapper = await mountPanel()
     expect(wrapper.find('.assistant-panel').exists()).toBe(true)
     expect(wrapper.find('[data-testid="assistant-chat-stub"]').isVisible()).toBe(true)
-    expect(wrapper.find('.assistant-tab.active').text()).toBe('Chat')
+    // FAR-2825: the strip is the shared StateTabs, so the active tab is the
+    // selected one in the tablist rather than a scoped `.assistant-tab.active`.
+    expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('Chat')
   })
 
   it('switches tabs between chat, skills, sessions and sources', async () => {
     const wrapper = await mountPanelOpen()
-    const tabs = wrapper.findAll('.assistant-tab')
+    const tabs = wrapper.findAll('[role="tab"]')
     await tabs[1].trigger('click')
     expect(wrapper.find('[data-testid="assistant-skill-manager-stub"]').exists()).toBe(true)
     await tabs[2].trigger('click')

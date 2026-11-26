@@ -195,6 +195,42 @@ describe('PipelineEditorView toolbar & fit-on-load', () => {
     expect(wrapper.find('[data-testid="pipeline-editor-undo-arrange"]').exists()).toBe(false)
   })
 
+  it('renders every toolbar control through the shared Button at the compact size', async () => {
+    const wrapper = mountEditor()
+    await flushPromises()
+
+    // FAR-2825: the hand-written `btnToolbar*` classes are gone. Each control is
+    // the shared Button, and `size="xs"` is what pins the toolbar's 1.75rem row
+    // and padding (a raw <button> would carry neither `p-button` nor the class).
+    const run = wrapper.find('[data-testid="pipeline-editor-run"]')
+    expect(run.classes()).toContain('p-button')
+    expect(run.classes()).toContain('ui-button-action')
+    expect(run.classes()).toContain('ui-button-xs')
+
+    const save = wrapper.find('[data-testid="pipeline-editor-save"]')
+    expect(save.classes()).toContain('p-button-secondary')
+    expect(save.classes()).toContain('p-button-outlined')
+    expect(save.classes()).toContain('ui-button-xs')
+
+    // The icon-only form needs no hand-written padding/box at the call site.
+    const rename = wrapper.find('[data-testid="pipeline-editor-rename"]')
+    expect(rename.classes()).toContain('p-button-icon-only')
+    expect(rename.classes()).toContain('ui-button-xs')
+    expect(rename.classes()).not.toContain('p-1')
+    expect(rename.classes()).not.toContain('h-7')
+    expect(rename.attributes('aria-label')).toBeTruthy()
+
+    // The destructive toolbar action keeps the outlined-danger combination.
+    const remove = wrapper.find('[data-testid="pipeline-editor-delete"]')
+    expect(remove.classes()).toContain('p-button-danger')
+    expect(remove.classes()).toContain('p-button-outlined')
+
+    // The keyboard-owned disclosure still lives on the shared Button.
+    const toggle = wrapper.find('[data-testid="pipeline-editor-settings-toggle"]')
+    expect(toggle.classes()).toContain('p-button')
+    expect(toggle.classes()).toContain('md:hidden')
+  })
+
   it('progressively discloses secondary settings on narrow layouts', async () => {
     const wrapper = mountEditor()
     await flushPromises()

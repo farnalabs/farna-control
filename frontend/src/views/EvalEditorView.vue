@@ -289,15 +289,16 @@
                       >
                         <div class="flex items-center justify-between gap-2">
                           <span class="text-xs font-medium">{{ $t('views.EvalEditorView.judging.questionNumber', { index: questionIndex + 1 }) }}</span>
-                          <button
+                          <Button
                             type="button"
+                            variant="danger-text"
+                            size="xs"
                             data-testid="eval-editor-question-remove"
                             :aria-label="$t('views.EvalEditorView.judging.removeQuestionAria', { index: questionIndex + 1 })"
-                            class="rounded p-1 text-destructive hover:bg-destructive/10"
                             @click="removeQuestion(questionIndex)"
                           >
-                            <Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
-                          </button>
+                            <template #icon><Trash2 class="h-3.5 w-3.5" aria-hidden="true" /></template>
+                          </Button>
                         </div>
 
                         <div class="grid gap-2 sm:grid-cols-2">
@@ -447,15 +448,17 @@
                               :placeholder="$t('views.EvalEditorView.judging.optionScore')"
                               class="rounded-lg border border-input bg-background px-2 py-1.5 text-xs sm:col-span-2"
                             />
-                            <button
+                            <Button
                               type="button"
+                              variant="danger-text"
+                              size="xs"
+                              class="sm:col-span-1"
                               data-testid="eval-editor-question-remove-option"
                               :aria-label="$t('views.EvalEditorView.judging.removeOptionAria', { question: questionIndex + 1, option: optionIndex + 1 })"
-                              class="rounded p-1 text-destructive hover:bg-destructive/10 sm:col-span-1"
                               @click="removeOption(question, optionIndex)"
                             >
-                              <Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
+                              <template #icon><Trash2 class="h-3.5 w-3.5" aria-hidden="true" /></template>
+                            </Button>
                           </div>
                           <p class="text-[11px] text-muted-foreground">{{ $t('views.EvalEditorView.judging.optionsHint') }}</p>
                         </div>
@@ -495,15 +498,17 @@
                               :placeholder="$t('views.EvalEditorView.judging.levelDescription')"
                               class="rounded-lg border border-input bg-background px-2 py-1.5 text-xs sm:col-span-8"
                             />
-                            <button
+                            <Button
                               type="button"
+                              variant="danger-text"
+                              size="xs"
+                              class="sm:col-span-1"
                               data-testid="eval-editor-question-remove-level"
                               :aria-label="$t('views.EvalEditorView.judging.removeLevelAria', { question: questionIndex + 1, level: levelIndex + 1 })"
-                              class="rounded p-1 text-destructive hover:bg-destructive/10 sm:col-span-1"
                               @click="removeLevel(question, levelIndex)"
                             >
-                              <Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
+                              <template #icon><Trash2 class="h-3.5 w-3.5" aria-hidden="true" /></template>
+                            </Button>
                           </div>
                           <div class="grid gap-2 sm:grid-cols-2">
                             <div>
@@ -738,39 +743,43 @@
                           {{ $t('views.EvalEditorView.policyGate.toggleDisableBlockWarning') }}
                         </template>
                       </span>
-                      <button
+                      <Button
                         type="button"
+                        variant="danger"
+                        size="xs"
                         data-testid="policy-gate-confirm-toggle-disable"
-                        class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
-                        @click="confirmToggleGate"
                         ref="gateToggleConfirmBtnRef"
+                        @click="confirmToggleGate"
                       >
                         {{ $t('views.EvalEditorView.policyGate.toggleConfirmDisable') }}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
+                        variant="plain"
+                        size="xs"
                         data-testid="policy-gate-cancel-toggle-disable"
-                        class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
                         @click="cancelToggleGate"
                       >
                         {{ $t('common.no') }}
-                      </button>
+                      </Button>
                     </Notice>
                   </dialog>
 
                   <!-- Delete gate button -->
                   <div v-if="policyGate.exists" class="flex items-center gap-2">
                     <template v-if="!gateDeleteConfirming">
-                      <button
+                      <Button
                         type="button"
+                        variant="danger"
+                        outlined
+                        size="xs"
                         data-testid="policy-gate-delete"
                         ref="gateDeleteBtnRef"
                         :aria-label="$t('views.EvalEditorView.policyGate.deleteAriaLabel')"
-                        class="inline-flex items-center gap-1 rounded border border-destructive/30 px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
                         @click="gateDeleteConfirming = true"
                       >
-                        <Trash2 class="h-3 w-3" aria-hidden="true" />
-                      </button>
+                        <template #icon><Trash2 class="h-3 w-3" aria-hidden="true" /></template>
+                      </Button>
                     </template>
                     <template v-else>
                       <dialog
@@ -793,23 +802,25 @@
                               {{ $t('views.EvalEditorView.policyGate.deleteConfirmBlockWarning') }}
                             </template>
                           </span>
-                          <button
+                          <Button
                             type="button"
+                            variant="danger"
+                            size="xs"
                             data-testid="policy-gate-confirm-delete"
-                            class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
-                            @click="deletePolicyGate"
                             ref="gateDeleteConfirmBtnRef"
+                            @click="deletePolicyGate"
                           >
                             {{ $t('common.confirm') }}
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            variant="plain"
+                            size="xs"
                             data-testid="policy-gate-cancel-delete"
-                            class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
                             @click="cancelGateDelete"
                           >
                             {{ $t('common.no') }}
-                          </button>
+                          </Button>
                         </Notice>
                       </dialog>
                     </template>
@@ -854,23 +865,25 @@
                   class="flex w-full items-center gap-2 text-xs"
                 >
                   <span>{{ $t('views.EvalEditorView.policyGate.unsavedChangesConfirm') }}</span>
-                  <button
+                  <Button
                     type="button"
                     data-testid="dirty-confirm-proceed"
-                    class="rounded bg-destructive-fill px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90"
+                    variant="danger"
+                    size="xs"
                     @click="resolveDirtyConfirm(true)"
                     ref="dirtyConfirmProceedBtnRef"
                   >
                     {{ $t('views.EvalEditorView.policyGate.dirtyConfirmProceed') }}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     data-testid="dirty-confirm-stay"
-                    class="rounded px-2 py-0.5 text-xs font-medium hover:bg-accent"
+                    variant="plain"
+                    size="xs"
                     @click="resolveDirtyConfirm(false)"
                   >
                     {{ $t('views.EvalEditorView.policyGate.dirtyConfirmStay') }}
-                  </button>
+                  </Button>
                 </Notice>
               </dialog>
 
@@ -952,27 +965,29 @@
                   </div>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
-                  <button
+                  <Button
                     type="button"
                     data-testid="eval-editor-edit"
+                    variant="secondary-text"
+                    size="xs"
                     :aria-label="$t('common.edit')"
-                    class="rounded p-1 text-muted-foreground hover:bg-accent"
                     :title="$t('common.edit')"
                     @click="startEdit(ev)"
                   >
-                    <Pencil class="h-4 w-4" aria-hidden="true" />
-                  </button>
-                  <button
+                    <template #icon><Pencil class="h-4 w-4" aria-hidden="true" /></template>
+                  </Button>
+                  <Button
                     type="button"
                     v-if="canDeleteEval && deletingEvalId !== ev.id"
                     data-testid="eval-editor-delete"
+                    variant="danger-text"
+                    size="xs"
                     :aria-label="$t('common.delete')"
-                    class="rounded p-1 text-destructive hover:bg-destructive/10"
                     :title="$t('common.delete')"
                     @click="confirmDelete(ev.id)"
                   >
-                    <Trash2 class="h-4 w-4" aria-hidden="true" />
-                  </button>
+                    <template #icon><Trash2 class="h-4 w-4" aria-hidden="true" /></template>
+                  </Button>
                   <div v-else-if="canDeleteEval" class="flex items-center gap-1">
                     <Button
                       type="button"
@@ -984,14 +999,15 @@
                     >
                       {{ deleting ? $t('common.deleting') : $t('common.confirm') }}
                     </Button>
-                    <button
+                    <Button
                       type="button"
+                      variant="plain"
+                      size="xs"
                       data-testid="eval-editor-cancel-delete"
-                      class="rounded px-2 py-1 text-xs font-medium hover:bg-accent"
                       @click="deletingEvalId = null"
                     >
                       {{ $t('common.no') }}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1043,6 +1059,12 @@ import {
   type QuestionType,
   type TypedJudgeDraft,
 } from '../components/eval/typedJudge'
+
+/**
+ * The shared Button exposes its element and a `focus()`, so a confirm control
+ * that used to hold a raw `<button>` ref keeps the same focus wiring.
+ */
+type ButtonInstance = InstanceType<typeof Button>
 
 const { t } = useI18n()
 const route = useRoute()
@@ -1217,18 +1239,18 @@ const gateError = ref(false)
 // create, where editingEvalId is still null — §3.3 retry mechanics).
 const gatePendingEvalId = ref<string | null>(null)
 const gateDeleteConfirming = ref(false)
-const gateDeleteBtnRef = ref<HTMLElement | null>(null)
-const gateDeleteConfirmBtnRef = ref<HTMLElement | null>(null)
+const gateDeleteBtnRef = ref<ButtonInstance | null>(null)
+const gateDeleteConfirmBtnRef = ref<ButtonInstance | null>(null)
 const evalGateActions = ref<Record<string, string>>({})
 
 // Operator enable/disable toggle state (CO-5)
 const gateToggleBusy = ref(false)
 const gateToggleConfirming = ref(false)
-const gateToggleConfirmBtnRef = ref<HTMLElement | null>(null)
+const gateToggleConfirmBtnRef = ref<ButtonInstance | null>(null)
 
 // §3.2 dirty-gate confirm dialog state
 const dirtyConfirmVisible = ref(false)
-const dirtyConfirmProceedBtnRef = ref<HTMLElement | null>(null)
+const dirtyConfirmProceedBtnRef = ref<ButtonInstance | null>(null)
 let dirtyConfirmResolve: ((value: boolean) => void) | null = null
 
 const isTyped = computed(() => form.eval_type === 'model_judge')
