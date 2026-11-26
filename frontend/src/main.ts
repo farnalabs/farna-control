@@ -147,6 +147,48 @@ async function main() {
         // theme engine (complex selectors like `:root:not(.light)` get
         // double-wrapped, producing invalid nested CSS).
         darkModeSelector: '.dark',
+        // FAR-2817 (ADR 024 decision 4, PrimeVue + Tailwind v4 cascade).
+        //
+        // Without this, PrimeVue emits its component CSS (`.p-inputtext`
+        // padding/border-radius/focus-shadow, ...) UNLAYERED, and unlayered
+        // CSS beats every cascade layer. Tailwind v4 puts its utilities in
+        // `@layer utilities`, so utility classes written on a PrimeVue
+        // component were silently ignored: `py-2`/`px-3`/`rounded-lg`/
+        // `focus:ring-2` on `Input` had no effect, and FAR-2809 had to escape
+        // SearchInput's icon padding with `pl-9!` `!important` utilities.
+        //
+        // `cssLayer` is PrimeVue 4's supported answer: every rule it emits is
+        // wrapped in `@layer primevue`, and the `order` statement below is
+        // injected as the FIRST style element in <head> (PrimeVue prepends it
+        // with `first: true`), so it establishes the layer order before any
+        // other stylesheet declares one. CSS layer order is fixed by the first
+        // declaration and can never be re-ordered later, which is why `order`
+        // must name EVERY layer Tailwind v4 declares (`theme`, `base`,
+        // `components`, `utilities`) plus `primevue`.
+        //
+        // `primevue` sits directly below `utilities` and above `components`,
+        // which keeps the existing precedence for everything else: a Tailwind
+        // utility still overrides a PrimeVue declaration (the fix), PrimeVue
+        // still overrides our `@layer components` classes, and our own
+        // UNLAYERED rules (the `--p-*` token bridge in primevue-theme.ts and
+        // the intentional overrides at the end of style.css) still win over
+        // both - unlayered CSS beats every layer.
+        //
+        // Blast radius (measured before/after in Chromium on /admin/audit):
+        // only properties a caller's own utility already names change. An
+        // `Input` written `rounded-lg px-3 py-2` goes 6px -> 12px radius (this
+        // project maps `rounded-lg` to `--radius-lg`, 0.75rem), 10px/6px ->
+        // 12px/8px padding, 34px -> 38px tall, and `focus:ring-2` becomes a
+        // real 2px ring again (the Aura preset sets `box-shadow: none` on
+        // focus, so an input previously showed only the border-colour change).
+        // A `.p-select`, which this app only ever gives layout classes
+        // (`w-full ...`), is unchanged at 6px/35px, and any element carrying
+        // no competing utility does not move at all - the layer only decides
+        // who wins where both sides declare the same property.
+        cssLayer: {
+          name: 'primevue',
+          order: 'theme, base, components, primevue, utilities',
+        },
       },
     },
   })
