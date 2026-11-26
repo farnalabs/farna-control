@@ -215,6 +215,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+    # FAR-2808: same failure class as `backend` above. The nginx frontend is
+    # enabled by default and is how the operator reaches the app; a transient
+    # exit (OOM-kill, nginx reload race on first boot) left the UI permanently
+    # down while the API stayed up - a half-dead stack. `unless-stopped` revives
+    # it without defeating an explicit `docker compose stop`/`down`.
+    restart: unless-stopped
     depends_on:
       - backend
     ports:

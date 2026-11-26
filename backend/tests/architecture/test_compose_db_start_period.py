@@ -88,6 +88,25 @@ _COMPOSE_DB_PROBE: list[tuple[Path, str]] = [
 _TCP_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
+def _pg_isready_host(tokens: list[str]) -> str | None:
+    """Return the ``pg_isready`` host, accepting every form libpq accepts.
+
+    libpq (and therefore ``pg_isready``) accepts the host as ``-h HOST``,
+    ``--host HOST``, ``-hHOST`` and ``--host=HOST``. Pinning only the short
+    separated form would fail a correct probe written any other way, so all four
+    are handled here. Returns ``None`` when no host is given (the probe would
+    then use the default Unix socket, which this test forbids).
+    """
+    for index, token in enumerate(tokens):
+        if token in ("-h", "--host"):
+            return tokens[index + 1] if index + 1 < len(tokens) else None
+        if token.startswith("--host="):
+            return token.split("=", 1)[1]
+        if token.startswith("-h") and not token.startswith("--") and token != "-h":
+            return token[2:]
+    return None
+
+
 @pytest.mark.parametrize(
     ("compose_path", "service"),
     _COMPOSE_DB_PROBE,
@@ -110,8 +129,8 @@ def test_shipped_db_probe_waits_for_the_realtime_server(compose_path: Path, serv
     listens on TCP. It also makes the probe mean what the deployment needs: the
     same ``db:5432`` TCP path the application uses. Note that naming the user
     and database (``-U``/``-d``) does NOT close it - ``pg_isready`` reports
-    "accepting connections" for a wrong user or database too - so ``-h`` is the
-    load-bearing flag here.
+    "accepting connections" for a wrong user or database too - so the host flag
+    (``-h``/``--host``, in any of libpq's forms) is the load-bearing part here.
     """
     relative = compose_path.relative_to(_REPO_ROOT)
     compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
@@ -122,7 +141,9 @@ def test_shipped_db_probe_waits_for_the_realtime_server(compose_path: Path, serv
     tokens = shlex.split(str(test[1]))
     assert tokens, f"{relative} services.{service} healthcheck command is empty: {test[1]!r}"
     assert tokens[0] == "pg_isready", f"{relative} services.{service} healthcheck must run pg_isready, got {test[1]!r}"
-    assert "-h" in tokens, f"{relative} services.{service} healthcheck runs pg_isready with no -h, so it probes the default Unix socket and answers during the temporary socket-only initdb server; the app services then start into a connection window that closes under them (FAR-2808): {test[1]!r}"
 
-    host = tokens[tokens.index("-h") + 1]
+    host = _pg_isready_host(tokens)
+    assert host is not None, (
+        f"{relative} services.{service} healthcheck runs pg_isready with no -h/--host, so it probes the default Unix socket and answers during the temporary socket-only initdb server; the app services then start into a connection window that closes under them (FAR-2808): {test[1]!r}"
+    )
     assert host in _TCP_LOOPBACK_HOSTS, f"{relative} services.{service} healthcheck must probe a TCP loopback host ({sorted(_TCP_LOOPBACK_HOSTS)}), got {host!r}; a socket path or a non-loopback host does not prove the db:5432 TCP path the app uses (FAR-2808)"
