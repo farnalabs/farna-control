@@ -227,8 +227,8 @@ def test_public_exception_message_bounds_input_before_regex():
 
 def test_public_exception_message_returns_empty_for_empty_message():
     """An exception with no message (or only whitespace) scrubs to empty."""
-    assert _public_exception_message(ValueError()) == ""
-    assert _public_exception_message(ValueError("   ")) == ""
+    assert not _public_exception_message(ValueError())
+    assert not _public_exception_message(ValueError("   "))
 
 
 def test_failure_reason_handles_empty_message():
