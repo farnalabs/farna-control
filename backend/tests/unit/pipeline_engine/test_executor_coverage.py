@@ -176,7 +176,7 @@ def test_failure_reason_is_readable_and_path_free():
 
 def test_failure_reason_scrubs_embedded_traceback_and_internal_paths():
     """An embedded traceback / source path never survives into the stored reason."""
-    message = 'Traceback (most recent call last):\n  File "/app/src/modulo/core/pipeline_engine/executor.py", line 3970, in execute\nTypeError: modulo.core.pipeline_engine.executor failed'
+    message = 'Traceback (most recent call last):\n  File "/app/src/farna/core/pipeline_engine/executor.py", line 3970, in execute\nTypeError: farna.core.pipeline_engine.executor failed'
     result = _failure_reason(TypeError(message))
     assert "Traceback (most recent call last)" not in result
     assert "/app/src/" not in result
@@ -194,9 +194,9 @@ def test_failure_reason_respects_limit():
 
 
 def test_failure_reason_scrubs_single_segment_internal_module():
-    """A one-dotted internal module ref (``modulo.core``) is scrubbed too."""
-    result = _failure_reason(RuntimeError("import of modulo.core failed"))
-    assert "modulo.core" not in result
+    """A one-dotted internal module ref (``farna.core``) is scrubbed too."""
+    result = _failure_reason(RuntimeError("import of farna.core failed"))
+    assert "farna.core" not in result
     assert "<internal module>" in result
 
 
@@ -223,6 +223,18 @@ def test_public_exception_message_bounds_input_before_regex():
     # No scrub pattern applies to an all-'x' message, so an uncapped
     # implementation would return all 200000 chars.
     assert len(bounded) <= 5000
+
+
+def test_public_exception_message_returns_empty_for_empty_message():
+    """An exception with no message (or only whitespace) scrubs to empty."""
+    assert _public_exception_message(ValueError()) == ""
+    assert _public_exception_message(ValueError("   ")) == ""
+
+
+def test_failure_reason_handles_empty_message():
+    """An exception without a message yields just its type name."""
+    assert _failure_reason(ValueError()) == "ValueError"
+    assert _failure_reason(ValueError("   ")) == "ValueError"
 
 
 # ---------------------------------------------------------------------------
