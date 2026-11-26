@@ -728,6 +728,24 @@ describe('AdminAuditView — header action group', () => {
     expect(group.classList).toContain('w-full')
     expect(group.classList).toContain('sm:flex-nowrap')
   })
+
+  it('renders the header actions through the shared Button primitive (FAR-2801)', async () => {
+    const wrapper = await mountLoaded()
+    const verify = wrapper.get('[data-testid="admin-audit-verify-chain"]')
+    const reset = wrapper.get('[data-testid="admin-audit-reset"]')
+
+    // The shared Button renders a real PrimeVue button, so its variant flags are
+    // observable on the root. A raw <button> would carry none of them.
+    expect(verify.classes()).toContain('p-button')
+    expect(verify.classes()).toContain('p-button-secondary')
+    expect(verify.classes()).toContain('p-button-outlined')
+    expect(verify.attributes('data-p-severity')).toBe('secondary')
+    expect(verify.attributes('type')).toBe('button')
+
+    expect(reset.classes()).toContain('p-button-outlined')
+    expect(reset.attributes('data-p-severity')).toBe('secondary')
+    expect(reset.text()).toBe('Reset')
+  })
 })
 
 describe('AdminAuditView — formatActor branches', () => {
