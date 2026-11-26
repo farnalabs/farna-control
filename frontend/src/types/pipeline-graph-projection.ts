@@ -199,7 +199,9 @@ export interface CanvasEdgeUiState {
 }
 
 /** A Vue Flow edge as the editor renders it: geometry, UI styling and the
- *  semantic ``data`` wrapper, all derived from the wire payload. */
+ *  semantic ``data`` wrapper, all derived from the wire payload. Vue Flow picks
+ *  the renderer from ``type``, so changing it means renaming the editor's
+ *  matching ``#edge-<type>`` slot (FAR-2810). */
 export interface CanvasFlowEdge {
   id: string
   source: string
