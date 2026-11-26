@@ -670,23 +670,24 @@
                   {{ retryPolicyError }}
                 </div>
                 <div class="mt-3 flex justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
-                    class="rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     data-testid="pipeline-editor-retry-policy-close"
                     @click="closeRetryPolicy"
                   >
                     {{ $t('views.PipelineEditorView.cancel') }}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    class="rounded-md border border-input bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    size="sm"
                     :disabled="retryPolicySaving || retryPolicySaveBlocked"
                     @click="saveRetryPolicy"
                     data-testid="pipeline-editor-retry-policy-save"
                   >
                     {{ retryPolicySaving ? $t('views.PipelineEditorView.saving') : $t('views.PipelineEditorView.save') }}
-                  </button>
+                  </Button>
                 </div>
               </dialog>
             </div>
@@ -933,10 +934,10 @@
             </div>
           </div>
           <div class="flex flex-wrap items-center justify-center gap-2 pointer-events-auto">
-            <Button size="small" type="button" class="text-xs" @click="openRenameDialog">{{ $t('views.PipelineEditorView.rename') }}</Button>
-            <button v-if="!pipeline?.archived_at" type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</button>
-            <button v-else type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</button>
-            <button type="button" class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive-text hover:bg-destructive/20" data-testid="pipeline-editor-empty-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</button>
+            <Button size="sm" type="button" class="text-xs" @click="openRenameDialog">{{ $t('views.PipelineEditorView.rename') }}</Button>
+            <Button v-if="!pipeline?.archived_at" type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</Button>
+            <Button v-else type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</Button>
+            <Button type="button" variant="danger" :outlined="true" size="sm" data-testid="pipeline-editor-empty-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</Button>
             <Select
               v-model="newNodeType"
               :options="nodeTypeOptions"
@@ -947,9 +948,9 @@
               :aria-label="$t('views.PipelineEditorView.new_node_type')"
               data-testid="pipeline-editor-empty-node-type-select"
             />
-            <Button severity="secondary" outlined size="small" type="button" class="text-xs" data-testid="pipeline-editor-empty-add-node" @click="addNode()">{{ $t('views.PipelineEditorView.add_node') }}</Button>
-            <button type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-show-me" @click="startEmptyStateWalkthrough">{{ $t('views.PipelineEditorView.empty_state_show_me') }}</button>
-            <button type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-template" @click="openTemplateLibrary">{{ $t('views.PipelineEditorView.empty_state_start_from_template') }}</button>
+            <Button variant="secondary" size="sm" type="button" class="text-xs" data-testid="pipeline-editor-empty-add-node" @click="addNode()">{{ $t('views.PipelineEditorView.add_node') }}</Button>
+            <Button type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-show-me" @click="startEmptyStateWalkthrough">{{ $t('views.PipelineEditorView.empty_state_show_me') }}</Button>
+            <Button type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-template" @click="openTemplateLibrary">{{ $t('views.PipelineEditorView.empty_state_start_from_template') }}</Button>
           </div>
         </div>
         <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions --><!-- palette keyboard region: Escape works from any palette control, including the option buttons -->
@@ -1046,14 +1047,14 @@
               {{ emptyRunWarning }}
             </div>
             <div class="flex justify-end gap-2 pt-2">
-              <button
+              <Button
                 type="button"
-                class="px-4 py-2 border border-input bg-background text-foreground text-sm font-medium rounded-lg hover:bg-accent transition-colors"
+                variant="secondary"
                 data-testid="pipeline-editor-run-dialog-cancel"
                 @click="closeRunDialog"
               >
                 {{ $t('views.PipelineEditorView.cancel') }}
-              </button>
+              </Button>
               <Button v-if="!isWebhookTriggered" type="button" class="border-action-build-border bg-action-build text-white hover:bg-action-build-hover" :disabled="running" @click="triggerRun" data-testid="pipeline-editor-run-submit">
                 <LoaderCircleIcon
                   v-if="running"
@@ -1503,12 +1504,13 @@
                     @keydown.enter.prevent="addCapabilityEntry('allowed_tools')"
                     data-testid="pipeline-editor-scope-tool-input"
                   />
-                  <button
+                  <Button
                     type="button"
-                    class="shrink-0 rounded border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     @click="addCapabilityEntry('allowed_tools')"
                     data-testid="pipeline-editor-scope-tool-add"
-                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</button>
+                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</Button>
                 </div>
               </div>
               <!-- Context Scope (free-form list of run_context keys) -->
@@ -1536,12 +1538,13 @@
                     @keydown.enter.prevent="addCapabilityEntry('context_scope')"
                     data-testid="pipeline-editor-scope-context-input"
                   />
-                  <button
+                  <Button
                     type="button"
-                    class="shrink-0 rounded border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     @click="addCapabilityEntry('context_scope')"
                     data-testid="pipeline-editor-scope-context-add"
-                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</button>
+                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</Button>
                 </div>
               </div>
               <!-- Reset to unrestricted -->
@@ -1680,15 +1683,16 @@
           <Button v-if="selectedNodeData.node_type === 'manual'" type="button" class="w-full" data-testid="pipeline-editor-convert-to-agent" @click="openAgentPicker">
             {{ $t('views.PipelineEditorView.convert_to_agent') }}
           </Button>
-          <button
+          <Button
             v-if="selectedNodeData.node_type === 'agent'"
             type="button"
             data-testid="pipeline-editor-revert-to-manual"
-            class="inline-flex w-full items-center justify-center rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+            variant="secondary"
+            class="w-full"
             @click="openRevertDialog"
           >
             {{ $t('views.PipelineEditorView.revert_to_manual') }}
-          </button>
+          </Button>
         </div>
       </aside>
       <!-- Edge Properties Panel (with HITL gate config). Mobile (FAR-1841):
@@ -2177,7 +2181,7 @@
             {{ $t('views.PipelineEditorView.historic_restore_diff_failed') }}
           </p>
           <Button
-            size="small"
+            size="sm"
             class="text-xs"
             data-testid="pipeline-editor-restore-diff-retry"
             @click="loadRestoreDiff"
@@ -2197,7 +2201,7 @@
             {{ $t('views.PipelineEditorView.historic_restore_diff_no_baseline') }}
           </p>
           <Button
-            size="small"
+            size="sm"
             class="text-xs"
             data-testid="pipeline-editor-restore-diff-reload"
             @click="loadRestoreDiff"
@@ -2354,7 +2358,7 @@ import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
 import { useEnvironmentProfilesStore } from '../stores/environmentProfiles'
 import { runnerTierLabelKeyForProvider } from '../lib/runnerTiers'
 import { currentSubstantiveVersion, NON_VERSION_CREATED_KINDS, SNAPSHOT_PAGE_SIZE } from '../lib/pipelineVersion'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import { Pencil as PencilIcon, LoaderCircle as LoaderCircleIcon, Download as DownloadIcon, Play as PlayIcon, Plus as PlusIcon, Maximize2 as Maximize2Icon, X as XIcon } from '@lucide/vue'
 import PipelineGovernanceVisibility from '../components/pipeline/PipelineGovernanceVisibility.vue'
