@@ -154,10 +154,15 @@ def test_the_step_can_discover_the_deploy_run_when_none_is_supplied() -> None:
     script = _verify_script()
 
     assert "DEPLOY_RUN_ID_INPUT" in script
-    assert "actions/workflows/deploy.yml/runs" in script
-    # discovery is anchored at the RC tag's own creation time, not "newest run"
-    assert "/git/ref/tags/" in script
-    assert "Discovered deploy run" in script
+    # FAR-2800: discovery is delegated to the tested selector script, which
+    # picks the run by WHAT IT DEPLOYED (its release-identity record) rather
+    # than by creation time. The old creation-time heuristic is gone for good.
+    assert ".github/scripts/select_rc_deploy_run.py" in script
+    assert '--rc-tag "$RC_TAG"' in script
+    # A selected run is announced so the wait loop can watch it.
+    assert "Watching deploy run" in script
+    assert "actions/workflows/deploy.yml/runs" not in script
+    assert "/git/ref/tags/" not in script
 
 
 # ---------------------------------------------------------------------------
