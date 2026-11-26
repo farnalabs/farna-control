@@ -142,10 +142,10 @@ error 7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f · fingerprint 9f8e7d6c5b4a · level 
 ```
 
 **A bundle** (printed by `farna-control support` and by the bundle module when the zip
-is written):
+is written). The output begins with a bundle-format reference line carrying the format
+version and a short reference, then:
 
 ```text
-modulo support bundle 1 ref=MSB-1-20261102T101500Z-deadbeef
 bundle: /home/you/modulo-support-MSB-1-20261102T101500Z-deadbeef.zip (348201 bytes)
 Open the bundle and check it before sending it to Farnalabs support.
 ```
