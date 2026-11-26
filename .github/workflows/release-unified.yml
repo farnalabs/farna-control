@@ -3861,11 +3861,6 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v${VERSION}"
-          # The checked-in production signing key id the published manifest must
-          # verify under; any other id (including the reserved next slot) is a
-          # failure.
-          EXPECTED_KEY_ID="modulo-2026-a"
-          export EXPECTED_KEY_ID
           inventory="$RUNNER_TEMP/ga-compose-assets.tsv"
           if [ ! -s "$inventory" ]; then
             echo "::error::expected-asset inventory ${inventory} is missing - the upload step did not run."
@@ -3904,7 +3899,11 @@ jobs:
           from farna.launcher import manifest as m
 
           dest = Path(os.environ["RUNNER_TEMP"]) / "ga-published"
-          expected_key_id = os.environ["EXPECTED_KEY_ID"]
+          # Source the expected key id from the trust store's single CURRENT
+          # constant the installer verifies against, rather than duplicating the
+          # literal: the published manifest must verify under the provisioned
+          # key, and any other id (including the reserved next slot) is a failure.
+          expected_key_id = m._KEY_ID_CURRENT
           try:
               sig = m.read_signature_file(dest / m.SIGNATURE_NAME)
               if sig["key_id"] != expected_key_id:

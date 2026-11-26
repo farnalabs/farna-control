@@ -28,7 +28,7 @@
 .github/workflows/pr-review.yml	1
 .github/workflows/publish-images.yml	1
 .github/workflows/rc-validate.yml	10
-.github/workflows/release-unified.yml	8
+.github/workflows/release-unified.yml	7
 .github/workflows/schemathesis-nightly.yml	7
 .github/workflows/windows-artifacts.yml	7
 .github/workflows/windows-installer.yml	5
@@ -626,7 +626,7 @@ backend/tests/unit/test_csp_settings.py	2
 backend/tests/unit/test_deploy_scripts.py	7
 backend/tests/unit/test_deploy_workflow_rehearsal.py	19
 backend/tests/unit/test_docker_compose_wiring.py	1
-backend/tests/unit/test_ga_promote_publication.py	3
+backend/tests/unit/test_ga_promote_publication.py	1
 backend/tests/unit/test_guardrail_loop_intercept.py	3
 backend/tests/unit/test_helm_image_tag_defaults.py	3
 backend/tests/unit/test_macos_installer_normalize.py	26

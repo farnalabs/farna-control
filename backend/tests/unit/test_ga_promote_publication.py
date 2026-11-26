@@ -88,8 +88,8 @@ def _verify_violations(run: str) -> list[str]:
     problems: list[str] = []
     if "verify_release_from_files" not in run:
         problems.append("does not verify the published manifest with verify_release_from_files")
-    if "modulo-2026-a" not in run:
-        problems.append("does not pin the checked-in trust-store key id (modulo-2026-a)")
+    if "_KEY_ID_CURRENT" not in run:
+        problems.append("does not derive the expected key id from the trust store (_KEY_ID_CURRENT)")
     if "gh release download" not in run:
         problems.append("does not download the published manifest/signature bytes to verify")
     if "gh release view" not in run:
