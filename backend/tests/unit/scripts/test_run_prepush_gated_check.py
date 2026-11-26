@@ -243,6 +243,77 @@ def test_main_usage_error_on_unknown_argument(monkeypatch, capsys):
 
 
 # ---------------------------------------------------------------------------
+# Multiple --pattern values: one hook, several trees
+# ---------------------------------------------------------------------------
+def test_matches_any_pattern_unions_every_pattern():
+    """The architecture hook gates on backend/src AND frontend/src in one run."""
+    changed = ["backend/src/farna/core/x.py", "frontend/src/views/A.vue", "docs/readme.md"]
+    assert mod._matches_any_pattern(changed, ["backend/src/**/*.py", "frontend/src/**"]) == [
+        "backend/src/farna/core/x.py",
+        "frontend/src/views/A.vue",
+    ]
+
+
+def test_matches_any_pattern_returns_each_file_once_when_patterns_overlap():
+    changed = ["backend/src/farna/core/x.py"]
+    patterns = ["backend/src/**/*.py", "backend/**/*.py"]
+    assert mod._matches_any_pattern(changed, patterns) == ["backend/src/farna/core/x.py"]
+
+
+def test_main_runs_when_only_the_second_pattern_matches(monkeypatch):
+    _set_argv(monkeypatch, ["--pattern", "backend/src/**/*.py", "--pattern", "frontend/src/**", "--", "echo", "hi"])
+    monkeypatch.setattr(mod, "_git_diff_names", lambda: ["frontend/src/views/A.vue"])
+    with patch.object(mod.subprocess, "run") as run:
+        run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        assert mod.main() == 0
+    run.assert_called_once_with(["echo", "hi"], check=False)
+
+
+def test_main_skips_when_no_pattern_matches(monkeypatch, capsys):
+    _set_argv(monkeypatch, ["--pattern", "backend/src/**/*.py", "--pattern", "frontend/src/**", "--", "echo", "hi"])
+    monkeypatch.setattr(mod, "_git_diff_names", lambda: ["docs/readme.md"])
+    with patch.object(mod.subprocess, "run") as run:
+        assert mod.main() == 0
+    run.assert_not_called()
+    assert "no files matching" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# --rerun-hint: every failure names the command that reproduces it
+# ---------------------------------------------------------------------------
+def test_main_prints_the_rerun_hint_on_failure(monkeypatch, capsys):
+    _set_argv(
+        monkeypatch,
+        ["--pattern", _PATTERN, "--rerun-hint", "uv run pytest backend/tests/architecture/", "--", "false-cmd"],
+    )
+    monkeypatch.setattr(mod, "_git_diff_names", lambda: ["backend/src/farna/core/x.py"])
+    with patch.object(mod.subprocess, "run") as run:
+        run.return_value = subprocess.CompletedProcess(args=[], returncode=3)
+        assert mod.main() == 3
+    err = capsys.readouterr().err
+    assert "FAILED: gate exited 3" in err
+    assert "uv run pytest backend/tests/architecture/" in err
+
+
+def test_main_does_not_print_the_rerun_hint_on_success(monkeypatch, capsys):
+    _set_argv(monkeypatch, ["--pattern", _PATTERN, "--rerun-hint", "uv run pytest backend/tests/architecture/", "--", "echo", "hi"])
+    monkeypatch.setattr(mod, "_git_diff_names", lambda: ["backend/src/farna/core/x.py"])
+    with patch.object(mod.subprocess, "run") as run:
+        run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+        assert mod.main() == 0
+    assert "Rerun locally with" not in capsys.readouterr().err
+
+
+def test_main_rerun_hint_is_optional(monkeypatch, capsys):
+    _set_argv(monkeypatch, _ARGV)
+    monkeypatch.setattr(mod, "_git_diff_names", lambda: ["backend/src/farna/core/x.py"])
+    with patch.object(mod.subprocess, "run") as run:
+        run.return_value = subprocess.CompletedProcess(args=[], returncode=1)
+        assert mod.main() == 1
+    assert "Rerun locally with" not in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
 # End-to-end: the three gate branches run as a real subprocess against a
 # throwaway git repository (no mocks of the script itself).
 # ---------------------------------------------------------------------------
