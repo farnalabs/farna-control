@@ -1032,7 +1032,8 @@ deployment backend (ADR 068).
 ### Docker Compose
 
 Compose files (`docker-compose*.yml` at the repo root; the non-default ones live under `deploy/compose/`):
-- `docker-compose.yml` – dev mode (builds from source, Postgres 16, Redis 8)
+- `docker-compose.yml` – full local stack, built from source (Postgres 16, Redis 8); the Python services run the code baked into the image
+- `docker-compose.dev.yml` – live-edit override for `docker-compose.yml` (re-adds the `./backend/src` bind mount; see [Compose first-boot latency](compose-first-boot-performance.md))
 - `docker-compose.local.yml` – with observability profile (otel-collector, Prometheus, Grafana)
 - `deploy/compose/docker-compose.prod.yml` – self-hosted single-server production (prebuilt image)
 - `deploy/compose/docker-compose.test.yml` – CI test environment
