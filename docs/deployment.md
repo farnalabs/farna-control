@@ -621,31 +621,43 @@ A maintained, vendor-neutral Helm chart ships in this repository at
 runner and system workers, frontend, and an optional in-cluster Redis, against
 an external PostgreSQL - and includes ResourceQuota, LimitRange, optional HPA,
 ingress and namespace templates. `deploy/helm/farna-control/values.eks.example.yaml`
-is a validated EKS example (RDS, ElastiCache, ALB), and the chart was deployed
-end-to-end on a real EKS cluster on 2026-09-23 (FAR-1052); see
+is a validated EKS example (RDS, ElastiCache, ALB). The chart was first proven
+end-to-end on a real EKS cluster on 2026-09-23 (FAR-1052) and re-validated
+end-to-end on 2026-11-26 (FAR-2770, below); see
 `deploy/helm/farna-control/README.md` §Validation Status for exactly what was proven
 and which follow-ups remain open.
 
-**That 2026-09-23 run is the last time the chart was proven end to end.** A
-re-validation attempt on 2026-11-25 (FAR-2770; same cluster shape: eksctl in
-`us-east-1`, EKS 1.34, 2 x `m7i-flex.large`, chart `0.3.330`, images built from the
-tree and tagged `helm-validate-20261125`) did **not** pass. The chart installed and
-four of its five workloads (`frontend`, `redis`, `saq-runner`, `saq-system`) became
-Ready, but the backend crash-looped because `backend/entrypoint.sh` migrates with
-`alembic upgrade 0001_v2_identity_org`, a revision the collapsed migration baseline
-no longer contains, so a fresh database cannot be migrated at all. That defect
-affects any install that boots the API-only backend image through
-`backend/entrypoint.sh` — the Helm chart and the root development
-`docker-compose.yml`. The production Docker Compose install is unaffected: it runs
-the all-in-one image via `deploy/supervisor/entrypoint.sh`, which only runs
-`alembic upgrade heads`. Readiness, sign-in, model
-backends, pipeline runs, upgrade and rollback are therefore unproven on the current
-release.
+**The chart was proven end to end on a real EKS cluster on 2026-11-26**
+(FAR-2770). Cluster shape: eksctl in `us-east-1` (AWS account 365370368472),
+cluster `farna-control-validation`, EKS 1.34 (Kubernetes `v1.34.12-eks-9adbfea`),
+2 x `m7i-flex.large` managed nodes, chart `farna-control-0.3.330`, embedded Redis
+(`redis.embedded=true` with a password), Postgres `postgres:16` in the sibling
+namespace `farna-control-db` with an admin role holding CREATEROLE + CREATEDB,
+ingress disabled, and images built from the current tree for `linux/amd64` and
+tagged `helm-validate-20261126` in ECR. On a fresh database the backend migrated
+with a single `alembic upgrade heads` (`0350_baseline_schema` to
+`0368_invitations_quarantine_rls`), all five workloads became Ready across both
+nodes, `/healthz/ready` returned 200 with top-level `status: ok`, sign-in through
+the UI worked, a model backend was created (proving the `FERNET_KEY` credential
+path), one pipeline ran to terminal status `complete` (run id
+`2384d050-194b-4599-bbf5-0cf235542b29`), and `helm upgrade` followed by
+`helm rollback` left readiness green, sign-in working and the pipeline list
+intact. This supersedes the 2026-11-25 attempt (FAR-2770; PR #3525), which failed
+only because `backend/entrypoint.sh` still booted the retired
+`alembic upgrade 0001_v2_identity_org` revision; FAR-2777 (PR #3527) replaced it
+with the single `alembic upgrade heads` and the 2026-11-26 run re-validated the
+chart. `deploy/helm/farna-control/README.md` §Validation Status carries the full
+evidence and the open follow-ups.
+
+Also observed on that fresh install and owned separately (FAR-2803, not fixed):
+the boot seed logs an RLS rejection for `environment_profiles` and leaves the
+table empty, so a fresh install currently ships no default environment profiles.
+It did not block readiness or the pipeline run above.
 
 One further limitation is by design for now and is **not** validated behaviour:
 the chart takes no pre-upgrade database snapshot (FAR-2675 is open), so a failed
 migration on the Helm path has nothing to restore, and `helm rollback` reverts
-Kubernetes objects only, never data.
+Kubernetes objects only, never data. Recovery on Kubernetes is unproven.
 
 **Stack versus runtime provider.** The chart installs the stack, not the agent
 runtime. The Kubernetes *runtime provider*, which runs agent workspaces as
