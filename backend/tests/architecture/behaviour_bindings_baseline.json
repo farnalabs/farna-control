@@ -653,54 +653,6 @@
       "entry": "docs/product-map/infra/health-checks.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
-    "hitl-gates-01": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-02": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-05": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
-    "hitl-gates-06": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-07": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-08": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-09": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-10": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-11": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
-    "hitl-gates-17": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
-    "hitl-gates-18": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-19": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
     "hitl-gates-20": {
       "entry": "docs/product-map/hitl/hitl-gates.md",
       "reason": "behaviour text cites a test artefact that does not resolve to a proving test"

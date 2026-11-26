@@ -1,16 +1,28 @@
 #!/usr/bin/env python3
 """Gate a pre-push check: only run the actual command when relevant files changed.
 
-Used by the pre-push hooks (mypy, schema-freshness) to skip expensive checks
-when no relevant source files changed between the branch and origin/main.
+Used by the pre-push hooks (mypy, vue-tsc, schema freshness, architecture
+suite, affected tests) to skip expensive checks when no relevant files changed
+between the branch and origin/main.
 
 Usage:
     python scripts/run_prepush_gated_check.py --pattern "backend/src/**/*.py" -- uv --directory backend run mypy src/farna/
     python scripts/run_prepush_gated_check.py --pattern "backend/src/**/*.py" -- pnpm run type-check
 
-The --pattern glob is matched against files changed between origin/main and HEAD.
-If zero files match, the check is skipped (exit 0).  If files match, the command
-after ``--`` is executed.
+    # --pattern is repeatable; the check runs when ANY pattern matches.
+    python scripts/run_prepush_gated_check.py \\
+        --pattern "backend/src/**/*.py" \\
+        --pattern "frontend/src/**" \\
+        --rerun-hint "uv run pytest backend/tests/architecture/" \\
+        -- uv run pytest backend/tests/architecture/
+
+The --pattern globs are matched against files changed between origin/main and
+HEAD.  If zero files match EVERY pattern, the check is skipped (exit 0).  If a
+file matches ANY pattern, the command after ``--`` is executed.
+
+``--rerun-hint`` is optional: when the command fails, the exact command to
+reproduce the failure locally is printed, so a red pre-push gate is always
+actionable without reading the hook definition.
 
 If the diff base cannot be resolved at all (e.g. a shallow clone with no merge
 base), the gate does NOT skip: it warns loudly and runs the check
@@ -128,27 +140,61 @@ def _matches_pattern(files: list[str], pattern: str) -> list[str]:
     return [f for f in files if regex.match(f.replace("\\", "/"))]
 
 
-def main() -> int:
-    args = sys.argv[1:]
+def _matches_any_pattern(files: list[str], patterns: list[str]) -> list[str]:
+    """Return the union of files matching ANY of *patterns*, in input order.
 
-    # Parse --pattern <glob> ... -- <command...>
-    pattern = None
+    Hooks that care about more than one tree (the architecture suite reads both
+    ``backend/src`` and ``frontend/src``) pass several ``--pattern`` values; one
+    hook invocation is cheaper than two hooks scanning the same diff.
+    """
+    matched: list[str] = []
+    seen: set[str] = set()
+    for pattern in patterns:
+        for path in _matches_pattern(files, pattern):
+            if path not in seen:
+                seen.add(path)
+                matched.append(path)
+    return matched
+
+
+def _parse_args(args: list[str]) -> tuple[list[str], str | None, list[str]] | None:
+    """Parse ``--pattern``/``--rerun-hint``/``--`` from *args*.
+
+    Returns ``(patterns, rerun_hint, command)`` or ``None`` after printing a
+    usage error.  ``--pattern`` is repeatable.
+    """
+    patterns: list[str] = []
+    rerun_hint: str | None = None
     cmd: list[str] = []
     i = 0
     while i < len(args):
         if args[i] == "--pattern" and i + 1 < len(args):
-            pattern = args[i + 1]
+            patterns.append(args[i + 1])
+            i += 2
+        elif args[i] == "--rerun-hint" and i + 1 < len(args):
+            rerun_hint = args[i + 1]
             i += 2
         elif args[i] == "--":
             cmd = args[i + 1 :]
             break
         else:
             print(f"Usage: unexpected argument {args[i]!r}", file=sys.stderr)
-            return 2
+            return None
 
-    if pattern is None or not cmd:
-        print("Usage: run_prepush_gated_check.py --pattern <glob> -- <command...>", file=sys.stderr)
+    if not patterns or not cmd:
+        print(
+            "Usage: run_prepush_gated_check.py --pattern <glob> [--pattern <glob> ...] [--rerun-hint <command>] -- <command...>",
+            file=sys.stderr,
+        )
+        return None
+    return patterns, rerun_hint, cmd
+
+
+def main() -> int:
+    parsed = _parse_args(sys.argv[1:])
+    if parsed is None:
         return 2
+    patterns, rerun_hint, cmd = parsed
 
     # Check changed files
     changed = _git_diff_names()
@@ -158,26 +204,32 @@ def main() -> int:
         # say so loudly.  An extra check run is safe; a gate that looks like
         # "ran and passed" while never executing is not.
         print(
-            "warning: cannot resolve diff base against origin/main — running check UNCONDITIONALLY "
-            "(base unresolved; skipping would silently disable this gate)",
+            "warning: cannot resolve diff base against origin/main — running check UNCONDITIONALLY (base unresolved; skipping would silently disable this gate)",
             file=sys.stderr,
         )
     elif not changed:
         print("no files changed vs origin/main — skipping check", file=sys.stderr)
         return 0
     else:
-        matched = _matches_pattern(changed, pattern)
+        matched = _matches_any_pattern(changed, patterns)
         if not matched:
-            print(f"no files matching {pattern} changed — skipping check", file=sys.stderr)
+            scope = ", ".join(patterns)
+            print(f"no files matching {scope} changed — skipping check", file=sys.stderr)
             return 0
 
-        print(f"changed files matching {pattern}: {len(matched)} (running check)", file=sys.stderr)
+        scope = ", ".join(patterns)
+        print(f"changed files matching {scope}: {len(matched)} (running check)", file=sys.stderr)
 
     # Run the actual command. `cmd` is the literal command declared after `--`
     # in the hook's .pre-commit-config.yaml entry — developer-controlled, not
     # remote/LLM input — and subprocess runs without a shell, so no command
     # injection is reachable (pythonsecurity:S8705 false positive).
     result = subprocess.run(cmd, check=False)  # NOSONAR
+    if result.returncode != 0 and rerun_hint:
+        print(
+            f"\nFAILED: gate exited {result.returncode}. Rerun locally with:\n    {rerun_hint}",
+            file=sys.stderr,
+        )
     return result.returncode
 
 

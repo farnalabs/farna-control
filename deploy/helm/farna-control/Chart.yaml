@@ -4,8 +4,8 @@ description: >-
   Vendor-neutral Helm chart for the Farna Control stack — backend API, SAQ
   workers, frontend SPA, and Redis. Postgres is external/optional.
 type: application
-version: 0.3.330
-appVersion: "0.3.330"
+version: 0.3.331
+appVersion: "0.3.331"
 keywords:
   - farna-control
   - agent-governance

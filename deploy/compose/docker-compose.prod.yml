@@ -15,7 +15,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U farna_control"]
+      # FAR-2808: TCP, not the default unix socket - the entrypoint's temporary
+      # initdb server is socket-only (`listen_addresses=''`) and would answer a
+      # host-less probe, going green before the real server exists. See the root
+      # compose's `db` for the full mechanism.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U farna_control -d farna_control"]
       interval: 5s
       timeout: 5s
       retries: 5
