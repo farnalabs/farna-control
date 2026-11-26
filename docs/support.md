@@ -146,6 +146,7 @@ is written). The output begins with a bundle-format reference line carrying the 
 version and a short reference, then:
 
 ```text
+farna-control support bundle 1 ref=MSB-1-20261102T101500Z-deadbeef
 bundle: /home/you/modulo-support-MSB-1-20261102T101500Z-deadbeef.zip (348201 bytes)
 Open the bundle and check it before sending it to Farnalabs support.
 ```
