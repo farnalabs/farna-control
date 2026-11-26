@@ -147,9 +147,9 @@ async def _safe_pipeline_name(
 # catastrophically on a long run (a 660-char ``'/aaaaaaaaaa'`` repeat measured
 # >20s), which would hang the executor's ``except`` handler on every failed run.
 _SOURCE_PATH_RE = re.compile(r"(?:[A-Za-z]:)?(?:[/\\][^\s\"':;,()\[\]<>/\\]+)+\.py[cod]?\b")
-# One dotted segment (e.g. ``farna.db`` / ``modulo.core``) is already an
-# internal module reference and must be scrubbed too.
-_INTERNAL_MODULE_RE = re.compile(r"\b(?:farna|modulo)(?:\.\w+){1,}\b")
+# One dotted segment (e.g. ``farna.db``) is already an internal module
+# reference and must be scrubbed too.
+_INTERNAL_MODULE_RE = re.compile(r"\bfarna(?:\.\w+){1,}\b")
 _TRACEBACK_HEADER = "Traceback (most recent call last)"
 
 # Upper bound on the text handed to the scrub patterns above. They run on every
@@ -166,7 +166,7 @@ def _public_exception_message(exc: BaseException) -> str:
     Keeps the exception's own wording (the readable part a user needs) and
     scrubs anything that would leak the codebase layout: an embedded formatted
     traceback, ``File "...", line N`` frame lines, source file paths and
-    internal ``farna.*`` / ``modulo.*`` module paths. Never raises.
+    internal ``farna.*`` module paths. Never raises.
     """
     try:
         raw = str(exc).strip()
