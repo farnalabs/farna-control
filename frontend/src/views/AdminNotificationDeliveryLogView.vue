@@ -162,27 +162,28 @@
           >
             {{ $t('views.AdminNotificationDeliveryLogView.reset') }}
           </Button>
-          <button
+          <Button
             v-if="hasRetryableItems && !retryAllConfirm"
-            type="button"
+            variant="warning"
+            outlined
             :disabled="retryingAll"
             data-testid="admin-notification-log-retry-all"
             class="rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm font-medium text-warning-text hover:bg-warning/20 disabled:opacity-40"
             @click="retryAllConfirm = true"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.retry_all_failed') }}
-          </button>
+          </Button>
           <div v-if="retryAllConfirm" class="flex items-center gap-2">
             <span class="text-sm text-muted-foreground">{{ $t('views.AdminNotificationDeliveryLogView.retry_all_confirm') }}</span>
-            <button
-              type="button"
+            <Button
+              variant="warning"
               :disabled="retryingAll"
               data-testid="admin-notification-log-retry-all-confirm"
               class="rounded-lg bg-warning px-3 py-1.5 text-sm font-medium text-warning-foreground hover:bg-warning/90 disabled:opacity-50"
               @click="retryAllFailed"
             >
               {{ retryingAll ? $t('views.AdminNotificationDeliveryLogView.retrying_all') : $t('views.AdminNotificationDeliveryLogView.confirm') }}
-            </button>
+            </Button>
             <Button
               variant="secondary"
               size="sm"
@@ -266,19 +267,16 @@
               @keydown.space.prevent="toggleRow(entry.id)"
             >
               <td class="table-cell text-muted-foreground">
-                <button
-                  type="button"
-                  class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                <Disclosure
+                  :open="expandedId === entry.id"
+                  :controls="'admin-notification-log-detail-' + entry.id"
                   :aria-label="$t('views.AdminNotificationDeliveryLogView.expand_delivery', { id: entry.id })"
                   :data-testid="'admin-notification-log-expand-' + entry.id"
-                  @click.stop="toggleRow(entry.id)"
-                >
-                  <ChevronRight
-                    :class="expandedId === entry.id ? 'rotate-90' : ''"
-                    class="h-3.5 w-3.5 transition-transform"
-                    aria-hidden="true"
-                  />
-                </button>
+                  chevron-class="h-3.5 w-3.5 transition-transform"
+                  class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  stop-propagation
+                  @update:open="toggleRow(entry.id)"
+                />
               </td>
               <td class="table-cell whitespace-nowrap text-muted-foreground">
                 {{ formatTimestamp(entry.created_at) }}
@@ -313,7 +311,11 @@
               </td>
             </tr>
             <template v-if="expandedId">
-              <tr v-for="entry in expandedEntries" :key="`exp-${entry.id}`">
+              <tr
+                v-for="entry in expandedEntries"
+                :id="'admin-notification-log-detail-' + entry.id"
+                :key="`exp-${entry.id}`"
+              >
               <td colspan="8" class="table-cell bg-muted/20">
                 <div class="space-y-2 text-sm">
                   <div v-if="entry.response_body" class="rounded border bg-card p-3">
@@ -408,8 +410,8 @@ import DataCard from '../components/ui/DataCard.vue'
 import Field from '../components/ui/Field.vue'
 import Input from '../components/ui/Input.vue'
 import Button from '../components/ui/Button.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
 import Select from '../components/shared/AppSelect.vue'
-import { ChevronRight } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import { usePlanStore } from '../stores/planStore'
 

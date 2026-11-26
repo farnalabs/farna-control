@@ -240,26 +240,23 @@
               </td>
               <td class="table-cell max-w-xs truncate text-muted-foreground" v-tooltip.top="{ value: summarize(event), showDelay: 300 }">{{ summarize(event) }}</td>
               <td class="table-cell text-xs text-muted-foreground">
-                <button
-                  type="button"
-                  class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                <Disclosure
+                  :open="expandedId === event.id"
+                  :controls="'admin-audit-event-detail-' + event.id"
+                  chevron="down"
                   :aria-label="$t('views.AdminAuditView.expand_event', { id: event.id })"
                   :data-testid="'admin-audit-event-expand-' + event.id"
-                  @click.stop="toggleExpand(event.id)"
-                >
-                  <ChevronDown
-                    class="h-4 w-4 transition-transform"
-                    :class="{ 'rotate-180': expandedId === event.id }"
-                    aria-hidden="true"
-                  />
-                </button>
+                  class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  stop-propagation
+                  @update:open="toggleExpand(event.id)"
+                />
               </td>
             </tr>
             <!-- The detail row is rendered as the expanded row's immediate
                  sibling. As a lone `v-if` after the loop it always appeared at
                  the BOTTOM of the table, so expanding a row near the top
                  flipped the chevron with no visible change on screen. -->
-            <tr v-if="expandedId === event.id">
+            <tr v-if="expandedId === event.id" :id="'admin-audit-event-detail-' + event.id">
               <td colspan="6" class="table-cell bg-muted">
                 <div class="space-y-3">
                   <div v-if="expandedEvent?.payload_json && Object.keys(expandedEvent.payload_json).length > 0">
@@ -453,22 +450,19 @@
                 </td>
                 <td class="table-cell max-w-xs truncate text-muted-foreground" v-tooltip.top="{ value: summarize(event), showDelay: 300 }">{{ summarize(event) }}</td>
                 <td class="table-cell text-xs text-muted-foreground">
-                  <button
-                    type="button"
-                    class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <Disclosure
+                    :open="expandedSystemId === event.id"
+                    :controls="'admin-audit-system-event-detail-' + event.id"
+                    chevron="down"
                     :aria-label="$t('views.AdminAuditView.expand_event', { id: event.id })"
                     :data-testid="'admin-audit-system-event-expand-' + event.id"
-                    @click.stop="toggleSystemExpand(event.id)"
-                  >
-                    <ChevronDown
-                      class="h-4 w-4 transition-transform"
-                      :class="{ 'rotate-180': expandedSystemId === event.id }"
-                      aria-hidden="true"
-                    />
-                  </button>
+                    class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    stop-propagation
+                    @update:open="toggleSystemExpand(event.id)"
+                  />
                 </td>
               </tr>
-              <tr v-if="expandedSystemId === event.id">
+              <tr v-if="expandedSystemId === event.id" :id="'admin-audit-system-event-detail-' + event.id">
                 <td colspan="6" class="table-cell bg-muted">
                   <div class="space-y-3">
                     <div v-if="expandedSystemEvent?.payload_json && Object.keys(expandedSystemEvent.payload_json).length > 0">
@@ -528,6 +522,7 @@
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
 import StateTabs, { type StateTab } from '../components/shared/StateTabs.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import Button from '../components/ui/Button.vue'
@@ -553,7 +548,6 @@ import { formatDateFilename } from '../lib/formatDate'
 import { shortId } from '../utils/format'
 import Select from '../components/shared/AppSelect.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
-import { ChevronDown } from '@lucide/vue'
 import { useCurrentUser } from '../composables/useCurrentUser'
 
 const { t } = useI18n()

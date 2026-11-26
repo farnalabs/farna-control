@@ -272,54 +272,54 @@
             data-testid="hitl-review-row-checkbox"
             @update:model-value="toggleSelect(gate)"
           />
-          <button
-            type="button"
+          <Disclosure
+            :open="expandedKey === expandKey(gate)"
+            :controls="'hitl-review-panel-' + expandKey(gate)"
             data-testid="hitl-review-toggle-expand"
             class="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-2 text-left md:flex-nowrap md:items-center md:gap-4"
-            @click="toggleExpand(gate)"
+            @update:open="toggleExpand(gate)"
           >
-            <svg
-              class="h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform"
-              :class="{ 'rotate-90': expandedKey === expandKey(gate) }"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <path d="m9 18 6-6-6-6" />
-            </svg>
-            <div class="w-full flex-shrink-0 md:w-24">
-              <span :class="statusBadgeClass(gateStatus(gate))">
-                {{ gateStatus(gate) }}
+            <template #trigger="{ open, chevronClass, rotationClass }">
+              <ChevronRight
+                :class="[chevronClass, open && rotationClass]"
+                class="flex-shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div class="w-full flex-shrink-0 md:w-24">
+                <span :class="statusBadgeClass(gateStatus(gate))">
+                  {{ gateStatus(gate) }}
+                </span>
+              </div>
+              <div class="min-w-0 flex-1 md:flex-[2]">
+                <p class="truncate text-sm font-medium" data-testid="hitl-review-pipeline-name">{{ pipelineDisplayName(gate) }}</p>
+              </div>
+              <div class="min-w-0 flex-1 md:flex-[2]">
+                <p class="truncate text-sm font-medium text-foreground" data-testid="hitl-review-node-name">
+
+
+                  {{ gate.label || shortId(gate.review_id) }}
+                </p>
+                <p v-if="gateDescriptionSnippet(gate)" class="mt-0.5 truncate text-xs text-muted-foreground" data-testid="hitl-review-snippet">
+                  {{ gateDescriptionSnippet(gate) }}
+                </p>
+              </div>
+               <div class="min-w-0 flex-1 md:flex-[1.25]">
+                 <p class="truncate text-xs text-muted-foreground">
+                   {{ gate.claimed_by ? (gate.claimed_by_name || gate.claimed_by) : $t('views.SettingsHitlReviewView.unassigned') }}
+                 </p>
+               </div>
+               <span class="w-full flex-shrink-0 text-left text-xs text-muted-foreground md:w-40 md:text-right">
+
+                {{ formatDate(gate.claimed_at || gate.created_at || '') }}
               </span>
-            </div>
-            <div class="min-w-0 flex-1 md:flex-[2]">
-              <p class="truncate text-sm font-medium" data-testid="hitl-review-pipeline-name">{{ pipelineDisplayName(gate) }}</p>
-            </div>
-            <div class="min-w-0 flex-1 md:flex-[2]">
-              <p class="truncate text-sm font-medium text-foreground" data-testid="hitl-review-node-name">
-
-
-                {{ gate.label || shortId(gate.review_id) }}
-              </p>
-              <p v-if="gateDescriptionSnippet(gate)" class="mt-0.5 truncate text-xs text-muted-foreground" data-testid="hitl-review-snippet">
-                {{ gateDescriptionSnippet(gate) }}
-              </p>
-            </div>
-             <div class="min-w-0 flex-1 md:flex-[1.25]">
-               <p class="truncate text-xs text-muted-foreground">
-                 {{ gate.claimed_by ? (gate.claimed_by_name || gate.claimed_by) : $t('views.SettingsHitlReviewView.unassigned') }}
-               </p>
-             </div>
-             <span class="w-full flex-shrink-0 text-left text-xs text-muted-foreground md:w-40 md:text-right">
-
-              {{ formatDate(gate.claimed_at || gate.created_at || '') }}
-            </span>
-          </button>
+            </template>
+          </Disclosure>
         </div>
-        <div v-if="expandedKey === expandKey(gate)" class="border-t p-4">
+        <div
+          v-if="expandedKey === expandKey(gate)"
+          :id="'hitl-review-panel-' + expandKey(gate)"
+          class="border-t p-4"
+        >
           <!-- No @claimed handler (FAR-686): a loadGates() refetch flips the
                page-level `loading` flag, unmounting this list branch and with
                it the card's in-session claim token. The card already shows
@@ -392,6 +392,8 @@ import HitlReviewCard from '../components/hitl/HitlReviewCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Button from '../components/ui/Button.vue'
 import Checkbox from '../components/ui/Checkbox.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
+import { ChevronRight } from '@lucide/vue'
 import Field from '../components/ui/Field.vue'
 import Input from '../components/ui/Input.vue'
 import Textarea from '../components/ui/Textarea.vue'
