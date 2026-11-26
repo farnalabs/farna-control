@@ -35,29 +35,31 @@
           </p>
           <p class="text-xs text-muted-foreground">
             {{ $t('views.RunDetailView.run_id_label') }} <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{{ shortId(run.run_id) }}</code>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               data-testid="run-detail-copy-run-id"
               :aria-label="$t('views.RunDetailView.copy_run_id')"
-              class="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/10"
+              class="ml-1 gap-1"
               @click="copyRunId"
             >
               {{ copied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-            </button>
+            </Button>
           </p>
         <template #right>
         <div class="text-right text-xs text-muted-foreground">
           <div v-if="run.total_cost_usd != null" class="text-base font-semibold tabular-nums text-foreground">
             {{ $t('views.RunDetailView.total_label') }} {{ formatMoney(Number(formattedCost), currencyCode, 6) }}
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             data-testid="run-detail-share-summary"
-            class="mt-2 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-primary-text hover:bg-primary/10"
+            class="mt-2 gap-1"
             @click="copySupportReference"
           >
             {{ supportCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.support_reference') }}
-          </button>
+          </Button>
         </div>
         </template>
       </PageHeader>
@@ -219,14 +221,15 @@
       <BaseCard v-if="runIO?.input_payload" padding="md" class="mb-4" data-testid="run-detail-input-payload">
         <CardHeader heading-level="h2" :title="$t('views.RunDetailView.run_input')">
           <template #actions>
-            <button
-              type="button"
-              class="text-xs text-primary-text hover:bg-primary/10 rounded px-2 py-1"
+            <Button
+              variant="ghost"
+              size="sm"
+              class="text-xs"
               data-testid="run-detail-copy-input"
               @click="copyInputPayload"
             >
               {{ inputPayloadCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-            </button>
+            </Button>
           </template>
         </CardHeader>
         <JsonViewer :data="runIO.input_payload" :show-toolbar="true" :max-height="'16rem'" />
@@ -280,34 +283,35 @@
 
       <!-- Cancel button for non-terminal runs -->
       <div v-if="canCancel" class="my-4">
-        <button
-          type="button"
+        <Button
+          variant="danger"
+          :outlined="true"
           :disabled="cancelling"
           data-testid="run-detail-cancel"
-          class="inline-flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive-text hover:bg-destructive/20 disabled:opacity-50"
+          class="gap-2"
           @click="cancelRun"
         >
           <LoaderCircle v-if="cancelling" aria-hidden="true" class="h-4 w-4 animate-spin" />
           <CircleStop v-else aria-hidden="true" class="h-4 w-4" />
           {{ cancelling ? $t('views.RunDetailView.stopping') : $t('views.RunDetailView.stop') }}
-        </button>
+        </Button>
         <span v-if="cancelError" role="alert" class="ml-3 text-xs text-destructive">{{ cancelError }}</span>
       </div>
 
       <!-- Re-run button for terminal runs (FAR-788) -->
       <div v-if="canRerun" class="my-4" data-testid="run-detail-rerun">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="rerunning"
           data-testid="run-rerun"
           :aria-label="$t('views.RunDetailView.rerun')"
-          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+          class="gap-2 whitespace-nowrap"
           @click="onRerunClick"
         >
           <LoaderCircle v-if="rerunning" aria-hidden="true" class="h-4 w-4 animate-spin" />
           <RotateCcw v-else class="h-4 w-4" aria-hidden="true" />
           {{ rerunning ? $t('views.RunDetailView.rerunning') : (rerunConfirming ? $t('views.RunDetailView.rerun_confirm') : $t('views.RunDetailView.rerun')) }}
-        </button>
+        </Button>
         <span v-if="rerunConfirming" role="alert" class="ml-3 text-xs text-warning-text">{{ $t('views.RunDetailView.rerun_confirm_warning') }}</span>
         <span v-if="rerunError" role="alert" class="ml-3 text-xs text-destructive">{{ rerunError }}</span>
       </div>
@@ -319,15 +323,16 @@
       <div v-if="run.trace_id" class="flex items-center gap-2">
         <span class="text-xs text-muted-foreground">{{ $t('views.RunDetailView.otel_trace_id') }}</span>
         <code class="select-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs" :title="run.trace_id">{{ shortId(run.trace_id) }}</code>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           data-testid="run-detail-copy-trace-id"
           :aria-label="$t('views.RunDetailView.copy_trace_id')"
-          class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10"
+          class="gap-1"
           @click="copyTraceId"
         >
           {{ copied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-        </button>
+        </Button>
         <a
           v-if="run.trace_url"
           :href="run.trace_url"
@@ -349,14 +354,15 @@
         heading-level="h2"
       >
         <template #headerActions>
-          <button
-            type="button"
-            class="px-3 py-1.5 text-xs font-medium rounded-lg border border-input bg-background hover:bg-accent transition-colors"
+          <Button
+            variant="secondary"
+            size="sm"
+            class="text-xs"
             @click="copyOutput"
             data-testid="run-detail-copy-output"
           >
             {{ outputCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-          </button>
+          </Button>
         </template>
         <JsonViewer :data="lastNodeOutput" :show-toolbar="false" :max-height="'30rem'" />
       </DataCard>
@@ -620,15 +626,16 @@
             >
               <td class="table-cell font-medium" :title="node.name">
                 <span class="select-all">{{ nodeLabel(node.name) }}</span>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   data-testid="run-detail-copy-node-id"
                   :aria-label="$t('views.RunDetailView.copy_node_id')"
-                  class="ml-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/10"
+                  class="ml-1"
                   @click="copyText(node.name)"
                 >
                   <Copy aria-hidden="true" class="h-3 w-3" />
-                </button>
+                </Button>
               </td>
               <td class="table-cell">
                 <span :class="[nodeStatusBadgeClass(node), 'capitalize']">{{ node.status }}</span>
@@ -671,39 +678,42 @@
                 <span v-else class="text-muted-foreground">—</span>
               </td>
               <td class="table-cell">
-                <button
+                <Button
                   v-if="node.io"
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   data-testid="run-detail-toggle-io"
-                  class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10"
+                  class="gap-1"
                   @click="toggleNodeIO(node.name)"
                 >
                   {{ expandedNodes.has(node.name) ? $t('views.RunDetailView.hide') : $t('views.RunDetailView.show') }}
-                </button>
+                </Button>
                 <span v-else class="text-muted-foreground">—</span>
               </td>
               <td class="table-cell">
-                <button
+                <Button
                   v-if="node.hasLogs || node.telemetry"
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   data-testid="run-detail-toggle-logs"
-                  class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10"
+                  class="gap-1"
                   @click="toggleNodeLogs(node.name)"
                 >
                   {{ expandedLogs.has(node.name) ? $t('views.RunDetailView.hide') : $t('views.RunDetailView.view') }}
-                </button>
+                </Button>
                 <span v-else class="text-muted-foreground">—</span>
               </td>
               <td class="table-cell">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   data-testid="run-detail-show-prompt"
-                  class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10 disabled:opacity-50"
+                  class="gap-1"
                   :disabled="promptLoading.has(node.name)"
                   @click="revealPrompt(node.name)"
                 >
                   {{ $t('views.RunDetailView.view_prompt') }}
-                </button>
+                </Button>
               </td>
             </tr>
 
@@ -854,15 +864,16 @@
                   data-testid="run-detail-artifact-error"
                 >
                   <span>{{ $t('views.RunDetailView.artifact_load_error') }}</span>
-                  <button
-                    type="button"
-                    class="rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    class="text-xs"
                     :aria-label="$t('views.RunDetailView.artifact_load_retry_aria')"
                     data-testid="run-detail-artifact-retry"
                     @click="retryNodeArtifacts(node.name)"
                   >
                     {{ $t('views.RunDetailView.artifact_load_retry') }}
-                  </button>
+                  </Button>
                 </div>
                 <div
                   v-if="!getNodeLog(node.name, 'agent_stdout') && !getNodeLog(node.name, 'agent_stderr') && !liveOutput[node.name] && !nodeArtifactMap[node.name]?.length"
@@ -1084,7 +1095,7 @@ import RunPipelineVersionLink from '../components/runs/RunPipelineVersionLink.vu
 import RunAttemptHistory from '../components/runs/RunAttemptHistory.vue'
 import { isAnalyzableFailure, type AnalyzeRunInfo } from '../components/runs/analyzeRun'
 import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { requestRunCancellation, requestRunRerun } from '../lib/api/runs'
 import { isHitlActionableStatus, isTerminalStatus } from '../constants/runStatuses'

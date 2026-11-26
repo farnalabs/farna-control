@@ -2987,6 +2987,13 @@ case "${1:-}" in
   registry)
     if [[ " $* " == *" --password-stdin "* ]]; then cat >/dev/null; fi
     printf 'helm login marker\\n' >> "$HARNESS_DIR/publication-markers" ;;
+  pull)
+    # FAR-2802: the promote step probes the registry for an already-published
+    # chart version before pushing. Nothing is published in this rehearsal, so
+    # the probe answers with the not-found error a real registry returns and the
+    # step pushes as before.
+    printf 'Error: failed to pull "oci://ghcr.io/example/repo/charts/farna-control": not found\\n' >&2
+    exit 1 ;;
   package)
     destination=""
     version=""
