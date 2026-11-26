@@ -139,9 +139,25 @@ async def _safe_pipeline_name(
 # the API, so a raw traceback (module paths, source file names) is a
 # data-hygiene leak. The FULL traceback is retained in the server log by each
 # caller's ``exc_info`` record; this only scrubs what is STORED on the row.
-_SOURCE_PATH_RE = re.compile(r"(?:[A-Za-z]:)?(?:[/\\][^\s\"':;,()\[\]<>]+)+\.py[cod]?\b")
-_INTERNAL_MODULE_RE = re.compile(r"\b(?:farna|modulo)(?:\.\w+){2,}\b")
+#
+# The separator and the inner character class are MUTUALLY EXCLUSIVE: the inner
+# class excludes ``/`` and ``\`` so ``(?:[/\\][^/\\]+)+`` has exactly one way to
+# split a path. Leaving the separator inside the class yields
+# ``(?:[/\\][^...]+)+`` — the classic ``(a+)+`` shape that backtracks
+# catastrophically on a long run (a 660-char ``'/aaaaaaaaaa'`` repeat measured
+# >20s), which would hang the executor's ``except`` handler on every failed run.
+_SOURCE_PATH_RE = re.compile(r"(?:[A-Za-z]:)?(?:[/\\][^\s\"':;,()\[\]<>/\\]+)+\.py[cod]?\b")
+# One dotted segment (e.g. ``farna.db`` / ``modulo.core``) is already an
+# internal module reference and must be scrubbed too.
+_INTERNAL_MODULE_RE = re.compile(r"\b(?:farna|modulo)(?:\.\w+){1,}\b")
 _TRACEBACK_HEADER = "Traceback (most recent call last)"
+
+# Upper bound on the text handed to the scrub patterns above. They run on every
+# failed run inside the executor's ``except`` handler, so the untrusted message
+# is capped BEFORE the pattern engine sees it — the same ReDoS defense
+# ``sanitize_error_text`` uses. Without a cap a long URL / base64 / path run in
+# an exception message hands the regex an unbounded haystack.
+_MAX_PUBLIC_MESSAGE_CHARS = 5000
 
 
 def _public_exception_message(exc: BaseException) -> str:
@@ -165,6 +181,9 @@ def _public_exception_message(exc: BaseException) -> str:
     # Drop any residual ``File "<path>", line N, in <func>`` frame lines.
     lines = [line for line in raw.splitlines() if not line.strip().startswith('File "')]
     raw = " ".join(line.strip() for line in lines if line.strip())
+    # Bound BEFORE the scrub regexes (ReDoS defense): the message is untrusted
+    # and may be arbitrarily long.
+    raw = raw[:_MAX_PUBLIC_MESSAGE_CHARS]
     raw = _SOURCE_PATH_RE.sub("<internal path>", raw)
     raw = _INTERNAL_MODULE_RE.sub("<internal module>", raw)
     return raw.strip()

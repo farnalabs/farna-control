@@ -9,6 +9,7 @@ code under test were deleted or altered.
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -81,6 +82,7 @@ from farna.core.pipeline_engine.executor import (
     _terminal_failure,
     compute_retry_aware_topology_hash,
 )
+from farna.core.pipeline_engine.executor_parts.support import _public_exception_message
 from farna.core.pipeline_engine.node_runner import (
     ConnectorNodeFailedError,
     SupersededNodeError,
@@ -189,6 +191,38 @@ def test_failure_reason_respects_limit():
     except ValueError as exc:
         result = _failure_reason(exc, limit=100)
     assert len(result) <= 100
+
+
+def test_failure_reason_scrubs_single_segment_internal_module():
+    """A one-dotted internal module ref (``modulo.core``) is scrubbed too."""
+    result = _failure_reason(RuntimeError("import of modulo.core failed"))
+    assert "modulo.core" not in result
+    assert "<internal module>" in result
+
+
+def test_failure_reason_slash_run_does_not_backtrack_catastrophically():
+    """A long slash-separated run stays linear (ReDoS regression guard).
+
+    ``_SOURCE_PATH_RE`` runs on every failed run inside the executor's
+    ``except`` handler. Its old ``(?:[/\\\\][^...]+)+`` shape was the classic
+    ``(a+)+`` pattern: this exact 660-char ``'/aaaaaaaaaa'`` repeat took >20s to
+    fail. A correct pattern resolves it in microseconds, so a generous 2s wall
+    clock bound catches any reintroduction without being load-sensitive.
+    """
+    message = "/aaaaaaaaaa" * 60  # 660 chars: the shape that hung review
+    start = time.perf_counter()
+    result = _failure_reason(ValueError(message))
+    elapsed = time.perf_counter() - start
+    assert elapsed < 2.0, f"scrubbing a 660-char slash run took {elapsed:.2f}s (ReDoS)"
+    assert result.startswith("ValueError:")
+
+
+def test_public_exception_message_bounds_input_before_regex():
+    """The untrusted message is capped before the scrub regexes run."""
+    bounded = _public_exception_message(ValueError("x" * 200_000))
+    # No scrub pattern applies to an all-'x' message, so an uncapped
+    # implementation would return all 200000 chars.
+    assert len(bounded) <= 5000
 
 
 # ---------------------------------------------------------------------------
