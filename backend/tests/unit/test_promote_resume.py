@@ -477,3 +477,330 @@ def test_resume_guard_rejects_a_missing_ga_tag(tmp_path: Path) -> None:
     result, _ = _run_resume_guard(tmp_path, STUB_GA_STATE="absent")
     assert result.returncode != 0
     assert "does not exist on origin" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Idempotent GA publication on a resume (FAR-2802 second slice)
+# ---------------------------------------------------------------------------
+
+HELM_STEP = "Push Helm chart to OCI registry"
+PYPI_STEP = "Check whether this version is already published on PyPI"
+PYPI_PUBLISH_STEP = "Publish farna-control via Trusted Publishing"
+FREEZE_LIFT_STEP = "Lift release freeze after successful GA publication"
+
+
+def _helm_violations(script: str) -> list[str]:
+    problems: list[str] = []
+    if "helm pull" not in script:
+        problems.append("does not ask the registry whether the version exists")
+    if "--destination" not in script:
+        problems.append("does not pull to a scratch destination")
+    if "farna-control-${VERSION_NUM}.tgz" not in script:
+        problems.append("does not read the pulled chart archive")
+    if "Chart.yaml" not in script:
+        problems.append("does not read the published Chart.yaml")
+    if "PUBLISHED_VERSION" not in script:
+        problems.append("does not read the published chart version")
+    if "PUBLISHED_APP_VERSION" not in script:
+        problems.append("does not read the published appVersion")
+    if 'if [ "$PUBLISHED_VERSION" != "$VERSION_NUM" ]' not in script:
+        problems.append("does not require the published version to match")
+    if "not found|manifest unknown|no such manifest" not in script:
+        problems.append("does not distinguish a not-found pull from any other failure")
+    if "failed for a reason other than an absent version" not in script:
+        problems.append("does not fail closed on a non-not-found pull error")
+    if "skipping the push" not in script:
+        problems.append("does not skip the push when the version is already published")
+    pull_index = script.find("helm pull")
+    push_index = script.find("helm push")
+    if push_index == -1:
+        problems.append("has no helm push")
+    elif push_index < pull_index:
+        problems.append("pushes before checking whether the version exists")
+    return problems
+
+
+def _pypi_violations(script: str) -> list[str]:
+    problems: list[str] = []
+    if "https://pypi.org/pypi/farna-control/${VERSION}/json" not in script:
+        problems.append("does not query the PyPI JSON API for the version")
+    if "curl " not in script:
+        problems.append("does not use curl for the query")
+    if "--write-out '%{http_code}'" not in script:
+        problems.append("does not capture the HTTP status")
+    if 'echo "publish=false" >> "$GITHUB_OUTPUT"' not in script:
+        problems.append("does not set publish=false when already published")
+    if 'echo "publish=true" >> "$GITHUB_OUTPUT"' not in script:
+        problems.append("does not set publish=true when unpublished")
+    if "404)" not in script:
+        problems.append("does not treat 404 as unpublished")
+    if "200)" not in script:
+        problems.append("does not handle a 200 response")
+    if "different file set" not in script:
+        problems.append("does not fail loudly when the published file set differs")
+    if "Unexpected PyPI response" not in script:
+        problems.append("does not fail closed on an unexpected status")
+    if "sha256" in script.lower():
+        problems.append("compares file hashes instead of filenames")
+    return problems
+
+
+def _freeze_lift_violations(script: str) -> list[str]:
+    problems: list[str] = []
+    if "refs/heads/release-freeze" not in script:
+        problems.append("does not query release-freeze")
+    if "freeze_rc" not in script:
+        problems.append("does not branch on the query exit code")
+    if "already absent" not in script:
+        problems.append("does not tolerate an already-absent freeze")
+    if 'marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze' not in script:
+        problems.append("does not lift the freeze with the admin marker credential")
+    if "unknown hold" not in script:
+        problems.append("does not fail closed on an unqueryable freeze")
+    return problems
+
+
+def test_helm_push_skips_an_existing_version_and_fails_closed() -> None:
+    script = _release_job_run(HELM_STEP)
+    problems = _helm_violations(script)
+    assert not problems, "; ".join(problems)
+
+
+def test_pypi_check_is_a_step_that_gates_the_publish_action() -> None:
+    step = _job_step("publish-pypi", PYPI_STEP)
+    problems = _pypi_violations(str(step.get("run", "")))
+    assert not problems, "; ".join(problems)
+    assert step["id"] == "pypi-state"
+    publish = _job_step("publish-pypi", PYPI_PUBLISH_STEP)
+    assert publish["if"] == "steps.pypi-state.outputs.publish == 'true'"
+    names = [other.get("name") for other in _workflow()["jobs"]["publish-pypi"]["steps"]]
+    assert names.index(PYPI_STEP) < names.index(PYPI_PUBLISH_STEP)
+
+
+def test_freeze_lift_tolerates_an_absent_freeze_but_not_an_unknown_one() -> None:
+    script = _release_job_run(FREEZE_LIFT_STEP)
+    problems = _freeze_lift_violations(script)
+    assert not problems, "; ".join(problems)
+
+
+def test_resume_and_failed_resume_never_lift_the_freeze() -> None:
+    for name in (PROMOTE_STEP, "Re-establish release freeze after failed GA publication"):
+        block = _resume_block(_release_job_run(name))
+        assert "--delete refs/heads/release-freeze" not in block, name
+
+
+def test_freeze_cleanup_cannot_lift_the_freeze_on_a_promote() -> None:
+    condition = _workflow()["jobs"]["freeze-cleanup"]["if"]
+    assert "inputs.mode == 'cut'" in condition
+    assert "inputs.mode == 'recut'" in condition
+    assert "promote" not in condition
+
+
+def test_release_docs_document_the_idempotent_publication_paths() -> None:
+    docs = RELEASE_DOCS.read_text(encoding="utf-8")
+    assert "publication steps are idempotent" in docs
+    assert "never overwritten" in docs
+    assert "https://pypi.org/pypi/farna-control/<version>/json" in docs
+    assert "not-found error means" in docs
+    assert "freeze already being absent" in docs
+
+
+# ---------------------------------------------------------------------------
+# Executable harness: Helm and PyPI idempotency against stubbed tools
+# ---------------------------------------------------------------------------
+
+_HELM_STUB = """#!/usr/bin/env bash
+set -uo pipefail
+sub="$1"
+shift
+case "$sub" in
+  registry|login)
+    cat >/dev/null
+    exit 0
+    ;;
+  pull)
+    dest=""
+    ver=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --version) ver="$2"; shift 2 ;;
+        --destination) dest="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    stage="$dest/stage/farna-control"
+    case "${HELM_MODE:-absent}" in
+      present|mismatch)
+        mkdir -p "$stage"
+        app="$ver"
+        if [ "$HELM_MODE" = "mismatch" ]; then app="9.9.9"; fi
+        {
+          printf 'apiVersion: v2\\n'
+          printf 'name: farna-control\\n'
+          printf 'version: %s\\n' "$ver"
+          printf 'appVersion: "%s"\\n' "$app"
+        } > "$stage/Chart.yaml"
+        tar -czf "$dest/farna-control-$ver.tgz" -C "$dest/stage" farna-control
+        exit 0
+        ;;
+      absent)
+        echo 'Error: failed to pull "oci://ghcr.io/farnalabs/farna-control/charts/farna-control": not found' >&2
+        exit 1
+        ;;
+      *)
+        echo 'Error: failed to authorize: 401 Unauthorized' >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  package)
+    mkdir -p /tmp/helm-pkg
+    echo "package $*" >> "$STUB_HELM_LOG"
+    exit 0
+    ;;
+  push)
+    echo "push $*" >> "$STUB_HELM_LOG"
+    exit 0
+    ;;
+esac
+echo "unexpected helm call: $sub $*" >&2
+exit 127
+"""
+
+_CURL_STUB = """#!/usr/bin/env bash
+set -uo pipefail
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output) out="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+case "${PYPI_MODE:-unpublished}" in
+  published)
+    printf '%s' '{"info":{"version":"0.2.0"},"urls":[{"filename":"farna_control-0.2.0-py3-none-any.whl"},{"filename":"farna_control-0.2.0.tar.gz"}]}' > "$out"
+    printf '200'
+    ;;
+  different)
+    printf '%s' '{"info":{"version":"0.2.0"},"urls":[{"filename":"farna_control-0.2.0-py3-none-any.whl"},{"filename":"farna_control-0.2.0.tar.gz"},{"filename":"farna_control-0.2.0-py3-none-macosx_11_0_arm64.whl"}]}' > "$out"
+    printf '200'
+    ;;
+  unpublished)
+    printf '{"message":"Not Found"}' > "$out"
+    printf '404'
+    ;;
+  *)
+    printf '{"message":"boom"}' > "$out"
+    printf '500'
+    ;;
+esac
+"""
+
+
+def _run_helm(tmp_path: Path, **scenario: str) -> tuple[subprocess.CompletedProcess[str], Path]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(bin_dir / "helm", _HELM_STUB)
+    helm_log = tmp_path / "helm.log"
+    helm_log.write_text("", encoding="utf-8")
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "VERSION": VERSION,
+            "GH_TOKEN": "test-token",
+            "REGISTRY_USER": "tester",
+            "IMAGE_NAMESPACE": "farnalabs/farna-control",
+            "STUB_HELM_LOG": str(helm_log),
+            "HELM_MODE": "absent",
+        }
+    )
+    env.update(scenario)
+    return _run_bash(_release_job_run(HELM_STEP), cwd=tmp_path, env=env), helm_log
+
+
+@pytest.mark.posix_only
+def test_helm_tolerates_an_already_published_chart(tmp_path: Path) -> None:
+    result, helm_log = _run_helm(tmp_path, HELM_MODE="present")
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "already published" in result.stdout
+    assert not helm_log.read_text(encoding="utf-8").strip()
+
+
+@pytest.mark.posix_only
+def test_helm_fails_closed_when_the_published_version_disagrees(tmp_path: Path) -> None:
+    result, helm_log = _run_helm(tmp_path, HELM_MODE="mismatch")
+    assert result.returncode != 0
+    assert "refusing to overwrite an existing chart version" in result.stdout
+    assert not helm_log.read_text(encoding="utf-8").strip()
+
+
+@pytest.mark.posix_only
+def test_helm_pushes_when_the_version_is_absent(tmp_path: Path) -> None:
+    result, helm_log = _run_helm(tmp_path, HELM_MODE="absent")
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "not published yet; pushing it" in result.stdout
+    assert "push " in helm_log.read_text(encoding="utf-8")
+
+
+@pytest.mark.posix_only
+def test_helm_fails_closed_on_a_non_not_found_pull_error(tmp_path: Path) -> None:
+    result, helm_log = _run_helm(tmp_path, HELM_MODE="denied")
+    assert result.returncode != 0
+    assert "failed for a reason other than an absent version" in result.stdout
+    assert not helm_log.read_text(encoding="utf-8").strip()
+
+
+def _run_pypi(tmp_path: Path, **scenario: str) -> tuple[subprocess.CompletedProcess[str], str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(bin_dir / "curl", _CURL_STUB)
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "farna_control-0.2.0-py3-none-any.whl").write_text("wheel", encoding="utf-8")
+    (dist / "farna_control-0.2.0.tar.gz").write_text("sdist", encoding="utf-8")
+    output = tmp_path / "output"
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "VERSION": VERSION,
+            "GITHUB_OUTPUT": str(output),
+            "PYPI_MODE": "unpublished",
+        }
+    )
+    env.update(scenario)
+    script = str(_job_step("publish-pypi", PYPI_STEP)["run"])
+    result = _run_bash(script, cwd=tmp_path, env=env)
+    return result, output.read_text(encoding="utf-8") if output.exists() else ""
+
+
+@pytest.mark.posix_only
+def test_pypi_skips_an_upload_when_the_same_file_set_is_published(tmp_path: Path) -> None:
+    result, output = _run_pypi(tmp_path, PYPI_MODE="published")
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "publish=false" in output
+    assert "already published" in result.stdout
+
+
+@pytest.mark.posix_only
+def test_pypi_fails_closed_when_the_published_file_set_differs(tmp_path: Path) -> None:
+    result, output = _run_pypi(tmp_path, PYPI_MODE="different")
+    assert result.returncode != 0
+    assert "different file set" in result.stdout
+    assert "publish=" not in output
+
+
+@pytest.mark.posix_only
+def test_pypi_publishes_an_unpublished_version(tmp_path: Path) -> None:
+    result, output = _run_pypi(tmp_path, PYPI_MODE="unpublished")
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "publish=true" in output
+
+
+@pytest.mark.posix_only
+def test_pypi_fails_closed_on_an_unexpected_status(tmp_path: Path) -> None:
+    result, output = _run_pypi(tmp_path, PYPI_MODE="error")
+    assert result.returncode != 0
+    assert "Unexpected PyPI response 500" in result.stdout
+    assert "publish=" not in output

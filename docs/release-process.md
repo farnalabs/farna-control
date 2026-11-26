@@ -115,6 +115,13 @@ gh workflow run "Release: Unified Pipeline" -f mode=promote -f version=0.4.0 -f 
 
 A resume creates, moves and deletes nothing. It skips safety 2 and safety 4, the freeze/publication-hold swap, the promote PR creation and merge, and the tag push, and it never creates, moves or deletes the GA tag or `release-freeze`. It checks out the GA commit and re-runs only the publication steps. If the resume fails, the freeze is left where it is - at the GA commit - so another resume can re-verify and try again.
 
+The publication steps are idempotent, so a resume is safe after a partial publish and never overwrites anything already published:
+
+- **Helm chart** - before pushing, the workflow pulls `oci://ghcr.io/farnalabs/farna-control/charts/farna-control` at the target version. If that version is already published, the pulled `Chart.yaml` must report the same `version` and `appVersion`, and the push is skipped with a notice. Only a not-found error means "safe to push"; any other pull error is a hard failure. An existing chart version is never overwritten.
+- **PyPI** - before uploading, the workflow queries `https://pypi.org/pypi/farna-control/<version>/json`. A 404 means the version is not published yet and the upload proceeds. An HTTP 200 means it is already published: the published filenames must exactly match the built `backend/dist/*` filenames, and the upload is skipped; a different file set is a hard failure. Any other HTTP status fails closed. Wheels are not byte-reproducible, so the comparison is by filename, never by hash.
+- **Container images** - the GA retags are immutable SHA-derived tags, so re-running them is naturally idempotent.
+- **Freeze lift** - the final GA step remains the only place that lifts the freeze, and it now tolerates the freeze already being absent (it queries first; a genuinely unknown state still fails closed).
+
 ### Website rebuild hook (optional)
 
 The marketing website reads the latest GitHub Release at build time. As the last step of `Create GitHub Release` (modes `cut` and `recut`), the workflow POSTs to a Cloudflare Pages deploy hook so the website rebuilds with the new version and installer links. It is controlled by the repository secret `WEBSITE_DEPLOY_HOOK_URL`:

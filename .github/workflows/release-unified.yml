@@ -2550,9 +2550,41 @@ jobs:
         run: |
           set -euo pipefail
           VERSION_NUM="${VERSION}"
+          CHART_REF="oci://ghcr.io/${IMAGE_NAMESPACE}/charts/farna-control"
 
           # Log in to GHCR for Helm
           echo "${GH_TOKEN}" | helm registry login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+          # FAR-2802: a resumed promote re-runs this step, so it must never
+          # overwrite an existing chart version. Ask the registry first: a
+          # successful pull proves the version exists and its Chart.yaml must
+          # name the version and appVersion we would publish. Only a not-found
+          # error means "safe to push"; any other pull failure cannot prove
+          # either state and is a hard failure.
+          PULL_DIR="$(mktemp -d)"
+          PULL_LOG="$(mktemp)"
+          if helm pull "$CHART_REF" --version "$VERSION_NUM" --destination "$PULL_DIR" > "$PULL_LOG" 2>&1; then
+            PULLED_CHART="$PULL_DIR/farna-control-${VERSION_NUM}.tgz"
+            if [ ! -f "$PULLED_CHART" ]; then
+              echo "::error::helm pull reported success but ${PULLED_CHART} is missing; refusing to guess the published chart state."
+              exit 1
+            fi
+            tar -xzf "$PULLED_CHART" -C "$PULL_DIR"
+            PUBLISHED_VERSION="$(awk '/^version:[[:space:]]*/ { print $2; exit }' "$PULL_DIR/farna-control/Chart.yaml" | tr -d '"')"
+            PUBLISHED_APP_VERSION="$(awk '/^appVersion:[[:space:]]*/ { print $2; exit }' "$PULL_DIR/farna-control/Chart.yaml" | tr -d '"')"
+            if [ "$PUBLISHED_VERSION" != "$VERSION_NUM" ] || [ "$PUBLISHED_APP_VERSION" != "$VERSION_NUM" ]; then
+              echo "::error::Published chart farna-control reports version='${PUBLISHED_VERSION}' appVersion='${PUBLISHED_APP_VERSION}', expected both to be ${VERSION_NUM}; refusing to overwrite an existing chart version."
+              exit 1
+            fi
+            echo "::notice::Helm chart farna-control ${VERSION_NUM} is already published at ${CHART_REF} with matching version and appVersion; skipping the push and never overwriting an existing chart version."
+            exit 0
+          fi
+          if ! grep -qiE 'not found|manifest unknown|no such manifest' "$PULL_LOG"; then
+            echo "::error::helm pull of farna-control ${VERSION_NUM} failed for a reason other than an absent version; refusing to push without knowing the registry state."
+            cat "$PULL_LOG"
+            exit 1
+          fi
+          echo "Helm chart farna-control ${VERSION_NUM} is not published yet; pushing it."
 
           # Package and push chart
           helm package deploy/helm/farna-control --destination /tmp/helm-pkg --version "$VERSION_NUM" --app-version "$VERSION_NUM"
@@ -2713,10 +2745,23 @@ jobs:
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
           }
-          if ! git ls-remote --exit-code origin refs/heads/release-freeze >/dev/null 2>&1; then
-            echo "::error::release-freeze is missing at final GA publication step; refusing to lift an unknown hold."
-            exit 1
-          fi
+          # FAR-2802: a resumed promote may reach this step after a manual or
+          # partial lift, so an absent freeze is tolerated. A query error is NOT
+          # absence and still fails closed - unknown is never lifted.
+          freeze_rc=0
+          git ls-remote --exit-code origin refs/heads/release-freeze >/dev/null 2>/tmp/release-freeze-lift-error || freeze_rc=$?
+          case "$freeze_rc" in
+            0) ;;
+            2)
+              echo "::notice::release-freeze is already absent; nothing to lift (idempotent GA finalisation)."
+              exit 0
+              ;;
+            *)
+              echo "::error::Could not query release-freeze (git ls-remote rc=${freeze_rc}) at the final GA publication step; refusing to lift an unknown hold."
+              cat /tmp/release-freeze-lift-error
+              exit 1
+              ;;
+          esac
           marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze
           echo "All GA publication steps succeeded; freeze lifted and merge queue resumes."
 
@@ -4439,9 +4484,57 @@ jobs:
           /tmp/modulo-pypi-smoke/bin/python -m pip install --disable-pip-version-check --no-cache-dir dist/*.whl
           /tmp/modulo-pypi-smoke/bin/farna-control apply --help
 
+      - name: Check whether this version is already published on PyPI
+        id: pypi-state
+        working-directory: backend
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # FAR-2802: a resumed promote re-runs this job, so publishing must be
+          # idempotent. Read the publication state rather than re-uploading:
+          # 404 -> not published (publish); 200 -> published, and the file set
+          # must match this build exactly (skip); anything else fails closed.
+          JSON_FILE="$(mktemp)"
+          STATUS="$(curl --silent --show-error --location \
+            --output "$JSON_FILE" --write-out '%{http_code}' \
+            "https://pypi.org/pypi/farna-control/${VERSION}/json")"
+          case "$STATUS" in
+            200)
+              LOCAL_FILES="$(find dist -maxdepth 1 -type f -printf '%f\n' | sort)"
+              if [ -z "$LOCAL_FILES" ]; then
+                echo "::error::No local distributions in backend/dist; refusing to compare the PyPI publication state."
+                exit 1
+              fi
+              PUBLISHED_FILES="$(jq -r '.urls[]?.filename' "$JSON_FILE" | sort)"
+              if [ "$LOCAL_FILES" != "$PUBLISHED_FILES" ]; then
+                echo "::error::PyPI already has farna-control ${VERSION} with a different file set than this build; refusing to publish and never overwriting a published version."
+                echo "--- local backend/dist"
+                printf '%s\n' "$LOCAL_FILES"
+                echo "--- published on PyPI"
+                printf '%s\n' "$PUBLISHED_FILES"
+                exit 1
+              fi
+              echo "::notice::farna-control ${VERSION} is already published on PyPI with the same file set; skipping the upload."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "farna-control ${VERSION} is not published on PyPI yet; the publish step will upload it."
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Unexpected PyPI response ${STATUS} for farna-control ${VERSION}; refusing to guess the publication state."
+              exit 1
+              ;;
+          esac
+
       - name: Publish farna-control via Trusted Publishing
         # PyPI Trusted Publisher must be registered by a human for this
         # repository, workflow and `pypi` environment before promote can upload.
+        # FAR-2802: skip when the check above proved this exact version is
+        # already published from this GA tag.
+        if: steps.pypi-state.outputs.publish == 'true'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: backend/dist
