@@ -2352,6 +2352,16 @@ async def create_pipeline_from_template_endpoint(
             pipeline.graph_nodes_json = graph_nodes
             _add_pipeline_edges(session, principal.organisation_id, pipeline, edges)
             await session.flush()
+            # FAR-2819: assigning ``graph_nodes_json`` above dirties the row, so
+            # the flush issues an UPDATE whose server-side ``onupdate`` expires
+            # ``updated_at``. Reading it after this ``session.begin()`` block
+            # closes would lazy-load outside a transaction on an
+            # ``autobegin=False`` session (the DI default) and raise
+            # ``InvalidRequestError`` — surfaced as the session-contract 500.
+            # Reload the row inside the transaction (the same pattern the
+            # lifecycle-map create endpoint uses) so the response builder reads
+            # fully-loaded timestamps after commit.
+            await session.refresh(pipeline)
     except HTTPException:
         raise
     except IntegrityError:
