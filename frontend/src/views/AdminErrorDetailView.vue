@@ -7,27 +7,25 @@
       :subtitle="$t('views.AdminErrorDetailView.subtitle')"
     >
       <template #right>
-        <button
-          type="button"
-          class="rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+        <Button
+          variant="secondary"
           data-testid="admin-error-detail-back"
           @click="goBack"
         >
           <ArrowLeft class="mr-1 inline-block h-4 w-4" aria-hidden="true" />
           {{ $t('views.AdminErrorDetailView.back') }}
-        </button>
+        </Button>
         <!-- FAR-2304: the canonical support reference (group id, fingerprint,
              level, count, source) in one copy action. Available in instance scope
              too — copying is read-only. -->
-        <button
+        <Button
           v-if="group"
-          type="button"
-          class="rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          variant="secondary"
           data-testid="admin-error-detail-copy-support"
           @click="copySupportReference"
         >
           {{ supportCopied ? $t('views.AdminErrorDetailView.support_reference_copied') : $t('views.AdminErrorDetailView.copy_support_reference') }}
-        </button>
+        </Button>
       </template>
     </PageHeader>
 
@@ -106,40 +104,37 @@
         </p>
         <div class="flex flex-wrap items-center gap-3">
           <span v-tooltip.top="{ value: statusAdminHelp, disabled: canManageErrors }" class="inline-flex">
-            <button
-              type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+            <Button
+              variant="secondary"
               :disabled="!canManageErrors || group.status === 'acknowledged'"
               :aria-describedby="statusAdminDescribedBy"
               data-testid="admin-error-detail-acknowledge"
               @click="updateStatus('acknowledged')"
             >
               {{ $t('views.AdminErrorDetailView.acknowledge') }}
-            </button>
+            </Button>
           </span>
           <span v-tooltip.top="{ value: statusAdminHelp, disabled: canManageErrors }" class="inline-flex">
-            <button
-              type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+            <Button
+              variant="secondary"
               :disabled="!canManageErrors || group.status === 'resolved'"
               :aria-describedby="statusAdminDescribedBy"
               data-testid="admin-error-detail-resolve"
               @click="updateStatus('resolved')"
             >
               {{ $t('views.AdminErrorDetailView.resolve') }}
-            </button>
+            </Button>
           </span>
           <span v-tooltip.top="{ value: statusAdminHelp, disabled: canManageErrors }" class="inline-flex">
-            <button
-              type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+            <Button
+              variant="secondary"
               :disabled="!canManageErrors || group.status === 'archived'"
               :aria-describedby="statusAdminDescribedBy"
               data-testid="admin-error-detail-archive"
               @click="updateStatus('archived')"
             >
               {{ $t('views.AdminErrorDetailView.archive') }}
-            </button>
+            </Button>
           </span>
           <div class="ml-auto flex flex-col items-end gap-1">
             <div class="flex items-center gap-2">
@@ -287,24 +282,24 @@
               {{ $t('views.AdminErrorDetailView.events_of', { count: events.length, total: eventsTotal }) }}
             </span>
             <div class="flex gap-2">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 :disabled="eventsOffset <= 0"
-                class="rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-30"
                 data-testid="admin-error-detail-events-prev"
                 @click="loadEvents(eventsOffset - eventsLimit)"
               >
                 {{ $t('views.AdminErrorDetailView.previous') }}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 :disabled="eventsOffset + eventsLimit >= eventsTotal"
-                class="rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-30"
                 data-testid="admin-error-detail-events-next"
                 @click="loadEvents(eventsOffset + eventsLimit)"
               >
                 {{ $t('views.AdminErrorDetailView.next') }}
-              </button>
+              </Button>
             </div>
           </div>
         </template>
@@ -318,6 +313,7 @@
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Button from '../components/ui/Button.vue'
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'

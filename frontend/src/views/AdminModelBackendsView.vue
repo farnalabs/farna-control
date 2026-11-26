@@ -52,25 +52,27 @@
             </div>
             <div class="mt-3 flex items-center gap-2">
               <span class="text-xs text-muted-foreground" aria-hidden="true">—</span>
-              <button
-                type="button"
-                class="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              <Button
+                variant="secondary-text"
+                size="sm"
+                class="text-xs underline underline-offset-2"
                 data-testid="admin-model-backends-manual-entry-toggle"
                 @click="manualMode = true"
               >
                 {{ $t('views.AdminModelBackendsView.preset_manual_entry') }}
-              </button>
+              </Button>
             </div>
           </div>
           <div v-if="manualMode" class="mb-6">
-            <button
-              type="button"
-              class="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            <Button
+              variant="secondary-text"
+              size="sm"
+              class="text-xs underline underline-offset-2"
               data-testid="admin-model-backends-back-to-presets"
               @click="manualMode = false"
             >
               {{ $t('views.AdminModelBackendsView.preset_back_to_presets') }}
-            </button>
+            </Button>
           </div>
           <div v-if="selectedPreset" class="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <div class="flex items-center justify-between">
@@ -78,14 +80,15 @@
                 <span class="text-sm font-medium text-primary-text">{{ selectedPreset.display_name }}</span>
                 <span class="ml-2 text-xs text-muted-foreground">{{ selectedPreset.default_model_id }}</span>
               </div>
-              <button
-                type="button"
-                class="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              <Button
+                variant="secondary-text"
+                size="sm"
+                class="text-xs underline underline-offset-2"
                 data-testid="admin-model-backends-preset-clear"
                 @click="selectedPresetId = null"
               >
                 {{ $t('views.AdminModelBackendsView.preset_clear') }}
-              </button>
+              </Button>
             </div>
             <p class="mt-1 text-xs text-muted-foreground">{{ selectedPreset.description }}</p>
             <a
@@ -213,14 +216,13 @@
               <Button :disabled="saving || !formData.name.trim() || !formData.display_name.trim() || !formData.model_id.trim() || !formData.api_key.trim()" type="submit" data-testid="admin-model-backends-submit">
                 {{ saving ? $t('views.AdminModelBackendsView.creating') : $t('views.AdminModelBackendsView.create') }}
               </Button>
-                <button
-                  type="button"
-                  class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                <Button
+                  variant="secondary"
                   data-testid="admin-model-backends-cancel"
                   @click="closeForm"
                 >
                   {{ $t('views.AdminModelBackendsView.cancel') }}
-                </button>
+                </Button>
               </div>
             </div>
           </form>
@@ -292,13 +294,14 @@
                         <LoadingSpinner v-if="refsState[backend.id]?.loading" />
                         <div v-else-if="refsState[backend.id]?.error" class="flex items-center gap-2 text-sm text-destructive">
                           <span>{{ refsState[backend.id]?.error }}</span>
-                          <button type="button"
-                            class="rounded border border-input px-2 py-1 text-xs hover:bg-accent"
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             :data-testid="`admin-model-backends-refs-retry-${backend.id}`"
                             @click="retryRefs(backend.id)"
                           >
                             {{ $t('views.AdminModelBackendsView.retry') }}
-                          </button>
+                          </Button>
                         </div>
                         <div v-else-if="refsState[backend.id]?.data">
                           <div v-if="(refsState[backend.id]?.data?.items.length ?? 0) === 0" class="text-sm text-muted-foreground">
@@ -332,22 +335,24 @@
                             </div>
                             <div v-if="refsHasPagination(backend.id)" class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                               <span>{{ $t('views.AdminModelBackendsView.refs_page_info', { page: refsPage(backend.id), total: refsTotalPages(backend.id) }) }}</span>
-                              <button type="button"
+                              <Button
                                 v-if="refsPage(backend.id) > 1"
-                                class="rounded border border-input px-2 py-1 hover:bg-accent"
+                                variant="secondary"
+                                size="sm"
                                 :data-testid="`admin-model-backends-refs-prev-${backend.id}`"
                                 @click="pageRefs(backend.id, refsPage(backend.id) - 1)"
                               >
                                 {{ $t('views.AdminModelBackendsView.previous') }}
-                              </button>
-                              <button type="button"
+                              </Button>
+                              <Button
                                 v-if="refsPage(backend.id) < refsTotalPages(backend.id)"
-                                class="rounded border border-input px-2 py-1 hover:bg-accent"
+                                variant="secondary"
+                                size="sm"
                                 :data-testid="`admin-model-backends-refs-next-${backend.id}`"
                                 @click="pageRefs(backend.id, refsPage(backend.id) + 1)"
                               >
                                 {{ $t('views.AdminModelBackendsView.next') }}
-                              </button>
+                              </Button>
                             </div>
                           </template>
                         </div>
@@ -498,14 +503,13 @@
               <Button :disabled="saving || !formData.name.trim() || !formData.display_name.trim() || !formData.model_id.trim()" type="submit" data-testid="admin-model-backends-save">
                 {{ saving ? $t('views.AdminModelBackendsView.saving') : $t('views.AdminModelBackendsView.save') }}
               </Button>
-                <button
-                  type="button"
-                  class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                <Button
+                  variant="secondary"
                   data-testid="admin-model-backends-edit-cancel"
                   @click="closeEditForm"
                 >
                   {{ $t('views.AdminModelBackendsView.cancel') }}
-                </button>
+                </Button>
               </div>
             </div>
           </form>
@@ -518,14 +522,13 @@
           <Button :disabled="deleting" variant="danger" data-testid="admin-model-backends-delete-confirm" @click="deleteBackend">
             {{ deleting ? $t('views.AdminModelBackendsView.deleting') : $t('views.AdminModelBackendsView.delete') }}
           </Button>
-            <button
-              type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+            <Button
+              variant="secondary"
               data-testid="admin-model-backends-cancel"
               @click="closeForm"
             >
               {{ $t('views.AdminModelBackendsView.cancel') }}
-            </button>
+            </Button>
           </div>
           <div v-if="deleteError" class="mt-2 text-sm text-destructive-text">{{ deleteError }}</div>
         </div>
