@@ -404,10 +404,13 @@ kubectl delete namespace farna-control  # If namespace.create=true
     pods ran on one node and the two SAQ workers on the other, so the stack is
     not co-located on a single node.
   - **Readiness.** `GET /healthz/ready` returned HTTP 200 with top-level
-    `"status":"ok"` and every gate green (`database`, `redis`, `checkpointer`,
-    `migrations`, `saq_workers`, `system_crons`, `dispatcher_reconcile`,
-    `stale_run_recovery`, `slot_reconciliation`, `runner_*`,
-    `decision_record_reconcile`).
+    `"status":"ok"` and the readiness gates green (`database`, `redis`,
+    `checkpointer`, `migrations`, `saq_workers`, `system_crons`,
+    `dispatcher_reconcile`, `stale_run_recovery`, `slot_reconciliation`,
+    `runner_*`, `decision_record_reconcile`). The advisory `break_glass` check
+    reported `degraded` because the optional `FARNA_CONTROL_BREAK_GLASS_*`
+    secrets and URL were not set on this validation cluster; that is reported
+    separately and does not change the top-level status.
   - **Sign-in through the UI.** A headless Chromium loaded the SPA at `/login`,
     signed in with the seeded admin, and landed on the dashboard with zero console
     errors and zero failed requests.
