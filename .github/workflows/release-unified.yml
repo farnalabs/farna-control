@@ -2639,11 +2639,18 @@ jobs:
             --version "$VERSION" --output CHANGELOG.md > "$NOTES_FILE"
 
           RELEASE_TITLE="Farna Control ${GA_TAG}"
+          # FAR-2822: the GA release is the release record, never Latest.
+          # /releases/latest must always resolve to the bundle-v<VERSION>
+          # release, which scripts/install.sh and the marketing website's
+          # fetch-release.mjs consume (they reject a non-bundle tag). Without an
+          # explicit --latest=false, `gh release create` defaults to automatic
+          # latest selection, so a GA release created after the bundle release
+          # would take the Latest pointer and break both consumers.
           if gh release view "$GA_TAG" >/dev/null 2>&1; then
-            gh release edit "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
+            gh release edit "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" --latest=false
             echo "GitHub Release updated for ${GA_TAG} with title ${RELEASE_TITLE}."
           else
-            gh release create "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
+            gh release create "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" --latest=false
 
             echo "GitHub Release created for ${GA_TAG} with title ${RELEASE_TITLE}."
           fi
