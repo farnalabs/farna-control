@@ -68,14 +68,14 @@ A recut is **idempotent for a version that already published a bundle**. The bun
 
 The bundle tag itself is **immutable**. `bundle-v<X.Y.Z>` identifies the *first* published commit for that version, and the repository ruleset `release-tag-protection` targets `refs/tags/bundle-v*` with `deletion` and `update` rules at `active` enforcement, so the workflow never moves or deletes it. A recut of an already-published version therefore publishes new assets and a new signed manifest against that same release identity, and the manifest plus the release notes name the exact built commit the recut published. A recut is **refused once the GA tag `v<X.Y.Z>` exists**: a promoted version's bundle is immutable and is never republished.
 
-Why there is one stable bundle tag and not one per RC: the marketing website resolves `https://api.github.com/repos/farnalabs/farna-control/releases/latest`, rejects any draft or prerelease, strips the `bundle-v` prefix and then requires the resulting version to match `^\d+\.\d+\.\d+$` (the marketing website repo's `scripts/release-lib.mjs::validateRelease`, used by its `scripts/fetch-release.mjs`). An RC-qualified tag (`bundle-v0.3.330-rc3`) would make an RC the latest non-prerelease release, fail that check, and leave the site silently serving its previous release for the whole RC window; it would also stop the newest-bundle selection in `release-unified.yml` from recognising the release (its filter only matches `bundle-v<X.Y.Z>`) and break every installer URL that resolves `/releases/latest`. Do not re-open "key the bundle tag on the RC" without that constraint.
+Why there is one stable bundle tag and not one per RC: the marketing website resolves `https://api.github.com/repos/farnalabs/farna-control/releases/latest`, rejects any draft or prerelease, strips the `bundle-v` prefix and then requires the resulting version to match `^\d+\.\d+\.\d+$` (the marketing website repo's `scripts/release-lib.mjs::validateRelease`, used by `Repos/modulo-website/scripts/fetch-release.mjs`). An RC-qualified tag (`bundle-v0.3.330-rc3`) would make an RC the latest non-prerelease release, fail that check, and leave the site silently serving its previous release for the whole RC window; it would also stop the newest-bundle selection in `release-unified.yml` from recognising the release (its filter only matches `bundle-v<X.Y.Z>`) and break every installer URL that resolves `/releases/latest`. Do not re-open "key the bundle tag on the RC" without that constraint.
 
 Use `recut` after a fix has been merged to `main` while the release freeze is active:
 
 1. Confirm the fix is on `main` and the previous RC remains identifiable.
 2. Dispatch `recut` for the same `X.Y.Z` version. The workflow selects the next free `vX.Y.Z-rcN`, tags the current `main` commit with it, and force-moves `release-freeze` to that new RC commit.
 3. The workflow then dispatches `Deploy: Staging + Prod` with `force_deploy=true`, so the freeze cannot throttle the soak deployment. It dispatches `rc-validate.yml` for the new RC only after the deploy dispatch is accepted.
-4. `rc-validate.yml` waits for `/api/v1/deployment` to report the new RC commit, runs the read-only Schemathesis checks, and pushes `validated/vX.Y.Z-rcN` at the RC commit only on success.
+4. `rc-validate.yml` boots the RC's own disposable compose stack (its own Postgres, its own generated secrets, its own seeded account), runs the read-only Schemathesis checks against it, and pushes `validated/vX.Y.Z-rcN` at the RC commit only on success. It never depends on a deployed environment: the soak host tracks `main`, so an RC tag - an ancestor of `main` - would be a downgrade there and could not start on a database `main` has already migrated past.
 5. Promote only after the validation marker exists and points at the latest RC commit. If validation fails, fix the issue on `main` and repeat this recut sequence; do not move the marker by hand.
 
 ## What `promote` requires (the four promote invariants)
@@ -187,7 +187,8 @@ pre-upgrade snapshot before the previous release is started on the restored
 database.
 
 `rc-validate.yml` runs that Docker leg after the anonymous clean-host compose
-check and before the live pen test. It resolves the previous published
+check and before the fuzz leg (which boots and fuzzes the RC's own disposable
+stack). It resolves the previous published
 `bundle-v*` release as the rollback target, refuses to claim coverage when no
 previous release exists, and uploads the evidence directory as the
 `alpha-docker-upgrade-rollback-*` workflow artifact. The predecessor is the
