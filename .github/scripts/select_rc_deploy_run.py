@@ -156,6 +156,27 @@ def _gh_api(endpoint: str, *, runner: _GH_RUNNER) -> Any | None:
         return None
 
 
+def _artifact_page_run_ids(artifacts: list[Any]) -> tuple[int, ...]:
+    """Every run id named by one page of artifacts, skipping malformed entries."""
+    run_ids: list[int] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        workflow_run = artifact.get("workflow_run") or {}
+        run_id = workflow_run.get("id")
+        if isinstance(run_id, int):
+            run_ids.append(run_id)
+    return tuple(run_ids)
+
+
+def _page_is_last(payload: dict[str, Any], page: int) -> bool:
+    """Whether this artifact page is the last one (nothing left to fetch)."""
+    total = payload.get("total_count")
+    if not isinstance(total, int):
+        return True
+    return page * 100 >= total
+
+
 def candidate_run_ids(
     repo: str,
     rc_tag: str,
@@ -175,15 +196,8 @@ def candidate_run_ids(
         artifacts = payload.get("artifacts") or []
         if not isinstance(artifacts, list):
             return None
-        for artifact in artifacts:
-            if not isinstance(artifact, dict):
-                continue
-            workflow_run = artifact.get("workflow_run") or {}
-            run_id = workflow_run.get("id")
-            if isinstance(run_id, int):
-                run_ids.add(run_id)
-        total = payload.get("total_count")
-        if not artifacts or not isinstance(total, int) or page * 100 >= total:
+        run_ids.update(_artifact_page_run_ids(artifacts))
+        if not artifacts or _page_is_last(payload, page):
             break
     return tuple(sorted(run_ids))
 
