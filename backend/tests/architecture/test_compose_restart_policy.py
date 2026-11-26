@@ -32,6 +32,10 @@ Documented exemptions:
   of the product stack.
 * Services opted into the ``observability`` profile in
   ``docker-compose.local.yml`` - developer tooling, not the product stack.
+* ``docker-compose.dev.yml`` - a live-edit overlay applied with
+  ``-f docker-compose.yml -f docker-compose.dev.yml`` (FAR-2785); its service
+  stubs only re-add a bind mount and inherit the base service's restart policy,
+  so it is exempt for the same reason as the ``runner*.yml`` overlays below.
 
 Overlay files (``deploy/compose/runner.yml``, ``deploy/compose/runner-ci.yml``)
 are deliberately NOT enumerated: they are partial overlays applied on top of a
@@ -67,6 +71,7 @@ _STACK_COMPOSE_FILES: list[Path] = [
 _EXEMPT_COMPOSE_FILES: frozenset[Path] = frozenset(
     {
         _REPO_ROOT / "deploy" / "compose" / "docker-compose.test.yml",
+        _REPO_ROOT / "docker-compose.dev.yml",
     }
 )
 
