@@ -290,6 +290,49 @@ def test_release_docs_document_the_resume_dispatch() -> None:
     assert "squash-merged" in docs
     assert "validated/<rc>" in docs
     assert "never creates, moves or deletes the GA tag" in docs
+    # The docs must scope the resume to the release job and name re-run-failed-jobs
+    # as the recovery path for the downstream publication jobs (FAR-2802 review).
+    assert "The resume covers the `release` job, not the downstream publication jobs" in docs
+    assert "Re-run failed jobs" in docs
+    assert "never read `release-freeze`" in docs
+
+
+#: Publication jobs that run with ``needs: release``, i.e. after the release job
+#: has already lifted ``release-freeze``.
+_DOWNSTREAM_PUBLICATION_JOBS = ("publish-pypi", "promote-compose", "attest-artefacts")
+
+
+def _job_needs(job: str) -> set[str]:
+    needs = _workflow()["jobs"][job].get("needs", [])
+    if isinstance(needs, str):
+        return {needs}
+    return set(needs)
+
+
+def test_downstream_publication_jobs_are_recovered_by_rerun_not_resume() -> None:
+    """A re-run of the failed downstream jobs recovers PyPI / compose / attestation.
+
+    The ``release`` job lifts ``release-freeze`` in its final step, so the resume
+    guard - which requires the freeze to sit at the GA commit - can never reach a
+    job that runs later with ``needs: release``. Those jobs must therefore be
+    re-runnable with the freeze already gone: they must run after ``release`` and
+    must not read ``release-freeze`` at all. That is what makes "Re-run failed
+    jobs" (not a ``resume=true`` dispatch) the recovery path the docs describe.
+    """
+    jobs = _workflow()["jobs"]
+
+    # The freeze is lifted inside the release job, before these jobs can start.
+    release_steps = [step.get("name") for step in jobs["release"]["steps"]]
+    assert "Lift release freeze after successful GA publication" in release_steps
+
+    for job in _DOWNSTREAM_PUBLICATION_JOBS:
+        assert "release" in _job_needs(job), f"{job} must run after the release job (needs: release)"
+        for step in jobs[job]["steps"]:
+            run = step.get("run")
+            if isinstance(run, str):
+                # The real dependency signal is a query of the marker ref, not a
+                # prose mention in a comment.
+                assert "refs/heads/release-freeze" not in run, f"{job} must not query release-freeze: it runs after the release job lifts it, so re-running the failed job must succeed with the freeze absent"
 
 
 # ---------------------------------------------------------------------------

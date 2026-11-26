@@ -4493,10 +4493,13 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          # FAR-2802: a resumed promote re-runs this job, so publishing must be
-          # idempotent. Read the publication state rather than re-uploading:
-          # 404 -> not published (publish); 200 -> published, and the file set
-          # must match this build exactly (skip); anything else fails closed.
+          # FAR-2802: this is a downstream job (needs: release), which lifts
+          # release-freeze on success, so a resume dispatch cannot reach it - a
+          # failed publish is recovered by re-running the failed jobs. Re-running
+          # must therefore be idempotent. Read the publication state rather than
+          # re-uploading: 404 -> not published (publish); 200 -> published, and
+          # the file set must match this build exactly (skip); anything else
+          # fails closed.
           JSON_FILE="$(mktemp)"
           STATUS="$(curl --silent --show-error --location \
             --proto '=https' --proto-redir '=https' \
@@ -4504,7 +4507,7 @@ jobs:
             "https://pypi.org/pypi/farna-control/${VERSION}/json")"
           case "$STATUS" in
             200)
-              LOCAL_FILES="$(find dist -maxdepth 1 -type f -printf '%f\n' | sort)"
+              LOCAL_FILES="$(find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -printf '%f\n' | sort)"
               if [ -z "$LOCAL_FILES" ]; then
                 echo "::error::No local distributions in backend/dist; refusing to compare the PyPI publication state."
                 exit 1
