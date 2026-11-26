@@ -5,33 +5,30 @@
     <PageHeader :title="$t('views.AdminAuditView.audit_log')" :subtitle="$t('views.AdminAuditView.tamper_evident_event_trail')">
       <template v-if="auditSource === 'org'" #right>
       <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="verifying"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           data-testid="admin-audit-verify-chain"
           @click="verifyChain"
         >
           {{ verifying ? $t('views.AdminAuditView.verifying') : $t('views.AdminAuditView.verify_chain') }}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
           :disabled="exporting"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           data-testid="admin-audit-export-csv"
           @click="exportCsv"
         >
           {{ exporting ? $t('views.AdminAuditView.exporting') : $t('views.AdminAuditView.export_csv') }}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
           :disabled="exportingJsonl"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           data-testid="admin-audit-export-jsonl"
           @click="exportJsonl"
         >
           {{ exportingJsonl ? $t('views.AdminAuditView.exporting') : $t('views.AdminAuditView.export_jsonl') }}
-        </button>
+        </Button>
       </div>
       </template>
     </PageHeader>
@@ -156,14 +153,13 @@
         </div>
       </FilterBar>
       <div class="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        <Button
+          variant="secondary"
           data-testid="admin-audit-reset"
           @click="resetFilters"
         >
           {{ $t('views.AdminAuditView.reset') }}
-        </button>
+        </Button>
         <span v-if="total > 0" class="ml-auto text-sm text-muted-foreground">
           {{ $t('views.AdminAuditView.events_count', { count: total }, total) }}
         </span>
@@ -290,27 +286,25 @@
       </div>
 
       <div class="flex items-center justify-between">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="!canGoPrevious"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
           data-testid="admin-audit-previous"
           @click="goToPreviousPage"
         >
           {{ $t('views.AdminAuditView.previous') }}
-        </button>
+        </Button>
         <span class="text-sm text-muted-foreground">
           {{ $t('views.AdminAuditView.page_of_total', { page, count: events.length, total: total }) }}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="!nextCursor"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
           data-testid="admin-audit-next"
           @click="goToNextPage"
         >
           {{ $t('views.AdminAuditView.next') }}
-        </button>
+        </Button>
       </div>
     </template>
     </div>
@@ -381,14 +375,13 @@
           </Field>
         </div>
         <div class="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <Button
+            variant="secondary"
             data-testid="admin-audit-system-reset"
             @click="resetSystemFilters"
           >
             {{ $t('views.AdminAuditView.reset') }}
-          </button>
+          </Button>
           <output
             aria-live="polite"
             class="ml-auto text-sm text-muted-foreground"
@@ -501,27 +494,25 @@
         </div>
 
         <div class="flex items-center justify-between">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             :disabled="systemPage <= 1"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
             data-testid="admin-audit-system-previous"
             @click="goSystemPage(systemPage - 1)"
           >
             {{ $t('views.AdminAuditView.previous') }}
-          </button>
+          </Button>
           <span class="text-sm text-muted-foreground">
             {{ $t('views.AdminAuditView.system_page_of_total', { page: systemPage, count: systemEvents.length, total: systemTotal }) }}
           </span>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             :disabled="systemPage * SYSTEM_PAGE_SIZE >= systemTotal"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
             data-testid="admin-audit-system-next"
             @click="goSystemPage(systemPage + 1)"
           >
             {{ $t('views.AdminAuditView.next') }}
-          </button>
+          </Button>
         </div>
       </template>
     </section>
@@ -534,6 +525,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import Disclosure from '../components/ui/Disclosure.vue'
 import StateTabs, { type StateTab } from '../components/shared/StateTabs.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import Button from '../components/ui/Button.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
 import Notice from '../components/shared/Notice.vue'

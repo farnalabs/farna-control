@@ -116,14 +116,15 @@
             data-testid="admin-notification-log-events-unavailable"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.event_list_unavailable') }}
-            <button
-              type="button"
+            <Button
+              variant="link"
+              size="sm"
               class="ml-1 underline"
               data-testid="admin-notification-log-events-retry"
               @click="loadAvailableEvents"
             >
               {{ $t('views.AdminNotificationDeliveryLogView.retry') }}
-            </button>
+            </Button>
           </output>
         </div>
         <Field
@@ -154,14 +155,13 @@
           <Button data-testid="admin-notification-log-apply" @click="applyFilters">
             {{ $t('views.AdminNotificationDeliveryLogView.apply') }}
           </Button>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             data-testid="admin-notification-log-reset"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
             @click="resetFilters"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.reset') }}
-          </button>
+          </Button>
           <Button
             v-if="hasRetryableItems && !retryAllConfirm"
             variant="warning"
@@ -184,14 +184,14 @@
             >
               {{ retryingAll ? $t('views.AdminNotificationDeliveryLogView.retrying_all') : $t('views.AdminNotificationDeliveryLogView.confirm') }}
             </Button>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               data-testid="admin-notification-log-retry-all-cancel"
-              class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent"
               @click="retryAllConfirm = false"
             >
               {{ $t('views.AdminNotificationDeliveryLogView.cancel') }}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -220,15 +220,14 @@
       :title="$t('views.AdminNotificationDeliveryLogView.no_deliveries_match_title')"
       :description="$t('views.AdminNotificationDeliveryLogView.no_deliveries_match_body')"
     >
-       <button
-         type="button"
+       <Button
+         variant="secondary"
          data-testid="admin-notification-log-empty-reset"
          :aria-label="$t('views.AdminNotificationDeliveryLogView.reset_all_filters')"
-         class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
          @click="resetFilters"
        >
          {{ $t('views.AdminNotificationDeliveryLogView.reset_filters') }}
-       </button>
+       </Button>
      </EmptyState>
 
     <!-- FAR-2596: "No deliveries yet" is only rendered once the endpoint read
@@ -299,16 +298,16 @@
                 <div v-if="retryMessages[entry.id]" class="text-xs" :class="retryMessages[entry.id].type === 'error' ? 'text-destructive' : 'text-success-text'">
                   {{ retryMessages[entry.id].text }}
                 </div>
-                <button
+                <Button
                   v-else-if="entry.status === 'failed' || entry.status === 'dead_lettered'"
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   :disabled="retryingId === entry.id"
                   data-testid="admin-notification-log-retry"
-                  class="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary-text hover:bg-primary/20 disabled:opacity-40"
                   @click.stop="retryDelivery(entry)"
                 >
                   {{ retryingId === entry.id ? $t('views.AdminNotificationDeliveryLogView.retrying') : $t('views.AdminNotificationDeliveryLogView.retry') }}
-                </button>
+                </Button>
               </td>
             </tr>
             <template v-if="expandedId">
@@ -350,27 +349,25 @@
       </p>
 
       <div class="flex items-center justify-between">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="!prevCursor"
           data-testid="admin-notification-log-previous"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
           @click="goToPage(prevCursor)"
         >
           {{ $t('views.AdminNotificationDeliveryLogView.previous') }}
-        </button>
+        </Button>
         <span class="text-sm text-muted-foreground">
           {{ $t('views.AdminNotificationDeliveryLogView.of_deliveries', { count: items.length, total }) }}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="!nextCursor"
           data-testid="admin-notification-log-next"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
           @click="goToPage(nextCursor)"
         >
           {{ $t('views.AdminNotificationDeliveryLogView.next') }}
-        </button>
+        </Button>
       </div>
 
       <DataCard
@@ -381,14 +378,14 @@
         :description="$t('views.AdminNotificationDeliveryLogView.dead_letter_queue_description', { count: deadLetteredCount }, deadLetteredCount)"
       >
         <template #headerActions>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             data-testid="admin-notification-log-dlq-filter"
-            class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent"
             @click="showDeadLettered"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.view_dead_lettered') }}
-          </button>
+          </Button>
         </template>
       </DataCard>
     </template>

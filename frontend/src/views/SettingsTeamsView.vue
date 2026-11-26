@@ -43,9 +43,9 @@
             <Button :disabled="!createName.trim() || creatingTeam" data-testid="settings-teams-create-submit" @click="createTeam">
               {{ creatingTeam ? $t('views.SettingsTeamsView.creating') : $t('views.SettingsTeamsView.create') }}
             </Button>
-            <button type="button" class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent" data-testid="settings-teams-create-cancel" @click="cancelCreate">
+            <Button variant="secondary" data-testid="settings-teams-create-cancel" @click="cancelCreate">
               {{ $t('views.SettingsTeamsView.cancel') }}
-            </button>
+            </Button>
           </div>
         </div>
         <ErrorAlert v-if="createError" compact class="mt-3" :message="createError" :retryable="false" />
@@ -95,21 +95,21 @@
               <Button :disabled="!renameName.trim() || renamingTeam" data-testid="settings-teams-rename-save" @click="saveRename">
                 {{ renamingTeam ? $t('views.SettingsTeamsView.saving') : $t('views.SettingsTeamsView.save') }}
               </Button>
-              <button type="button" class="rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent" data-testid="settings-teams-rename-cancel" @click="cancelRename">
+              <Button variant="secondary" data-testid="settings-teams-rename-cancel" @click="cancelRename">
                 {{ $t('views.SettingsTeamsView.cancel') }}
-              </button>
+              </Button>
             </div>
 
             <div v-if="deleteConfirmTeamId === team.id" class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
               <p class="text-sm font-medium text-destructive-text">{{ $t('views.SettingsTeamsView.delete_confirm_title', { name: team.name }) }}</p>
               <p class="mt-1 text-sm text-destructive-text">{{ $t('views.SettingsTeamsView.this_action_cannot_be_undone') }}</p>
               <div class="mt-3 flex items-center gap-2">
-                <button type="button" :disabled="deletingTeam" data-testid="settings-teams-delete-confirm" class="rounded-lg bg-destructive-fill px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50" @click="deleteTeam(team.id)">
+                <Button variant="danger" :disabled="deletingTeam" data-testid="settings-teams-delete-confirm" @click="deleteTeam(team.id)">
                   {{ deletingTeam ? $t('views.SettingsTeamsView.deleting') : $t('views.SettingsTeamsView.delete') }}
-                </button>
-                <button type="button" class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent" data-testid="settings-teams-delete-cancel" @click="deleteConfirmTeamId = null; deleteError = null">
+                </Button>
+                <Button variant="secondary" data-testid="settings-teams-delete-cancel" @click="deleteConfirmTeamId = null; deleteError = null">
                   {{ $t('views.SettingsTeamsView.cancel') }}
-                </button>
+                </Button>
                 <div v-if="deleteError" class="mt-2 text-sm text-destructive-text">{{ deleteError }}</div>
               </div>
             </div>
@@ -121,7 +121,7 @@
             </div>
             <ErrorAlert v-else-if="membersError[team.id]" compact class="mb-3" :message="membersError[team.id]" :retryable="false">
               <template #actions>
-                <button type="button" class="underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</button>
+                <Button variant="link" size="sm" class="underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</Button>
               </template>
             </ErrorAlert>
             <div v-else>
@@ -172,12 +172,12 @@
                     <td colspan="4" class="table-cell">
                       <div class="flex items-center gap-3">
                         <span class="text-sm text-destructive-text">{{ $t('views.SettingsTeamsView.remove_member_confirm') }}</span>
-                        <button type="button" :disabled="removingMember" data-testid="settings-teams-remove-confirm" class="rounded-lg bg-destructive-fill px-3 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50" @click="removeMember(team.id, member)">
+                        <Button variant="danger" size="sm" :disabled="removingMember" data-testid="settings-teams-remove-confirm" @click="removeMember(team.id, member)">
                           {{ removingMember ? $t('views.SettingsTeamsView.deleting') : $t('views.SettingsTeamsView.delete') }}
-                        </button>
-                        <button type="button" data-testid="settings-teams-remove-cancel" class="rounded-lg border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" @click="removeConfirmMemberId = null">
+                        </Button>
+                        <Button variant="secondary" size="sm" data-testid="settings-teams-remove-cancel" @click="removeConfirmMemberId = null">
                           {{ $t('views.SettingsTeamsView.cancel') }}
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -218,15 +218,15 @@
               <Button :disabled="!addMemberUserId || addingMember" data-testid="settings-teams-add-member-submit" @click="addMember(team.id)">
                 {{ addingMember ? $t('views.SettingsTeamsView.adding') : $t('views.SettingsTeamsView.add') }}
               </Button>
-              <button type="button" class="rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent" data-testid="settings-teams-add-member-cancel" @click="addMemberTeamId = null">
+              <Button variant="secondary" data-testid="settings-teams-add-member-cancel" @click="addMemberTeamId = null">
                 {{ $t('views.SettingsTeamsView.cancel') }}
-              </button>
+              </Button>
             </div>
 
-            <button type="button" v-else class="mt-3 flex items-center gap-1 text-sm text-primary-text hover:underline" data-testid="settings-teams-add-member" @click="addMemberTeamId = team.id">
+            <Button v-else variant="link" class="mt-3 gap-1" data-testid="settings-teams-add-member" @click="addMemberTeamId = team.id">
               <Plus class="h-4 w-4" aria-hidden="true" />
               {{ $t('views.SettingsTeamsView.add_member') }}
-            </button>
+            </Button>
 
             <div v-if="memberActionError[team.id]" class="mt-2 text-sm text-destructive">
               {{ memberActionError[team.id] }}

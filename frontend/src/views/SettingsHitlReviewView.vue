@@ -74,33 +74,33 @@
         <span class="text-sm font-medium">
           {{ $t('views.SettingsHitlReviewView.bulk_selected', { count: selectedCount }) }}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           :disabled="bulkClaiming || bulkRejecting"
           data-testid="hitl-review-bulk-claim"
-          class="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           @click="bulkClaim"
         >
           {{ bulkClaiming ? $t('views.SettingsHitlReviewView.bulk_claiming') : $t('views.SettingsHitlReviewView.bulk_claim') }}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
           :disabled="bulkClaiming || bulkRejecting || showBulkRejectInput"
           data-testid="hitl-review-bulk-reject"
-          class="rounded-lg bg-destructive-fill px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50"
           @click="openBulkReject"
         >
           {{ $t('views.SettingsHitlReviewView.bulk_reject') }}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           :disabled="bulkClaiming || bulkRejecting"
           data-testid="hitl-review-bulk-clear"
-          class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
           @click="clearSelection"
         >
           {{ $t('views.SettingsHitlReviewView.bulk_clear') }}
-        </button>
+        </Button>
       </span>
       <!-- Bulk reject shared reason input -->
       <div v-if="showBulkRejectInput" class="mt-3 flex flex-wrap items-end gap-3">
@@ -117,24 +117,24 @@
           />
         </Field>
         <div class="flex gap-2">
-          <button
-            type="button"
+          <Button
+            variant="danger"
+            size="sm"
             :disabled="bulkRejecting"
             data-testid="hitl-review-bulk-reject-confirm"
-            class="rounded-lg bg-destructive-fill px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50"
             @click="confirmBulkReject"
           >
             {{ bulkRejecting ? $t('views.SettingsHitlReviewView.bulk_rejecting') : $t('views.SettingsHitlReviewView.bulk_reject_confirm') }}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             :disabled="bulkRejecting"
             data-testid="hitl-review-bulk-reject-cancel"
-            class="rounded-lg border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
             @click="cancelBulkReject"
           >
             {{ $t('views.SettingsHitlReviewView.bulk_reject_cancel') }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -166,14 +166,15 @@
           <span v-if="outcome.error" class="text-destructive">{{ outcome.error }}</span>
         </span>
       </div>
-      <button
-        type="button"
-        class="mt-1 text-xs text-muted-foreground hover:text-foreground"
+      <Button
+        variant="secondary-text"
+        size="sm"
+        class="mt-1 text-xs"
         data-testid="hitl-review-bulk-outcomes-dismiss"
         @click="dismissBulkOutcomes"
       >
         {{ $t('views.SettingsHitlReviewView.bulk_outcomes_dismiss') }}
-      </button>
+      </Button>
     </div>
     <div class="flex items-center gap-1 text-xs text-muted-foreground">
       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -345,16 +346,16 @@
         class="flex items-center justify-center gap-3 py-2"
         :aria-label="$t('views.SettingsHitlReviewView.pagination_label')"
       >
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid="hitl-review-prev-page"
-          class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="page <= 1"
           :aria-label="$t('views.SettingsHitlReviewView.prev_page')"
           @click="goToPage(page - 1)"
         >
           {{ $t('views.SettingsHitlReviewView.prev_page') }}
-        </button>
+        </Button>
         <span
           data-testid="hitl-review-page-indicator"
           aria-live="polite"
@@ -362,16 +363,16 @@
         >
           {{ $t('views.SettingsHitlReviewView.page_indicator', { page, total: totalPages }) }}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid="hitl-review-next-page"
-          class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="page >= totalPages"
           :aria-label="$t('views.SettingsHitlReviewView.next_page')"
           @click="goToPage(page + 1)"
         >
           {{ $t('views.SettingsHitlReviewView.next_page') }}
-        </button>
+        </Button>
       </nav>
     </template>
   </div>
@@ -389,6 +390,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import HitlReviewCard from '../components/hitl/HitlReviewCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Button from '../components/ui/Button.vue'
 import Checkbox from '../components/ui/Checkbox.vue'
 import Disclosure from '../components/ui/Disclosure.vue'
 import { ChevronRight } from '@lucide/vue'

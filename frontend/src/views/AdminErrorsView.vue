@@ -75,7 +75,7 @@
       @update:filter="handleFilterUpdate"
     >
       <template #after>
-        <button type="button" class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="admin-errors-reset" @click="resetFilters">{{ $t('common.reset') }}</button>
+        <Button variant="secondary" data-testid="admin-errors-reset" @click="resetFilters">{{ $t('common.reset') }}</Button>
       </template>
     </FilterBar>
 
@@ -154,15 +154,15 @@
                dynamic (per row), so it is not part of the product map's static
                testid inventory. -->
           <template #cell-support="{ row }">
-            <button
-              type="button"
-              class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <Button
+              variant="ghost"
+              size="sm"
               :data-testid="`admin-errors-copy-support-${errorGroupRowId(row)}`"
               @click.stop="copyGroupSupport(row)"
               @keydown.stop
             >
               {{ copiedGroupId === errorGroupRowId(row) ? $t('views.AdminErrorsView.support_reference_copied') : $t('views.AdminErrorsView.copy_support_reference') }}
-            </button>
+            </Button>
           </template>
         </DataTable>
       </div>
@@ -172,25 +172,25 @@
           {{ $t('views.AdminErrorsView.group_count', { count: total }, total) }}
         </span>
         <div class="flex items-center gap-2">
-          <button type="button"
+          <Button
+            variant="secondary"
             :disabled="offset <= 0"
             data-testid="admin-errors-previous-page"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
             @click="prevPage"
           >
             {{ $t('common.previous') }}
-          </button>
+          </Button>
           <span class="text-sm text-muted-foreground" data-testid="admin-errors-page-indicator">
             {{ $t('common.page_label', { page: currentPage }) }}
           </span>
-          <button type="button"
+          <Button
+            variant="secondary"
             :disabled="offset + limit >= total"
             data-testid="admin-errors-next-page"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
             @click="nextPage"
           >
             {{ $t('common.next') }}
-          </button>
+          </Button>
         </div>
       </div>
     </template>
@@ -232,6 +232,7 @@ import { DataTable, type Column } from '../components/ui/data-table'
 import EmptyState from '../components/shared/EmptyState.vue'
 import Disclosure from '../components/ui/Disclosure.vue'
 import SegmentedControl, { type SegmentedOption } from '../components/ui/SegmentedControl.vue'
+import Button from '../components/ui/Button.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
