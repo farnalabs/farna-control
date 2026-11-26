@@ -2,9 +2,16 @@ name: "Merge tier: full validation"
 
 # Reusable FULL validation of a combined branch (step 0 of the merge-tier CI
 # consolidation). It has NO trigger of its own - no push, no pull_request, no
-# schedule - so it never runs until a caller asks for it. The only caller today
-# is merge-queue.yml's MERGE_QUEUE_FULL_VALIDATION step (default OFF), which
-# passes `ref: merge-queue` and `full: true`.
+# schedule - and NOTHING CALLS IT YET, so it cannot run at all today.
+#
+# The intended caller is the merge queue, validating the combined `merge-queue`
+# branch with `ref: merge-queue` and `full: true`, behind the repository
+# variable MERGE_QUEUE_FULL_VALIDATION (unset = off). That wiring cannot be a
+# step of the queue job: GitHub calls a reusable workflow from a JOB
+# (`jobs.<id>.uses`), never from a job step, and `secrets: inherit` - the only
+# way to hand this workflow SONAR_TOKEN - is job-level too. So the flag needs
+# the queue job split at the validation seam (build-batch -> validate -> merge);
+# merge-queue.yml records the split and exactly what it must carry.
 #
 # Why this exists
 # ---------------
