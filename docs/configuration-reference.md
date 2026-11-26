@@ -47,7 +47,7 @@ refusing to create new runs once usage reaches `DB_CAPACITY_HARD_STOP_PCT`.
 |----------|----------|---------|-------------|
 | `DB_CAPACITY_MODE` | No | `fixed` | Capacity mode: `fixed` (enforced), `elastic` (advisory only), or `disabled` |
 | `DB_CAPACITY_SOURCE` | No | `auto` | Where capacity comes from: `auto`, `env`, `filesystem`, or `disabled` |
-| `DB_CAPACITY_PATH` | No | `/var/lib/farna/db-volume` | Mount point of the Postgres data volume, for the `filesystem` source |
+| `DB_CAPACITY_PATH` | No | `/var/lib/modulo/db-volume` | Mount point of the Postgres data volume, for the `filesystem` source. The default above is the `Settings` field default; the shipped Compose files set `/var/lib/farna/db-volume` and mount the `postgres_data` volume there (`docker-compose.prod.yml`), so on a Compose deployment that path wins |
 | `DB_CAPACITY_BYTES` | No | `None` | Explicit capacity in bytes. An **override**, not a requirement - see below |
 | `DB_CAPACITY_BYPASS` | No | `false` | Operator bypass for the 98% hard-stop (e.g. deliberate migrations) |
 | `DB_CAPACITY_HARD_STOP_PCT` | No | `98.0` | Percent of capacity at/above which new runs are refused (mode=fixed only) |
