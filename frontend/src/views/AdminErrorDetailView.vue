@@ -186,39 +186,25 @@
         <p class="rounded-lg bg-muted p-3 text-sm font-mono">{{ sampleEvent.message }}</p>
 
         <div v-if="sampleEvent.stacktrace" class="mt-4">
-          <button
-            type="button"
+          <Disclosure
+            v-model:open="showStacktrace"
+            :label="$t('views.AdminErrorDetailView.stacktrace')"
             class="flex items-center gap-1 rounded text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-testid="admin-error-detail-toggle-stacktrace"
-            :aria-expanded="showStacktrace"
-            @click="showStacktrace = !showStacktrace"
           >
-            <ChevronRight
-              class="h-4 w-4 transition-transform"
-              :class="{ 'rotate-90': showStacktrace }"
-              aria-hidden="true"
-            />
-            {{ $t('views.AdminErrorDetailView.stacktrace') }}
-          </button>
-          <pre v-if="showStacktrace" class="mt-2 max-h-96 overflow-auto rounded-lg bg-muted p-3 text-xs leading-relaxed"><code>{{ sampleEvent.stacktrace }}</code></pre>
+            <pre class="mt-2 max-h-96 overflow-auto rounded-lg bg-muted p-3 text-xs leading-relaxed"><code>{{ sampleEvent.stacktrace }}</code></pre>
+          </Disclosure>
         </div>
 
         <div v-if="sampleEvent.context_json && Object.keys(sampleEvent.context_json).length > 0" class="mt-4">
-          <button
-            type="button"
+          <Disclosure
+            v-model:open="showContext"
+            :label="$t('views.AdminErrorDetailView.context_json')"
             class="flex items-center gap-1 rounded text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-testid="admin-error-detail-toggle-context"
-            :aria-expanded="showContext"
-            @click="showContext = !showContext"
           >
-            <ChevronRight
-              class="h-4 w-4 transition-transform"
-              :class="{ 'rotate-90': showContext }"
-              aria-hidden="true"
-            />
-            {{ $t('views.AdminErrorDetailView.context_json') }}
-          </button>
-          <JsonViewer v-if="showContext" :data="sampleEvent.context_json ?? null" :show-toolbar="true" :max-height="'16rem'" />
+            <JsonViewer :data="sampleEvent.context_json" :show-toolbar="true" :max-height="'16rem'" />
+          </Disclosure>
         </div>
 
         <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
@@ -317,12 +303,13 @@ import Button from '../components/ui/Button.vue'
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, ChevronRight } from '@lucide/vue'
+import { ArrowLeft } from '@lucide/vue'
 import { fetchErrorGroup, updateErrorGroup, fetchErrorGroupEvents, fetchInstanceErrorGroup, fetchInstanceErrorGroupEvents, type ErrorGroupDetail, type ErrorEventDetail, type ErrorEventListResponse } from '../lib/api/errors'
 import { api } from '../lib/api/client'
 import { useCurrentUser } from '../composables/useCurrentUser'

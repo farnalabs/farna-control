@@ -61,20 +61,25 @@
       <div class="space-y-3">
         <BaseCard v-for="team in teams" :key="team.id" padding="none">
           <div class="flex items-start gap-3 p-4 max-sm:flex-wrap sm:items-center" :class="{ 'border-b': expandedTeamId === team.id }">
-            <button
-              type="button"
+            <Disclosure
+              :open="expandedTeamId === team.id"
+              :controls="'settings-teams-panel-' + team.id"
               :data-testid="'settings-teams-toggle-' + team.id"
               class="flex min-w-0 flex-1 items-start gap-3 border-none bg-transparent p-0 text-left sm:items-center"
-              :aria-expanded="expandedTeamId === team.id"
-              :aria-controls="'settings-teams-panel-' + team.id"
-              @click="toggleExpand(team.id)"
+              @update:open="toggleExpand(team.id)"
             >
-              <ChevronRight class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="{ 'rotate-90': expandedTeamId === team.id }" aria-hidden="true" />
-              <div class="min-w-0">
-                <p class="break-words font-medium">{{ team.name }}</p>
-                <p class="break-words text-sm text-muted-foreground">{{ team.description || '—' }}</p>
-              </div>
-            </button>
+              <template #trigger="{ open, chevronClass, rotationClass }">
+                <ChevronRight
+                  :class="[chevronClass, open && rotationClass]"
+                  class="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <div class="min-w-0">
+                  <p class="break-words font-medium">{{ team.name }}</p>
+                  <p class="break-words text-sm text-muted-foreground">{{ team.description || '—' }}</p>
+                </div>
+              </template>
+            </Disclosure>
             <div class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 max-sm:ml-7 max-sm:w-full">
               <span class="text-sm text-muted-foreground">{{ $t('views.SettingsTeamsView.member_count', team.member_count) }}</span>
               <span class="text-sm text-muted-foreground" data-testid="settings-teams-owned-resource-count">
@@ -250,6 +255,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Field from '../components/ui/Field.vue'
 import Input from '../components/ui/Input.vue'
