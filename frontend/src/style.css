@@ -733,19 +733,20 @@
 .light .badge-context-amber { color: hsl(var(--warning-text)); background-color: hsla(38 92% 35% / 0.1); }
 .light .badge-context-green { color: hsl(var(--success-text)); background-color: hsla(142 71% 28% / 0.1); }
 
-/* FAR-2351 stale-dark: a light page that still carries `.dark` (the two theme
-   switches are independent; the WCAG audit scan reproduces exactly this
-   disagreement) leaves PrimeVue's outlined `secondary` Button on the DARK
-   scheme's ink. `.light` re-declares our semantic tokens but not PrimeVue's
-   `--p-button-outlined-secondary-color` scale, which `.dark` still drives, so
-   the migrated header/reset actions on AdminAuditView render `#a1a1aa` on the
-   white fill (2.56:1 - below AA). Match the light page's own muted ink so
-   those actions stay legible under the stale class, exactly as the plan-tier
-   chip fix did for the Badge. Scoped to `.light.dark` so normal light and dark
-   rendering is untouched (that state only occurs in the audit scan). */
-.light.dark .p-button.p-button-outlined.p-button-secondary {
-  color: hsl(var(--muted-foreground));
-}
+/* FAR-2351 stale-dark (now covered by the token bridge, not a CSS patch): a
+   light page that still carries `.dark` (the two theme switches are independent;
+   the WCAG audit scan reproduces exactly this disagreement) used to leave
+   PrimeVue's outlined `secondary` Button on the dark scheme's ink, because
+   `.light` re-declared our semantic tokens but not PrimeVue's
+   `--p-button-outlined-secondary-color`, which `.dark` still drove.
+   Since FAR-2764 the token bridge (src/lib/primevue-theme.ts) writes
+   `--p-button-outlined-secondary-color: hsl(var(--muted-foreground))` inline on
+   the document root, and an inline declaration beats `.dark`, so that token now
+   follows our muted ink in every theme - including the stale `.light.dark`
+   state. The former `.light.dark .p-button.p-button-outlined.p-button-secondary`
+   colour override was therefore redundant and was removed; the behaviour it
+   guarded is still pinned by the FAR-2351 stale-`.dark` scan in
+   tests/e2e/wcag-contrast.spec.ts. */
 
 body {
   background-color: hsl(var(--background));

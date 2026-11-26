@@ -235,11 +235,12 @@ Every other capture is pixel-identical except `desktop-pipeline-editor`, whose
 canvas node-position jitter already known to be non-deterministic (the bounding
 box moves, nothing recolours), unrelated to this change.
 
-Two token-*dump* additions, not rendered differences: on routes that render no
-secondary button, `--p-button-outlined-secondary-color` and
+Two token-*dump* additions, not rendered differences: on routes where no `Button`
+component mounts at all, `--p-button-outlined-secondary-color` and
 `--p-button-text-secondary-color` were previously absent (PrimeVue injects a
-component's tokens only once it mounts) and are now present, because the bridge
-writes them on `:root` unconditionally. Those captures stay 0 px different.
+component's whole token set only once that component mounts) and are now present,
+because the bridge writes them on `:root` unconditionally. Those captures stay
+0 px different.
 
 Contrast after the change, measured in the running app on
 `button[data-testid="settings-mcp-copy-url"]`:
