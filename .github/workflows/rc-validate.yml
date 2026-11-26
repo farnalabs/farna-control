@@ -642,30 +642,6 @@ jobs:
           # deploy that never shipped. Watching the run turns that into a named
           # cause, and stops the wait early instead of burning the whole budget.
           # ------------------------------------------------------------------
-          rc_tag_created_at() {
-            local ref_json obj_type obj_sha created
-            ref_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RC_TAG}" 2>/dev/null || true)"
-            if [ -z "$ref_json" ]; then
-              return 1
-            fi
-            obj_type="$(printf '%s' "$ref_json" | jq -r '.object.type // empty' 2>/dev/null || true)"
-            obj_sha="$(printf '%s' "$ref_json" | jq -r '.object.sha // empty' 2>/dev/null || true)"
-            if [ -z "$obj_sha" ]; then
-              return 1
-            fi
-            created=""
-            if [ "$obj_type" = "tag" ]; then
-              created="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${obj_sha}" --jq '.tagger.date // empty' 2>/dev/null || true)"
-            fi
-            if [ -z "$created" ]; then
-              created="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${obj_sha}" --jq '.committer.date // empty' 2>/dev/null || true)"
-            fi
-            if [ -z "$created" ]; then
-              return 1
-            fi
-            printf '%s' "$created"
-          }
-
           report_deploy_jobs() {
             local run_id="$1" jobs
             jobs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" 2>/dev/null || true)"
@@ -683,29 +659,54 @@ jobs:
             ' 2>/dev/null || echo "  (could not parse the job list for deploy run ${run_id})"
           }
 
+          DEPLOY_VERDICT=""
           if [ -z "$DEPLOY_RUN_ID" ]; then
-            RC_CREATED_AT="$(rc_tag_created_at || true)"
-            if [ -z "$RC_CREATED_AT" ]; then
-              echo "::warning::Could not resolve when ${RC_TAG} was created, so no deploy run can be discovered; falling back to the ${WAIT_MINUTES}-minute wait only."
-            else
-              DEPLOY_RUNS_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml/runs?event=workflow_dispatch&per_page=50" 2>/dev/null || true)"
-              if [ -n "$DEPLOY_RUNS_JSON" ]; then
-                DEPLOY_RUN_ID="$(printf '%s' "$DEPLOY_RUNS_JSON" | jq -r --arg after "$RC_CREATED_AT" '
-                  [ .workflow_runs[] | select(.created_at >= $after) ]
-                  | sort_by(.created_at) | reverse | .[0].id // empty
-                ' 2>/dev/null || true)"
-              fi
-              if [ -n "$DEPLOY_RUN_ID" ] && [ "$DEPLOY_RUN_ID" != "null" ]; then
-                echo "Discovered deploy run ${DEPLOY_RUN_ID} for ${RC_TAG} (newest workflow_dispatch deploy run created at or after the tag at ${RC_CREATED_AT})."
-              else
-                DEPLOY_RUN_ID=""
-                echo "::warning::No workflow_dispatch deploy run created at or after ${RC_CREATED_AT} could be discovered for ${RC_TAG}; falling back to the ${WAIT_MINUTES}-minute wait only."
-              fi
+            # FAR-2800: select the deploy run by WHAT IT DEPLOYED, never by
+            # creation time. The previous heuristic - "newest workflow_dispatch
+            # deploy run created at or after the tag" - is a heuristic rather
+            # than a property, so on 2026-11-26 it picked a main deploy that had
+            # shipped a different commit (and, in fact, been throttled and
+            # shipped nothing), and this leg failed on deployment identity
+            # instead of validating the RC.
+            #
+            # The selector reads the deploy run's own `release-identity-<rc_tag>`
+            # artifact. `.github/workflows/deploy.yml` uploads that only when the
+            # run passed the throttle's `deployed` gate AND carries a non-empty
+            # `release_ref`, so the artifact is a record of a run that set out to
+            # ship THIS RC - it cannot exist for a throttled no-op or a main
+            # deploy. The selection logic lives in a tested script rather than
+            # inline jq; see `.github/scripts/select_rc_deploy_run.py`.
+            SELECTOR=".github/scripts/select_rc_deploy_run.py"
+            if [ ! -f "$SELECTOR" ]; then
+              echo "::error::${SELECTOR} is missing from this checkout (ref ${GITHUB_REF}). This RC tag predates the FAR-2800 deploy-run selector; dispatch rc-validate.yml from main to re-validate it."
+              exit 1
             fi
+
+            # Re-runnable on purpose. The identity record is written by the
+            # deploy run's own `record-release-identity` job, which starts only
+            # after that run's throttle job finishes - so a record can
+            # legitimately appear a minute or so AFTER this step starts. Polling
+            # is what keeps "the RC has not been deployed" from being a race
+            # against a deploy that was dispatched moments ago.
+            resolve_deploy_run() {
+              local out
+              out="$(mktemp)"
+              if python3 "$SELECTOR" --repo "$GITHUB_REPOSITORY" --rc-tag "$RC_TAG" --github-output "$out"; then
+                DEPLOY_VERDICT="$(sed -n 's/^verdict=//p' "$out")"
+                DEPLOY_RUN_ID="$(sed -n 's/^deploy_run_id=//p' "$out")"
+              else
+                # The selector failed to run at all (missing python3, an
+                # unreadable script): UNKNOWN, never "not deployed".
+                DEPLOY_VERDICT="unknown"
+                DEPLOY_RUN_ID=""
+              fi
+              rm -f "$out"
+            }
           fi
 
           DEADLINE=$(( $(date -u +%s) + WAIT_MINUTES * 60 ))
           ATTEMPT=0
+          FAILED_POLLS=0
           LAST_INFO=""
           LAST_DEPLOYED=""
           RUN_STATUS=""
@@ -719,6 +720,29 @@ jobs:
             if [ -n "$LAST_DEPLOYED" ] && [ "${LAST_DEPLOYED:0:7}" = "${RC_SHA:0:7}" ]; then
               echo "Deployment SHA match: ${LAST_DEPLOYED:0:7} == ${RC_TAG}"
               exit 0
+            fi
+
+            # FAR-2800: keep resolving while nothing is selected, so a record
+            # that appears after this step started is still picked up.
+            if [ -z "$DEPLOY_RUN_ID" ]; then
+              resolve_deploy_run
+              if [ -n "$DEPLOY_RUN_ID" ]; then
+                echo "Watching deploy run ${DEPLOY_RUN_ID} for ${RC_TAG} (verdict: ${DEPLOY_VERDICT})."
+              fi
+            fi
+
+            # A record exists but its deploy lost: a named deploy failure, not a
+            # wrong deployment SHA and not "not deployed". Require two
+            # consecutive polls first so a deploy dispatched moments ago (whose
+            # record has not been written yet) cannot cause a premature verdict.
+            if [ -z "$DEPLOY_RUN_ID" ] && [ "$DEPLOY_VERDICT" = "deploy_failed" ]; then
+              FAILED_POLLS=$((FAILED_POLLS + 1))
+              if [ "$FAILED_POLLS" -ge 2 ]; then
+                echo "::error::The RC ${RC_TAG} (${RC_SHA:0:7}) has not been deployed: every deploy run that records shipping it finished without a successful production deploy (see the candidate list above). This is NOT a wrong deployment SHA - the RC's own deploy did not ship it; fix the deploy and re-run it."
+                exit 1
+              fi
+            else
+              FAILED_POLLS=0
             fi
 
             RUN_STATUS=""
@@ -759,7 +783,20 @@ jobs:
 
             if [ "$(date -u +%s)" -ge "$DEADLINE" ]; then
               if [ -z "$DEPLOY_RUN_ID" ]; then
-                echo "::error::No deploy run could be resolved for ${RC_TAG}, so this step cannot name the cause. After ${WAIT_MINUTES} minutes ${BASE_URL}/api/v1/deployment reports: ${LAST_INFO:-<empty>} (serves ${LAST_DEPLOYED:-<unreadable>}, expected ${RC_SHA:0:7}). Wait for the deploy pipeline to ship the RC before validating."
+                # FAR-2800: the three "no run to watch" causes are different
+                # diagnoses and must read differently. "Nothing tried to ship
+                # this RC" is neither a wrong SHA nor a failed deploy.
+                case "$DEPLOY_VERDICT" in
+                  not_deployed)
+                    echo "::error::The RC ${RC_TAG} has not been deployed: no deploy.yml run records shipping it, so nothing has tried to ship this RC yet. This is NOT a wrong deployment SHA and NOT a failed deploy. After ${WAIT_MINUTES} minutes ${BASE_URL}/api/v1/deployment reports: ${LAST_INFO:-<empty>} (serves ${LAST_DEPLOYED:-<unreadable>}, expected ${RC_SHA:0:7}). Dispatch the RC deploy, then re-run this validation."
+                    ;;
+                  unknown)
+                    echo "::error::Could not select a deploy run for ${RC_TAG} (the GitHub Actions API was unreadable), so this step cannot name the cause and this is NOT evidence that the RC was never deployed. After ${WAIT_MINUTES} minutes ${BASE_URL}/api/v1/deployment reports: ${LAST_INFO:-<empty>} (serves ${LAST_DEPLOYED:-<unreadable>}, expected ${RC_SHA:0:7})."
+                    ;;
+                  *)
+                    echo "::error::No deploy run could be resolved for ${RC_TAG}, so this step cannot name the cause. After ${WAIT_MINUTES} minutes ${BASE_URL}/api/v1/deployment reports: ${LAST_INFO:-<empty>} (serves ${LAST_DEPLOYED:-<unreadable>}, expected ${RC_SHA:0:7}). Wait for the deploy pipeline to ship the RC before validating."
+                    ;;
+                esac
               elif [ "$RUN_STATUS" = "completed" ]; then
                 echo "::error::Deploy run ${DEPLOY_RUN_ID} concluded '${RUN_CONCLUSION}' but ${BASE_URL} never reported a readable git_sha matching ${RC_TAG} (${RC_SHA:0:7}) within ${WAIT_MINUTES} minutes. Last deployment record: ${LAST_INFO:-<empty>}."
               else
