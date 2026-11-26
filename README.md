@@ -136,6 +136,14 @@ credentials already stored in the database unreadable.
 The first run builds the backend and frontend images and may take a few
 minutes; after that, the demo itself takes about five minutes.
 
+The stack runs the code baked into the image. To live-edit backend code without
+rebuilding, add the dev override (see
+[docs/dev-setup.md](docs/dev-setup.md#running-the-containerised-stack-and-live-editing)):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
 After the services become healthy, open <http://localhost:5173> and sign in
 with the local demo credentials `admin` / `admin`. These credentials and the
 Compose secrets are for local evaluation only.

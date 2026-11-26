@@ -87,7 +87,19 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./backend/src:/app/src
+      # NO `./backend/src:/app/src` by default (FAR-2785). The image already
+      # bakes the code AND the editable install (a `.pth` puts /app/src on
+      # sys.path), so a bind mount here made every import read from Docker
+      # Desktop's slow host filesystem and shadowed the image layer — ~12 min
+      # of the cold boot. Live-edit with `docker compose -f docker-compose.yml
+      # -f docker-compose.dev.yml up` (that override re-adds the mount).
+      #
+      # The manifest mount STAYS: the backend image cannot bake
+      # `frontend/src/manifest.yaml` (its build context is ./backend), and the
+      # runtime serves it (routes/manifest.py, the assistant primer and the
+      # documentation indexer). It is a single small file read once and cached
+      # in-process, so it costs nothing at boot. Removing it would serve an
+      # empty manifest, which changes product behaviour.
       - ./frontend/src/manifest.yaml:/app/manifest.yaml
       # Read-only: the monitor only statvfs()es it. If the container user
       # cannot traverse the mount the probe fails open (capacity "none", stop
@@ -122,7 +134,8 @@ services:
       # hard-stop is inert for them.
       DB_CAPACITY_PATH: /var/lib/farna/db-volume
     volumes:
-      - ./backend/src:/app/src
+      # No `./backend/src` bind mount by default — see the backend service's
+      # comment (FAR-2785). Add `-f docker-compose.dev.yml` for live editing.
       # Read-only: the monitor only statvfs()es it. If the container user
       # cannot traverse the mount the probe fails open (capacity "none", stop
       # inert) rather than erroring - set DB_CAPACITY_BYTES to override.
@@ -159,7 +172,8 @@ services:
     ports:
       - "127.0.0.1:8081:8081"
     volumes:
-      - ./backend/src:/app/src
+      # No `./backend/src` bind mount by default — see the backend service's
+      # comment (FAR-2785). Add `-f docker-compose.dev.yml` for live editing.
       # Cron/polling triggers create their runs in THIS process
       # (cron_helpers.fire_cron_trigger / _run_poll_fire / _create_ongoing_runs
       # all call crud.run.create_run), which is where the 98% hard-stop is
