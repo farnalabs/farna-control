@@ -79,6 +79,30 @@ describe('Checkbox', () => {
     expect(wrapper.find('label').exists()).toBe(false)
   })
 
+  it('applies the caller class to the control in the bare form', () => {
+    const wrapper = mountHarness(
+      '<UiCheckbox v-model="on" bare aria-label="Select row" class="h-4 w-4" data-testid="control" />',
+      { on: ref(false) },
+    )
+    const control = wrapper.get('[data-testid="control"]')
+
+    expect(control.classes()).toContain('h-4')
+    expect(control.classes()).toContain('w-4')
+  })
+
+  it('renders help text and references it from a bare control', () => {
+    const wrapper = mountHarness(
+      '<UiCheckbox v-model="on" bare aria-label="Select row" help="Applies to every row" data-testid="control" />',
+      { on: ref(false) },
+    )
+    const control = wrapper.get('[data-testid="control"]')
+    const help = wrapper.get('p')
+
+    expect(help.text()).toBe('Applies to every row')
+    expect(help.attributes('id')).toBe(`${control.attributes('id')}-help`)
+    expect(control.attributes('aria-describedby')).toBe(help.attributes('id'))
+  })
+
   it('renders rich label content through the default slot instead of the label prop', () => {
     const wrapper = mountHarness(
       '<UiCheckbox v-model="on" data-testid="control"><span class="rich">Rich label</span></UiCheckbox>',

@@ -35,6 +35,33 @@ describe('RadioGroup', () => {
     expect(names[0]).toBeTruthy()
   })
 
+  it('generates a distinct radio name for every group instance', () => {
+    const wrapper = mountHarness(
+      `<div>
+        <RadioGroup v-model="first" aria-label="First" :options="options" />
+        <RadioGroup v-model="second" aria-label="Second" :options="options" />
+      </div>`,
+      { first: ref('existing'), second: ref('existing'), options: OPTIONS },
+    )
+    const groups = wrapper.findAll('[role="radiogroup"]')
+    const firstName = groups[0].get('input[type="radio"]').attributes('name')
+    const secondName = groups[1].get('input[type="radio"]').attributes('name')
+
+    expect(firstName).toBeTruthy()
+    expect(secondName).toBeTruthy()
+    expect(firstName).not.toBe(secondName)
+  })
+
+  it('forwards non-aria caller attributes such as data-testid to the group root', () => {
+    const wrapper = mountHarness(
+      '<RadioGroup v-model="mode" aria-label="Target" :options="options" data-testid="mode-group" />',
+      { mode: ref('existing'), options: OPTIONS },
+    )
+    const group = wrapper.get('[data-testid="mode-group"]')
+
+    expect(group.attributes('role')).toBe('radiogroup')
+  })
+
   it('gives the group an accessible name and native radio semantics, not tabs', () => {
     const wrapper = mountHarness('<RadioGroup v-model="mode" aria-label="Graduation target" :options="options" />', {
       mode: ref('existing'),

@@ -15,6 +15,20 @@ export interface RadioOption<V extends string | number = string> {
   /** `data-testid` on the native radio input. */
   testid?: string
 }
+
+/**
+ * Module-scoped so the generated name is unique across EVERY instance on the
+ * page. A counter inside `<script setup>` would run once per instance and give
+ * every group the same name, so two groups would share one native radio name
+ * and selecting in one would clear the other. Mirrors `Field.vue`'s
+ * `nextFieldId` (FAR-2792 review).
+ */
+let radioGroupCounter = 0
+
+export function nextRadioGroupName(): string {
+  radioGroupCounter += 1
+  return `radio-group-${radioGroupCounter}`
+}
 </script>
 
 <script setup lang="ts" generic="V extends string | number">
@@ -74,14 +88,22 @@ const props = defineProps<{
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: V): void }>()
 
-let radioGroupCounter = 0
-
 const attrs = useAttrs()
 const slots = useSlots()
 const field = inject(FIELD_CONTEXT, null)
 
-const groupName = `radio-group-${(radioGroupCounter += 1)}`
+const groupName = nextRadioGroupName()
 const resolvedName = computed(() => props.name || groupName)
+
+// Passthrough attributes (`data-testid`, `id`, other aria-*) must reach the
+// group root, not vanish because `inheritAttrs` is off. The two we resolve
+// ourselves are excluded so the explicit bindings below stay authoritative.
+const rootAttrs = computed(() => {
+  const rest = { ...attrs }
+  delete rest['aria-describedby']
+  delete rest['aria-invalid']
+  return rest
+})
 const wrapsOptions = computed(() => Boolean(slots['option-after']))
 
 const resolvedDescribedBy = computed(() => {
@@ -113,6 +135,7 @@ function select(option: RadioOption<V>): void {
 <template>
   <div
     role="radiogroup"
+    v-bind="rootAttrs"
     :class="props.class"
     :aria-label="ariaLabel"
     :aria-labelledby="ariaLabelledBy"

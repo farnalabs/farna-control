@@ -1,11 +1,11 @@
 <template>
   <input
-    v-if="bare"
+    v-if="bare && !help"
     ref="inputEl"
     v-bind="inputAttrs"
     :id="resolvedId"
     type="checkbox"
-    :class="controlClass"
+    :class="bareControlClass"
     :checked="isChecked"
     :disabled="disabled"
     :indeterminate="indeterminate"
@@ -14,6 +14,23 @@
     :aria-invalid="resolvedAriaInvalid"
     @change="onChange"
   />
+  <template v-else-if="bare">
+    <input
+      ref="inputEl"
+      v-bind="inputAttrs"
+      :id="resolvedId"
+      type="checkbox"
+      :class="bareControlClass"
+      :checked="isChecked"
+      :disabled="disabled"
+      :indeterminate="indeterminate"
+      :aria-label="ariaLabel"
+      :aria-describedby="resolvedDescribedBy"
+      :aria-invalid="resolvedAriaInvalid"
+      @change="onChange"
+    />
+    <p :id="helpId" :class="helpClass">{{ help }}</p>
+  </template>
   <template v-else>
     <label :for="resolvedId" :class="[rootClass, wrapperClass]">
       <input
@@ -50,8 +67,10 @@
  * Two shapes:
  *   - labelled: `label` (or a default slot for rich label content) renders a
  *     `<label for>` wrapping the control, with optional `help` below it;
- *   - bare: `bare` renders the control alone, for a checkbox whose name comes
- *     from `aria-label` (a table cell, a card header action).
+ *   - bare: `bare` renders the control with no `<label>` wrapper, for a
+ *     checkbox whose name comes from `aria-label` (a table cell, a card header
+ *     action). The caller's `class` lands on the control, and optional `help`
+ *     text still renders below it (so its `aria-describedby` reference is real).
  *
  * The control styling is the caller's `controlClass` so a migration keeps the
  * site's existing token classes exactly; `wrapperClass` is the label's layout.
@@ -106,6 +125,11 @@ const resolvedId = computed(() => props.id || (attrs.id as string | undefined) |
 const helpId = computed(() => `${resolvedId.value}-help`)
 
 const rootClass = computed(() => props.class)
+
+// Bare mode renders no wrapper, so the caller's root `class` must land on the
+// control itself or it would be silently dropped. Labelled mode keeps `class`
+// on the `<label>` wrapper (rootClass below).
+const bareControlClass = computed(() => [props.controlClass, props.class])
 
 // Every attribute except `class` belongs to the control: a caller keeps its
 // `data-testid`, `value`, `name` and aria-* exactly as before adoption.
