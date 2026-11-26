@@ -21,6 +21,12 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release-unified.yml"
 
 PROMOTE_JOB = "promote-compose"
+RELEASE_JOB = "release"
+PUBLISH_RELEASE_JOB = "publish-release"
+# The promote-mode step that creates/updates the GA GitHub Release record.
+GA_RELEASE_STEP = "Update CHANGELOG.md and GitHub Release for GA"
+# The step that publishes the installable bundle-v* release (the Latest one).
+BUNDLE_RELEASE_STEP = "Create GitHub Release with assets"
 # The title states what the step does: the publication below is idempotent
 # (--clobber on a retry) and a verification step follows it. The release
 # rehearsal contract (test_deploy_workflow_rehearsal.py) keys on this exact name.
@@ -36,6 +42,20 @@ _SIGNATURE = 'release-artefacts/RELEASE_MANIFEST.json.sig"'
 def _steps() -> list[dict[str, Any]]:
     workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
     return list(workflow["jobs"][PROMOTE_JOB]["steps"])
+
+
+def _job_run(job: str, step_name: str) -> str:
+    """Return the run script of a named step in a named job."""
+    workflow = yaml.safe_load(RELEASE_WORKFLOW.read_text(encoding="utf-8"))
+    matches = [step for step in workflow["jobs"][job]["steps"] if step.get("name") == step_name]
+    assert len(matches) == 1, f"expected exactly one {step_name!r} step in {job!r}, found {len(matches)}"
+    run = matches[0].get("run")
+    assert isinstance(run, str), f"step {step_name!r} in job {job!r} has no run script"
+    return run
+
+
+def _command_lines(run: str, needle: str) -> list[str]:
+    return [line.strip() for line in run.splitlines() if needle in line]
 
 
 def _step_by_name(name: str) -> dict[str, Any]:
@@ -125,3 +145,49 @@ def test_promote_job_keeps_the_release_public_and_never_deletes_it() -> None:
     assert "gh release delete" not in runs
     assert "--draft" not in runs
     assert "gh release edit" not in runs
+
+
+# ---------------------------------------------------------------------------
+# FAR-2822: the GA release record must never be /releases/latest.
+#
+# `/releases/latest` is the install pointer: scripts/install.sh and the
+# marketing website's fetch-release.mjs both resolve it and both reject a tag
+# that is not `bundle-v<X.Y.Z>`. `gh release create` without `--latest` defaults
+# to automatic latest selection, so a GA `v<X.Y.Z>` release created after the
+# bundle release would take the pointer and break installs and the site. The GA
+# release is therefore always created and edited with `--latest=false`, while
+# the bundle release keeps its own explicit latest decision.
+# ---------------------------------------------------------------------------
+
+
+def _ga_latest_violations(run: str) -> list[str]:
+    problems: list[str] = []
+    create_lines = _command_lines(run, 'gh release create "$GA_TAG"')
+    edit_lines = _command_lines(run, 'gh release edit "$GA_TAG"')
+    if not create_lines:
+        problems.append('has no `gh release create "$GA_TAG"` invocation')
+    if not edit_lines:
+        problems.append('has no `gh release edit "$GA_TAG"` invocation')
+    for line in create_lines:
+        if "--latest=false" not in line:
+            problems.append(f"creates the GA release without --latest=false: {line}")
+    for line in edit_lines:
+        if "--latest=false" not in line:
+            problems.append(f"edits the GA release without --latest=false: {line}")
+    return problems
+
+
+def test_ga_release_create_and_edit_are_never_latest() -> None:
+    problems = _ga_latest_violations(_job_run(RELEASE_JOB, GA_RELEASE_STEP))
+    assert not problems, "; ".join(problems)
+
+
+def test_bundle_release_keeps_its_explicit_latest_decision() -> None:
+    run = _job_run(PUBLISH_RELEASE_JOB, BUNDLE_RELEASE_STEP)
+    # The bundle release decides Latest explicitly from the newest published
+    # bundle, never by gh's default. Both arms must survive untouched.
+    assert "PUBLISH_ARGS=(--prerelease=false --latest)" in run
+    assert "PUBLISH_ARGS=(--prerelease=false --latest=false)" in run
+    # ...and the decision must actually be applied to both publish paths.
+    applied = _command_lines(run, '"${PUBLISH_ARGS[@]}"')
+    assert len(applied) == 2, f"expected PUBLISH_ARGS applied to create and edit, found {len(applied)}"
