@@ -208,7 +208,7 @@
             class="flex items-center gap-1 rounded text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-testid="admin-error-detail-toggle-context"
           >
-            <JsonViewer :data="sampleEvent.context_json ?? null" :show-toolbar="true" :max-height="'16rem'" />
+            <JsonViewer :data="sampleEvent.context_json" :show-toolbar="true" :max-height="'16rem'" />
           </Disclosure>
         </div>
 

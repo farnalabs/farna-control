@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 
 import Disclosure from '../components/ui/Disclosure.vue'
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.restoreAllMocks()
+})
 
 describe('Disclosure', () => {
   it('wires aria-expanded and aria-controls to a real button and its region', async () => {
@@ -153,5 +158,14 @@ describe('Disclosure', () => {
     await wrapper.get('button').trigger('click')
     expect(onClick).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('update:open')).toBeUndefined()
+  })
+
+  it('does not warn in a production build when no region can be resolved', () => {
+    vi.stubEnv('DEV', false)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    mount(Disclosure, { props: { label: 'Details' } })
+
+    expect(warn).not.toHaveBeenCalled()
   })
 })
