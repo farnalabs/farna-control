@@ -250,10 +250,24 @@
         stages: [pre-commit]
 
   # CI-parity pre-push gate: mirrors key CI checks so a red-PR push is caught
-  # locally before the CI round-trip. Tests are NOT included — CI's
-  # "Test (Backend)" job runs the full suite properly; a pre-push best-guess
-  # subset duplicates CI, costs minutes, and can fail on files unrelated to the
-  # change. Install: pre-commit install --hook-type pre-push (see CONTRIBUTING.md).
+  # locally before the CI round-trip. Install: pre-commit install --hook-type
+  # pre-push (see CONTRIBUTING.md).
+  #
+  # What is deliberately NOT here, and why (leave it in the merge tier):
+  # - the full backend unit suite — CI shards it across three runners; a
+  #   pre-push copy would cost ~40 minutes per push;
+  # - integration / BDD live-app / Playwright E2E — they need Docker, a browser
+  #   and a running app, none of which exist in the E2B sandbox or on a plain
+  #   developer machine. `prepush-affected-tests` prints an explicit
+  #   "deferred to CI" line for each such suite rather than skipping silently;
+  # - the changed-lines coverage gate (`scripts/run_coverage_gate.py`) — it
+  #   reads `backend/coverage.xml` + `frontend/coverage/lcov.info`, which only
+  #   exist after the instrumented CI runs. A local subset run would produce a
+  #   report with the changed files partially measured, and diff-cover scores a
+  #   file absent from the report at 0%, so the local gate would fail changes
+  #   CI passes. Measured evidence is in the PR that added these hooks; it
+  #   stays a merge-tier gate until a deterministic local instrumented run
+  #   exists.
   - repo: local
     hooks:
       # EXACT `Lint (Backend)` mypy invocation (ci.yml backend-lint job,
@@ -287,6 +301,45 @@
         entry: uv run --project backend --no-sync --frozen python scripts/run_prepush_gated_check.py --pattern "backend/src/**/*.py" -- uv run --project backend --no-sync --frozen python scripts/run_generate_api_types.py --check
         language: system
         files: ^(backend/src/.+\.py$)
+        pass_filenames: false
+        stages: [pre-push]
+      # The architecture suite was the largest single red-CI class in the last
+      # 80 failed runs (27 of the 30 failures in "Test (Backend) non-unit
+      # suites" were the "Run architecture tests" step). It needs no DB and no
+      # Docker, so it belongs here rather than in the CI round-trip. Two
+      # patterns because the suite reads BOTH trees (it scans src/farna and the
+      # frontend product map). `run_architecture_suite.py` sets an isolated
+      # PYTEST_DEBUG_TEMPROOT (a stale global `pytest-current` symlink makes
+      # pytest exit 1 with every test green) and refuses any scope wider than
+      # tests/architecture.
+      - id: prepush-architecture
+        name: prepush architecture suite (exact CI invocation)
+        entry: uv run --project backend --no-sync --frozen python scripts/run_prepush_gated_check.py --pattern "backend/src/**/*.py" --pattern "frontend/src/**" --rerun-hint "uv run --project backend --no-sync --frozen python scripts/run_architecture_suite.py" -- uv run --project backend --no-sync --frozen python scripts/run_architecture_suite.py
+        language: system
+        files: ^(backend/src/|frontend/src/)
+        pass_filenames: false
+        stages: [pre-push]
+      # A source change now runs its AFFECTED tests, not only a changed test
+      # file (the pre-commit `run-changed-tests` hook covers the latter). The
+      # --prepush profile reuses `run_affected_tests.py`'s existing source→test
+      # mapper and adds the bounds: file cap, wall-clock budget, no Docker
+      # suites, and a hard refusal when the path scope cannot be resolved.
+      - id: prepush-affected-tests
+        name: prepush affected tests for changed sources
+        entry: uv run --project backend --no-sync --frozen python scripts/run_prepush_gated_check.py --pattern "backend/src/**/*.py" --rerun-hint "uv run --project backend --no-sync --frozen python scripts/run_affected_tests.py --prepush" -- uv run --project backend --no-sync --frozen python scripts/run_affected_tests.py --prepush
+        language: system
+        files: ^backend/src/
+        pass_filenames: false
+        stages: [pre-push]
+      # ERR_PNPM_OUTDATED_LOCKFILE was six of the failed frontend/merge-queue
+      # steps in the same 80-run window. The exact CI command, run from
+      # frontend/. Gated on the three files that feed the lockfile (pnpm v10+
+      # reads `overrides` ONLY from pnpm-workspace.yaml).
+      - id: prepush-pnpm-lock
+        name: prepush pnpm lockfile freshness (--frozen-lockfile)
+        entry: uv run --project backend --no-sync --frozen python scripts/run_check_pnpm_lock.py
+        language: system
+        files: ^frontend/(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$
         pass_filenames: false
         stages: [pre-push]
       - id: prepush-merge-conflict-check

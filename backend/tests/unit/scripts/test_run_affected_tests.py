@@ -18,6 +18,7 @@ from __future__ import annotations
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
+from types import SimpleNamespace
 
 for parent in Path(__file__).resolve().parents:
     script_path = parent / "scripts" / "run_affected_tests.py"
@@ -150,3 +151,196 @@ def test_matches_stem_word_boundary():
     assert mod._matches_stem("test_me_password.py", "me")
     assert not mod._matches_stem("test_metrics_ingest.py", "me")
     assert mod._matches_stem("test_me_2023.py", "me")
+
+
+# ---------------------------------------------------------------------------
+# Pre-push profile (--prepush): bounds, deferrals, guards
+# ---------------------------------------------------------------------------
+def _make_prepush_tree(tmp_path: Path) -> None:
+    """A fake repo tree with one runnable (unit) and one Docker (integration) test."""
+    for rel in (
+        "backend/tests/unit/api/test_me.py",
+        "backend/tests/integration/test_me_db.py",
+    ):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    (tmp_path / "backend" / "src" / "api").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "backend" / "src" / "api" / "me.py").touch()
+
+
+def test_collect_changed_files_returns_none_when_scope_is_unknown(monkeypatch):
+    """Unknown scope is distinct from an empty diff (never conflated)."""
+    monkeypatch.setattr(mod, "_resolve_merge_base", lambda _ref: None)
+    assert mod._collect_changed_files("origin/main") is None
+
+
+def test_collect_changed_files_returns_empty_list_for_an_empty_diff(monkeypatch):
+    """An empty diff is "nothing to do", not "scope unknown"."""
+
+    def fake_git(*args):
+        if args[0] == "merge-base":
+            return "abc123"
+        return ""
+
+    monkeypatch.setattr(mod, "_git", fake_git)
+    assert not mod._collect_changed_files("origin/main")
+
+
+def test_prepush_refuses_when_the_scope_cannot_be_resolved(monkeypatch, capsys):
+    """A gate that cannot see the diff must not silently skip nor widen to the full suite."""
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: None)
+    monkeypatch.setattr(mod, "_run_pytest", lambda *args, **kwargs: 0)
+
+    assert mod.main(["--prepush"]) == 2
+
+    err = capsys.readouterr().err
+    assert "cannot resolve the changed-path scope" in err
+    assert "never falls back to the full backend suite" in err
+
+
+def test_non_prepush_still_skips_quietly_when_the_scope_is_unknown(monkeypatch, capsys):
+    """The ad hoc (non pre-push) invocation keeps its historical exit 0."""
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: None)
+
+    assert mod.main([]) == 0
+
+    assert "skipping" in capsys.readouterr().err
+
+
+def test_prepush_runs_the_unit_suite_and_defers_the_docker_suite(tmp_path, monkeypatch, capsys):
+    _make_prepush_tree(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: ["backend/src/api/me.py"])
+    monkeypatch.setattr(mod, "_is_whole_suite", lambda selected, root=None: False)
+    run_calls: list[dict] = []
+
+    def fake_run(paths, **kwargs):
+        run_calls.append({"paths": paths, **kwargs})
+        return 0
+
+    monkeypatch.setattr(mod, "_run_pytest", fake_run)
+
+    assert mod.main(["--prepush"]) == 0
+
+    suites_run = [call["paths"][0].split("/")[0] for call in run_calls]
+    assert suites_run == ["tests"]
+    integration_paths = [call["paths"] for call in run_calls if call["paths"][0].startswith("tests/integration")]
+    assert not integration_paths
+    err = capsys.readouterr().err
+    assert "deferred to CI: suite [integration]" in err
+    assert "needs Docker/testcontainers" in err
+
+
+def test_prepush_defers_bdd_e2e_docker_and_load_suites_with_a_reason(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    grouped = {
+        "unit": ["backend/tests/unit/test_a.py"],
+        "bdd": ["backend/tests/bdd/steps/test_b.py"],
+        "e2e": ["backend/tests/e2e/test_c.py"],
+        "docker": ["backend/tests/docker/test_d.py"],
+        "load": ["backend/tests/load/test_e.py"],
+    }
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: ["backend/src/api/me.py"])
+    monkeypatch.setattr(mod, "_select_test_files", lambda changed: [p for paths in grouped.values() for p in paths])
+    monkeypatch.setattr(mod, "_group_by_suite", lambda paths: grouped)
+    monkeypatch.setattr(mod, "_is_whole_suite", lambda selected, root=None: False)
+    monkeypatch.setattr(mod, "_run_pytest", lambda paths, **kwargs: 0)
+
+    assert mod.main(["--prepush"]) == 0
+
+    err = capsys.readouterr().err
+    for suite in ("bdd", "e2e", "docker", "load"):
+        assert f"deferred to CI: suite [{suite}]" in err
+
+
+def test_prepush_caps_the_selection_and_says_so(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    selected = [f"backend/tests/unit/test_{index}.py" for index in range(10)]
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: ["backend/src/api/me.py"])
+    monkeypatch.setattr(mod, "_select_test_files", lambda changed: list(selected))
+    monkeypatch.setattr(mod, "_group_by_suite", lambda paths: {"unit": list(paths)})
+    monkeypatch.setattr(mod, "_is_whole_suite", lambda value, root=None: False)
+    run_calls: list[list[str]] = []
+    monkeypatch.setattr(mod, "_run_pytest", lambda paths, **kwargs: run_calls.append(paths) or 0)
+
+    assert mod.main(["--prepush", "--max-files", "3"]) == 0
+
+    assert len(run_calls[0]) == 3
+    assert "Notice: 10 affected test files" in capsys.readouterr().err
+
+
+def test_prepush_defers_remaining_suites_when_the_time_budget_is_spent(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    grouped = {
+        "unit": ["backend/tests/unit/test_a.py"],
+        "connectors": ["backend/tests/connectors/test_b.py"],
+    }
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: ["backend/src/api/me.py"])
+    monkeypatch.setattr(mod, "_select_test_files", lambda changed: [p for paths in grouped.values() for p in paths])
+    monkeypatch.setattr(mod, "_group_by_suite", lambda paths: grouped)
+    monkeypatch.setattr(mod, "_is_whole_suite", lambda selected, root=None: False)
+    # A budget of 1s is already spent by the time the first suite starts.
+    # Replace the module's clock reference (never the global ``time`` module, so
+    # no other machinery in this process is affected).
+    monkeypatch.setattr(mod, "time", SimpleNamespace(monotonic=iter([0.0, 5.0, 5.0]).__next__))
+    run_calls: list[list[str]] = []
+    monkeypatch.setattr(mod, "_run_pytest", lambda paths, **kwargs: run_calls.append(paths) or 0)
+
+    assert mod.main(["--prepush", "--time-budget-seconds", "1"]) == 0
+
+    assert not run_calls
+    err = capsys.readouterr().err
+    assert "pre-push time budget was exhausted" in err
+
+
+def test_prepush_refuses_to_run_the_entire_backend_suite(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: ["backend/src/api/me.py"])
+    monkeypatch.setattr(mod, "_select_test_files", lambda changed: ["backend/tests/unit/test_a.py"] * 5)
+    monkeypatch.setattr(mod, "_is_whole_suite", lambda selected, root=None: True)
+    monkeypatch.setattr(mod, "_run_pytest", lambda *args, **kwargs: 0)
+
+    assert mod.main(["--prepush"]) == 2
+
+    err = capsys.readouterr().err
+    assert "entire backend test suite" in err
+
+
+def test_prepush_prints_the_rerun_command_on_failure(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: ["backend/tests/unit/test_a.py"])
+    monkeypatch.setattr(mod, "_select_test_files", lambda changed: ["backend/tests/unit/test_a.py"])
+    monkeypatch.setattr(mod, "_group_by_suite", lambda paths: {"unit": list(paths)})
+    monkeypatch.setattr(mod, "_is_whole_suite", lambda selected, root=None: False)
+    monkeypatch.setattr(mod, "_run_pytest", lambda paths, **kwargs: 1)
+
+    assert mod.main(["--prepush"]) == 1
+
+    err = capsys.readouterr().err
+    assert "Rerun locally with:" in err
+    assert "run_affected_tests.py --base origin/main --prepush" in err
+
+
+def test_prepush_forwards_the_time_budget_as_a_wall_clock_bound(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mod, "_collect_changed_files", lambda base: ["backend/tests/unit/test_a.py"])
+    monkeypatch.setattr(mod, "_select_test_files", lambda changed: ["backend/tests/unit/test_a.py"])
+    monkeypatch.setattr(mod, "_group_by_suite", lambda paths: {"unit": list(paths)})
+    monkeypatch.setattr(mod, "_is_whole_suite", lambda selected, root=None: False)
+    captured: list[dict] = []
+    monkeypatch.setattr(mod, "_run_pytest", lambda paths, **kwargs: captured.append(kwargs) or 0)
+
+    assert mod.main(["--prepush", "--time-budget-seconds", "60"]) == 0
+
+    assert captured[0]["wall_timeout"] is not None
+
+
+def test_parse_args_rejects_a_non_positive_max_files(capsys):
+    assert mod._parse_args(["--prepush", "--max-files", "0"]) is None
+    assert "--max-files expects a positive integer" in capsys.readouterr().err
+
+
+def test_parse_args_rejects_an_unknown_flag(capsys):
+    assert mod._parse_args(["--nope"]) is None
+    assert "unexpected argument" in capsys.readouterr().err
