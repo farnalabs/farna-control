@@ -911,11 +911,13 @@ jobs:
         run: |
           FAILED=""
           record() {
-            if [ "$2" != "success" ] && [ "$2" != "skipped" ]; then
+            local name="$1"
+            local status="$2"
+            if [ "$status" != "success" ] && [ "$status" != "skipped" ]; then
               if [ -z "$FAILED" ]; then
-                FAILED="$1 ($2)"
+                FAILED="$name ($status)"
               else
-                FAILED="${FAILED}, $1 ($2)"
+                FAILED="${FAILED}, $name ($status)"
               fi
             fi
           }
