@@ -5,6 +5,9 @@ caller's analytics queries are constrained to:
 * an org admin is unscoped (``None``) — no session is opened,
 * any other caller gets the tuple of their OWN ``TeamMembership.team_id``
   rows, resolved inside a session pinned to the caller's org (``set_rls_org``),
+* a team-scoped credential (``TenantPrincipal.team_id``) is narrowed to that
+  one team — the credential's own hard boundary, applied on top of membership
+  so the invariant holds whichever dependency guards the route,
 * a DB failure is a 503, never an unconstrained boundary.
 """
 
@@ -41,6 +44,18 @@ def _principal(org_role: str = "viewer") -> SimpleNamespace:
         account_id=_ACCOUNT,
         org_role=org_role,
     )
+
+
+def _team_scoped_principal(team_id: uuid.UUID, org_role: str = "viewer") -> SimpleNamespace:
+    """A team-scoped credential principal — the ``TeamPrincipal.team_id`` shape.
+
+    Built from ``_principal()`` and given ``team_id`` afterwards so the
+    attribute-ABSENT stand-in (a principal shape the production class always
+    carries, but lightweight test doubles do not) stays covered above.
+    """
+    principal = _principal(org_role)
+    principal.team_id = team_id
+    return principal
 
 
 def _factory(exec_result: Any = None, exc: Exception | None = None) -> MagicMock:
@@ -95,3 +110,48 @@ class TestResolveScopedTeamIds:
         result = await analytics_routes._resolve_scoped_team_ids(factory, org_id=_ORG, principal=principal)
         assert result == ()
         factory.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_team_scoped_credential_sees_only_its_own_team(self) -> None:
+        """A team-scoped credential is NARROWER than the account's membership.
+
+        The account belongs to teams A and B (the membership read returns both)
+        while the credential is bound to team A. The resolved boundary must be
+        team A alone: resolving membership only would hand a team-A credential
+        team B's analytics rows, and that is currently prevented only by every
+        analytics route happening to be JWT-only (a JWT carries ``team_id=None``).
+        """
+        factory = _factory()
+        principal = _team_scoped_principal(_TEAM_A)
+        with patch.object(analytics_routes, "set_rls_org", new_callable=AsyncMock):
+            result = await analytics_routes._resolve_scoped_team_ids(factory, org_id=_ORG, principal=principal)
+        assert result == (_TEAM_A,)
+
+    @pytest.mark.anyio
+    async def test_team_scoped_credential_outside_its_membership_resolves_no_team(self) -> None:
+        """A credential bound to a team the account does not belong to resolves no team.
+
+        Fail closed: the intersection is empty, so the SQL boundary degrades to
+        org-level (no owning team) rows only — never to the membership set, and
+        never to ``None`` (unconstrained).
+        """
+        outside_team = uuid.uuid4()
+        factory = _factory()
+        principal = _team_scoped_principal(outside_team)
+        with patch.object(analytics_routes, "set_rls_org", new_callable=AsyncMock):
+            result = await analytics_routes._resolve_scoped_team_ids(factory, org_id=_ORG, principal=principal)
+        assert result == ()
+
+    @pytest.mark.anyio
+    async def test_org_wide_jwt_principal_is_unchanged(self) -> None:
+        """A browser JWT / org-wide credential carries ``team_id=None`` — no clamp.
+
+        Every analytics route is JWT-guarded today, so this is the production
+        path: it must keep resolving the full membership set.
+        """
+        factory = _factory()
+        principal = _principal()
+        principal.team_id = None  # a browser JWT / org-wide key: an unbound credential
+        with patch.object(analytics_routes, "set_rls_org", new_callable=AsyncMock):
+            result = await analytics_routes._resolve_scoped_team_ids(factory, org_id=_ORG, principal=principal)
+        assert result == (_TEAM_A, _TEAM_B)
