@@ -1,0 +1,980 @@
+name: "Merge tier: full validation"
+
+# Reusable FULL validation of a combined branch (step 0 of the merge-tier CI
+# consolidation). It has NO trigger of its own - no push, no pull_request, no
+# schedule - so it never runs until a caller asks for it. The only caller today
+# is merge-queue.yml's MERGE_QUEUE_FULL_VALIDATION step (default OFF), which
+# passes `ref: merge-queue` and `full: true`.
+#
+# Why this exists
+# ---------------
+# merge-queue.yml validates a whole batch in ONE step on one runner: backend
+# lint, mypy, bandit, ruff-format, the unit suite and every frontend check run
+# sequentially inside a single job on a single 2-vCPU runner. That is the
+# queue's critical path (~34 min measured) and it is a SUM, not a maximum:
+# each gate waits for the one before it. Here the same gates are re-expressed
+# as independent jobs, so the pass costs the SLOWEST job, not the sum.
+#
+# The jobs are deliberately independent: none of them `needs:` another except
+#   backend-unit -> coverage -> sonar   (Sonar imports coverage.xml)
+# which is a data dependency, not a sequencing choice. Everything else starts
+# at once.
+#
+# Every job takes the caller's ref (`inputs.ref`), so the whole workflow
+# validates the branch the caller built, never a default checkout.
+#
+# Required secrets
+# ----------------
+#   SONAR_TOKEN         REQUIRED for the `sonar` job. The scanner exits non-zero
+#                       without it, so a caller that inherits no token sees the
+#                       sonar job fail loudly rather than skip silently. Declared
+#                       `required: true` below so a missing token fails the call
+#                       itself, before any runner is spent.
+#   SECRET_KEY,
+#   FERNET_KEY,
+#   POSTGRES_PASSWORD   optional; each has the same fixed non-production test
+#                       fallback ci.yml/bdd.yml use, so a run without them still
+#                       exercises real behaviour (the fallbacks are test-only
+#                       values, never production ones).
+# Callers pass `secrets: inherit`.
+#
+# Gate provenance (lift-and-shift, no re-invention)
+# -------------------------------------------------
+#   backend-unit      ci.yml backend-test (unit suite) - but UNSHARDED, because
+#                     this workflow runs once per merge-queue pass, not once per
+#                     PR push: three parallel shards would triple the runner
+#                     count for a pass that is already serialised by the queue's
+#                     own lock. The retry wrapper around the pytest invocation is
+#                     new and required: ci.yml's own comment records five
+#                     standard-2 runner terminations on this suite, each at
+#                     ~13.7-14.2 min with zero failing tests.
+#   backend-non-unit  ci.yml backend-non-unit (architecture scan + ratchet
+#                     baseline, connector contracts, the self-contained BDD
+#                     module sets).
+#   integration       deploy.yml integration-tests sharding pattern, 4 shards
+#                     instead of 10.
+#   tier1b            ci.yml tier1b-light (Testcontainers light set).
+#   frontend          ci.yml frontend minus the duplicate frontend-unit-parity
+#                     job (FAR-1947) and minus the Playwright visual/mobile
+#                     slices and the e2e-route-coverage gate, which are
+#                     PR-head gates and stay in ci.yml.
+#   sonar             ci.yml sonarcloud-scan (coverage import).
+#   coverage          ci.yml backend-coverage (thresholds: line AND branch, via
+#                     coverage.py's combined `percent_covered` under
+#                     `branch = true`) + ci.yml coverage-gate (diff-cover against
+#                     changed lines).
+#   bdd               bdd.yml (full BDD/E2E suite).
+#   summary           folds the eight job results into one verdict and one
+#                     `failed_jobs` output for the caller's PR comment.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: >-
+          Ref every job checks out. The merge queue passes `merge-queue`, the
+          combined branch it built from main plus the batch's approved PRs.
+        required: true
+        type: string
+      full:
+        description: >-
+          true (default) runs every gate. false skips the three whole-repo suites
+          that dominate wall-clock - integration, bdd and sonar - and keeps the
+          fast gates (backend-unit, backend-non-unit, tier1b, frontend, coverage).
+          A skipped job counts as non-failing in the summary. The merge queue
+          always passes true; the input exists so a cheaper profile can call this
+          workflow without forking it.
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      SECRET_KEY:
+        required: false
+      FERNET_KEY:
+        required: false
+      POSTGRES_PASSWORD:
+        required: false
+      SONAR_TOKEN:
+        description: >-
+          Required by the `sonar` job (SonarCloud scan). Declared required so a
+          caller that does not supply it fails the workflow CALL immediately
+          instead of spending runners on a scan that can only fail.
+        required: true
+    outputs:
+      failed_jobs:
+        description: >-
+          Comma-separated `<job> (<result>)` entries for every job that did not
+          succeed (skipped jobs excluded). Empty when the validation passed. The
+          caller uses it to name the failing job(s) on the PR.
+        value: ${{ jobs.summary.outputs.failed_jobs }}
+
+env:
+  # Dependabot PR runs never receive repository secrets, and a reusable call can
+  # arrive without them too. Same fixed, non-production test fallbacks as ci.yml
+  # and bdd.yml: FERNET_KEY must stay a valid 32-byte url-safe base64 key
+  # because cryptography.Fernet parses it at import.
+  SECRET_KEY: ${{ secrets.SECRET_KEY || 'ci-only-placeholder-secret-key-not-for-production' }}
+  FERNET_KEY: ${{ secrets.FERNET_KEY || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }}
+  # Authenticate GitHub git fetches so `uv sync --frozen` can resolve git-pinned
+  # dependencies (e.g. pytest-bdd @ refs/pull/827/head) without an anonymous
+  # fetch-by-SHA, which GitHub rejects from CI runners. THE single git-credential
+  # mechanism (FAR-1940): one `url.<base>.insteadOf` rewrite, one Authorization
+  # header. Never add a second one.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ github.token }}@github.com/.insteadOf'
+  GIT_CONFIG_VALUE_0: "https://github.com/"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-unit:
+    # The whole unit suite on ONE runner, unsharded, with a retry.
+    #
+    # Runner size is standard-2 (2 vCPU, 8 GB) as instructed, and ci.yml's own
+    # measurement says why the retry is not optional: on standard-2 this suite
+    # was terminated five times, each at ~13.7-14.2 min, with zero failing tests
+    # (ci.yml moved its shards to standard-4 for that reason; this workflow
+    # cannot, and unsharded is the point, so it retries instead).
+    #
+    # What the retry does and does not cover: it re-runs the pytest invocation
+    # when the PROCESS dies or exits non-zero (an OOM kill of pytest, a signal
+    # delivered to the child, a non-zero exit). A whole-VM termination takes the
+    # job with it and cannot be recovered from inside the job - that case still
+    # needs a CI-level re-run, which is why the caller treats a validation
+    # failure as "do not merge" rather than as a verdict on the code.
+    #
+    # --dist worksteal and the unraisable-warning escalation, plus the
+    # `--disable-warnings` suppression, are the exact flags merge-queue.yml
+    # already used for this suite on the combined branch - the same behaviour,
+    # moved into its own job.
+    name: "Validation: backend unit (unsharded)"
+    runs-on: ubicloud-standard-2
+    # 60, not 45 (ci.yml's shard budget): one unsharded run measured ~25 min on
+    # standard-2, and the retry needs room for a second attempt.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541: the lockfile pins source-archive deps (pytest-bdd, ibm-cos-sdk); --frozen pins exact revisions so builds are deterministic.
+      - name: Run unit tests (unsharded, retried)
+        shell: bash
+        env:
+          # The shard file name `coverage combine` reads, kept identical to
+          # ci.yml's shard convention so the coverage job combines one file the
+          # same way it would combine three.
+          COVERAGE_FILE: .coverage.unit-1
+          DATABASE_URL: "postgresql+asyncpg://unused:${{ secrets.POSTGRES_PASSWORD || 'unused' }}@localhost/unused"
+        run: |
+          # --cov-fail-under=0: NO threshold is enforced here. The whole-suite
+          # floor (line AND branch - coverage's combined percent_covered under
+          # [tool.coverage.run] branch = true) and the per-module floors are
+          # enforced once, in the `coverage` job, against the report this job
+          # uploads.
+          MAX_ATTEMPTS=2
+          BACKOFF_SECONDS=30
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "--- unit tests attempt ${attempt} of ${MAX_ATTEMPTS} ---"
+            if uv run --no-build --no-sync pytest tests/unit/ \
+                 -n 2 -x -q --timeout=120 --dist worksteal \
+                 --cov=src/farna --cov-report= --cov-fail-under=0 \
+                 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings; then
+              echo "Unit tests passed on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "::warning::Unit tests did not complete on attempt ${attempt}/${MAX_ATTEMPTS}; retrying in ${BACKOFF_SECONDS}s (a standard-2 runner has terminated this suite at ~14 min with zero failing tests)."
+              sleep "$BACKOFF_SECONDS"
+            fi
+          done
+          echo "::error::Unit tests failed on every one of ${MAX_ATTEMPTS} attempts."
+          exit 1
+      - name: Upload unit coverage data
+        # if: always() so the coverage job can still report which lines the run
+        # reached when the suite failed - it is skipped anyway when this job
+        # fails, but the artifact makes the failure diagnosable.
+        #
+        # include-hidden-files: true is LOAD-BEARING (ci.yml records the same
+        # trap): upload-artifact defaults it to false and `.coverage.unit-1` is a
+        # dotfile, so the glob would match nothing and the upload would be a
+        # silent no-op.
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-shard-1
+          path: backend/.coverage.unit-*
+          include-hidden-files: true
+          retention-days: 7
+
+  backend-non-unit:
+    # The non-Docker suites that are cheap but were never part of the merge-tier
+    # validation at all: the architecture scan, the shrink-only ratchet guard,
+    # the connector contracts and the two self-contained BDD module sets.
+    # fetch-depth: 0 is required by the ratchet guard (it reads the baseline at a
+    # base revision).
+    name: "Validation: backend non-unit suites"
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541: the lockfile pins source-archive deps (pytest-bdd, ibm-cos-sdk); --frozen pins exact revisions so builds are deterministic.
+      - name: Run architecture tests
+        # The architecture suite scans all of src/farna for structural
+        # violations (raw SQL f-strings, sensitive data logging, module-level
+        # side effects, bare session.rollback, login-field drift, Dockerfile
+        # python-version drift). `-p no:warnings` would disable the warnings
+        # plugin entirely; the escalation plus --disable-warnings keeps the gate
+        # firing while suppressing the benign summary.
+        shell: bash
+        run: uv run --no-build --no-sync pytest tests/architecture/ -q --tb=short --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings -n auto
+      - name: Fail on a loosened shrink-only baseline
+        # A ratchet that can be loosened silently is not a ratchet (FAR-2699).
+        # The base is named explicitly here: this workflow is called from a
+        # repository_dispatch/schedule event, so GITHUB_BASE_REF is empty and the
+        # resolver would otherwise fall through to HEAD^ (the merge-queue
+        # branch's own tip) - the wrong comparison for a combined batch.
+        working-directory: .
+        shell: bash
+        run: uv run --no-build --project backend --no-sync python scripts/run_check_ratchet_baseline.py --base origin/main
+      - name: Run connector contract tests
+        # Drives each connector against a real in-process HTTP server or a
+        # recorded VCR cassette - no Docker, no external network.
+        shell: bash
+        run: uv run --no-build --no-sync pytest tests/connectors/ -q --tb=short --timeout=180 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+      - name: Run email settings BDD scenarios
+        shell: bash
+        run: >
+          uv run --no-build --no-sync pytest tests/bdd/steps/test_email_settings.py
+          tests/bdd/features/infra/test_health_steps.py
+          -q --tb=short --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+      - name: Run repaired step-rot BDD modules
+        shell: bash
+        run: |
+          uv run --no-build --no-sync pytest tests/bdd/steps/test_auth.py tests/bdd/steps/test_eval.py \
+            tests/bdd/steps/test_eval_block_steps.py tests/bdd/steps/test_hitl.py \
+            tests/bdd/steps/test_eval_scorer_gates.py \
+            -q --tb=short --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+
+  integration:
+    # The full integration suite (Testcontainers Postgres), 4 shards. The
+    # sharding is deploy.yml's pattern verbatim with TOTAL_SHARDS changed from 10
+    # to 4: the real-IdP auth modules keep a shard of their own (their container
+    # boots are much slower) and every other file round-robins over the rest.
+    #
+    # Skipped when inputs.full is false.
+    name: "Validation: integration shard ${{ matrix.shard }}/4"
+    if: ${{ inputs.full }}
+    strategy:
+      # If one shard fails the others still have diagnostic value; never cancel
+      # siblings, so a red shard names exactly one slice of the suite.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubicloud-standard-4
+    # 90: deploy.yml allows 75 for TEN shards. Four shards carry ~2.5x the work
+    # per shard, and the suite is Docker/CPU-bound, so the ceiling is raised
+    # rather than left to produce a mid-run kill that looks like a test hang.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Sync deps
+        working-directory: backend
+        run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541
+      # Redis is required by test_rate_bucket_redis.py, which connects to
+      # localhost:6379 when RATE_LIMIT_REDIS_URL is not set.
+      - name: Start Redis
+        shell: bash
+        run: |
+          docker rm -f modulo-ci-redis 2>/dev/null || true
+          docker run -d --name modulo-ci-redis -p 6379:6379 redis:7-alpine
+          for _ in $(seq 1 60); do
+            docker exec modulo-ci-redis redis-cli ping 2>/dev/null && { echo "Redis ready"; break; }
+            sleep 2
+          done
+          # Fail fast: a never-ready Redis must not sleep through the loop and
+          # only surface as a confusing failure in the test step.
+          docker exec modulo-ci-redis redis-cli ping 2>/dev/null \
+            || { echo "::error::Redis did not become ready within 120s"; exit 1; }
+      - name: Integration tests
+        working-directory: backend
+        shell: bash
+        run: |
+          SHARD="${{ matrix.shard }}"
+          TOTAL_SHARDS=4
+          export COVERAGE_FILE=".coverage.integration-${SHARD}"
+          SHARD_ARGS=()
+          NON_AUTH_SHARDS=(1 2 3)
+          NON_AUTH_INDEX=0
+          while IFS= read -r test_file; do
+            # Keep the Keycloak/OIDC/SAML integration files together in a
+            # dedicated shard: their real HTTP IdP container startup is much
+            # slower than the database-only tests and was concentrated in
+            # round-robin shard 1 in deploy.yml before that shard was split out.
+            if [[ "$test_file" == tests/integration/auth/test_keycloak_* || \
+                  "$test_file" == tests/integration/auth/test_oidc_* || \
+                  "$test_file" == tests/integration/auth/test_saml_* || \
+                  "$test_file" == tests/integration/test_sso_licence_degradation.py ]]; then
+              TARGET_SHARD=4
+            else
+              TARGET_SHARD="${NON_AUTH_SHARDS[$((NON_AUTH_INDEX % ${#NON_AUTH_SHARDS[@]}))]}"
+              NON_AUTH_INDEX=$((NON_AUTH_INDEX + 1))
+            fi
+            if [ "$TARGET_SHARD" -ne "$SHARD" ]; then
+              SHARD_ARGS+=("--ignore=${test_file}")
+            fi
+          done < <(find tests/integration -type f -name 'test_*.py' ! -name 'test_tier1b_*.py' | LC_ALL=C sort)
+
+          echo "Running integration shard ${SHARD}/${TOTAL_SHARDS} with COVERAGE_FILE=${COVERAGE_FILE} (${#SHARD_ARGS[@]} file(s) ignored)"
+          # Retry wrapper: 2 attempts, 30s backoff (deploy.yml's policy) for
+          # transient container/network failures.
+          MAX_ATTEMPTS=2
+          BACKOFF_SECONDS=30
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "--- Integration tests attempt ${attempt} of ${MAX_ATTEMPTS} ---"
+            # --timeout-method=thread: with the default signal method a
+            # syscall-blocked test ignores SIGALRM, so --timeout=300 never fires
+            # and the runner kills the job after minutes of silence.
+            if uv run --no-build --no-sync pytest tests/integration/ -m integration \
+                 --ignore-glob='tests/integration/test_tier1b_*.py' \
+                 -n 1 --dist loadgroup --timeout=300 --timeout-method=thread \
+                 --cov=src/farna --cov-report=xml --cov-fail-under=0 \
+                 -v -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings \
+                 "${SHARD_ARGS[@]}"; then
+              echo "Integration tests passed on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "::warning::Integration shard ${SHARD} failed on attempt ${attempt}/${MAX_ATTEMPTS}; retrying in ${BACKOFF_SECONDS}s."
+              sleep "$BACKOFF_SECONDS"
+            fi
+          done
+          echo "::error::Integration shard ${SHARD} failed on every one of ${MAX_ATTEMPTS} attempts."
+          exit 1
+        env:
+          DATABASE_URL: "postgresql+asyncpg://farna_control_test:farna_control_test@localhost:5433/farna_control_test"
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+      - name: Stop Redis
+        if: always()
+        shell: bash
+        run: docker rm -f modulo-ci-redis 2>/dev/null || true
+
+  tier1b:
+    # Tier 1b connectors (FAR-934): the container-hosted LIGHT set only. The
+    # heavy set (gitlab, vllm, tgi) stays nightly-only in tier1b-nightly.yml.
+    # The disk cleanup is not cosmetic: the runner's local disk is the binding
+    # constraint (0-2 MB free observed) and a full disk kills the shared
+    # Postgres container mid-run.
+    name: "Validation: tier1b testcontainers (light)"
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Free up disk space
+        shell: bash
+        run: |
+          echo "disk before:"; df -h / || true
+          for path in /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                      /usr/local/share/boost /usr/local/share/powershell; do
+            if [ -d "$path" ]; then
+              echo "removing $path"; sudo -n rm -rf "$path" || true
+            fi
+          done
+          sudo -n apt-get clean || true
+          echo "disk after:"; df -h / || true
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541
+      - name: Run Tier 1b light connector + model-server suites
+        run: |
+          # Tier 1b fixtures deliberately loud-skip (with a recorded reason) when
+          # a server cannot be stood up on the runner; successes assert against
+          # REAL server responses only.
+          uv run --no-build --no-sync pytest \
+            tests/integration/test_tier1b_connectors_light.py \
+            tests/integration/test_tier1b_models_light.py \
+            tests/integration/auth/test_keycloak_oidc_real_http_flow.py \
+            tests/integration/auth/test_keycloak_saml_real_http_flow.py \
+            -q --tb=short --timeout=900 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+
+  frontend:
+    # Lint, type-check, WCAG contrast, the vitest suite WITH coverage, and the
+    # production build. Deliberately NOT the frontend-unit-parity duplicate
+    # (FAR-1947) and NOT the Playwright visual/mobile slices or the
+    # e2e-route-coverage gate: those are PR-head gates and stay in ci.yml. This
+    # job answers one question - does the combined batch build, type-check, lint
+    # and pass its unit suite?
+    name: "Validation: frontend"
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.29.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # Lint and type-check first, before the Playwright browser download: a
+      # lint or type failure fails the job in ~2 min instead of after ~6.
+      - run: pnpm run lint
+      - run: pnpm run type-check
+      # The WCAG contrast spec is a Playwright test, so chromium must be present.
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install chromium
+      - name: Run WCAG contrast tests
+        run: pnpm exec playwright test wcag-contrast
+      - name: Run unit tests (vitest, with coverage)
+        # --maxWorkers=2 matches the 2-vCPU runner. package.json's `test:unit`
+        # script hardcodes --maxWorkers=4, which saturates both cores with four
+        # concurrently-loading jsdom environments and starves setImmediate
+        # (flushPromises) by 10+s, so vitest is invoked directly here (ci.yml
+        # makes the same choice). v8 + lcov produces frontend/coverage/lcov.info
+        # for the changed-lines coverage gate and for Sonar.
+        run: pnpm exec vitest run src --pool=threads --maxWorkers=2 --coverage --coverage.provider=v8 --coverage.reporter=lcov
+      - name: Upload frontend coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/lcov.info
+      - run: pnpm run build
+
+  sonar:
+    # SonarCloud scan with coverage import. It needs the combined backend
+    # coverage report (from `coverage`) for its coverage measure, which is the
+    # only reason this job is not fully independent.
+    #
+    # .git/ probes: the scan retries two known environment-only, intermittent
+    # failures by exact log signature - the .git/.probe-* FileProvider race
+    # (upstream SONARPY-2120) and the security engine's duplicate-class
+    # LinkageError - and one server-side CE rejection, fetching the CE's own
+    # errorMessage so a DETERMINISTIC rejection (quota, bad report) stays
+    # visible. Any other error fails immediately. Never widen this to "retry
+    # anything": that would mask a genuine red.
+    name: "Validation: sonarcloud"
+    if: ${{ inputs.full }}
+    needs: [coverage]
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 30
+    permissions:
+      # A job-level block REPLACES the workflow default. actions: read is needed
+      # by `gh run download` (Actions artifacts REST API) for the frontend
+      # coverage leg; contents: read is for checkout. The scan authenticates
+      # with SONAR_TOKEN and posts nothing to GitHub.
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0   # SonarCloud needs full history for blame/new-code detection
+          persist-credentials: false
+      - name: Download backend coverage report
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: coverage-report
+          path: backend
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        # Node only: SonarCloud's JS/TS analysis needs a Node runtime on the
+        # runner. pnpm, the dependency install and vitest are NOT needed here -
+        # the coverage is downloaded from the frontend job.
+        with:
+          node-version: "22"
+      - name: Download frontend coverage report (from the frontend job)
+        # A missing lcov is a NON-FATAL Sonar warning, never a job failure: the
+        # frontend job may have failed before producing coverage. `gh run
+        # download` inside an `if` is used (not actions/download-artifact) so an
+        # absent artifact cannot fail the step, and without the banned
+        # continue-on-error setting.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh run download "$RUN_ID" --repo "$REPO" --name frontend-coverage --dir frontend/coverage; then
+            ls -l frontend/coverage/lcov.info
+          else
+            echo "::warning::frontend-coverage artifact unavailable (the frontend job failed before producing coverage, or the artifact expired); Sonar will import no JS coverage for this run."
+          fi
+      - name: Install SonarScanner CLI
+        # Pinned version, GPG signature verified against the SonarSource key.
+        # Not the SonarSource/sonarqube-scan-action: its work would run before
+        # any retry could wrap it, and the scan below needs a retry wrapper.
+        # 8.1.0 is the scanner SonarCloud accepts (7.2.0.5079 fails with
+        # "Error 500 on .../batch/project.protobuf"); keep in sync with the
+        # action's sonar-scanner-version file when upgrading.
+        env:
+          SONAR_SCANNER_VERSION: "8.1.0.6389"
+          SONAR_SCANNER_BINARIES_URL: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli
+        run: |
+          set -euo pipefail
+          ZIP_URL="${SONAR_SCANNER_BINARIES_URL}/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64.zip"
+          INSTALL_DIR="${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}/sonar-scanner-cli/manual"
+          mkdir -p "$INSTALL_DIR"
+          curl -sSL --proto '=https' --proto-redir '=https' --retry 3 --retry-delay 5 --max-time 300 -o /tmp/sonar-cli.zip "$ZIP_URL"
+          curl -sSL --proto '=https' --proto-redir '=https' --retry 3 --retry-delay 5 --max-time 60 -o /tmp/sonar-cli.zip.asc "${ZIP_URL}.asc"
+          for attempt in 1 2 3; do
+            if gpg --batch --keyserver hkps://keyserver.ubuntu.com \
+                 --keyserver-options timeout=30 \
+                 --recv-keys 679F1EE92B19609DE816FDE81DB198F93525EC1A; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::gpg keyserver fetch failed after 3 attempts; failing closed (no unverified fallback)."
+              exit 1
+            fi
+            echo "::warning::gpg keyserver fetch failed (attempt ${attempt}/3); retrying."
+            sleep $((attempt * 5))
+          done
+          gpg --batch --verify /tmp/sonar-cli.zip.asc /tmp/sonar-cli.zip
+          unzip -q -o /tmp/sonar-cli.zip -d "$INSTALL_DIR"
+          SCANNER="$INSTALL_DIR/sonar-scanner-${SONAR_SCANNER_VERSION}-linux-x64/bin/sonar-scanner"
+          test -x "$SCANNER"
+          echo "SCANNER=$SCANNER" >> "$GITHUB_ENV"
+          "$SCANNER" --version
+      - name: SonarCloud scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        run: |
+          set -uo pipefail
+          LOG="$(mktemp)"
+          trap 'rm -f "$LOG"' EXIT
+          CE_FAILURES=0
+          for attempt in 1 2 3; do
+            : > "$LOG"
+            set +e
+            "$SCANNER" -Dsonar.projectBaseDir=. 2>&1 | tee "$LOG"
+            RC=${PIPESTATUS[0]}
+            set -e
+            if [ "$RC" -eq 0 ]; then
+              echo "::notice::SonarCloud scan succeeded on attempt ${attempt}/3."
+              exit 0
+            fi
+            if grep -qE "NoSuchFileException: .*\.git/\.probe-|attempted duplicate abstract class definition" "$LOG"; then
+              if [ "$attempt" -lt 3 ]; then
+                echo "::warning::SonarCloud scan hit a known transient scanner failure (attempt ${attempt}/3); retrying."
+                sleep $((attempt * 15))
+              else
+                echo "::warning::SonarCloud scan hit a known transient scanner failure on the final attempt (3/3); not retrying."
+              fi
+              continue
+            fi
+            if grep -qF "CE Task finished abnormally with status: FAILED" "$LOG"; then
+              CE_FAILURES=$((CE_FAILURES + 1))
+              TASK_ID="$(grep -oE 'api/ce/task\?id=[A-Za-z0-9_-]+' "$LOG" | tail -n 1 | sed 's/.*id=//')"
+              CE_REASON=""
+              if [ -n "$TASK_ID" ]; then
+                CE_REASON="$(curl -sS --max-time 30 -H "Authorization: Bearer ${SONAR_TOKEN}" "${SONAR_HOST_URL}/api/ce/task?id=${TASK_ID}" 2>/dev/null | jq -r '.task.errorMessage // .errors[0].msg // empty' 2>/dev/null || true)"
+                echo "::notice::SonarCloud CE task ${TASK_ID} failed server-side: ${CE_REASON:-<no errorMessage returned>}"
+              fi
+              # A report for an OLDER commit that reaches the CE after a NEWER
+              # commit's report was processed can never be accepted; the newer
+              # analysis already covers fresher code, so skipping is non-fatal.
+              if printf '%s' "$CE_REASON" | grep -qi "a newer report has already been processed"; then
+                echo "::notice::SonarCloud report for this commit was superseded by a newer commit's analysis; skipping the stale report (non-fatal)."
+                exit 0
+              fi
+              if [ "$CE_FAILURES" -lt 2 ] && [ "$attempt" -lt 3 ]; then
+                echo "::warning::SonarCloud CE task rejected the report server-side (CE attempt ${CE_FAILURES}/2); retrying once - identical analyses of this project have completed green minutes apart."
+                sleep 20
+                continue
+              fi
+              echo "::error::SonarCloud CE task rejected the report server-side on ${CE_FAILURES}/2 attempt(s); not retrying further. Server reason: ${CE_REASON:-<no errorMessage returned>}"
+              exit "$RC"
+            fi
+            echo "::error::SonarCloud scan failed with a non-transient error (neither the .git/.probe-* race, the security-engine duplicate-class LinkageError, nor a server-side CE task rejection); not retrying."
+            exit "$RC"
+          done
+          echo "::error::SonarCloud scan still hit a known transient scanner failure after 3 attempts (upstream SONARPY-2120 / security-engine plugin-classloader race)."
+          exit 1
+
+  coverage:
+    # The single place the coverage floors fire, and the changed-lines gate.
+    #
+    # Floors: coverage.py's `percent_covered` under [tool.coverage.run]
+    # `branch = true` is (executed lines + executed branches) / (lines +
+    # branches) - i.e. ONE combined line-AND-branch figure - and `coverage
+    # report --fail-under` compares against it. coverage-thresholds.sh `combine`
+    # enforces the 89% whole-suite floor plus the per-module floors
+    # (farna.auth 93, farna.core.pipeline_engine 91, farna.db.rls 95) and writes
+    # the coverage.xml Sonar and the changed-lines gate consume.
+    #
+    # Changed lines: diff-cover against origin/main, which is the base the
+    # merge-queue branch was built from.
+    name: "Validation: coverage + changed lines"
+    needs: [backend-unit]
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0  # diff-cover needs full history to compute the merge base
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541
+      - name: Download unit coverage data
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: coverage-shard-*
+          path: backend
+          merge-multiple: true
+      - name: Combine coverage and enforce thresholds
+        # `auto combine` is the same command ci.yml's backend-coverage job runs
+        # against three shards; with one unsharded data file it combines to a
+        # single .coverage and applies the identical floors, so there is exactly
+        # one definition of "covered" across both workflows.
+        shell: bash
+        run: ../.github/scripts/coverage-thresholds.sh auto combine
+        env:
+          DATABASE_URL: "postgresql+asyncpg://unused:${{ secrets.POSTGRES_PASSWORD || 'unused' }}@localhost/unused"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+      - name: Fetch base branch for diff comparison
+        # actions/checkout fetches the branch (and, with fetch-depth 0, its
+        # history) but the base ref must be explicit for `origin/main` to
+        # resolve: without it diff-cover fails with "unknown revision
+        # origin/main...HEAD", which the gate treats as a failure (fail-closed).
+        working-directory: .
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      - name: Download frontend coverage report
+        id: fe_cov
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh run download "$RUN_ID" --repo "$REPO" --name frontend-coverage --dir frontend/coverage; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::frontend-coverage artifact unavailable; the changed-lines gate will tolerate a missing JS report (the Python leg stays strict)."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run changed-lines coverage gate
+        shell: bash
+        env:
+          FRONTEND_PRESENT: ${{ steps.fe_cov.outputs.present }}
+        run: |
+          # An isolated venv with only the gate's dependency (diff-cover), built
+          # WITHOUT --no-build? No: --no-build is deliberate - diff-cover 10.5.1
+          # and all its dependencies are pure-Python wheels, so nothing runs a
+          # third-party setup script (resolves githubactions:S8541).
+          uv venv .venv
+          uv pip install --python .venv --no-build "diff-cover==10.5.1"
+          EXTRA_ARGS=()
+          # Tolerate a missing JS report ONLY when the artifact was genuinely
+          # absent; the Python leg stays strict (the global
+          # --allow-missing-reports must never be passed in CI).
+          if [ "$FRONTEND_PRESENT" != "true" ]; then
+            EXTRA_ARGS+=(--allow-missing-js-report)
+          fi
+          .venv/bin/python ../scripts/run_coverage_gate.py \
+            --compare-branch origin/main \
+            --python-report coverage.xml \
+            --js-report ../frontend/coverage/lcov.info \
+            "${EXTRA_ARGS[@]}"
+
+  bdd:
+    # The full BDD/E2E suite from bdd.yml: real Postgres + Redis + a built
+    # frontend + a live backend, then pytest-bdd against the served app.
+    #
+    # bdd.yml's changed-path gate is deliberately NOT lifted: this workflow only
+    # runs for a merge-tier validation, where the whole batch is about to land on
+    # main and the full suite is the point. Skipped when inputs.full is false.
+    name: "Validation: bdd (full suite)"
+    if: ${{ inputs.full }}
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: "postgresql+asyncpg://farna_control:${{ secrets.POSTGRES_PASSWORD || 'modulo' }}@localhost:5432/farna_control"
+      REDIS_URL: "redis://localhost:6379/0"
+      FARNA_CONTROL_PUBLIC_URL: "http://localhost:8000"
+      FARNA_CONTROL_USERS: "admin:admin"
+      CORS_ORIGINS: "http://localhost:4173"
+      FARNA_CONTROL_PLUGIN_DISCOVERY: "false"
+      FARNA_CONTROL_CSRF_ENABLED: "false"
+      # Developer mode so internal preview surfaces are reachable; the
+      # feature-flag gate must return 402, not 403.
+      FARNA_CONTROL_DEV_MODE: "true"
+      # Redis is present, so the auth rate limiter would return 429 on the high
+      # request volume from scenario steps.
+      FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.29.0
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Start Postgres
+        shell: bash
+        run: |
+          docker rm -f modulo-bdd-pg 2>/dev/null || true
+          docker run -d --name modulo-bdd-pg \
+            -e POSTGRES_USER=farna_control \
+            -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'modulo' }} \
+            -e POSTGRES_DB=farna_control \
+            -p 5432:5432 \
+            postgres:16-alpine
+          echo "Waiting for Postgres..."
+          for i in $(seq 1 60); do
+            if docker exec modulo-bdd-pg pg_isready -U farna_control >/dev/null 2>&1; then
+              echo "Postgres ready after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres did not become ready in time"
+          docker logs modulo-bdd-pg
+          exit 1
+      - name: Start Redis
+        shell: bash
+        run: |
+          docker rm -f modulo-bdd-redis 2>/dev/null || true
+          docker run -d --name modulo-bdd-redis \
+            -p 6379:6379 \
+            redis:7-alpine
+          echo "Waiting for Redis..."
+          for i in $(seq 1 30); do
+            if docker exec modulo-bdd-redis redis-cli ping >/dev/null 2>&1; then
+              echo "Redis ready after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Redis did not become ready in time"
+          docker logs modulo-bdd-redis
+          exit 1
+      - name: Install backend deps
+        working-directory: backend
+        # Route through the shared retry wrapper: the lockfile pins pytest-bdd to
+        # a GitHub source archive and a transient codeload 5xx/timeout used to
+        # fail this job before a single scenario ran.
+        run: bash ../scripts/uv_sync_with_retry.sh --frozen
+      - name: Install Playwright browsers
+        working-directory: backend
+        run: |
+          # `playwright install --with-deps` runs apt-get update across every
+          # configured apt source; the runner's google-chrome source
+          # intermittently returns a hash-sum mismatch and takes the whole
+          # install down. Chromium does not need google-chrome-stable.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome-stable.list 2>/dev/null || true
+          install_ok=0
+          for i in 1 2 3; do
+            if uv run --no-build --no-sync playwright install --with-deps chromium; then
+              install_ok=1
+              break
+            fi
+            echo "Playwright browser install attempt $i failed, retrying..."
+            sleep 5
+          done
+          if [ "$install_ok" -ne 1 ]; then
+            echo "Playwright browser install failed after 3 attempts"
+            exit 1
+          fi
+      - name: Pre-create alembic_version table
+        shell: bash
+        run: |
+          docker exec modulo-bdd-pg psql -U farna_control -d farna_control -c "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(255) NOT NULL PRIMARY KEY);"
+      - name: Run migrations
+        working-directory: backend
+        run: uv run --no-build --no-sync alembic upgrade heads
+      - name: Install frontend deps
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm run build
+      - name: Start backend
+        working-directory: backend
+        shell: bash
+        run: |
+          nohup uv run --no-build --no-sync uvicorn farna.api.main:app --host 0.0.0.0 --port 8000 > backend-bdd.log 2>&1 &
+      - name: Serve frontend preview
+        working-directory: frontend
+        shell: bash
+        run: |
+          nohup pnpm run preview -- --port 4173 --host 0.0.0.0 > frontend-bdd.log 2>&1 &
+      - name: Wait for backend healthz
+        shell: bash
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then
+              echo "Backend healthy after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "=== Backend log ==="
+          cat backend/backend-bdd.log 2>/dev/null || true
+          echo "=== Process check ==="
+          # Diagnostic listing for a failed boot: ps|grep prints the full command
+          # line of every uvicorn-ish process. pgrep would change the log shape
+          # the failure triage reads, so keep the ps form.
+          # shellcheck disable=SC2009
+          ps aux | grep -i uvicorn || true
+          exit 1
+      - name: Wait for frontend ready
+        shell: bash
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:4173/ >/dev/null 2>&1; then
+              echo "Frontend ready after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "=== Frontend log ==="
+          cat frontend/frontend-bdd.log 2>/dev/null || true
+          exit 1
+      - name: Run BDD tests (full suite)
+        working-directory: backend
+        timeout-minutes: 50
+        run: uv run --no-build --no-sync pytest tests/bdd/ -q --base-url http://localhost:4173 --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+      - name: Cleanup containers
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f modulo-bdd-pg 2>/dev/null || true
+          docker rm -f modulo-bdd-redis 2>/dev/null || true
+
+  summary:
+    # Folds the eight results into ONE verdict and one machine-readable
+    # `failed_jobs` value for the caller, which posts it on the PR. It runs
+    # always() so a failed validation still produces the named failing job; a
+    # SKIPPED job (full=false) is not a failure.
+    name: "Validation: summary"
+    needs: [backend-unit, backend-non-unit, integration, tier1b, frontend, sonar, coverage, bdd]
+    if: always()
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      failed_jobs: ${{ steps.report.outputs.failed_jobs }}
+    steps:
+      - name: Report failed jobs
+        id: report
+        shell: bash
+        env:
+          R_BACKEND_UNIT: ${{ needs.backend-unit.result }}
+          R_BACKEND_NON_UNIT: ${{ needs.backend-non-unit.result }}
+          R_INTEGRATION: ${{ needs.integration.result }}
+          R_TIER1B: ${{ needs.tier1b.result }}
+          R_FRONTEND: ${{ needs.frontend.result }}
+          R_SONAR: ${{ needs.sonar.result }}
+          R_COVERAGE: ${{ needs.coverage.result }}
+          R_BDD: ${{ needs.bdd.result }}
+        run: |
+          FAILED=""
+          record() {
+            # $1 = job name, $2 = its needs result.
+            if [ "$2" != "success" ] && [ "$2" != "skipped" ]; then
+              if [ -z "$FAILED" ]; then
+                FAILED="$1 ($2)"
+              else
+                FAILED="${FAILED}, $1 ($2)"
+              fi
+            fi
+          }
+          record backend-unit "$R_BACKEND_UNIT"
+          record backend-non-unit "$R_BACKEND_NON_UNIT"
+          record integration "$R_INTEGRATION"
+          record tier1b "$R_TIER1B"
+          record frontend "$R_FRONTEND"
+          record sonar "$R_SONAR"
+          record coverage "$R_COVERAGE"
+          record bdd "$R_BDD"
+          echo "failed_jobs=${FAILED}" >> "$GITHUB_OUTPUT"
+          if [ -n "$FAILED" ]; then
+            echo "::error::Merge-tier validation failed: ${FAILED}"
+            exit 1
+          fi
+          echo "Merge-tier validation passed (skipped jobs, if any, were excluded by full=false)."
