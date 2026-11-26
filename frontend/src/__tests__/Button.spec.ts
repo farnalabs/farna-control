@@ -310,6 +310,10 @@ describe('Button', () => {
     expect(sfc).toContain('padding: 0 0.625rem;')
     expect(sfc).toContain('.p-button-sm.ui-button-xs.p-button-icon-only {')
     expect(sfc).toContain('width: 1.75rem;\n  height: 1.75rem;\n  padding: 0;')
+    // The compact controls this size replaces faded when disabled; PrimeVue
+    // only sets `cursor: default`, so the size carries the state itself.
+    expect(sfc).toContain('.p-button-sm.ui-button-xs:disabled {')
+    expect(sfc).toContain('cursor: not-allowed;\n  opacity: 0.5;')
   })
 
   it('leaves md and sm without the compact class', () => {

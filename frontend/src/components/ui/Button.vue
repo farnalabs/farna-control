@@ -371,4 +371,17 @@ defineExpose({ el, focus })
   height: 1.75rem;
   padding: 0;
 }
+
+/*
+ * Disabled state for the compact density. The hand-written toolbar/titlebar
+ * controls this size replaces paired `disabled:cursor-not-allowed
+ * disabled:opacity-50`; PrimeVue only sets `cursor: default` and leaves the
+ * colour at full strength, so without this a disabled toolbar control reads as
+ * live. Scoped to `xs` on purpose: the other sizes are already adopted across
+ * the app and must keep PrimeVue's disabled look.
+ */
+.p-button-sm.ui-button-xs:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 </style>
