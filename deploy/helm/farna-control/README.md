@@ -47,7 +47,7 @@ postgres:
   database: modulo
   username: farna_control_app       # Restricted runtime role (DATABASE_URL)
   adminUsername: modulo      # Admin/superuser role (DATABASE_ADMIN_URL)
-  existingSecret: modulo-secrets  # Secret with "password" key
+  existingSecret: farna-control-secrets  # Secret with "password" key
 ```
 
 Or set `postgres.password` directly (rendered into a Secret). The password is shared between both roles unless your setup requires separate credentials.
@@ -60,7 +60,7 @@ redis:
   host: your-redis-host.cache.amazonaws.com
   port: 6379
   db: 0
-  existingSecret: modulo-secrets  # Secret with "password" key
+  existingSecret: farna-control-secrets  # Secret with "password" key
 ```
 
 ### Embedded Redis (Development)
@@ -77,7 +77,7 @@ redis:
   embedded: true
   password: replace-with-a-development-password
   # Or use a pre-created Secret containing a `password` key:
-  # existingSecret: modulo-secrets
+  # existingSecret: farna-control-secrets
 ```
 
 `redis.embedded` is the only switch that controls the embedded Redis Deployment.
