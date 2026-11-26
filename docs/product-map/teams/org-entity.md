@@ -87,8 +87,10 @@ authorization cleanup.
       <!-- behaviour: org-entity-06 | tests: backend/tests/integration/test_system_audit_org_deletion.py -->
 - [x] RLS tenant isolation: org-scoped tables carry `organisation_id`, `SET LOCAL
       app.organisation_id` in transactions, pool-checkout org reset, ORM tenant filter
-      for non-Postgres backends, `organisations` (root tenant) and `invitations` tables
-      excluded
+      for non-Postgres backends; only `organisations` (root tenant) and the
+      runtime-managed LangGraph checkpoint tables sit outside the regime, while
+      `invitations` is protected and its pre-auth accept read uses the scoped
+      `app.bootstrap_context` grant
       <!-- behaviour: org-entity-07 | tests: none -->
 - [x] License management via `/api/v1/admin/orgs/{org_id}/license` (Ed25519 verified,
       422 on invalid key, falls back to system license)

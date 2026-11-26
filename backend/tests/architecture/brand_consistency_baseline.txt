@@ -213,6 +213,7 @@ backend/src/farna/db/migrations/versions/0353_baseline_seed_data.py	2
 backend/src/farna/db/migrations/versions/0357_rebrand_library_seed_copy.py	14
 backend/src/farna/db/migrations/versions/0362_rename_legacy_db_objects.py	13
 backend/src/farna/db/migrations/versions/0364_rewrite_legacy_persisted_values.py	17
+backend/src/farna/db/migrations/versions/0368_invitations_quarantine_rls.py	1
 backend/src/farna/db/models/account.py	1
 backend/src/farna/db/models/external_agent.py	4
 backend/src/farna/db/models/journey.py	1
