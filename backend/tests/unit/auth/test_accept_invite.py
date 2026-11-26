@@ -150,6 +150,49 @@ def test_accept_invite_creates_account_and_membership(client: TestClient) -> Non
     patches["append_audit_event"].assert_awaited_once()
 
 
+def test_accept_invite_scopes_the_token_lookup_to_the_bootstrap_grant(client: TestClient) -> None:
+    """The pre-auth lookup runs inside ``bootstrap_read`` — set, lookup, clear.
+
+    ``invitations`` carries ``rls_org_isolation`` since migration 0368, so the
+    accept-by-token read has no org context to match on. It is authorised by the
+    explicit, transaction-scoped grant instead, which must be applied around that
+    ONE pinned lookup and dropped again before the org-scoped writes follow.
+    """
+    invitation = _make_invitation()
+    order: list[str] = []
+
+    async def _set_grant(*_args: object, **_kwargs: object) -> None:
+        order.append("set")
+
+    async def _clear_grant(*_args: object, **_kwargs: object) -> None:
+        order.append("clear")
+
+    async def _lookup(*_args: object, **_kwargs: object) -> MagicMock:
+        order.append("lookup")
+        return invitation
+
+    patches = {**_base_patches(invitation), "get_valid_by_token_hash": _lookup}
+    with (
+        patch.dict(
+            "farna.api.routes.auth.__dict__",
+            {
+                **patches,
+                "validate_password_strength": MagicMock(),
+                "get_account_by_email": AsyncMock(return_value=None),
+                "create_account": AsyncMock(return_value=_make_account()),
+                "get_membership_by_account_and_org": AsyncMock(return_value=None),
+                "create_membership": AsyncMock(return_value=MagicMock()),
+            },
+        ),
+        patch("farna.db.rls.set_rls_bootstrap_context", new=_set_grant),
+        patch("farna.db.rls.clear_rls_bootstrap_context", new=_clear_grant),
+    ):
+        resp = client.post("/api/v1/auth/accept-invite", json={"token": "tok", "password": _STRONG_PASSWORD})
+
+    assert resp.status_code == 200
+    assert order == ["set", "lookup", "clear"], f"the grant must wrap exactly the pinned token lookup, got {order}"
+
+
 def test_accept_invite_existing_account_keeps_password_and_flags(client: TestClient) -> None:
     """Branch (d): existing local password is untouched; UI gets the flag."""
     invitation = _make_invitation()
