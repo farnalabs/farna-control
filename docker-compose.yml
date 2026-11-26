@@ -1,6 +1,15 @@
 services:
   db:
     image: postgres:16-alpine
+    # FAR-2808: without a restart policy a container that exits stays exited and
+    # `docker compose ps` presents a half-dead stack as "the stack". The app
+    # services below carry one for the cold-start race; the datastores carry it
+    # for the same class (a container that exited never comes back on its own).
+    # `unless-stopped`, never `always`: an operator's `docker compose stop`/`down`
+    # must stay stopped, including across a daemon restart - which is what
+    # scripts/compose-restore.sh relies on when it stops the writers and leaves
+    # the stack down.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: farna_control
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
@@ -10,7 +19,19 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U farna_control"]
+      # FAR-2808: probe the TCP interface, not the default unix socket. On a
+      # first run the image's entrypoint starts a SECOND, socket-only server
+      # (`listen_addresses=''`) to run initdb and create the app role/database,
+      # stops it, then execs the real server (which the image configures with
+      # `listen_addresses='*'`). A host-less `pg_isready` answers 0 against that
+      # temporary server, so the probe went green, the app services started, the
+      # temporary server stopped, and a connection in that window failed with
+      # ConnectionRefusedError. `-h` keeps the probe on TCP, which the temporary
+      # server never listens on, so it passes only once the real server serves
+      # the same `db:5432` path the app uses. `-U`/`-d` are documentation only:
+      # pg_isready reports "accepting connections" for a wrong user or database
+      # too, so naming them is not what closes the window.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U farna_control -d farna_control"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -24,6 +45,11 @@ services:
 
   redis:
     image: redis:8-alpine
+    # FAR-2808: same class as `db` - a Redis that exits leaves every enqueue
+    # failing while the rest of the stack looks up. Its dataset is rebuildable
+    # (see the eviction policy below), so a restart cannot poison state the way
+    # a half-initialised database could.
+    restart: unless-stopped
     # FAR-2002 — bound the queue store, and evict only what the reconciler can
     # repair. Without a maxmemory, Redis runs `noeviction`: a worker wedge grows
     # the SAQ queue until every enqueue fails with `OOM command not allowed`.
@@ -50,6 +76,16 @@ services:
 
   backend:
     build: ./backend
+    # FAR-2808: this is the service the bug reported. On a cold first start the
+    # db probe could go green against Postgres's temporary, socket-only init
+    # server; when that server stopped, the backend's first connection failed
+    # with ConnectionRefusedError and the container exited - and nothing brought
+    # it back, so `docker compose ps` showed a dead API with everything else up.
+    # The db probe is fixed too; this policy is the backstop for every other
+    # transient exit (OOM-kill, a race in startup, a dependency arriving late),
+    # because a healthcheck gates START ORDER only and can never revive a
+    # process that has already exited.
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -110,6 +146,10 @@ services:
   # pipeline execution.
   saq-runner:
     build: ./backend
+    # FAR-2808: same failure class as `backend` (see above). A dead runs worker
+    # accepts no pipeline work while /healthz/ready still serves, so nothing
+    # restarted it: the stack looked up and executed nothing.
+    restart: unless-stopped
     command: ["python", "-m", "saq", "farna.core.saq_worker.runs_settings"]
     depends_on:
       db:
@@ -146,6 +186,11 @@ services:
   # 127.0.0.1:8081 via the custom runner.
   saq-system:
     build: ./backend
+    # FAR-2808: same failure class as `backend` (see above). A dead system
+    # worker stops fire_due_triggers, dispatcher_reconcile and the system crons
+    # with no scheduler to revive them - every cron/polling trigger is silently
+    # dead until a human notices.
+    restart: unless-stopped
     command: ["python", "-m", "farna.core.saq_worker"]
     depends_on:
       db:
@@ -184,6 +229,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+    # FAR-2808: same failure class as `backend` above. The nginx frontend is
+    # enabled by default and is how the operator reaches the app; a transient
+    # exit (OOM-kill, nginx reload race on first boot) left the UI permanently
+    # down while the API stayed up - a half-dead stack. `unless-stopped` revives
+    # it without defeating an explicit `docker compose stop`/`down`.
+    restart: unless-stopped
     depends_on:
       - backend
     ports:
