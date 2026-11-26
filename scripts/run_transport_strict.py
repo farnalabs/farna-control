@@ -180,7 +180,26 @@ def _run_pytest(modules: list[Path], report: Path, timeout: int, jobs: int, base
     # only: each xdist worker writes its own report shard, and every finding is
     # attributed per test (the instrumentation resets per test), so the merged
     # set is identical to a serial run.
-    command = ["uv", "run", "--no-sync", "pytest", *relative, "-q", "--tb=short", f"--timeout={timeout}", "-p", "no:randomly"]
+    # The unraisable-warning gate is mandatory on every pytest invocation
+    # (see backend/tests/conftest.py UNRAISABLE_ESCALATION and the
+    # architecture guard that compares this argv): a leaked never-awaited
+    # coroutine surfaces at GC as PytestUnraisableExceptionWarning, and a
+    # large enough flood of them wedges pytest's terminal writer.
+    command = [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest",
+        *relative,
+        "-q",
+        "--tb=short",
+        f"--timeout={timeout}",
+        "-p",
+        "no:randomly",
+        "-W",
+        "error::pytest.PytestUnraisableExceptionWarning",
+        "--disable-warnings",
+    ]
     if jobs > 1:
         command.extend(["-n", str(jobs)])
     print("+ " + " ".join(command))

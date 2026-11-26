@@ -206,7 +206,7 @@ def test_fingerprint_ratchet_distinguishes_a_second_stub_in_one_test(tmp_path: P
 
     _transport_strict.configure_baseline(baseline_file)
     try:
-        assert _transport_strict.unbaselined([first]) == []
+        assert not _transport_strict.unbaselined([first])
         assert _transport_strict.unbaselined([first, second]) == [second]
         assert _transport_strict.unbaselined([second]) == [second]
     finally:

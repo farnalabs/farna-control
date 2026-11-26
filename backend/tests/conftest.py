@@ -152,7 +152,13 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     """
     if _gated_item(item):
         warnings.filterwarnings("error", category=pytest.PytestUnraisableExceptionWarning)
-    _transport_strict.set_write_header_exempt(item.get_closest_marker(_transport_strict.WRITE_HEADER_EXEMPT_MARKER) is not None)
+    # Guarded: the architecture gate exercises this hook with a minimal
+    # ``SimpleNamespace(path=...)`` stand-in (see
+    # ``tests/architecture/test_unit_unraisable_warning_gate.py``), which has no
+    # marker API. A real ``pytest.Item`` always has ``get_closest_marker``.
+    get_marker = getattr(item, "get_closest_marker", None)
+    marker = get_marker(_transport_strict.WRITE_HEADER_EXEMPT_MARKER) if get_marker is not None else None
+    _transport_strict.set_write_header_exempt(marker is not None)
 
 
 #: The module whose ``_verify_identity`` the FAR-1631 leak guard protects.

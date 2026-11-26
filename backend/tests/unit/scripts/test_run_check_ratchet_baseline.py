@@ -187,6 +187,10 @@ _TRANSPORT_BASE = '{"version": 2, "modules": ["tests/x.py"], "violations": {"tes
 _TRANSPORT_LOOSENED = '{"version": 2, "modules": ["tests/x.py"], "violations": {"tests/x.py::test_a": [{"kind": "unused_route", "fingerprint": "aaaaaaaaaaaaaaaa"}, {"kind": "unused_route", "fingerprint": "bbbbbbbbbbbbbbbb"}]}}\n'
 _TRANSPORT_TIGHTENED = '{"version": 2, "modules": ["tests/x.py"], "violations": {}}\n'
 
+_CONTRACT_ROUNDTRIP_BASE = '{"version": 1, "uncovered_routes": ["get /api/v1/agents", "post /api/v1/agents"]}\n'
+_CONTRACT_ROUNDTRIP_LOOSENED = '{"version": 1, "uncovered_routes": ["get /api/v1/agents", "post /api/v1/agents", "delete /api/v1/agents/{agent_id}"]}\n'
+_CONTRACT_ROUNDTRIP_TIGHTENED = '{"version": 1, "uncovered_routes": ["get /api/v1/agents"]}\n'
+
 #: ``(key, base text, loosened text, tightened text)`` for every registry entry.
 _CASES: dict[str, tuple[str, str, str]] = {
     "brand-consistency": ("a.md\t2\n", "a.md\t3\n", "a.md\t1\n"),
@@ -236,6 +240,7 @@ _CASES: dict[str, tuple[str, str, str]] = {
         _READ_CREDENTIAL_TIGHTENED,
     ),
     "transport-policy": (_TRANSPORT_BASE, _TRANSPORT_LOOSENED, _TRANSPORT_TIGHTENED),
+    "contract-roundtrip": (_CONTRACT_ROUNDTRIP_BASE, _CONTRACT_ROUNDTRIP_LOOSENED, _CONTRACT_ROUNDTRIP_TIGHTENED),
 }
 
 
@@ -472,6 +477,7 @@ _RATCHET_FIXTURES: dict[str, str] = {
     "sonar-project.properties": "sonar.coverage.exclusions=tests/**\n",
     READ_CREDENTIAL_ALLOWLIST: _READ_CREDENTIAL_BASE,
     f"{ARCH}/transport_policy_baseline.json": _TRANSPORT_BASE,
+    f"{ARCH}/contract_roundtrip_baseline.json": _CONTRACT_ROUNDTRIP_BASE,
 }
 
 

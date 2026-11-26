@@ -37,6 +37,8 @@ sonar-project.properties coverage.exclusions an added pattern
 read_credential_jwt_only_allowlist.txt       an added route, or a changed kind
 backend/tests/architecture/transport_policy_baseline.json
                                              an added violation fingerprint
+backend/tests/architecture/contract_roundtrip_baseline.json
+                                             an added uncovered route
 ===========================================  ==================================
 
 Tightening any of them passes: a removed entry, a lowered count, a raised
@@ -84,6 +86,13 @@ parsed entries: they cannot be edited on their own or alongside an added entry.
 ``any_credential`` and ``public/exempt`` are human-recorded (only the four-way
 sum constrains them), so raising those two together with ``read routes total``
 still parses - they are a review invariant, not a derived count.
+
+The contract round-trip baseline (``contract_roundtrip_baseline.json``, FAR-2702)
+records the routes the integration test tolerates WITHOUT an executable
+round-trip case. It is compared as a set of ``"<method> <path>"`` route ids, so
+adding an uncovered route is a loosening: otherwise an agent could dodge the
+round-trip ratchet - which asks whether a PR that changed a route's handler has
+a case - by adding that route to the baseline. Removing one is a tightening.
 
 Base revision
 -------------
@@ -179,6 +188,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import combinations
@@ -831,6 +841,32 @@ def _parse_transport_policy_violations(text: str, source: str) -> frozenset[tupl
     return frozenset(tokens)
 
 
+def _parse_contract_roundtrip_uncovered_routes(text: str, source: str) -> frozenset[str]:
+    """The ``uncovered_routes`` set from the contract round-trip baseline.
+
+    Each entry is one ``"<method> <path>"`` route id the round-trip ratchet
+    tolerates *without* an executable case. The baseline is shrink-only: an
+    added route is a new tolerated gap (the ratchet that asks "did this PR
+    change a route's handler without a case?" would otherwise be dodged by
+    adding that route to the baseline), while removing one is a tightening.
+    Route ids are compared PER ENTRY, not per count - swapping one route for
+    another keeps the total constant and is exactly the loosening that matters.
+    """
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RatchetError(f"{source}: not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise RatchetError(f"{source}: expected a JSON object")
+    routes = payload.get("uncovered_routes")
+    if not isinstance(routes, list) or not all(isinstance(route, str) for route in routes):
+        raise RatchetError(f"{source}: 'uncovered_routes' must be a list of strings")
+    duplicates = sorted(route for route, count in Counter(routes).items() if count > 1)
+    if duplicates:
+        raise RatchetError(f"{source}: duplicate uncovered_routes entries: {duplicates}")
+    return frozenset(routes)
+
+
 def _read_credential_header_counts(text: str, source: str) -> dict[str, int]:
     """The frozen counts from the ``#`` header block, exactly one of each."""
     header = "\n".join(line for line in text.splitlines() if line.lstrip().startswith("#"))
@@ -1142,6 +1178,13 @@ RATCHETS: tuple[Ratchet, ...] = (
         f"{_ARCH}/transport_policy_baseline.json",
         "tolerated strict-transport violation fingerprints (add = looser)",
         _parse_transport_policy_violations,
+        _added_set_loosenings,
+    ),
+    Ratchet(
+        "contract-roundtrip",
+        f"{_ARCH}/contract_roundtrip_baseline.json",
+        "routes tolerated without an executable contract round-trip (add = looser)",
+        _parse_contract_roundtrip_uncovered_routes,
         _added_set_loosenings,
     ),
 )
