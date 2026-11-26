@@ -35,10 +35,16 @@
  *   link           -> PrimeVue's `link` flag (transparent hover, underlined
  *                     label on hover) - deliberately distinct from `text`
  *   danger         -> severity="danger", solid
+ *   warning        -> severity="warn", solid (the warning token pair)
  *
  * `secondary-text` is the text-button form of `secondary`: it keeps the
  * secondary severity's resting colour instead of the primary one. `link` is the
  * underlined-on-hover action the `text` flag does not render.
+ *
+ * The `warning` variant is solid (PrimeVue `severity="warn"`), using the Aura
+ * warn background/colour token pair. An outlined warning action is reachable
+ * through the `outlined` override (`variant="warning" outlined`), the same way
+ * the legacy combinations below are.
  *
  * Two legacy flag combinations the variants do not express are reachable
  * through the `outlined` override: a solid secondary button
@@ -65,7 +71,7 @@
 import { computed, onBeforeMount, useAttrs, useSlots } from 'vue'
 import PrimeButton from 'primevue/button'
 
-type ButtonVariant = 'primary' | 'secondary' | 'secondary-text' | 'ghost' | 'link' | 'danger'
+type ButtonVariant = 'primary' | 'secondary' | 'secondary-text' | 'ghost' | 'link' | 'danger' | 'warning'
 type ButtonSize = 'sm' | 'md'
 
 const props = withDefaults(defineProps<{
@@ -102,13 +108,14 @@ defineOptions({ inheritAttrs: false })
 const slots = useSlots()
 const attrs = useAttrs()
 
-const VARIANT_FLAGS: Record<ButtonVariant, { severity?: 'secondary' | 'danger'; outlined: boolean; text: boolean; link: boolean }> = {
+const VARIANT_FLAGS: Record<ButtonVariant, { severity?: 'secondary' | 'danger' | 'warn'; outlined: boolean; text: boolean; link: boolean }> = {
   primary: { severity: undefined, outlined: false, text: false, link: false },
   secondary: { severity: 'secondary', outlined: true, text: false, link: false },
   'secondary-text': { severity: 'secondary', outlined: false, text: true, link: false },
   ghost: { severity: undefined, outlined: false, text: true, link: false },
   link: { severity: undefined, outlined: false, text: false, link: true },
   danger: { severity: 'danger', outlined: false, text: false, link: false },
+  warning: { severity: 'warn', outlined: false, text: false, link: false },
 }
 
 const variantFlags = computed(() => VARIANT_FLAGS[props.variant])
