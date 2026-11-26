@@ -114,6 +114,20 @@ describe('DeterminationReviewPanel', () => {
     })
   })
 
+  it('restores the approve block when an acknowledgement is removed again', async () => {
+    const wrapper = mountPanel()
+    const acknowledge = () =>
+      wrapper.find(`[data-testid="determination-review-acknowledge-${LOW_ASSUMPTION_ID}"]`)
+    const approve = wrapper.find('[data-testid="determination-review-approve"]')
+
+    await acknowledge().setValue(true)
+    expect(approve.attributes('disabled')).toBeUndefined()
+
+    // Toggling the same assumption off removes it from the acknowledged list.
+    await acknowledge().setValue(false)
+    expect(approve.attributes('disabled')).toBeDefined()
+  })
+
   it('refuses a reject without a reason and then emits it with the reason', async () => {
     const wrapper = mountPanel()
 

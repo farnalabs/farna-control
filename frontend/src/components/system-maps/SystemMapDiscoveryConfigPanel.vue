@@ -9,19 +9,19 @@
       <form class="flex-1 overflow-y-auto p-4 space-y-5" @submit.prevent="submit">
         <fieldset :disabled="submitting">
           <legend class="text-sm font-medium">{{ $t('views.SystemMapDetailView.discovery_mode_label') }}</legend>
-          <div class="mt-2 grid gap-2">
-            <label class="rounded border p-3 cursor-pointer" :class="mode === 'deterministic' ? 'border-primary bg-primary/5' : ''">
-              <input v-model="mode" type="radio" value="deterministic" class="mr-2" data-testid="system-map-discovery-mode-deterministic" />
-              <span class="font-medium">{{ $t('views.SystemMapDetailView.mode_deterministic') }}</span>
-              <span class="block text-xs text-muted-foreground ml-6">{{ $t('views.SystemMapDetailView.deterministic_hint') }}</span>
-            </label>
-            <label v-if="canUseAi" class="rounded border p-3 cursor-pointer" :class="mode === 'ai_assisted' ? 'border-primary bg-primary/5' : ''">
-              <input v-model="mode" type="radio" value="ai_assisted" class="mr-2" :disabled="optionsLoaded && !aiDiscoveryAvailable" data-testid="system-map-discovery-mode-ai" />
-              <span class="font-medium">{{ $t('views.SystemMapDetailView.mode_ai_assisted') }}</span>
-              <span class="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs">{{ $t('views.SystemMapDetailView.beta_private_preview') }}</span>
-              <span class="block text-xs text-muted-foreground ml-6">{{ $t('views.SystemMapDetailView.ai_assisted_hint') }}</span>
-            </label>
-          </div>
+          <RadioGroup
+            v-model="mode"
+            name="system-map-discovery-mode"
+            :aria-label="$t('views.SystemMapDetailView.discovery_mode_label')"
+            :options="discoveryModeOptions"
+            class="mt-2 grid gap-2"
+            option-class="rounded border p-3 cursor-pointer"
+            selected-class="border-primary bg-primary/5"
+            control-class="mr-2"
+            label-class="font-medium"
+            description-class="block text-xs text-muted-foreground ml-6"
+            badge-class="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs"
+          />
           <!-- The AI path is decided from what the caller can actually read
                (their organisation's model backends and model-judge evals).
                There is no system-admin-only access probe, so an ordinary org
@@ -77,6 +77,7 @@ import type { components } from '../../lib/api/schema'
 import type { DiscoveryMode } from '../../stores/systemMaps'
 import AppSelect from '../shared/AppSelect.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
+import RadioGroup, { type RadioOption } from '../ui/RadioGroup.vue'
 
 type Backend = components['schemas']['ModelBackendResponse']
 type Evaluation = components['schemas']['EvalDefinitionResponse']
@@ -111,6 +112,30 @@ const modelJudgeConfigured = computed(() => evals.value.length > 0)
 const aiDiscoveryAvailable = computed(
   () => props.canUseAi && optionsLoaded.value && !loading.value && !failed.value && modelBackendsConfigured.value && modelJudgeConfigured.value,
 )
+
+// The AI option only exists when the caller may author at all, and stays
+// disabled until a completed options read proves the AI path is usable.
+const discoveryModeOptions = computed<RadioOption<DiscoveryMode>[]>(() => {
+  const options: RadioOption<DiscoveryMode>[] = [
+    {
+      value: 'deterministic',
+      label: $t('views.SystemMapDetailView.mode_deterministic'),
+      description: $t('views.SystemMapDetailView.deterministic_hint'),
+      testid: 'system-map-discovery-mode-deterministic',
+    },
+  ]
+  if (props.canUseAi) {
+    options.push({
+      value: 'ai_assisted',
+      label: $t('views.SystemMapDetailView.mode_ai_assisted'),
+      badge: $t('views.SystemMapDetailView.beta_private_preview'),
+      description: $t('views.SystemMapDetailView.ai_assisted_hint'),
+      disabled: optionsLoaded.value && !aiDiscoveryAvailable.value,
+      testid: 'system-map-discovery-mode-ai',
+    })
+  }
+  return options
+})
 
 // AppSelect option lists for the AI-assisted controls (both were native
 // <select> elements). The leading empty entry is the "not selected" placeholder.

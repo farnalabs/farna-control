@@ -225,16 +225,14 @@
         data-testid="hitl-review-column-headers"
         class="hidden items-center gap-4 px-4 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground md:flex"
       >
-        <label class="h-4 w-4 flex-shrink-0">
-          <input
-            type="checkbox"
-            :checked="allSelected"
-            :aria-label="$t('views.SettingsHitlReviewView.bulk_select_all')"
-            data-testid="hitl-review-select-all"
-            class="h-4 w-4 rounded border-input accent-primary"
-            @change="toggleSelectAll"
-          />
-        </label>
+        <Checkbox
+          :model-value="allSelected"
+          :aria-label="$t('views.SettingsHitlReviewView.bulk_select_all')"
+          class="h-4 w-4 flex-shrink-0"
+          control-class="h-4 w-4 rounded border-input accent-primary"
+          data-testid="hitl-review-select-all"
+          @update:model-value="toggleSelectAll"
+        />
         <!-- FAR-2365: mirrors the body's expand chevron (h-4 w-4) so every
              header label aligns with the value column beneath it. The body
              chevron lives inside the row button, after the checkbox; this
@@ -265,16 +263,14 @@
           class="flex w-full items-start gap-3 p-4 text-left md:items-center md:gap-4"
           :class="{ 'border-b': expandedKey === expandKey(gate) }"
         >
-          <label class="h-4 w-4 flex-shrink-0">
-            <input
-              type="checkbox"
-              :checked="isSelected(gate)"
-              :aria-label="$t('views.SettingsHitlReviewView.bulk_select_gate', { id: shortId(gate.review_id) })"
-              data-testid="hitl-review-row-checkbox"
-              class="h-4 w-4 rounded border-input accent-primary"
-              @change="toggleSelect(gate)"
-            />
-          </label>
+          <Checkbox
+            :model-value="isSelected(gate)"
+            :aria-label="$t('views.SettingsHitlReviewView.bulk_select_gate', { id: shortId(gate.review_id) })"
+            class="h-4 w-4 flex-shrink-0"
+            control-class="h-4 w-4 rounded border-input accent-primary"
+            data-testid="hitl-review-row-checkbox"
+            @update:model-value="toggleSelect(gate)"
+          />
           <button
             type="button"
             data-testid="hitl-review-toggle-expand"
@@ -393,6 +389,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import HitlReviewCard from '../components/hitl/HitlReviewCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import Field from '../components/ui/Field.vue'
 import Input from '../components/ui/Input.vue'
 import Textarea from '../components/ui/Textarea.vue'
