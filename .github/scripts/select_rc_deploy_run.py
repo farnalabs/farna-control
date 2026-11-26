@@ -307,7 +307,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.github_output:
         run_id = "" if selection.run_id is None else str(selection.run_id)
-        with Path(args.github_output).open("a", encoding="utf-8") as handle:
+        # ``args.github_output`` is a CLI argument supplied by the calling
+        # workflow (rc-validate.yml passes a ``mktemp`` path); it is never user-
+        # or model-supplied, so this S8707 taint flow is a false positive. The
+        # values written are a fixed verdict enum and an int run id, so the
+        # write cannot inject additional ``key=value`` lines either.
+        with Path(args.github_output).open("a", encoding="utf-8") as handle:  # NOSONAR pythonsecurity:S8707
             handle.write(f"verdict={selection.verdict}\n")
             handle.write(f"deploy_run_id={run_id}\n")
     return 0
