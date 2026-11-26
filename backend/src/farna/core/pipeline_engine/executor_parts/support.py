@@ -22,6 +22,7 @@ globals or the patch silently stops intercepting. Two seams enforce that:
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -133,20 +134,60 @@ async def _safe_pipeline_name(
     return pipeline.name if pipeline is not None else None
 
 
-def _traceback_detail(exc: BaseException, limit: int = 2000) -> str:
-    """Sanitized, bounded traceback text for a caught exception.
+# Source-location shapes that must never reach a stored, API-exposed
+# ``runs.error_detail``. The detail is rendered on the Runs list and served by
+# the API, so a raw traceback (module paths, source file names) is a
+# data-hygiene leak. The FULL traceback is retained in the server log by each
+# caller's ``exc_info`` record; this only scrubs what is STORED on the row.
+_SOURCE_PATH_RE = re.compile(r"(?:[A-Za-z]:)?(?:[/\\][^\s\"':;,()\[\]<>]+)+\.py[cod]?\b")
+_INTERNAL_MODULE_RE = re.compile(r"\b(?:farna|modulo)(?:\.\w+){2,}\b")
+_TRACEBACK_HEADER = "Traceback (most recent call last)"
 
-    Formats the full traceback of *exc* into a single string, sanitizes it
-    (redaction runs before truncation), and caps it at *limit* chars.
-    Shared by the generic ``except Exception`` handlers in ``execute`` /
-    ``resume`` / ``_stream_graph`` so each stays a one-liner.
+
+def _public_exception_message(exc: BaseException) -> str:
+    """Return *exc*'s message with internal source locations removed.
+
+    Keeps the exception's own wording (the readable part a user needs) and
+    scrubs anything that would leak the codebase layout: an embedded formatted
+    traceback, ``File "...", line N`` frame lines, source file paths and
+    internal ``farna.*`` / ``modulo.*`` module paths. Never raises.
     """
-    import traceback
+    try:
+        raw = str(exc).strip()
+    except Exception:  # pragma: no cover - str() must not break a failure path
+        return ""
+    if not raw:
+        return ""
+    # Some exceptions embed a fully formatted traceback in their message. Keep
+    # only the final exception line so no frame line can survive.
+    if _TRACEBACK_HEADER in raw:
+        raw = raw.rsplit("\n", 1)[-1].strip()
+    # Drop any residual ``File "<path>", line N, in <func>`` frame lines.
+    lines = [line for line in raw.splitlines() if not line.strip().startswith('File "')]
+    raw = " ".join(line.strip() for line in lines if line.strip())
+    raw = _SOURCE_PATH_RE.sub("<internal path>", raw)
+    raw = _INTERNAL_MODULE_RE.sub("<internal module>", raw)
+    return raw.strip()
 
-    return _sanitize_detail(
-        "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
-        limit=limit,
-    )
+
+def _failure_reason(exc: BaseException, limit: int = 500) -> str:
+    """Short, user-facing failure reason for a caught executor exception.
+
+    ``runs.error_detail`` is API-exposed, so it must never carry raw exception
+    text with a traceback or internal paths. This returns
+    ``"<ExceptionType>: <scrubbed message>"`` (or just the type name when the
+    message is empty), sanitized and bounded.
+
+    The full traceback is NOT returned — every call site records it to the
+    server log via ``exc_info`` before this reason is stored on the run row.
+    """
+    reason = type(exc).__name__
+    message = _public_exception_message(exc)
+    if message and not message.startswith(f"{reason}:"):
+        reason = f"{reason}: {message}"
+    elif message:
+        reason = message
+    return _sanitize_detail(reason, limit=limit)
 
 
 class RunNotFoundError(KeyError):

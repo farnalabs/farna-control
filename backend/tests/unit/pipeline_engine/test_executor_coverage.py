@@ -43,6 +43,7 @@ from farna.core.pipeline_engine.executor import (
     _failure_build_sha,
     _failure_class_attempt_cap,
     _failure_column,
+    _failure_reason,
     _graph_has_script_mode,
     _graph_is_idempotent,
     _graph_is_interactive,
@@ -78,7 +79,6 @@ from farna.core.pipeline_engine.executor import (
     _streamed_interrupts,
     _StreamState,
     _terminal_failure,
-    _traceback_detail,
     compute_retry_aware_topology_hash,
 )
 from farna.core.pipeline_engine.node_runner import (
@@ -158,26 +158,36 @@ async def test_safe_pipeline_name_returns_none_when_pipeline_is_none():
 
 
 # ---------------------------------------------------------------------------
-# _traceback_detail
+# _failure_reason
 # ---------------------------------------------------------------------------
 
 
-def test_traceback_detail_formats_and_sanitizes():
-    """_traceback_detail formats the full traceback and returns a string."""
+def test_failure_reason_is_readable_and_path_free():
+    """A raised exception's reason is user-facing text, never a traceback."""
     try:
-        raise ValueError("test error")
+        raise ValueError("Object of type set is not JSON serializable")
     except ValueError as exc:
-        result = _traceback_detail(exc)
-    assert "ValueError: test error" in result
-    assert isinstance(result, str)
+        result = _failure_reason(exc)
+    assert result == "ValueError: Object of type set is not JSON serializable"
+    assert "Traceback (most recent call last)" not in result
 
 
-def test_traceback_detail_respects_limit():
+def test_failure_reason_scrubs_embedded_traceback_and_internal_paths():
+    """An embedded traceback / source path never survives into the stored reason."""
+    message = 'Traceback (most recent call last):\n  File "/app/src/modulo/core/pipeline_engine/executor.py", line 3970, in execute\nTypeError: modulo.core.pipeline_engine.executor failed'
+    result = _failure_reason(TypeError(message))
+    assert "Traceback (most recent call last)" not in result
+    assert "/app/src/" not in result
+    assert ".py" not in result
+    assert result.startswith("TypeError:")
+
+
+def test_failure_reason_respects_limit():
     """Truncation at limit."""
     try:
         raise ValueError("x" * 10000)
     except ValueError as exc:
-        result = _traceback_detail(exc, limit=100)
+        result = _failure_reason(exc, limit=100)
     assert len(result) <= 100
 
 
