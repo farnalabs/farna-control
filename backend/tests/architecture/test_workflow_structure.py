@@ -1525,6 +1525,10 @@ DEPLOY_ASSUMING_JOBS = (
     "deploy-production",
     "prod-smoke",
     "notify-deploy-failure",
+    # FAR-2800: records "this run is deploying release X" for rc-validate to
+    # select on. A throttled run deploys nothing, so it must never emit a
+    # release-identity record - the same gate applies.
+    "record-release-identity",
 )
 
 

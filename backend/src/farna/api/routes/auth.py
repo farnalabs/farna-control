@@ -967,18 +967,26 @@ async def accept_invite(
 
     The invitation compare-and-swap consumption runs as the FINAL DB statement
     of the success path: if another consumer raced us, the CAS matches zero
-    rows and the whole transaction aborts. RLS context is set to the
-    *invitation's* org before any membership write (the caller is otherwise
-    pre-authenticated); the invitations table itself deliberately carries no
-    RLS policy. IP-based failures are recorded for every denial path; a
-    successful enrollment clears them (``record_success``).
+    rows and the whole transaction aborts. The pre-auth token lookup runs inside
+    ``bootstrap_read`` — the scoped ``app.bootstrap_context`` grant ADR 070 §2
+    requires — and pins the unique ``token_hash``; the grant is cleared again
+    before the transaction continues. RLS context is then set to the
+    *invitation's* org before any membership write, so the rest of the
+    transaction is ordinary org-scoped work against ``invitations``'
+    ``rls_org_isolation`` policy (migration 0368). IP-based failures are
+    recorded for every denial path; a successful enrollment clears them
+    (``record_success``).
     """
     ip = _client_ip(request)
     limiter = get_auth_rate_limiter(settings)
 
     try:
         async with session.begin():
-            invitation = await get_valid_by_token_hash(session, hash_invitation_token(req.token))
+            # Pre-auth: no principal and no org context exist yet. The grant is
+            # scoped to this one pinned lookup and cleared as the block exits, so
+            # the org-scoped work below cannot inherit it.
+            async with bootstrap_read(session):
+                invitation = await get_valid_by_token_hash(session, hash_invitation_token(req.token))
             if invitation is None:
                 await _reject_invitation(limiter, ip)
 

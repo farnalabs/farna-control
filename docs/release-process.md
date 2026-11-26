@@ -17,6 +17,8 @@ Every release action runs through `.github/workflows/release-unified.yml` ("Rele
 
 **The unified pipeline owns every publication.** `release-unified.yml` pushes the four container images (and their versioned tags) to GHCR, pushes the Helm chart to the OCI registry, builds and signs the Linux release bundle through `bundle-release.yml`, builds and notarizes separate native macOS arm64 and x86_64 `.dmg` artifacts on `macos-15` and `macos-15-intel`, builds the native Windows payload (`windows-artifacts.yml`), then compiles, signs (Azure Trusted Signing) and attests the Windows installer (`windows-installer.yml`) before generating the final `SHA256SUMS` and signed `RELEASE_MANIFEST.json`. Windows native installer support is Beta scope (delivered by FAR-2337 / FAR-2338) and is not built on the Alpha release path: it is included in the release manifest and `SHA256SUMS` only when the Beta-only `include_windows` input is explicitly set to true (it defaults to false); its publication depends on a release running (no signed Windows installer is published yet), and real-host validation under FAR-2250 is still outstanding. It creates the GitHub Release from that final manifest/checksum chain, pushes the `bundle-v*` tag, publishes `farna-control` to PyPI on `promote`, and dispatches Deploy plus `rc-validate`. macOS arm64 and Intel x86_64 are supported as separate native artifacts; Rosetta is not required.
 
+**The signed manifest is the provenance record.** The signed `RELEASE_MANIFEST.json` records the exact source commit the publishing job checked out and built from: schema v1's `generated_at` field carries that commit SHA, not a timestamp and not the workflow's dispatch ref. The immutable `bundle-v<VERSION>` tag is a version anchor, not a per-recut commit pointer - a recut republishes the signed manifest, so what was actually built is read from the signed manifest, never inferred from the tag's commit.
+
 **Slow Apple notarization holds the release; it does not fail it.** A macOS DMG is published only once a notarization ticket is stapled to it and verified (FAR-2573). If Apple is still processing the submission when the macOS job's notary budget (a 90-minute `notarytool --wait` plus a 45-minute `notarytool info` poll) runs out, the job ends with a PENDING outcome instead of failing: the unstapled DMG still passes every non-ticket gate, publication is HELD, and `macos-staple-retry.yml` staples and publishes the release once Apple accepts it. The Apple submission id is kept in the run's `macos-notary-submission-<version>-<arch>` artifact. An `Invalid` or `Rejected` verdict is never retried: it fails the macOS job at build time, or fails the staple retry loudly (and stops its re-dispatch) if it arrives later (FAR-2577).
 
 The workflow defaults to workflow-level `permissions: contents: read`, with write scopes granted only on the job that needs them: the `release` job carries `contents: write` (push tags and the CHANGELOG commit, create the GitHub Release) and `actions: write` (`gh workflow run rc-validate.yml`). The `dry-run` and build jobs are read-only. A `release-unified-${{ github.ref }}` concurrency group with `cancel-in-progress: false` ensures two release actions can never interleave.
@@ -93,6 +95,34 @@ The GA tag is the release identity, so it is created and pushed before anything 
 
 - A failed CHANGELOG commit/push turns the job **red** - it is a required deliverable.
 - Failed release-notes generation or a failed `gh release create` is a **warning only**, because the tag already exists and is intact.
+
+### Resuming a failed promote
+
+`promote` pushes the `vX.Y.Z` GA tag before the rest of the `release` job's GA publication steps run (the Helm chart, `CHANGELOG.md` and the GitHub Release, and the freeze lift at the end of that job). If the `release` job fails after the tag - but before it lifts `release-freeze` - a plain re-dispatch of `promote` cannot finish the release: safety 2 refuses because the GA tag already exists, and safety 4 refuses because `origin/main` is no longer the validated RC commit once the promote PR has squash-merged. The release is then stranded with the GA tag pushed but GA publication incomplete.
+
+The explicit resume path completes that release instead. Dispatch `promote` again with `resume=true`:
+
+```bash
+gh workflow run "Release: Unified Pipeline" -f mode=promote -f version=0.4.0 -f resume=true
+```
+
+`resume` is only valid with `mode=promote`; the workflow refuses it for `cut`, `recut` and `dry-run` at the first input-validation step. The release identity is re-derived from the frozen state, never from `main`:
+
+- the GA tag `vX.Y.Z` must exist on origin - it is the release commit, and its commit is what every downstream job checks out and attests;
+- `release-freeze` on origin must resolve to that exact GA commit. A missing freeze and a failed query both fail closed: a resume never treats an unknown state as absent;
+- the GA commit must have exactly one parent, because the promote PR is squash-merged. A merge commit, a root commit or an unreadable parent listing is a hard failure, so a release promoted by a non-squash merge cannot be resumed;
+- that single parent is the RC commit. A `vX.Y.Z-rc*` tag must point at it (the highest rc wins when several share the commit), and the `validated/<rc>` marker must exist on origin and point at the same commit.
+
+A resume creates, moves and deletes nothing. It skips safety 2 and safety 4, the freeze/publication-hold swap, the promote PR creation and merge, and the tag push, and it never creates, moves or deletes the GA tag or `release-freeze`. It checks out the GA commit and re-runs only the publication steps **inside the `release` job**. If the resume fails, the freeze is left where it is - at the GA commit - so another resume can re-verify and try again.
+
+> **The resume covers the `release` job, not the downstream publication jobs.** The PyPI upload (`publish-pypi`), the GA compose bundle (`promote-compose`) and the attestation (`attest-artefacts`) are separate jobs that run with `needs: release` - after the `release` job has already lifted `release-freeze`. A `resume=true` dispatch cannot reach them: it fails closed at preflight (and at the resume guard above) because the freeze is absent. Recover a failure in those jobs by re-running the failed jobs on the same workflow run (Actions -> Re-run failed jobs). Those jobs are idempotent and never read `release-freeze`, so a re-run succeeds with the freeze already gone. A resume dispatch and a re-run of failed jobs are different recovery paths: neither can substitute for the other.
+
+The publication steps are idempotent, so a resume (or a re-run of the failed downstream jobs) is safe after a partial publish and never overwrites anything already published:
+
+- **Helm chart** - before pushing, the workflow pulls `oci://ghcr.io/farnalabs/farna-control/charts/farna-control` at the target version. If that version is already published, the pulled `Chart.yaml` must report the same `version` and `appVersion`, and the push is skipped with a notice. Only a not-found error means "safe to push"; any other pull error is a hard failure. An existing chart version is never overwritten.
+- **PyPI** - runs as the downstream `publish-pypi` job, so a failure is recovered by re-running the failed job, not by a resume. Before uploading, the workflow queries `https://pypi.org/pypi/farna-control/<version>/json`. A 404 means the version is not published yet and the upload proceeds. An HTTP 200 means it is already published: the published filenames must exactly match the built `backend/dist/*.whl` and `backend/dist/*.tar.gz` filenames, and the upload is skipped; a different file set is a hard failure. Any other HTTP status fails closed. Wheels are not byte-reproducible, so the comparison is by filename, never by hash.
+- **Container images** - the GA retags are immutable SHA-derived tags, so re-running them is naturally idempotent.
+- **Freeze lift** - the final `release`-job step remains the only place that lifts the freeze, and it tolerates the freeze already being absent (it queries first; a genuinely unknown state still fails closed).
 
 ### Website rebuild hook (optional)
 

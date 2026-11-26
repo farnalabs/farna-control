@@ -84,8 +84,10 @@ def test_promote_rebuilds_compose_bundle_from_ga_tag_and_replaces_release_assets
     pull_idx = names.index("Verify the GA image is anonymously pullable")
     package_idx = names.index("Package final GA compose release bundle")
     sign_idx = names.index("Generate SHA256SUMS and sign the final GA manifest")
-    upload_idx = names.index("Replace GA compose assets without clobbering")
+    upload_idx = names.index("Publish the GA compose assets (idempotent, verified)")
+    verify_idx = names.index("Verify the published GA compose assets")
     assert pull_idx < package_idx < sign_idx < upload_idx
+    assert upload_idx < verify_idx
 
     pull_script = job["steps"][pull_idx]["run"]
     assert 'docker pull "$IMAGE"' in pull_script
@@ -107,7 +109,11 @@ def test_promote_rebuilds_compose_bundle_from_ga_tag_and_replaces_release_assets
     upload_script = job["steps"][upload_idx]["run"]
     assert 'gh release view "$TAG"' in upload_script
     assert 'gh release upload "$TAG"' in upload_script
+    assert "--clobber" in upload_script
     assert "farna-control-${VERSION}-compose.tar.gz" in upload_script
+
+    verify_script = job["steps"][verify_idx]["run"]
+    assert "verify_release_from_files" in verify_script
 
 
 def test_promote_retag_publishes_the_v_prefixed_ga_tag_the_compose_bundle_pins() -> None:
@@ -2981,6 +2987,13 @@ case "${1:-}" in
   registry)
     if [[ " $* " == *" --password-stdin "* ]]; then cat >/dev/null; fi
     printf 'helm login marker\\n' >> "$HARNESS_DIR/publication-markers" ;;
+  pull)
+    # FAR-2802: the promote step probes the registry for an already-published
+    # chart version before pushing. Nothing is published in this rehearsal, so
+    # the probe answers with the not-found error a real registry returns and the
+    # step pushes as before.
+    printf 'Error: failed to pull "oci://ghcr.io/example/repo/charts/farna-control": not found\\n' >&2
+    exit 1 ;;
   package)
     destination=""
     version=""

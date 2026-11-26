@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
+import Aura from '@primevue/themes/aura'
+import { toNormalizeVariable, toVariables } from '@primeuix/styled'
 
 import Button from '../components/ui/Button.vue'
 
@@ -13,8 +15,11 @@ describe('Button', () => {
   it.each([
     ['primary', [], undefined],
     ['secondary', ['p-button-secondary', 'p-button-outlined'], 'secondary'],
+    ['secondary-text', ['p-button-secondary', 'p-button-text'], 'secondary'],
     ['ghost', ['p-button-text'], undefined],
+    ['link', ['p-button-link'], undefined],
     ['danger', ['p-button-danger'], 'danger'],
+    ['warning', ['p-button-warn'], 'warn'],
   ] as const)('maps variant %s to the PrimeVue severity/outlined/text flags', (variant, classes, severity) => {
     const wrapper = mount(Button, { props: { variant, label: 'Save' } })
 
@@ -25,6 +30,67 @@ describe('Button', () => {
     } else {
       expect(wrapper.attributes('data-p-severity')).toBe(severity)
     }
+  })
+
+  it('pins the warning variant to severity="warn", solid, distinct from primary and danger', () => {
+    const warning = mount(Button, { props: { variant: 'warning', label: 'Retry all' } })
+    const primary = mount(Button, { props: { variant: 'primary', label: 'Retry all' } })
+    const danger = mount(Button, { props: { variant: 'danger', label: 'Retry all' } })
+
+    // The exact flag: severity warn, and nothing that would un-solid it.
+    expect(warning.attributes('data-p-severity')).toBe('warn')
+    expect(warning.classes()).toContain('p-button-warn')
+    expect(warning.classes()).not.toContain('p-button-outlined')
+    expect(warning.classes()).not.toContain('p-button-text')
+    expect(warning.classes()).not.toContain('p-button-link')
+
+    // Distinct from the two solid variants it can be confused with.
+    expect(primary.attributes('data-p-severity')).toBeUndefined()
+    expect(danger.attributes('data-p-severity')).toBe('danger')
+    expect(warning.attributes('data-p-severity')).not.toBe(primary.attributes('data-p-severity'))
+    expect(warning.attributes('data-p-severity')).not.toBe(danger.attributes('data-p-severity'))
+
+    // The variant relies on Aura's warn background/colour token pair: both
+    // must resolve in the preset, and neither may be the danger pair.
+    const { tokens } = toVariables(Aura as unknown as Parameters<typeof toVariables>[0], { prefix: 'p' })
+    const names = new Set((tokens || []).map((token) => `--p-${toNormalizeVariable(token)}`))
+    expect(names.has('--p-button-warn-background')).toBe(true)
+    expect(names.has('--p-button-warn-color')).toBe(true)
+    expect(names.has('--p-button-danger-background')).toBe(true)
+  })
+
+  it('supports an outlined warning action through the outlined override', () => {
+    const outlinedWarning = mount(Button, { props: { variant: 'warning', outlined: true, label: 'Retry all' } })
+
+    expect(outlinedWarning.attributes('data-p-severity')).toBe('warn')
+    expect(outlinedWarning.classes()).toContain('p-button-outlined')
+  })
+
+  it('maps secondary-text to the secondary severity at rest rather than the primary one', () => {
+    const wrapper = mount(Button, { props: { variant: 'secondary-text', label: 'Cancel' } })
+
+    // The severity is the whole point of the variant: a plain `text` button
+    // would render the primary severity at rest.
+    expect(wrapper.classes()).toContain('p-button-secondary')
+    expect(wrapper.classes()).toContain('p-button-text')
+    expect(wrapper.classes()).not.toContain('p-button-outlined')
+    expect(wrapper.attributes('data-p-severity')).toBe('secondary')
+    expect(wrapper.attributes('data-p')).toContain('text')
+  })
+
+  it("maps link to PrimeVue's link flag, distinct from text", () => {
+    const link = mount(Button, { props: { variant: 'link', label: 'Learn more' } })
+    const text = mount(Button, { props: { variant: 'ghost', label: 'Learn more' } })
+
+    // `link` sets the link flag (transparent hover + underlined label on
+    // hover); `text` does not. They must not be the same combination.
+    expect(link.classes()).toContain('p-button-link')
+    expect(link.classes()).not.toContain('p-button-text')
+    expect(link.attributes('data-p')).toContain('link')
+
+    expect(text.classes()).toContain('p-button-text')
+    expect(text.classes()).not.toContain('p-button-link')
+    expect(text.attributes('data-p')).not.toContain('link')
   })
 
   it('keeps the variant flags exclusive: primary is solid and ghost is not outlined', () => {

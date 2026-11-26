@@ -37,6 +37,11 @@ one of them regains *any* ``IS NULL`` arm
 ``test_global_asset_tables_keep_their_named_null_arm`` keeps the two deliberate
 ``organisation_id IS NULL`` global-asset arms named as such (ADR 070 §6).
 
+``invitations`` joined the register with migration 0368: it was outside the RLS
+regime entirely (pre-auth accept read) and now carries the same scoped arm, so the
+pre-auth accept lookup is authorised by the explicit grant instead of by the
+absence of a policy. Its accept call site pins the unique ``token_hash``.
+
 Part 2 (behavioural) — for ``pipelines``, ``runs``, ``connector_instances``,
 ``model_backends`` and ``system_maps`` this seeds two organisations (two teams
 each) and asserts, as a NON-superuser role so RLS actually applies, that an org-B
@@ -106,7 +111,13 @@ _EXEMPTIONS: dict[str, Exemption] = {
 #   oauth_consent_states  — anonymous consent-context read by state, before any org exists
 #   org_memberships       — login/SSO/refresh role resolution, pinned to (account, org)
 #   token_families        — refresh rotation + credential-change revocation, pinned to (family, account)
+#
+# ``invitations`` joined in 0368 (FAR-2701 follow-up): the accept-invite read
+# happens before any principal exists, and the row carries a Bearer-equivalent
+# token hash, so it needs the grant as much as the four above — the accept call
+# site pins the unique ``token_hash`` inside ``bootstrap_read``.
 _BOOTSTRAP_GRANT_TABLES: dict[str, str] = {
+    "invitations": "pre-auth accept-by-token lookup, pinned to the unique token_hash (accept-invite route)",
     "oauth_clients": "pre-auth OAuth client lookup by client_id (authorize / token / refresh legs)",
     "oauth_consent_states": "anonymous consent-context read by state (the org is a column of the row)",
     "org_memberships": "login/SSO/refresh live-role resolution, pinned to (account, org)",
@@ -115,13 +126,12 @@ _BOOTSTRAP_GRANT_TABLES: dict[str, str] = {
 
 # The tenant-table census is deliberate: if a table drops out of RLS (or a new
 # tenant table appears without one), the count changes and this gate must be
-# updated as a reviewed act rather than silently drifting. Currently 102 public
-# tables carry both ``relrowsecurity`` and ``organisation_id``. Five further
-# tables carry an ``organisation_id`` column but do NOT enable RLS and are
-# therefore outside ADR 070's invariant by definition: the three runtime-managed
-# LangGraph checkpoint tables, ``invitations`` (consumed before any principal
-# exists) and ``run_node_outputs_quarantine`` (ops-only remediation evidence).
-_EXPECTED_TENANT_TABLE_COUNT = 102
+# updated as a reviewed act rather than silently drifting. Currently 104 public
+# tables carry both ``relrowsecurity`` and ``organisation_id`` (0368 moved the
+# last two application-owned tables in; the three runtime-managed LangGraph
+# checkpoint tables still carry ``organisation_id`` without RLS and are outside
+# ADR 070's invariant by definition).
+_EXPECTED_TENANT_TABLE_COUNT = 104
 
 # The exception list is now only the two deliberate global-asset catalogues.
 _REQUIRED_EXEMPTIONS: dict[str, str] = {
@@ -570,11 +580,12 @@ def test_no_policy_regains_an_org_context_is_null_arm(tenant_policy_census: dict
 
 
 def test_bootstrap_grant_tables_use_the_scoped_arm(tenant_policy_census: dict[str, TablePolicies]) -> None:
-    """The four pre-auth tables must hold the scoped bootstrap grant, and no others.
+    """The reviewed pre-auth tables must hold the scoped bootstrap grant, and no others.
 
-    Both directions matter. If one of the four drifts back to a fail-open arm the
-    gate says so; if a table that is NOT on the reviewed list acquires the grant,
-    a pre-auth read has been widened without this test being updated.
+    Both directions matter. If one of the reviewed tables drifts back to a
+    fail-open arm the gate says so; if a table that is NOT on the reviewed list
+    acquires the grant, a pre-auth read has been widened without this test being
+    updated.
     """
     problems: list[str] = []
     carrying: set[str] = set()

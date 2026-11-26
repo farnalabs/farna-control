@@ -19,28 +19,16 @@
       data-testid="admin-errors-scope"
     >
       <span class="text-sm font-medium text-muted-foreground">{{ $t('views.AdminErrorsView.scope_label') }}</span>
-      <div class="inline-flex rounded-lg border border-input bg-background p-0.5">
-        <button
-          type="button"
-          class="rounded-md px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          :class="!isInstanceScope ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'"
-          :aria-pressed="!isInstanceScope"
-          data-testid="admin-errors-scope-organisation"
-          @click="setScope('organisation')"
-        >
-          {{ $t('views.AdminErrorsView.scope_organisation') }}
-        </button>
-        <button
-          type="button"
-          class="rounded-md px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          :class="isInstanceScope ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'"
-          :aria-pressed="isInstanceScope"
-          data-testid="admin-errors-scope-instance"
-          @click="setScope('instance')"
-        >
-          {{ $t('views.AdminErrorsView.scope_instance') }}
-        </button>
-      </div>
+      <SegmentedControl
+        :model-value="scope"
+        :options="scopeOptions"
+        :aria-label="$t('views.AdminErrorsView.scope_group_label')"
+        class="inline-flex rounded-lg border border-input bg-background p-0.5"
+        option-class="rounded-md px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        selected-class="bg-muted text-foreground"
+        unselected-class="text-muted-foreground hover:text-foreground"
+        @update:model-value="onScopeChange"
+      />
       <p
         v-if="isInstanceScope"
         class="basis-full text-sm text-muted-foreground sm:basis-auto"
@@ -87,7 +75,7 @@
       @update:filter="handleFilterUpdate"
     >
       <template #after>
-        <button type="button" class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="admin-errors-reset" @click="resetFilters">{{ $t('common.reset') }}</button>
+        <Button variant="secondary" data-testid="admin-errors-reset" @click="resetFilters">{{ $t('common.reset') }}</Button>
       </template>
     </FilterBar>
 
@@ -124,29 +112,24 @@
           </template>
           <template #cell-sample_message="{ row, value }">
             <div class="flex items-start gap-1">
-              <button
-                type="button"
-                class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              <Disclosure
+                :open="isMessageExpanded(errorGroupRowId(row))"
                 :aria-label="isMessageExpanded(errorGroupRowId(row)) ? $t('views.AdminErrorsView.collapse_message') : $t('views.AdminErrorsView.expand_message')"
-                :aria-expanded="isMessageExpanded(errorGroupRowId(row))"
                 :data-testid="'admin-errors-expand-' + errorGroupRowId(row)"
-                @click.stop="toggleMessage(errorGroupRowId(row))"
+                chevron-class="h-3.5 w-3.5 transition-transform"
+                region-class="min-w-0"
+                class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                stop-propagation
+                @update:open="toggleMessage(errorGroupRowId(row))"
                 @keydown.stop
               >
-                <ChevronRight
-                  :size="14"
-                  class="transition-transform"
-                  :class="isMessageExpanded(errorGroupRowId(row)) ? 'rotate-90' : ''"
-                  aria-hidden="true"
-                />
-              </button>
+                <span
+                  data-testid="admin-errors-message-full"
+                  class="min-w-0 max-w-xs whitespace-normal break-words font-medium"
+                >{{ value || $t('views.AdminErrorsView.no_message') }}</span>
+              </Disclosure>
               <span
-                v-if="isMessageExpanded(errorGroupRowId(row))"
-                data-testid="admin-errors-message-full"
-                class="min-w-0 max-w-xs whitespace-normal break-words font-medium"
-              >{{ value || $t('views.AdminErrorsView.no_message') }}</span>
-              <span
-                v-else
+                v-if="!isMessageExpanded(errorGroupRowId(row))"
                 data-testid="admin-errors-message-truncated"
                 class="min-w-0 max-w-xs truncate font-medium"
               >{{ value || $t('views.AdminErrorsView.no_message') }}</span>
@@ -171,15 +154,15 @@
                dynamic (per row), so it is not part of the product map's static
                testid inventory. -->
           <template #cell-support="{ row }">
-            <button
-              type="button"
-              class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <Button
+              variant="ghost"
+              size="sm"
               :data-testid="`admin-errors-copy-support-${errorGroupRowId(row)}`"
               @click.stop="copyGroupSupport(row)"
               @keydown.stop
             >
               {{ copiedGroupId === errorGroupRowId(row) ? $t('views.AdminErrorsView.support_reference_copied') : $t('views.AdminErrorsView.copy_support_reference') }}
-            </button>
+            </Button>
           </template>
         </DataTable>
       </div>
@@ -189,25 +172,25 @@
           {{ $t('views.AdminErrorsView.group_count', { count: total }, total) }}
         </span>
         <div class="flex items-center gap-2">
-          <button type="button"
+          <Button
+            variant="secondary"
             :disabled="offset <= 0"
             data-testid="admin-errors-previous-page"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
             @click="prevPage"
           >
             {{ $t('common.previous') }}
-          </button>
+          </Button>
           <span class="text-sm text-muted-foreground" data-testid="admin-errors-page-indicator">
             {{ $t('common.page_label', { page: currentPage }) }}
           </span>
-          <button type="button"
+          <Button
+            variant="secondary"
             :disabled="offset + limit >= total"
             data-testid="admin-errors-next-page"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
             @click="nextPage"
           >
             {{ $t('common.next') }}
-          </button>
+          </Button>
         </div>
       </div>
     </template>
@@ -247,8 +230,10 @@ import {
 import { formatApiError } from "../lib/api/formatError"
 import { DataTable, type Column } from '../components/ui/data-table'
 import EmptyState from '../components/shared/EmptyState.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
+import SegmentedControl, { type SegmentedOption } from '../components/ui/SegmentedControl.vue'
+import Button from '../components/ui/Button.vue'
 import { useI18n } from 'vue-i18n'
-import { ChevronRight } from '@lucide/vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -312,6 +297,15 @@ function setScope(next: 'organisation' | 'instance') {
     path: '/admin/errors',
     query: next === 'instance' ? { scope: 'instance' } : {},
   })
+}
+
+const scopeOptions = computed<SegmentedOption<'organisation' | 'instance'>[]>(() => [
+  { value: 'organisation', label: t('views.AdminErrorsView.scope_organisation'), testid: 'admin-errors-scope-organisation' },
+  { value: 'instance', label: t('views.AdminErrorsView.scope_instance'), testid: 'admin-errors-scope-instance' },
+])
+
+function onScopeChange(value: string): void {
+  if (value === 'organisation' || value === 'instance') setScope(value)
 }
 
 const limit = ref(20)

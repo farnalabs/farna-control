@@ -10,7 +10,7 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 490 of 922 ticked behaviours (109 node, 138 feature, 243 module strength).
+Bound today: 502 of 922 ticked behaviours (120 node, 139 feature, 243 module strength).
 Weak bindings (module-only): 243. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
@@ -614,30 +614,6 @@ Derived status: `partial`
 
 Derived status: `partial`
 
-- `hitl-gates-01` - A run reaching a HITL review edge creates a `HitlClaim` and pauses in
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `hitl-gates-02` - Pending-gate queues: `GET /api/v1/runs/{run_id}/hitl/pending` (per run)
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `hitl-gates-05` - Same-account re-claim (FAR-686 token recovery): a reviewer who reloaded
-  - why: behaviour text cites a test artefact that does not resolve to a proving test
-- `hitl-gates-06` - Approve resumes the run (`action: approved`, optional notes) – gated by
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `hitl-gates-07` - Reject records the decision and resumes the graph with one of three
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `hitl-gates-08` - The executor finalize downgrades a would-be `complete` to `rejected` only
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `hitl-gates-09` - A coalesced-supersede system rejection (committed
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `hitl-gates-10` - The reviewer briefing (`consequences.reject.disposition`) states the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `hitl-gates-11` - Modify-then-approve applies the reviewer's modified output into state
-  - why: behaviour text cites a test artefact that does not resolve to a proving test
-- `hitl-gates-17` - The fired gate's config is stamped on the claim row at fire time – the
-  - why: behaviour text cites a test artefact that does not resolve to a proving test
-- `hitl-gates-18` - Team-scoped gates restrict claiming to members whose team role is
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `hitl-gates-19` - Stale gates warn their owners and expired claims are reset to unclaimed
-  - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-20` - Configurable HITL review window (FAR-1257, org tiering FAR-1269): the
   - why: behaviour text cites a test artefact that does not resolve to a proving test
 - `hitl-gates-21` - Approaching-deadline warning (FAR-1270): while an undecided, unclaimed
@@ -1165,7 +1141,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 109  Feature: 138  Module (weak): 243
+Node: 120  Feature: 139  Module (weak): 243
 
 ### Weak (module-only) bindings
 

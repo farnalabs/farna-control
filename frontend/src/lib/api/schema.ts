@@ -1580,11 +1580,15 @@ export interface paths {
          *
          *     The invitation compare-and-swap consumption runs as the FINAL DB statement
          *     of the success path: if another consumer raced us, the CAS matches zero
-         *     rows and the whole transaction aborts. RLS context is set to the
-         *     *invitation's* org before any membership write (the caller is otherwise
-         *     pre-authenticated); the invitations table itself deliberately carries no
-         *     RLS policy. IP-based failures are recorded for every denial path; a
-         *     successful enrollment clears them (``record_success``).
+         *     rows and the whole transaction aborts. The pre-auth token lookup runs inside
+         *     ``bootstrap_read`` — the scoped ``app.bootstrap_context`` grant ADR 070 §2
+         *     requires — and pins the unique ``token_hash``; the grant is cleared again
+         *     before the transaction continues. RLS context is then set to the
+         *     *invitation's* org before any membership write, so the rest of the
+         *     transaction is ordinary org-scoped work against ``invitations``'
+         *     ``rls_org_isolation`` policy (migration 0368). IP-based failures are
+         *     recorded for every denial path; a successful enrollment clears them
+         *     (``record_success``).
          */
         post: operations["accept_invite_api_v1_auth_accept_invite_post"];
         delete?: never;

@@ -19,8 +19,8 @@
       type="text"
       inputmode="search"
       :class="[
-        'w-full rounded-lg border border-input bg-background py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-ring',
-        clearable && hasValue ? 'pr-9' : 'pr-3',
+        'w-full rounded-lg border border-input bg-background py-2 pl-9! text-sm focus:outline-none focus:ring-2 focus:ring-ring',
+        clearable && hasValue ? 'pr-9!' : 'pr-3',
         inputClass,
       ]"
       @update:model-value="onUpdate"
@@ -65,6 +65,11 @@ import Input from './Input.vue'
  * emits `clear`. `clearLabel` is the button's accessible name and is required
  * whenever `clearable` is set (there is deliberately no hard-coded default, so
  * every caller supplies a translated string).
+ *
+ * The padding that clears the icon (`pl-9!`) and the clear button (`pr-9!`)
+ * must stay `!important`: PrimeVue injects its `.p-inputtext` padding as
+ * unlayered CSS, which beats ordinary Tailwind utilities (they live in
+ * `@layer utilities`), leaving the icon drawn over the text (FAR-2809).
  *
  * `class` styles the wrapper (the icon and button are positioned against it);
  * `inputClass` adds control-level classes such as a width or font.

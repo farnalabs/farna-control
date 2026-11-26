@@ -129,14 +129,14 @@
         <p class="text-sm text-muted-foreground">{{ $t('views.DeterminationView.review_acknowledgements_hint') }}</p>
         <ul class="space-y-2">
           <li v-for="assumption in blockingAssumptions" :key="assumption.id">
-            <label class="flex items-start gap-2 rounded-lg border p-3 text-sm">
-              <input
-                v-model="acknowledgedIds"
-                type="checkbox"
-                :value="assumption.id"
-                class="mt-1"
-                :data-testid="`determination-review-acknowledge-${assumption.id}`"
-              />
+            <Checkbox
+              :model-value="acknowledgedIds.includes(assumption.id)"
+              :value="assumption.id"
+              class="flex items-start gap-2 rounded-lg border p-3 text-sm"
+              control-class="mt-1"
+              :data-testid="`determination-review-acknowledge-${assumption.id}`"
+              @update:model-value="toggleAcknowledged(assumption.id)"
+            >
               <span>
                 <span class="block font-medium">{{ assumption.statement }}</span>
                 <span class="block text-xs text-muted-foreground">
@@ -144,7 +144,7 @@
                   {{ $t('views.DeterminationView.confidence_' + assumption.confidence) }}
                 </span>
               </span>
-            </label>
+            </Checkbox>
           </li>
         </ul>
         <p
@@ -222,6 +222,7 @@ import { useI18n } from 'vue-i18n'
 import AppSelect from '../shared/AppSelect.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import DataCard from '../ui/DataCard.vue'
+import Checkbox from '../ui/Checkbox.vue'
 import Field from '../ui/Field.vue'
 import Input from '../ui/Input.vue'
 import Textarea from '../ui/Textarea.vue'
@@ -271,6 +272,14 @@ const removedIds = ref<string[]>([])
 const acknowledgedIds = ref<string[]>([])
 const reason = ref('')
 const showReasonRequired = ref(false)
+
+function toggleAcknowledged(id: string): void {
+  const next = [...acknowledgedIds.value]
+  const index = next.indexOf(id)
+  if (index === -1) next.push(id)
+  else next.splice(index, 1)
+  acknowledgedIds.value = next
+}
 
 const derivedElements = computed(() => props.proposal.derived_elements ?? [])
 

@@ -414,6 +414,73 @@ jobs:
             fi
           fi
 
+  # FAR-2800: record WHICH release this run set out to deploy, so
+  # rc-validate.yml can select the deploy run by a property it can verify
+  # instead of by creation time. The artifact NAME carries the identity
+  # (`release-identity-<rc_tag>`), so GitHub's repo-wide
+  # `actions/artifacts?name=` filter maps that identity straight to this run id
+  # with no log parsing.
+  #
+  # Both conditions are load-bearing and neither may be relaxed:
+  #   * `deployed == 'true'` - FAR-2152's machine-readable "this run will
+  #     deploy" signal. A throttled run concludes SUCCESS while shipping
+  #     nothing, so it must never produce a record.
+  #   * a non-empty `requested_ref` - only an RC dispatch names an immutable
+  #     release; a main push deploy leaves it empty and must not produce one.
+  #
+  # The record exists for every RC deploy ATTEMPT (it is written before
+  # pre-deploy runs), which is what lets rc-validate tell "the RC's deploy lost"
+  # apart from "nothing has tried to ship this RC yet".
+  record-release-identity:
+    name: Record release identity
+    needs: [deploy-throttle]
+    if: needs.deploy-throttle.outputs.deployed == 'true' && needs.deploy-throttle.outputs.requested_ref != ''
+    runs-on: ubicloud-standard-2
+    # upload-artifact authenticates with the Actions runtime token, not
+    # GITHUB_TOKEN, so no write scope is needed here.
+    permissions:
+      contents: read
+    steps:
+      - name: Write release identity record
+        id: identity
+        shell: bash
+        env:
+          # Dispatch inputs are caller-controlled data: they arrive via the
+          # environment and are never interpolated into the script text.
+          REQUESTED_REF: ${{ needs.deploy-throttle.outputs.requested_ref }}
+          REQUESTED_SHA: ${{ needs.deploy-throttle.outputs.requested_sha }}
+        run: |
+          set -euo pipefail
+          # deploy-throttle has already refused a ref that is not an RC tag.
+          # This guard additionally requires the value to be safe as an artifact
+          # NAME, so a recorded identity can never be one the selector cannot
+          # read back.
+          if ! [[ "$REQUESTED_REF" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "::error::release_ref '${REQUESTED_REF}' is not usable as an artifact name; refusing to record it."
+            exit 1
+          fi
+          RECORD_DIR="$RUNNER_TEMP/release-identity"
+          mkdir -p "$RECORD_DIR"
+          jq -n \
+            --arg release_ref "$REQUESTED_REF" \
+            --arg release_sha "$REQUESTED_SHA" \
+            --arg deploy_run_id "$GITHUB_RUN_ID" \
+            '{release_ref: $release_ref, release_sha: $release_sha, deploy_run_id: $deploy_run_id}' \
+            > "$RECORD_DIR/release-identity.json"
+          cat "$RECORD_DIR/release-identity.json"
+          echo "name=release-identity-${REQUESTED_REF}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release identity record
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ steps.identity.outputs.name }}
+          path: ${{ runner.temp }}/release-identity/release-identity.json
+          if-no-files-found: error
+          # No retention-days on purpose: the repository default (90 days) is
+          # the longest this record can usefully live, and pinning a number here
+          # would FAIL the upload outright if a plan's artifact cap were lower.
+          # A shorter retention only degrades a very old RC to "not deployed".
+
   # FAR-459: the former monolithic pre-deploy test job (~75-90 min, strictly
   # sequential) is split into five parallel atomic jobs plus an aggregate gate
   # below. Per-suite jobs mean per-job live status and partial logs mid-run via

@@ -317,7 +317,7 @@ These checks cover both edge-level `hitl_review_config` and node-level `hitl_con
 
 | Code | Severity | Rule |
 |---|---|---|
-| `CATEGORY_INVALID_ID` | Error | A node's `category_id` is not a UUID |
+| `CATEGORY_INVALID_ID` | Error | A node's `node_category_id` is not a UUID |
 | `CATEGORY_NOT_FOUND` | Error | A node references a category that does not exist |
 
 **Git content references**

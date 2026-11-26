@@ -22,6 +22,7 @@ the container unhealthy.
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 
 import pytest
@@ -72,3 +73,77 @@ def test_shipped_db_healthcheck_has_a_cold_start_grace(compose_path: Path, servi
 
     retry_budget = interval * retries
     assert start_period > retry_budget, f"{relative} services.{service}.healthcheck.start_period {start_period:g}s must exceed interval x retries ({interval:g}s x {retries} = {retry_budget:g}s); a shorter grace still lets a cold start consume every retry and mark the DB unhealthy (FAR-2780)"
+
+
+# FAR-2808: every shipped Postgres the app waits on, EXCEPT the CI-only
+# docker-compose.test.yml rig (not part of the cold-install path).
+_COMPOSE_DB_PROBE: list[tuple[Path, str]] = [
+    (_REPO_ROOT / "docker-compose.yml", "db"),
+    (_REPO_ROOT / "docker-compose.local.yml", "db-local"),
+    (_REPO_ROOT / "deploy" / "compose" / "docker-compose.prod.yml", "postgres"),
+]
+
+#: A value libpq treats as a TCP host. A leading ``/`` would select a Unix
+#: domain socket directory instead, which is what this test forbids.
+_TCP_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _pg_isready_host(tokens: list[str]) -> str | None:
+    """Return the ``pg_isready`` host, accepting every form libpq accepts.
+
+    libpq (and therefore ``pg_isready``) accepts the host as ``-h HOST``,
+    ``--host HOST``, ``-hHOST`` and ``--host=HOST``. Pinning only the short
+    separated form would fail a correct probe written any other way, so all four
+    are handled here. Returns ``None`` when no host is given (the probe would
+    then use the default Unix socket, which this test forbids).
+    """
+    for index, token in enumerate(tokens):
+        if token in ("-h", "--host"):
+            return tokens[index + 1] if index + 1 < len(tokens) else None
+        if token.startswith("--host="):
+            return token.split("=", 1)[1]
+        if token.startswith("-h") and not token.startswith("--") and token != "-h":
+            return token[2:]
+    return None
+
+
+@pytest.mark.parametrize(
+    ("compose_path", "service"),
+    _COMPOSE_DB_PROBE,
+    ids=[f"{p.relative_to(_REPO_ROOT)}:{s}" for p, s in _COMPOSE_DB_PROBE],
+)
+def test_shipped_db_probe_waits_for_the_realtime_server(compose_path: Path, service: str) -> None:
+    """The DB probe must cross TCP, not the Unix socket (FAR-2808).
+
+    On a first run the image's entrypoint starts a SECOND, temporary server to
+    run ``initdb`` and create the app role/database, and starts it SOCKET-ONLY
+    (``-c listen_addresses=''``), then stops it before ``exec``-ing the real
+    server - which the image configures with ``listen_addresses = '*'``. A
+    ``pg_isready`` with no ``-h`` therefore used the Unix socket and answered
+    ``0`` (accepting connections) against the temporary server: the probe went
+    green, the app services started, the temporary server went away, and the
+    first connection failed with ``ConnectionRefusedError``. ``start_period``
+    cannot help - the probe legitimately SUCCEEDED and then the server went away.
+
+    Pinning a TCP host closes the window, because the temporary server never
+    listens on TCP. It also makes the probe mean what the deployment needs: the
+    same ``db:5432`` TCP path the application uses. Note that naming the user
+    and database (``-U``/``-d``) does NOT close it - ``pg_isready`` reports
+    "accepting connections" for a wrong user or database too - so the host flag
+    (``-h``/``--host``, in any of libpq's forms) is the load-bearing part here.
+    """
+    relative = compose_path.relative_to(_REPO_ROOT)
+    compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+    test = compose["services"][service]["healthcheck"]["test"]
+    assert isinstance(test, list), f"{relative} services.{service}.healthcheck.test must be the ['CMD-SHELL', '<command>'] form, got {test!r}"
+    assert len(test) == 2, f"{relative} services.{service}.healthcheck.test must be the ['CMD-SHELL', '<command>'] form, got {test!r}"
+
+    tokens = shlex.split(str(test[1]))
+    assert tokens, f"{relative} services.{service} healthcheck command is empty: {test[1]!r}"
+    assert tokens[0] == "pg_isready", f"{relative} services.{service} healthcheck must run pg_isready, got {test[1]!r}"
+
+    host = _pg_isready_host(tokens)
+    assert host is not None, (
+        f"{relative} services.{service} healthcheck runs pg_isready with no -h/--host, so it probes the default Unix socket and answers during the temporary socket-only initdb server; the app services then start into a connection window that closes under them (FAR-2808): {test[1]!r}"
+    )
+    assert host in _TCP_LOOPBACK_HOSTS, f"{relative} services.{service} healthcheck must probe a TCP loopback host ({sorted(_TCP_LOOPBACK_HOSTS)}), got {host!r}; a socket path or a non-loopback host does not prove the db:5432 TCP path the app uses (FAR-2808)"

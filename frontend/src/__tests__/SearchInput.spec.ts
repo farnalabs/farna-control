@@ -31,6 +31,30 @@ describe('SearchInput', () => {
     expect(inputOf(wrapper).attributes('inputmode')).toBe('search')
   })
 
+  // PrimeVue's `.p-inputtext` padding is unlayered CSS, so it beats every
+  // ordinary (layered) Tailwind utility. Only an important utility takes effect,
+  // and jsdom computes no layout, so the class list is what we can pin (FAR-2809).
+  it('reserves room for the icon with padding that overrides the PrimeVue base style', () => {
+    const wrapper = mountHarness('<SearchInput data-testid="control" />')
+
+    expect(inputOf(wrapper).classes()).toContain('p-inputtext')
+    expect(inputOf(wrapper).classes()).toContain('pl-9!')
+  })
+
+  it('reserves room for the clear button with overriding padding only while it is shown', async () => {
+    const value = ref('')
+    const wrapper = mountHarness(
+      '<SearchInput v-model="value" data-testid="control" clearable clear-label="Clear search" />',
+      { value },
+    )
+
+    expect(inputOf(wrapper).classes()).not.toContain('pr-9!')
+
+    await inputOf(wrapper).setValue('query')
+
+    expect(inputOf(wrapper).classes()).toContain('pr-9!')
+  })
+
   it('puts the caller class on the wrapper and inputClass on the control', () => {
     const wrapper = mountHarness(
       '<SearchInput data-testid="control" class="w-full" input-class="font-mono" />',
