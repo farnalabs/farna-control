@@ -147,7 +147,7 @@ afterEach(() => {
 })
 
 describe('PipelineEditorView — canvas edge rendering with the real Vue Flow (FAR-2810)', () => {
-  it('shows the gate, LLM and loop badges on their own edges', async () => {
+  it('shows gate and LLM and loop badges on their own edges', async () => {
     const { root } = await mountCanvas()
 
     await vi.waitFor(() => expect(badgeTexts(root, 'gate')).toHaveLength(3), { timeout: 5000 })
