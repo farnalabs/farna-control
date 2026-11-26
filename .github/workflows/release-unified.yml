@@ -47,6 +47,11 @@ name: "Release: Unified Pipeline"
         type: boolean
         required: false
         default: false
+      resume:
+        description: "Resume a promote that failed after the GA tag was pushed. Requires mode=promote; re-derives the release identity from the frozen GA tag and the validated RC marker."
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: release-unified-${{ github.ref }}
@@ -95,6 +100,8 @@ jobs:
           # script, so values are data, never code.
           MODE: ${{ inputs.mode }}
           REQUESTED_SHA: ${{ inputs.target_sha }}
+          VERSION: ${{ inputs.version }}
+          RESUME: ${{ inputs.resume }}
         run: |
           set -euo pipefail
 
@@ -102,6 +109,45 @@ jobs:
             echo "::error::[$1] $2"
             exit 1
           }
+
+          # ---------------------------------------------------------------------
+          # FAR-2802 resume path: a promote that already pushed the GA tag has
+          # no origin/main target - main has moved past the RC and the GA tag is
+          # the frozen release identity. Resolve the target from that tag so the
+          # schema gate, SBOM and attestation jobs inspect the GA commit itself,
+          # never a later main. This is also the earliest input-validation point,
+          # so a resume against any other mode is refused here.
+          # ---------------------------------------------------------------------
+          if [ "${RESUME:-false}" = "true" ]; then
+            if [ "$MODE" != "promote" ]; then
+              fail "resume_unsupported_mode" "resume=true is only valid with mode=promote (got mode '${MODE}'). cut/recut re-cut from main and must never resume a promote."
+            fi
+            if [ -z "${VERSION:-}" ]; then
+              fail "resume_version_required" "resume=true requires the version input so the frozen GA tag v<VERSION> can be resolved."
+            fi
+            GA_TAG="v${VERSION}"
+            resume_tag_rc=0
+            git ls-remote --exit-code origin "refs/tags/${GA_TAG}" >/dev/null 2>/dev/null || resume_tag_rc=$?
+            case "$resume_tag_rc" in
+              0) ;;
+              2)
+                fail "resume_tag_missing" "resume=true requires the frozen GA tag ${GA_TAG} to exist on origin; it is absent. A first promote (no GA tag yet) must run without resume."
+                ;;
+              *)
+                fail "resume_tag_query_failed" "Could not query the GA tag ${GA_TAG} (git ls-remote rc=${resume_tag_rc}); refusing to resolve a release target from an unknown tag state."
+                ;;
+            esac
+            if ! git fetch --quiet --force --tags origin; then
+              fail "resume_tag_fetch_failed" "Could not fetch tags from origin; refusing to resolve the GA tag from an unfetched ref."
+            fi
+            if ! RESUME_TARGET="$(git rev-parse --verify "${GA_TAG}^{commit}" 2>/dev/null)"; then
+              fail "resume_tag_unresolvable" "The GA tag ${GA_TAG} exists on origin but does not resolve to a commit locally."
+            fi
+            echo "Resume: resolved the release target from the frozen GA tag ${GA_TAG} at ${RESUME_TARGET}."
+            echo "target_sha=${RESUME_TARGET}" >> "$GITHUB_OUTPUT"
+            echo "target_pinned=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # A pin is coherent only for the modes that publish exactly one chosen
           # commit. `cut` creates and merges a version-bump PR on main and tags
@@ -167,12 +213,15 @@ jobs:
       - name: Record the release target in the run summary
         env:
           MODE: ${{ inputs.mode }}
+          RESUME: ${{ inputs.resume }}
           TARGET_SHA: ${{ steps.resolve.outputs.target_sha }}
           TARGET_PINNED: ${{ steps.resolve.outputs.target_pinned }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$TARGET_PINNED" = "true" ]; then
+          if [ "${RESUME:-false}" = "true" ]; then
+            source="the frozen GA tag v${{ inputs.version }} (resume)"
+          elif [ "$TARGET_PINNED" = "true" ]; then
             source="pinned via the target_sha workflow input"
           else
             source="resolved once from origin/main"
@@ -698,7 +747,8 @@ jobs:
         # values are data, never code.
         env:
           VERSION: ${{ inputs.version }}
-          IMAGE_NAMESPACE: farnalabs/farna-control
+          RESUME: ${{ inputs.resume }}
+        shell: bash
         run: |
           set -euo pipefail
           declare -A IMAGE_CONTEXT=(
@@ -1715,7 +1765,7 @@ jobs:
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_RELEASE_PR_TOKEN }}
           RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
-        shell: bash
+          RESUME: ${{ inputs.resume }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
@@ -1741,6 +1791,149 @@ jobs:
           }
           GA_TAG="v${VERSION}"
           BRANCH="release/promote-${VERSION}"
+
+          # ---------------------------------------------------------------------
+          # FAR-2802 RESUME: a promote that already pushed the GA tag but failed
+          # before the publication chain finished cannot be completed by a plain
+          # promote - safety 2 refuses because the tag exists and safety 4
+          # requires origin/main to equal the RC commit, which is false once the
+          # promote PR squash-merged. Re-derive the release identity from the
+          # frozen state instead: the GA tag is the release commit, the freeze
+          # must still point at it, and the single parent of that squash merge is
+          # the validated RC. Everything that mutates release identity (safety 2,
+          # safety 4, the freeze/hold swap, the promote PR, the tag push) is
+          # skipped: this path creates, moves and deletes nothing.
+          # ---------------------------------------------------------------------
+          if [ "${RESUME:-false}" = "true" ]; then
+            # 1. Refresh refs so the frozen GA tag, the RC marker and the live
+            #    release-freeze branch are all read from origin, not a stale clone.
+            if ! git fetch --tags --force origin; then
+              echo "::error::Could not fetch tags from origin; refusing to resume from stale refs."
+              exit 1
+            fi
+
+            # 2. The GA tag must exist. rc 2 from ls-remote is a proven absence;
+            #    any other failure is an unknown state and fails closed.
+            ga_tag_rc=0
+            ga_tag_listing="$(git ls-remote --exit-code origin "refs/tags/${GA_TAG}")" || ga_tag_rc=$?
+            case "$ga_tag_rc" in
+              0) ;;
+              2)
+                echo "::error::Cannot resume: the GA tag ${GA_TAG} does not exist on origin. A resume is only for a promote that already pushed the tag; run a first promote without resume."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not query the GA tag ${GA_TAG} (git ls-remote rc=${ga_tag_rc}); refusing to resume on an unknown tag state."
+                exit 1
+                ;;
+            esac
+            if [ -z "$ga_tag_listing" ]; then
+              echo "::error::The GA tag ${GA_TAG} query returned no ref; refusing to resume."
+              exit 1
+            fi
+            if ! GA_SHA="$(git rev-parse --verify "${GA_TAG}^{commit}" 2>/dev/null)"; then
+              echo "::error::The GA tag ${GA_TAG} does not resolve to a commit; refusing to resume."
+              exit 1
+            fi
+
+            # 3. release-freeze must still sit at the GA commit. A missing
+            #    freeze and a query error both fail closed: resume never treats
+            #    unknown as absent and never lifts or moves the freeze itself.
+            freeze_rc=0
+            freeze_listing="$(git ls-remote --exit-code origin refs/heads/release-freeze)" || freeze_rc=$?
+            case "$freeze_rc" in
+              0) ;;
+              2)
+                echo "::error::Cannot resume: release-freeze is absent on origin, so it cannot be proven to point at the GA commit ${GA_SHA}."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not query release-freeze (git ls-remote rc=${freeze_rc}); refusing to resume on an unknown freeze state."
+                exit 1
+                ;;
+            esac
+            FREEZE_SHA="$(printf '%s\n' "$freeze_listing" | awk 'NF >= 1 { print $1; exit }')"
+            if [ -z "$FREEZE_SHA" ]; then
+              echo "::error::The release-freeze listing produced no SHA; refusing to resume."
+              exit 1
+            fi
+            if [ "$FREEZE_SHA" != "$GA_SHA" ]; then
+              echo "::error::release-freeze is at ${FREEZE_SHA}, not the GA commit ${GA_SHA}; refusing to resume a release whose freeze has moved."
+              exit 1
+            fi
+
+            # 4. The GA commit must be the squash merge of the promote PR: a
+            #    merge commit, a root commit or an unreadable result all fail.
+            if ! parent_line="$(git rev-list --parents -n1 "$GA_SHA" 2>/dev/null)"; then
+              echo "::error::Could not read the parents of the GA commit ${GA_SHA}; refusing to resume."
+              exit 1
+            fi
+            if [ -z "$parent_line" ]; then
+              echo "::error::Empty parent listing for the GA commit ${GA_SHA}; refusing to resume."
+              exit 1
+            fi
+            parent_count="$(printf '%s\n' "$parent_line" | awk '{ print NF - 1 }')"
+            if [ "$parent_count" != "1" ]; then
+              echo "::error::The GA commit ${GA_SHA} has ${parent_count} parent(s); a resumed promote requires the single-parent squash merge of the promote PR."
+              exit 1
+            fi
+
+            # 5. The RC candidate is that single parent and the validation
+            #    marker must point at it. Several rc tags may share the commit;
+            #    the version sort picks the highest rc spelling.
+            RC_SHA="$(git rev-parse "${GA_SHA}^")"
+            RC_TAG=""
+            while IFS= read -r candidate; do
+              [ -n "$candidate" ] || continue
+              if [ "$(git rev-parse "${candidate}^{commit}")" = "$RC_SHA" ]; then
+                RC_TAG="$candidate"
+                break
+              fi
+            done < <(git tag --list "${GA_TAG}-rc*" --sort=-v:refname)
+            if [ -z "$RC_TAG" ]; then
+              echo "::error::No ${GA_TAG}-rc* tag points at the RC parent ${RC_SHA} of the GA commit ${GA_SHA}; refusing to resume."
+              exit 1
+            fi
+            VALIDATED_TAG="validated/${RC_TAG}"
+            validated_rc=0
+            git ls-remote --exit-code origin "refs/tags/${VALIDATED_TAG}" >/dev/null || validated_rc=$?
+            case "$validated_rc" in
+              0) ;;
+              2)
+                echo "::error::Cannot resume: no validation marker ${VALIDATED_TAG} exists on origin; ${RC_TAG} was never validated."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not query the validation marker ${VALIDATED_TAG} (git ls-remote rc=${validated_rc}); refusing to resume on an unknown validation state."
+                exit 1
+                ;;
+            esac
+            if ! VAL_SHA="$(git rev-parse --verify "${VALIDATED_TAG}^{commit}" 2>/dev/null)"; then
+              echo "::error::The validation marker ${VALIDATED_TAG} does not resolve to a commit; refusing to resume."
+              exit 1
+            fi
+            if [ "$VAL_SHA" != "$RC_SHA" ]; then
+              echo "::error::Validation marker ${VALIDATED_TAG} points at ${VAL_SHA}, not the RC parent ${RC_SHA}; refusing to resume."
+              exit 1
+            fi
+
+            # 6. Publish from the exact GA commit, never from a moved main.
+            git checkout --detach "$GA_SHA"
+            if [ "$(git rev-parse HEAD)" != "$GA_SHA" ]; then
+              echo "::error::Could not check out the GA commit ${GA_SHA}; refusing to publish."
+              exit 1
+            fi
+
+            # 9. One clear line naming the re-derived release identity.
+            echo "::notice::Resume ${GA_TAG}: GA ${GA_SHA}, RC ${RC_TAG} @ ${RC_SHA}, freeze ${FREEZE_SHA} == GA. Publication only; no tag or freeze mutation."
+
+            {
+              echo "ga_tag=$GA_TAG"
+              echo "rc_tag=$RC_TAG"
+              echo "promote_sha=$GA_SHA"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Safety 1: only promote OUT of an active freeze.
           if ! git ls-remote --exit-code origin refs/heads/release-freeze >/dev/null 2>&1; then
@@ -2428,6 +2621,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
+          RESUME: ${{ inputs.resume }}
         shell: bash
         run: |
           set -euo pipefail
@@ -2449,7 +2643,13 @@ jobs:
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
           }
           GA_TAG="v${VERSION}"
-          if git rev-parse -q --verify "refs/tags/${GA_TAG}" >/dev/null 2>&1; then
+          if [ "${RESUME:-false}" = "true" ]; then
+            # FAR-2802: a resumed promote must never move or delete
+            # release-freeze. It is the anchor the next resume verifies against,
+            # and the resume path may have failed before checking out the GA
+            # commit, so HEAD is not a safe value to point the freeze at.
+            echo "Resume: leaving release-freeze untouched after a failed resumed promote."
+          elif git rev-parse -q --verify "refs/tags/${GA_TAG}" >/dev/null 2>&1; then
             git branch -f release-freeze HEAD
             marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force
             echo "Re-established release-freeze after failed GA publication."

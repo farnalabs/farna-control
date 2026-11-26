@@ -68,7 +68,7 @@ A recut is **idempotent for a version that already published a bundle**. The bun
 
 The bundle tag itself is **immutable**. `bundle-v<X.Y.Z>` identifies the *first* published commit for that version, and the repository ruleset `release-tag-protection` targets `refs/tags/bundle-v*` with `deletion` and `update` rules at `active` enforcement, so the workflow never moves or deletes it. A recut of an already-published version therefore publishes new assets and a new signed manifest against that same release identity, and the manifest plus the release notes name the exact built commit the recut published. A recut is **refused once the GA tag `v<X.Y.Z>` exists**: a promoted version's bundle is immutable and is never republished.
 
-Why there is one stable bundle tag and not one per RC: the marketing website resolves `https://api.github.com/repos/farnalabs/farna-control/releases/latest`, rejects any draft or prerelease, strips the `bundle-v` prefix and then requires the resulting version to match `^\d+\.\d+\.\d+$` (the marketing website repo's `scripts/release-lib.mjs::validateRelease`, used by its `scripts/fetch-release.mjs`). An RC-qualified tag (`bundle-v0.3.330-rc3`) would make an RC the latest non-prerelease release, fail that check, and leave the site silently serving its previous release for the whole RC window; it would also stop the newest-bundle selection in `release-unified.yml` from recognising the release (its filter only matches `bundle-v<X.Y.Z>`) and break every installer URL that resolves `/releases/latest`. Do not re-open "key the bundle tag on the RC" without that constraint.
+Why there is one stable bundle tag and not one per RC: the marketing website resolves `https://api.github.com/repos/farnalabs/farna-control/releases/latest`, rejects any draft or prerelease, strips the `bundle-v` prefix and then requires the resulting version to match `^\d+\.\d+\.\d+$` (the marketing website repo's `scripts/release-lib.mjs::validateRelease`, used by `Repos/modulo-website/scripts/fetch-release.mjs`). An RC-qualified tag (`bundle-v0.3.330-rc3`) would make an RC the latest non-prerelease release, fail that check, and leave the site silently serving its previous release for the whole RC window; it would also stop the newest-bundle selection in `release-unified.yml` from recognising the release (its filter only matches `bundle-v<X.Y.Z>`) and break every installer URL that resolves `/releases/latest`. Do not re-open "key the bundle tag on the RC" without that constraint.
 
 Use `recut` after a fix has been merged to `main` while the release freeze is active:
 
@@ -95,6 +95,25 @@ The GA tag is the release identity, so it is created and pushed before anything 
 
 - A failed CHANGELOG commit/push turns the job **red** - it is a required deliverable.
 - Failed release-notes generation or a failed `gh release create` is a **warning only**, because the tag already exists and is intact.
+
+### Resuming a failed promote
+
+`promote` pushes the `vX.Y.Z` GA tag before the rest of the GA publication chain runs (Helm chart, `CHANGELOG.md` and the GitHub Release, PyPI, the GA compose bundle, the freeze lift). If a job after that point fails, a plain re-dispatch of `promote` cannot finish the release: safety 2 refuses because the GA tag already exists, and safety 4 refuses because `origin/main` is no longer the validated RC commit once the promote PR has squash-merged. Every later job is then unreachable, and the release is stranded with the GA tag pushed but GA publication incomplete.
+
+The explicit resume path completes that release instead. Dispatch `promote` again with `resume=true`:
+
+```bash
+gh workflow run "Release: Unified Pipeline" -f mode=promote -f version=0.4.0 -f resume=true
+```
+
+`resume` is only valid with `mode=promote`; the workflow refuses it for `cut`, `recut` and `dry-run` at the first input-validation step. The release identity is re-derived from the frozen state, never from `main`:
+
+- the GA tag `vX.Y.Z` must exist on origin - it is the release commit, and its commit is what every downstream job checks out and attests;
+- `release-freeze` on origin must resolve to that exact GA commit. A missing freeze and a failed query both fail closed: a resume never treats an unknown state as absent;
+- the GA commit must have exactly one parent, because the promote PR is squash-merged. A merge commit, a root commit or an unreadable parent listing is a hard failure, so a release promoted by a non-squash merge cannot be resumed;
+- that single parent is the RC commit. A `vX.Y.Z-rc*` tag must point at it (the highest rc wins when several share the commit), and the `validated/<rc>` marker must exist on origin and point at the same commit.
+
+A resume creates, moves and deletes nothing. It skips safety 2 and safety 4, the freeze/publication-hold swap, the promote PR creation and merge, and the tag push, and it never creates, moves or deletes the GA tag or `release-freeze`. It checks out the GA commit and re-runs only the publication steps. If the resume fails, the freeze is left where it is - at the GA commit - so another resume can re-verify and try again.
 
 ### Website rebuild hook (optional)
 
