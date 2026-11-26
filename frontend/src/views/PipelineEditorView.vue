@@ -1104,8 +1104,10 @@
               :id="nodeProps.id"
             />
           </template>
-          <template #edge-default="edgeProps">
-            <EdgeBadges :data="edgeProps.data" />
+          <!-- FAR-2810: Vue Flow picks the slot by the edge's `type`, and every
+               canvas edge is `smoothstep`; an `edge-default` slot never runs. -->
+          <template #edge-smoothstep="edgeProps">
+            <PipelineEdge v-bind="edgeProps" />
           </template>
         </VueFlow>
         </div>
@@ -2316,7 +2318,7 @@ import RouterNode from '../components/pipeline/nodes/RouterNode.vue'
 import HitlNode from '../components/pipeline/nodes/HitlNode.vue'
 import DispatchNode from '../components/pipeline/nodes/DispatchNode.vue'
 import ConnectorNode from '../components/pipeline/nodes/ConnectorNode.vue'
-import EdgeBadges from '../components/pipeline/nodes/EdgeBadges.vue'
+import PipelineEdge from '../components/pipeline/edges/PipelineEdge.vue'
 import { NODE_REGISTRY, PIPELINE_CONNECTORS_KEY, PIPELINE_TEAM_NAMES_KEY } from '../components/pipeline/nodes/NodeRegistry'
 import { projectCanvasEdge, projectGraphNode } from '../types/pipeline-graph-projection'
 import { shortId } from '../utils/format'
@@ -3964,7 +3966,7 @@ function convertBackendNode(n: any): any {
 
 // Backend edges map onto their Vue Flow edge entirely through the shared
 // projection adapter (FAR-2482): projectCanvasEdge owns the variant stroke
-// table and the `data` wrapper the canvas + EdgeBadges consume. Every canvas
+// table and the `data` wrapper the canvas edge (PipelineEdge) consumes. Every canvas
 // edge originates here - both loadGraph() and loadViewedSnapshot() map through
 // convertBackendEdge.
 function convertBackendEdge(e: any, i: number): any {
