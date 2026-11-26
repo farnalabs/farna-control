@@ -298,10 +298,10 @@ function setScope(next: 'organisation' | 'instance') {
   })
 }
 
-const scopeOptions: SegmentedOption<'organisation' | 'instance'>[] = [
+const scopeOptions = computed<SegmentedOption<'organisation' | 'instance'>[]>(() => [
   { value: 'organisation', label: t('views.AdminErrorsView.scope_organisation'), testid: 'admin-errors-scope-organisation' },
   { value: 'instance', label: t('views.AdminErrorsView.scope_instance'), testid: 'admin-errors-scope-instance' },
-]
+])
 
 function onScopeChange(value: string): void {
   if (value === 'organisation' || value === 'instance') setScope(value)

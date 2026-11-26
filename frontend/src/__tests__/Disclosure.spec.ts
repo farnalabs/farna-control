@@ -34,6 +34,31 @@ describe('Disclosure', () => {
     expect(rendered.find('.region-body').exists()).toBe(true)
   })
 
+  it('gives every generated region a distinct id across instances', async () => {
+    const wrapper = mount({
+      components: { Disclosure },
+      data: () => ({ open: true }),
+      template: `
+        <div>
+          <Disclosure :open="open" label="Stacktrace">trace</Disclosure>
+          <Disclosure :open="open" label="Context">context</Disclosure>
+        </div>
+      `,
+    })
+
+    const triggers = wrapper.findAll('button')
+    expect(triggers).toHaveLength(2)
+    const first = triggers[0].attributes('aria-controls')
+    const second = triggers[1].attributes('aria-controls')
+    expect(first).toBeTruthy()
+    expect(second).toBeTruthy()
+    expect(first).not.toBe(second)
+
+    // Each trigger resolves to its own rendered region, so the ids are unique.
+    expect(wrapper.findAll(`#${first}`)).toHaveLength(1)
+    expect(wrapper.findAll(`#${second}`)).toHaveLength(1)
+  })
+
   it('emits update:open with the toggled value on click', async () => {
     const wrapper = mount(Disclosure, { props: { open: false, label: 'Details' } })
 

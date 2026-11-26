@@ -34,6 +34,21 @@
   </div>
 </template>
 
+<script lang="ts">
+/**
+ * Module-scoped so every instance on the page gets a unique region id. A
+ * counter inside `<script setup>` runs once per instance and would repeat the
+ * id, making one trigger's `aria-controls` resolve to another disclosure's
+ * region (mirrors `Field.vue` / `RadioGroup.vue`).
+ */
+let disclosureCounter = 0
+
+export function nextDisclosureId(): string {
+  disclosureCounter += 1
+  return `disclosure-region-${disclosureCounter}`
+}
+</script>
+
 <script setup lang="ts">
 /*
  * The ONE shared disclosure (FAR-2804).
@@ -70,14 +85,6 @@ import { ChevronDown, ChevronRight } from '@lucide/vue'
 
 defineOptions({ name: 'UiDisclosure', inheritAttrs: false })
 
-/**
- * Module-scoped so every instance on the page gets a unique region id. A
- * counter inside `<script setup>` runs once per instance and would repeat the
- * id, making one trigger's `aria-controls` resolve to another disclosure's
- * region (mirrors `Field.vue` / `RadioGroup.vue`).
- */
-let disclosureCounter = 0
-
 const props = withDefaults(defineProps<{
   /** Controlled open state. */
   open?: boolean
@@ -111,7 +118,7 @@ const emit = defineEmits<{ (e: 'update:open', value: boolean): void }>()
 const attrs = useAttrs()
 const slots = useSlots()
 
-const generatedControls = `disclosure-region-${(disclosureCounter += 1)}`
+const generatedControls = nextDisclosureId()
 const resolvedControls = computed(() => props.controls || generatedControls)
 
 const chevronIcon = computed(() => (props.chevron === 'down' ? ChevronDown : ChevronRight))
