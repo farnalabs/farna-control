@@ -28,6 +28,8 @@ code:
   - deploy/windows/modulo.iss
   - deploy/windows/INSTALLER-INFO.txt
   - deploy/windows/BUNDLE-BUILD.md
+  - deploy/caddy/Caddyfile
+  - deploy/caddy/README.md
   - .github/workflows/bundle-release.yml
   - .github/workflows/macos-installer.yml
   - .github/workflows/macos-staple-retry.yml
@@ -43,6 +45,7 @@ unit-tests:
   - backend/tests/unit/scripts/test_install_activation_file.py
   - backend/tests/unit/scripts/test_install_support_block.py
   - backend/tests/unit/scripts/test_install_unreadable_cwd.py
+  - backend/tests/unit/scripts/test_caddy_installer_url.py
   - backend/tests/unit/scripts/test_bundle_release_security.py
   - backend/tests/unit/scripts/test_windows_artifact_provenance.py
   - backend/tests/unit/scripts/test_windows_installer_service.py
@@ -74,6 +77,44 @@ platform matrix live in `docs/system-requirements.md` and
 `docs/upgrade-process.md`. This is an infra-only surface: the native install has
 no manifest route and no in-product UI, so it is tracked here rather than in the
 manifest `features:` registry.
+
+## Installer entry point
+
+The installer is published through the bundled Caddy reverse-proxy config
+(`deploy/caddy/Caddyfile`) at a stable URL, so operators are not pointed at a
+`raw.githubusercontent.com` path:
+
+```bash
+# Stable: the installer on the default branch (main)
+curl -fsSL https://<your-domain>/install.sh -o farna-control-install.sh
+bash farna-control-install.sh
+
+# Pinned: the installer as it shipped in release 0.3.329 (tag bundle-v0.3.329)
+curl -fsSL 'https://<your-domain>/install.sh?version=0.3.329' -o farna-control-install.sh
+bash farna-control-install.sh
+```
+
+`version=X.Y.Z` maps to the release tag `bundle-v<X.Y.Z>` — the convention the
+release pipeline creates and `scripts/install.sh` consumes — and any other
+version shape is refused with `400` rather than silently served from the default
+branch. The pinned URL serves the installer script from that tag; running it
+installs the latest release unless you also set `VERSION=bundle-v<X.Y.Z>`.
+
+The rule is an exact-path match placed after the backend routes and before the
+SPA catch-all, so it cannot shadow `/healthz`, `/api`, `/.well-known`, `/mcp`,
+`/ws`, or the SPA. The live URL is observable only after a deploy; these are the
+post-deploy checks:
+
+```bash
+curl -sI https://<your-domain>/install.sh | grep -i '^location:.*/main/scripts/install.sh'
+curl -sI 'https://<your-domain>/install.sh?version=0.3.329' | grep -i '^location:.*/bundle-v0.3.329/scripts/install.sh'
+curl -s -o /dev/null -w '%{http_code}\n' 'https://<your-domain>/install.sh?version=nope'   # 400
+```
+
+**Deployment scope:** this entry is the Caddy path. The public
+`control.farna.dev` host is fronted by nginx (`deploy/fly/nginx.conf`), not
+Caddy, so serving `https://control.farna.dev/install.sh` needs the equivalent
+rule there; that file is outside this entry's scope and is tracked separately.
 
 ## Behaviors
 

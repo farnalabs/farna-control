@@ -539,10 +539,20 @@ self-contained bundle (own Python runtime, PostgreSQL, Redis) for a workstation
 or single machine without Docker; it does not bootstrap this Compose stack.
 Download it to a file and run it rather than streaming it into a shell:
 `install.sh` verifies every download's sha256 before executing anything, and a
-`curl ... | bash` pipe skips that verification entirely.
+`curl ... | bash` pipe skips that verification entirely. A deployment whose
+reverse proxy publishes the installer entry point (see `deploy/caddy/README.md`)
+serves it at a stable URL; the GitHub raw URL always works as a fallback.
 
 ```bash
+# Preferred: the stable installer entry point (Caddy-fronted deployments)
+curl -fsSL https://<your-domain>/install.sh -o farna-control-install.sh
+
+# Pinned: the installer as it shipped in release 0.3.329 (tag bundle-v0.3.329)
+curl -fsSL 'https://<your-domain>/install.sh?version=0.3.329' -o farna-control-install.sh
+
+# Always-available fallback: the script on the default branch
 curl -fsSL https://raw.githubusercontent.com/farnalabs/farna-control/main/scripts/install.sh -o farna-control-install.sh
+
 bash farna-control-install.sh
 ```
 
