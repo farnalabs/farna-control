@@ -371,8 +371,9 @@ kubectl delete namespace farna-control  # If namespace.create=true
   EKS 1.34 (Kubernetes `v1.34.12-eks-9adbfea`), 2 x `m7i-flex.large` ON_DEMAND
   managed nodes (2 vCPU / 8 GiB each), chart `farna-control-0.3.330`, embedded
   Redis (`redis.embedded=true` with `redis.password`), Postgres `postgres:16` in
-  the sibling namespace `farna-control-db` whose admin role (`modulo`) holds
-  CREATEROLE + CREATEDB so `bootstrap_role` can create the app and system roles,
+  the sibling namespace `farna-control-db` whose default admin (superuser) role
+  holds CREATEROLE + CREATEDB so `bootstrap_role` can create the app and system
+  roles,
   ingress disabled. Images were built from the current tree for `linux/amd64` and
   pushed to ECR in AWS account 365370368472 with tag `helm-validate-20261126`:
 
