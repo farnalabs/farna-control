@@ -747,8 +747,7 @@ jobs:
         # values are data, never code.
         env:
           VERSION: ${{ inputs.version }}
-          RESUME: ${{ inputs.resume }}
-        shell: bash
+          IMAGE_NAMESPACE: farnalabs/farna-control
         run: |
           set -euo pipefail
           declare -A IMAGE_CONTEXT=(
@@ -1766,6 +1765,7 @@ jobs:
           RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
           RESUME: ${{ inputs.resume }}
+        shell: bash
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then

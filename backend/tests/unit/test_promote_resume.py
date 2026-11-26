@@ -219,6 +219,52 @@ def test_promote_step_re_derives_the_release_identity_on_resume() -> None:
     assert _release_step(PROMOTE_STEP)["env"]["RESUME"] == "${{ inputs.resume }}"
 
 
+# ---------------------------------------------------------------------------
+# Structural pins: a step must declare the shell and env its run block spends
+# ---------------------------------------------------------------------------
+
+DRY_RUN_JOB = "dry-run"
+DRY_RUN_BUILD_STEP = "Build all images (no push)"
+IMAGE_NAMESPACE = "farnalabs/farna-control"
+
+
+def _dry_run_step(name: str) -> dict[str, Any]:
+    return _job_step(DRY_RUN_JOB, name)
+
+
+def _inherited_env_levels() -> list[dict[str, Any]]:
+    """The workflow- and job-level env maps a step env would inherit from."""
+    workflow = _workflow()
+    return [
+        dict(workflow.get("env") or {}),
+        dict(workflow["jobs"][DRY_RUN_JOB].get("env") or {}),
+    ]
+
+
+def _image_namespace_violations(step: dict[str, Any]) -> list[str]:
+    problems: list[str] = []
+    env = dict(step.get("env") or {})
+    script = str(step.get("run", ""))
+    if env.get("IMAGE_NAMESPACE") != IMAGE_NAMESPACE:
+        problems.append("does not declare IMAGE_NAMESPACE in its own env block")
+    if "$IMAGE_NAMESPACE" not in script:
+        problems.append("does not use IMAGE_NAMESPACE in its run block")
+    if any("IMAGE_NAMESPACE" in level for level in _inherited_env_levels()):
+        problems.append("relies on an inherited IMAGE_NAMESPACE instead of declaring it")
+    if "RESUME" in env:
+        problems.append("declares RESUME, which this step never reads")
+    return problems
+
+
+def test_dry_run_image_build_declares_its_image_namespace() -> None:
+    problems = _image_namespace_violations(_dry_run_step(DRY_RUN_BUILD_STEP))
+    assert not problems, "; ".join(problems)
+
+
+def test_promote_step_declares_its_bash_shell() -> None:
+    assert _release_step(PROMOTE_STEP).get("shell") == "bash"
+
+
 def test_resume_branch_never_mutates_the_tag_or_the_freeze() -> None:
     block = _resume_block(_release_job_run(PROMOTE_STEP))
     problems = _resume_write_violations(block)
