@@ -364,11 +364,15 @@ monitored error event to the Error Dashboard (source = `suite_run`). The SAQ
 ### Plan and permission gates
 
 No feature flag gates the eval REST surface. The eval endpoints (including
-`POST /api/v1/evals/compare`) are authenticated and gated by the `evals.*`
-permission codes in `backend/src/farna/api/routes/evals.py`; suite runs are
-executed from triggers with `run_kind: suite_run`, not from a gated REST or UI
-surface. The two eval UI views (`EvalEditorView`, `EvalProposalsQueueView`) are
-wrapped in the community-tier `eval_system` feature gate.
+`POST /api/v1/evals/compare`) are authenticated and gated by the `eval.*`
+permission codes registered in `backend/src/farna/auth/permissions.py`:
+`eval.list` (viewer) for reads, and `eval.definition.create` / `.update` /
+`.delete` (operator) for writes. The `evals.*` strings defined in
+`backend/src/farna/api/routes/evals.py` are error-correlation labels passed to
+`handle_db_errors`, not permission keys. Suite runs are executed from triggers
+with `run_kind: suite_run`, not from a gated REST or UI surface. The eval UI
+views (`EvalsListView`, `EvalEditorView`, `EvalProposalsQueueView`) are wrapped
+in the community-tier `eval_system` feature gate.
 
 ## Leaderboard / rollup read-model (FAR-378)
 
