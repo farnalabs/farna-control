@@ -73,17 +73,17 @@
           </p>
           <p v-if="deleteRefError" class="mt-1 text-sm text-destructive-text">{{ deleteRefError }}</p>
           <div class="mt-3 flex items-center gap-2">
-            <Button :disabled="deleting" severity="danger" data-testid="paramschema-delete-confirm" @click="doDelete">
+            <Button :disabled="deleting" variant="danger" data-testid="paramschema-delete-confirm" @click="doDelete">
               {{ deleting ? $t('views.ParameterSchemasView.deleting') : $t('views.ParameterSchemasView.delete') }}
             </Button>
-            <button
+            <Button
               type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+              variant="secondary"
               data-testid="paramschema-delete-cancel"
               @click="deleteConfirmId = null"
             >
               {{ $t('views.ParameterSchemasView.cancel') }}
-            </button>
+            </Button>
           </div>
         </div>
       </template>
@@ -92,15 +92,17 @@
     <!-- Schema Editor -->
     <template v-else>
       <div class="mb-4">
-        <button
+        <Button
           type="button"
-          class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          variant="secondary-text"
+          size="sm"
+          class="gap-1"
           data-testid="paramschema-back"
           @click="closeEditor"
         >
           <ChevronLeft class="h-4 w-4" aria-hidden="true" />
           {{ $t('views.ParameterSchemasView.back') }}
-        </button>
+        </Button>
       </div>
 
       <!-- Schema details tabs -->
@@ -125,14 +127,14 @@
               <Button :disabled="saving || !schemaForm.name.trim()" data-testid="paramschema-save" @click="saveSchema">
                 {{ saving ? $t('views.ParameterSchemasView.saving') : (isNew ? $t('views.ParameterSchemasView.create') : $t('views.ParameterSchemasView.save_as_new_version')) }}
               </Button>
-              <button
+              <Button
                 type="button"
-                class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                variant="secondary"
                 data-testid="paramschema-cancel"
                 @click="closeEditor"
               >
                 {{ $t('views.ParameterSchemasView.cancel') }}
-              </button>
+              </Button>
             </div>
           </header>
 
@@ -172,7 +174,7 @@
           <div>
             <div class="flex items-center justify-between mb-3">
               <h3 class="text-sm font-semibold">{{ $t('views.ParameterSchemasView.parameters') }}</h3>
-              <Button severity="secondary" outlined size="small" data-testid="paramschema-add-param" @click="addParameter">
+              <Button variant="secondary" size="sm" data-testid="paramschema-add-param" @click="addParameter">
                 {{ $t('views.ParameterSchemasView.add_parameter') }}
               </Button>
             </div>
@@ -308,14 +310,16 @@
                             <X class="h-3 w-3" aria-hidden="true" />
                           </button>
                         </div>
-                        <button
+                        <Button
                           type="button"
-                          class="text-xs text-primary-text hover:underline"
+                          variant="link"
+                          size="sm"
+                          class="text-xs"
                           data-testid="paramschema-add-option"
                           @click="(param.options = param.options || []).push('')"
                         >
                           {{ $t('views.ParameterSchemasView.add_option') }}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                     <div>
@@ -381,7 +385,7 @@
           <section class="space-y-4">
             <CardHeader heading-level="h2" header-class="mb-0!" :title="$t('views.ParameterSchemasView.parameter_sets')">
               <template #actions>
-                <Button size="small" @click="startNewSet" data-testid="paramschema-new-set">
+                <Button size="sm" @click="startNewSet" data-testid="paramschema-new-set">
                   {{ $t('views.ParameterSchemasView.new_set') }}
                 </Button>
               </template>
@@ -421,14 +425,16 @@
                   <p class="text-xs text-muted-foreground">{{ set.description || '—' }}</p>
                 </div>
                 <div class="flex items-center gap-1">
-                  <button
+                  <Button
                     type="button"
-                    class="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                    variant="secondary-text"
+                    size="sm"
+                    class="text-xs"
                     @click="editSet(set)"
                     data-testid="paramschema-edit-set"
                   >
                     {{ $t('views.ParameterSchemasView.edit') }}
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     class="rounded px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
@@ -574,13 +580,13 @@
               <Button :disabled="setSaving || !setForm.name.trim()" @click="saveSet" data-testid="paramschema-set-save">
                 {{ setSaving ? $t('views.ParameterSchemasView.saving') : $t('views.ParameterSchemasView.save') }}
               </Button>
-              <button type="button"
-                class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+              <Button type="button"
+                variant="secondary"
                 data-testid="paramschema-set-cancel"
                 @click="cancelSetEdit"
               >
                 {{ $t('views.ParameterSchemasView.cancel') }}
-              </button>
+              </Button>
             </div>
           </BaseCard>
 
@@ -590,16 +596,16 @@
             </p>
             <p v-if="deleteSetError" class="mt-1 text-sm text-destructive-text">{{ deleteSetError }}</p>
             <div class="mt-3 flex items-center gap-2">
-              <Button :disabled="deletingSet" severity="danger" data-testid="paramschema-delete-set-confirm" @click="doDeleteSet">
+              <Button :disabled="deletingSet" variant="danger" data-testid="paramschema-delete-set-confirm" @click="doDeleteSet">
                 {{ deletingSet ? $t('views.ParameterSchemasView.deleting') : $t('views.ParameterSchemasView.delete') }}
               </Button>
-              <button type="button"
-                class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+              <Button type="button"
+                variant="secondary"
                 data-testid="paramschema-delete-set-cancel"
                 @click="deleteSetConfirmId = null"
               >
                 {{ $t('views.ParameterSchemasView.cancel') }}
-              </button>
+              </Button>
             </div>
           </div>
         </TabPanel>
@@ -754,7 +760,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Tabs from 'primevue/tabs'
 import TabList from 'primevue/tablist'
 import Tab from 'primevue/tab'
