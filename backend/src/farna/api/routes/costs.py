@@ -24,11 +24,13 @@ from farna.api.db_error_handling import (
     raise_session_contract_error,
 )
 from farna.api.dependencies import get_db_session, require_entitlement, require_permission
+from farna.api.routes.dashboard import _facts_window
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
 from farna.core.audit_logger import append_audit_event
 from farna.core.cost_controller import (
+    _report_since,
     build_cost_report_buckets,
     get_cost_export_rows,
     get_cost_report,
@@ -257,6 +259,43 @@ class SetSpendLimitRequest(BaseModel):
     daily_spend_limit: float | None = Field(None, ge=0)
 
 
+async def _load_period_run_total(
+    session: AsyncSession,
+    *,
+    org_id: uuid.UUID,
+    period: str,
+) -> int:
+    """Total terminal runs in the report window, from the ANALYTICS FACT table.
+
+    FAR-2820: the spend ledger's ``run_count`` is NOT a total-run count. The
+    live writer only enters a ledger row for a run with a POSITIVE persisted
+    cost (``cost_controller.finalize._ledger_run_date`` skips a zero-cost
+    terminal) and the per-day backfill mirrors that rule, so
+    ``OrgDailyRunCount.run_count`` counts only spend-bearing runs. Deriving the
+    Costs overview's "Total Runs" tile from it produced the impossible
+    "Total Runs 0 / 226 successful runs" pair whenever the window's runs were
+    all free (a zero-cost model backend), because the "successful runs" figure
+    the SAME card renders is read from ``/analytics/query``, which counts
+    ``run_daily_facts`` - one row per terminal run.
+
+    Both figures now derive from ``run_daily_facts`` over the SAME organisation
+    and period window (``_facts_window`` is the dashboard's period-facts
+    definition, so the costs card and the dashboard summary agree), which makes
+    ``total_runs >= successful_runs`` hold by construction: a successful run is
+    a terminal fact whose status is ``complete``.
+    """
+    today = datetime.now(UTC).date()
+    # ``_facts_window`` bounds on ``[start_date, end_date)``. The exclusive end
+    # is two days ahead so this window is a strict SUPERSET of the browser-local
+    # month-to-date window the same card's "successful runs" figure is queried
+    # with (``/analytics/query`` sends bare local dates, and a browser up to
+    # +14h ahead of UTC can already be on "tomorrow" relative to UTC). Facts
+    # never carry a future ``run_date``, so the extra day can only ever be
+    # empty - it just guarantees the total can never undershoot the successes.
+    facts = await _facts_window(session, org_id, _report_since(today, period), today + timedelta(days=2))
+    return int(facts["total_runs"])
+
+
 @router.get("")
 @handle_db_errors("costs.get_costs")
 async def get_costs(
@@ -276,12 +315,22 @@ async def get_costs(
                 period=period,
             )
             buckets = {}
-            # REPORTING fields only — the ledger lines are the period-total
-            # source; a failure in the runs-based detail aggregation
+            # REPORTING fields only — the ledger lines remain the period SPEND
+            # source; a failure in the runs-based reporting aggregation
             # degrades to empty buckets, never to a 500. DB/HTTP/cancel errors
             # still propagate to the outer handlers below.
             try:
                 buckets = await build_cost_report_buckets(
+                    session,
+                    org_id=current_user.organisation_id,
+                    period=period,
+                )
+                # FAR-2820: override the spend ledger's billable-run count (it
+                # only counts runs with a positive cost) with the TRUE total
+                # run count for the window, from the same fact table the
+                # card's "successful runs" figure is read from - so the two
+                # tiles cannot disagree. See ``_load_period_run_total``.
+                buckets["org_run_count"] = await _load_period_run_total(
                     session,
                     org_id=current_user.organisation_id,
                     period=period,
