@@ -33,8 +33,11 @@ Usage:
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -175,6 +178,36 @@ def _select_test_files(changed: list[str]) -> list[str]:
     return sorted(selected)[:MAX_TEST_FILES]
 
 
+def _child_env() -> dict[str, str]:
+    """Return the environment for the pytest child process.
+
+    Two things the inherited environment cannot provide:
+
+    * **No git hook context.** A pre-push hook exports ``GIT_DIR`` and friends;
+      left in place, any test that shells out to git targets the enclosing
+      repository instead of its own scratch tree.  Same house helper as
+      ``run_changed_tests.py``.
+    * **An isolated pytest temp root.** pytest derives ``tmp_path`` roots from
+      ``PYTEST_DEBUG_TEMPROOT`` (else the shared ``pytest-of-<user>``
+      directory).  A stale or dangling ``pytest-current`` symlink in that shared
+      root makes pytest's session-end cleanup raise ``PermissionError`` and the
+      whole run exit 1 **with every test green** — a false failure that would
+      make this gate untrustworthy.  A per-run root also stops two concurrent
+      agents on one machine from colliding over the same numbered directories.
+    """
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from scripts.git_hook_env import strip_git_hook_context_vars
+
+    env = strip_git_hook_context_vars(os.environ)
+    # Only fall back to USERPROFILE when HOME is genuinely absent (Windows);
+    # an empty HOME breaks uv/git resolution in the subprocess.
+    if "HOME" not in env and "USERPROFILE" in env:
+        env["HOME"] = env["USERPROFILE"]
+    env["PYTEST_DEBUG_TEMPROOT"] = tempfile.mkdtemp(prefix="farna-affected-pytest-")
+    return env
+
+
 def _run_pytest(test_paths: list[str], timeout: int = 120, wall_timeout: float | None = None) -> int:
     """Run pytest on *test_paths* from the backend/ directory. Returns exit code.
 
@@ -203,14 +236,23 @@ def _run_pytest(test_paths: list[str], timeout: int = 120, wall_timeout: float |
     ]
     print(f"running: {' '.join(cmd)}", file=sys.stderr)
     print("from:    backend/", file=sys.stderr)
+    env = _child_env()
     try:
-        result = subprocess.run(cmd, cwd="backend", check=False, timeout=wall_timeout)  # NOSONAR - fixed argv, no shell
+        result = subprocess.run(  # NOSONAR - fixed argv, no shell
+            cmd,
+            cwd="backend",
+            check=False,
+            timeout=wall_timeout,
+            env=env,
+        )
     except subprocess.TimeoutExpired:
         print(
             f"FAILED: suite exceeded its {wall_timeout:.0f}s wall-clock bound and was killed. Rerun the suite command above to see where it hangs.",
             file=sys.stderr,
         )
         return 1
+    finally:
+        shutil.rmtree(env["PYTEST_DEBUG_TEMPROOT"], ignore_errors=True)
     return result.returncode
 
 

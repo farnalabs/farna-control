@@ -344,3 +344,55 @@ def test_parse_args_rejects_a_non_positive_max_files(capsys):
 def test_parse_args_rejects_an_unknown_flag(capsys):
     assert mod._parse_args(["--nope"]) is None
     assert "unexpected argument" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Child environment: a stale shared pytest temp root must not fail the gate
+# ---------------------------------------------------------------------------
+def test_run_pytest_hands_pytest_an_isolated_temp_root_and_strips_git_context(monkeypatch):
+    """A dangling ``pytest-current`` symlink in the shared temp root exits 1 with every test green."""
+    captured: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setenv("GIT_DIR", "/elsewhere/.git")
+
+    assert mod._run_pytest(["tests/unit/x.py"], timeout=60, wall_timeout=30) == 0
+
+    env = captured["env"]
+    assert isinstance(env, dict)
+    assert "GIT_DIR" not in env
+    assert "PYTEST_DEBUG_TEMPROOT" in env
+    assert captured["timeout"] == 30
+    assert captured["cwd"] == "backend"
+
+
+def test_run_pytest_removes_the_isolated_temp_root_after_the_suite(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    assert mod._run_pytest(["tests/unit/x.py"]) == 1
+
+    env = captured["env"]
+    assert isinstance(env, dict)
+    assert not Path(env["PYTEST_DEBUG_TEMPROOT"]).exists()
+
+
+def test_run_pytest_reports_a_wall_clock_kill_as_a_failure(monkeypatch, capsys):
+    def fake_run(cmd, **kwargs):
+        raise mod.subprocess.TimeoutExpired(cmd, 30)
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    assert mod._run_pytest(["tests/unit/x.py"], wall_timeout=30) == 1
+
+    assert "wall-clock bound" in capsys.readouterr().err
