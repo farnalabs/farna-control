@@ -11,7 +11,7 @@ unit-tests:
 bdd:
   - backend/tests/bdd/features/system_admin/system_admin_config.feature
 depends-on: []
-status: partial
+status: covered
 ---
 
 # System Config
@@ -25,7 +25,7 @@ with sensitive value masking.
 - [x] GET `/api/v1/system-admin/config` lists all config entries with sensitive
       value masking; gated on `system.config.manage` (system admin only)
       (`admin_system_config.py`)
-      <!-- behaviour: system-config-01 | tests: none -->
+      <!-- behaviour: system-config-01 | tests: backend/tests/unit/api/test_admin_system_config.py::test_system_admin_can_list, backend/tests/unit/api/test_admin_system_config.py::test_sensitive_key_value_is_masked, backend/tests/unit/api/test_admin_system_config.py::test_regular_admin_gets_403 -->
 - [x] PUT `/api/v1/system-admin/config/{key}` creates or updates a config entry
       (upsert) with `updated_by` tracking
       (`backend/tests/bdd/features/system_admin/system_admin_config.feature`)
@@ -39,6 +39,12 @@ with sensitive value masking.
       <!-- behaviour: system-config-04 | tests: backend/tests/bdd/features/system_admin/system_admin_config.feature -->
 
 ## QA History
+
+- 2026-11-25: **Improve Architecture product-map walk** - bound
+  `system-config-01` to the existing list/masking/permission tests in
+  `backend/tests/unit/api/test_admin_system_config.py`. Every ticked behaviour
+  now resolves, so the derived status moves from `partial` to `covered`. No
+  product code changed.
 - 2026-09-17: **product-map review pass** - closed the last
   `feat-system-config` BDD gap: added DELETE coverage to
   `system_admin_config.feature` (successful 204 delete, 404 for an unknown key,

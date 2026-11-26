@@ -449,10 +449,6 @@
       "entry": "docs/product-map/core/evidence-store.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
-    "external-agent-registry-02": {
-      "entry": "docs/product-map/configure/external-agent-registry.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "feedback-02": {
       "entry": "docs/product-map/improve/feedback.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
@@ -952,14 +948,6 @@
     "onboarding-08": {
       "entry": "docs/product-map/auth/onboarding.md",
       "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
-    "org-01": {
-      "entry": "docs/product-map/admin/org.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "org-02": {
-      "entry": "docs/product-map/admin/org.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
     "org-08": {
       "entry": "docs/product-map/admin/org.md",
@@ -1593,10 +1581,6 @@
       "entry": "docs/product-map/infra/support-diagnostics.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
-    "system-config-01": {
-      "entry": "docs/product-map/system/system-config.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "system-maps-01": {
       "entry": "docs/product-map/pipelines/system-maps.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
@@ -1652,10 +1636,6 @@
     "system-maps-36": {
       "entry": "docs/product-map/pipelines/system-maps.md",
       "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
-    "system-orgs-06": {
-      "entry": "docs/product-map/system/system-orgs.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
     "trigger-engine-01": {
       "entry": "docs/product-map/triggers/trigger-engine.md",
@@ -2091,13 +2071,13 @@
     "backup-restore-03": "fdaaa68e3334f44a",
     "backup-restore-04": "03714be681eba6ea",
     "backup-restore-05": "87faa646c6ddb2cb",
-    "backup-restore-06": "bfbfb95537d5f64f",
+    "backup-restore-06": "ac28a5ac33b851ae",
     "backup-restore-07": "47aeab2fc01dcc3f",
     "backup-restore-08": "be97129a01b8109f",
     "backup-restore-09": "c61d7e3745267923",
     "backup-restore-10": "ca1bae4319e7f783",
     "backup-restore-11": "1208dba8efc2c4e8",
-    "backup-restore-12": "e2f32a646c3caf02",
+    "backup-restore-12": "455681192afdde61",
     "backup-restore-13": "9dbf95052dbe747a",
     "backup-restore-14": "61e95336c814805b",
     "backup-restore-15": "9a7e8a58dba52f29",
@@ -2110,7 +2090,7 @@
     "backup-restore-22": "336e011f0b091329",
     "backup-restore-23": "321140093b1dc019",
     "backup-restore-24": "50fb0fcfcffa3e53",
-    "backup-restore-25": "698e431f9cf5e1ee",
+    "backup-restore-25": "a3739d84551e9ac1",
     "backup-restore-26": "09775e099255afc6",
     "backup-restore-27": "66fc4c351e3f7e2c",
     "backup-restore-28": "45561c40241d1e2a",
@@ -2143,7 +2123,7 @@
     "connectors-27": "c86ae78d43651c4c",
     "connectors-28": "04e8604a2dc46dd9",
     "container-deployment-01": "fc18b094b391806d",
-    "container-deployment-02": "198d6732e92b9f92",
+    "container-deployment-02": "3837bf7570f22c69",
     "container-deployment-03": "55316547861b5ebb",
     "container-deployment-04": "21741f9daf2feed2",
     "container-deployment-05": "acf5f1e125010658",

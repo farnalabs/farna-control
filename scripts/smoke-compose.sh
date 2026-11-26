@@ -38,7 +38,7 @@
 #   ./scripts/smoke-compose.sh --skip-db-check
 #
 #   # compose project started with an explicit `-p` name
-#   ./scripts/smoke-compose.sh --project-name my-modulo
+#   ./scripts/smoke-compose.sh --project-name my-farna-control
 #
 # EXIT CODES
 #   0 every check passed; 1 a check failed (the failing check names the fix).
@@ -54,8 +54,9 @@ PASSWORD="${FARNA_CONTROL_SMOKE_PASSWORD:-admin}"
 COMPOSE_FILE="docker-compose.yml"
 PROJECT_NAME=""
 DB_SERVICE="db"
-DB_USER="modulo"
-DB_NAME="modulo"
+# Defaults match docker-compose.yml's POSTGRES_USER / POSTGRES_DB.
+DB_USER="farna_control"
+DB_NAME="farna_control"
 SKIP_DB_CHECK=0
 
 usage() {

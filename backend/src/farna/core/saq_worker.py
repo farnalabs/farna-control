@@ -1743,10 +1743,28 @@ async def stale_run_recovery(_ctx: dict[str, Any]) -> dict[str, Any]:
     plain integer count; this wrapper ALSO persists a stats dict to the shared
     Redis key so /healthz/ready can warn when the sweep is stale or missing.
     Best-effort: a persistence failure must never fail the sweep.
-    """
-    from farna.core.pipeline_execution import stale_run_recovery_sweep
 
-    result = await stale_run_recovery_sweep(_get_async_engine())
+    FAR-2782: this worker starts as soon as ``db`` is healthy and does NOT run
+    the migrations or the backend's boot-time checkpointer DDL, so on a fresh
+    install its first ticks see a database whose LangGraph ``checkpoints``
+    table does not exist yet. The sweep's SAQ zero-progress arm embeds a
+    reference to that table, which PostgreSQL resolves at parse time — so the
+    tick failed with ``relation "checkpoints" does not exist`` and this wrapper
+    persisted it as the sweep's reported FAILURE for the whole 15-min stale
+    window, long after the table existed. Probe once per tick and hand the
+    answer to the sweep: an absent table DEFERS that one arm and is persisted
+    as a deferral (``deferred``), never as an ``error``.
+    """
+    from farna.core.pipeline_execution import (
+        langgraph_checkpoint_schema_present,
+        stale_run_recovery_sweep,
+    )
+
+    engine = _get_async_engine()
+    result = await stale_run_recovery_sweep(
+        engine,
+        checkpoint_schema_present=await langgraph_checkpoint_schema_present(engine),
+    )
     stats: dict[str, Any] = {
         "last_run_at": datetime.now(UTC).isoformat(),
     }
@@ -1755,6 +1773,11 @@ async def stale_run_recovery(_ctx: dict[str, Any]) -> dict[str, Any]:
         stats["recovered"] = 0
     else:
         stats["recovered"] = result
+    # FAR-2782: surface a deferral as a deferral. It is NOT an ``error``: the
+    # sweep ran, only one arm could not (the checkpointer check owns the
+    # missing-schema signal). Kept short — /healthz/ready appends it verbatim.
+    if isinstance(result, dict) and result.get("zero_progress_deferred"):
+        stats["deferred"] = f"saq zero-progress arm not run yet ({result['zero_progress_deferred']})"
     await _persist_sweep_stats(STALE_RUN_RECOVERY_STATS_KEY, stats, STALE_RUN_RECOVERY_STATS_TTL_SECONDS)
     return result
 

@@ -8,7 +8,7 @@
         <div class="rounded-md bg-success/10 p-3 text-sm text-success-text">
           {{ $t('views.ModelBackendSetupView.backend_now_active', { name: backendName }) }}
         </div>
-        <Button severity="secondary" outlined class="w-full"
+        <Button variant="secondary" class="w-full"
           data-testid="model-backend-setup-view-backends"
           @click="router.push('/admin/model-backends')">
           {{ $t('views.ModelBackendSetupView.view_model_backends') }}
@@ -54,7 +54,7 @@ import ErrorAlert from '../../components/shared/ErrorAlert.vue'
 import { useApi } from '../../composables/useApi'
 import { getApiErrorCode } from '../../lib/api/apiError'
 import { useMutation } from '../../composables/useMutation'
-import Button from 'primevue/button'
+import Button from '../../components/ui/Button.vue'
 import InputText from 'primevue/inputtext'
 
 const { t } = useI18n()

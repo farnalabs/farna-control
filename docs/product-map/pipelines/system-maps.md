@@ -98,25 +98,30 @@ REST gate (FAR-2595).
 The published-read routes sit on their own router
 (`published_router` in `api/routes/system_maps.py`) with
 `_require_published_system_maps_read` (viewer role floor plus a grant check) and
-`require_feature("system_maps_read")`, and the repository is asked for
-`published_only=True` maps/revisions; a draft or an unpublished map is a 404 to
-a viewer. The authoring routes keep the operator gate: the operator role
-floor, the `system_maps_access` grant, and the `system_maps` feature flag, all
-resolved server-side on each request. Developer mode is deliberately NOT part
-of this API gate (FAR-2595); the `private_preview` route visibility described
-above is a separate UI release gate, not an API one.
+`require_feature_any_credential("system_maps_read")`, and the repository is
+asked for `published_only=True` maps/revisions; a draft or an unpublished map is
+a 404 to a viewer. The authoring routes keep the operator gate: the operator
+role floor, the `system_maps_access` grant, and the `system_maps` feature flag
+(`require_org_feature_any_credential`), all resolved server-side on each
+request. Developer mode is deliberately NOT part of this API gate (FAR-2595);
+the `private_preview` route visibility described above is a separate UI release
+gate, not an API one.
 Legacy JWTs and callers with no grant set keep the role-based behavior rather
 than being refused for the missing grant. Nothing publishes automatically.
 
-Credential contract (FAR-2730): both route groups authenticate the HTTP caller
-with a user JWT. Each endpoint's `require_permission(...)` and the plan/feature
-gate (`get_plan_context` resolves through `get_current_user`) reject an `mk_`
-org API key with 401 before the internal-access probe is reached, so the probe
-no longer implies an API-key path the routes cannot deliver. The
-`farna-control apply` CLI is documented to authenticate with an `mk_` key and
-does read `GET /api/v1/system-maps`; because the whole System Maps family —
-reads and writes — is JWT-only, making that CLI path work is a family-wide
-change rather than a single-read one.
+Credential contract (FAR-2748): the route groups accept a user JWT or an `mk_`
+org API key. The `farna-control apply` CLI manages System Maps as a declared
+entity kind and authenticates with its documented `mk_` key, so the four routes
+its workflow uses — the map collection read (`GET /api/v1/system-maps`) and the
+create / update / revision-create writes — carry the any-credential permission
+gate together with the any-credential plan/feature gates
+(`require_feature_any_credential` / `require_org_feature_any_credential`), so a
+JWT-only plan gate cannot reject the key before the permission gate runs (the
+FAR-2729 trap). The per-map and revision reads keep the JWT-only
+`require_permission` on the endpoint, so widening the collection read did not
+widen them; the authoring routes the CLI does not use (delete, publish, archive,
+restore, attribution bindings, discovery) keep their JWT-only gate for the same
+reason. Lifecycle maps are a separate, JWT-only internal surface.
 
 The map is stored in dedicated System Maps tables (baseline schema,
 `0350_baseline_schema.py`: `system_maps`, `system_map_revisions`,

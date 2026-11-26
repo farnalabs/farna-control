@@ -224,23 +224,33 @@
           testid-prefix="admin-users-mode"
           @update:model-value="onCreateModeSelected"
         />
-        <div>
-          <label for="adminusersview-field-4" class="block text-sm font-medium mb-1">{{ $t('common.email') }}</label>
-          <input id="adminusersview-field-4" v-model="newUser.email" data-testid="admin-users-create-email" type="email" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
-        </div>
-        <div>
-          <label for="adminusersview-field-3" class="block text-sm font-medium mb-1">{{ $t('views.AdminModelBackendsView.display_name') }}</label>
-          <input id="adminusersview-field-3" v-model="newUser.display_name" data-testid="admin-users-create-display-name" type="text" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
-        </div>
-        <div v-if="createMode === 'password'">
-          <label for="adminusersview-field-2" class="block text-sm font-medium mb-1">{{ $t('common.password') }}</label>
+        <Field
+          id="adminusersview-field-4"
+          :label="$t('common.email')"
+          label-class="block text-sm font-medium mb-1"
+        >
+          <Input v-model="newUser.email" data-testid="admin-users-create-email" type="email" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
+        </Field>
+        <Field
+          id="adminusersview-field-3"
+          :label="$t('views.AdminModelBackendsView.display_name')"
+          label-class="block text-sm font-medium mb-1"
+        >
+          <Input v-model="newUser.display_name" data-testid="admin-users-create-display-name" type="text" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
+        </Field>
+        <Field
+          v-if="createMode === 'password'"
+          id="adminusersview-field-2"
+          :label="$t('common.password')"
+          label-class="block text-sm font-medium mb-1"
+        >
           <div class="flex gap-2">
-            <input id="adminusersview-field-2" v-model="newUser.password" data-testid="admin-users-create-password" type="password" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" minlength="8" required />
+            <Input v-model="newUser.password" data-testid="admin-users-create-password" type="password" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" minlength="8" required />
             <Button type="button" variant="secondary" class="shrink-0 border-primary/30" data-testid="admin-users-generate-password" @click="generatePassword">
               {{ $t('views.AdminUsersView.generate_password') }}
             </Button>
           </div>
-        </div>
+        </Field>
         <p v-if="createMode === 'invite'" class="mt-2 text-xs text-muted-foreground">
           {{ $t('views.AdminUsersView.invite_mode_hint') }}
         </p>
@@ -379,6 +389,8 @@ import { useApi } from '../composables/useApi'
 import { useDataFetch } from '../composables/useDataFetch'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import Button from '../components/ui/Button.vue'

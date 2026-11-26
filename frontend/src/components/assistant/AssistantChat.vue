@@ -268,10 +268,10 @@
       >
         <p class="text-sm font-medium">{{ $t('components.assistant.AssistantChat.delete_confirm') }}</p>
         <div class="flex gap-2 mt-2">
-          <Button severity="danger" size="small" @click="deleteCurrentSession">
+          <Button variant="danger" size="sm" @click="deleteCurrentSession">
             {{ $t('common.delete') }}
           </Button>
-          <Button severity="secondary" outlined size="small" @click="showDeleteConfirm = false">
+          <Button variant="secondary" size="sm" @click="showDeleteConfirm = false">
             {{ $t('common.cancel') }}
           </Button>
         </div>
@@ -285,7 +285,7 @@ import { ref, watch, nextTick, computed, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { useAssistantStore } from "@/composables/useAssistantStore";
 import { useAssistantStream } from "@/composables/useAssistantStream";
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 import { getAccessToken } from "@/lib/api/client";
 import AnalyticsChart from "../analytics/AnalyticsChart.vue";
 import { MEASURES, type AnalyticsBucket, type AnalyticsMeasure } from "../../stores/analytics";

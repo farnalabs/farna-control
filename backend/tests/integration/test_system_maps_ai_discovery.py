@@ -15,7 +15,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from farna.api.dependencies import _get_engine, get_db_session, get_plan_context, get_settings
+from farna.api.dependencies import _get_engine, get_db_session, get_plan_context, get_plan_context_any_credential, get_settings
 from farna.api.main import app
 from farna.auth.dependencies import get_current_tenant_user, get_current_tenant_user_or_api_key, get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
@@ -253,6 +253,9 @@ async def discovery_client(
     app.dependency_overrides[_get_engine] = lambda: app_engine
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[get_plan_context] = override_features
+    # FAR-2748: the system-maps router feature gate resolves the plan through the
+    # any-credential variant, so the JWT-only override above no longer applies.
+    app.dependency_overrides[get_plan_context_any_credential] = override_features
     app.dependency_overrides[get_current_tenant_user] = override_principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = override_principal
     app.dependency_overrides[get_current_user] = override_user

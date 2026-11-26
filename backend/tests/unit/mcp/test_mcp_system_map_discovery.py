@@ -28,7 +28,7 @@ from sqlalchemy.exc import IntegrityError, InvalidRequestError, ProgrammingError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from farna.api.db_error_handling import MSG_SESSION_CONTRACT
-from farna.api.dependencies import _get_engine, get_db_session, get_plan_context, get_settings
+from farna.api.dependencies import _get_engine, get_db_session, get_plan_context, get_plan_context_any_credential, get_settings
 from farna.api.main import app
 from farna.api.mcp_server import (
     _MSG_DB_MIGRATION_REQUIRED,
@@ -436,6 +436,9 @@ def rest_client() -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_plan_context] = lambda: _Plan()
+    # FAR-2748: the system_maps feature gate now resolves the plan through the
+    # any-credential context, so the REST path stubs both variants.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: _Plan()
     app.dependency_overrides[get_current_user] = lambda: auth_user
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal

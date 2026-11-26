@@ -53,16 +53,15 @@
           heading-level="h2"
           :title="$t('views.SettingsObservabilityView.otlp_endpoint')"
         >
-          <div>
-            <label for="settingsobservabilityview-field-3" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsObservabilityView.endpoint_url') }}</label>
-            <input id="settingsobservabilityview-field-3"
+          <Field id="settingsobservabilityview-field-3" :label="$t('views.SettingsObservabilityView.endpoint_url')">
+            <Input
               v-model="otlpEndpoint"
               type="url"
               data-testid="settings-observability-otlp-endpoint"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               placeholder="https://otlp.example.com:4318"
             />
-          </div>
+          </Field>
         </DataCard>
 
         <DataCard
@@ -81,7 +80,7 @@
             {{ $t('views.SettingsObservabilityView.no_custom_headers_configured') }}
           </div>
           <div v-for="(header, index) in otlpHeaders" :key="index" class="mb-2 flex items-center gap-2">
-            <input
+            <Input
               v-model="header.key"
               type="text"
               :aria-label="$t('views.SettingsObservabilityView.header_name')"
@@ -89,7 +88,7 @@
               class="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SettingsObservabilityView.header_name')"
             />
-            <input
+            <Input
               v-model="header.value"
               type="text"
               :aria-label="$t('views.SettingsObservabilityView.header_value')"
@@ -118,17 +117,19 @@
           heading-level="h2"
           :title="$t('views.SettingsObservabilityView.export_interval')"
         >
-          <div>
-            <label for="settingsobservabilityview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsObservabilityView.interval_seconds') }}</label>
-            <input id="settingsobservabilityview-field-2"
+          <Field
+            id="settingsobservabilityview-field-2"
+            :label="$t('views.SettingsObservabilityView.interval_seconds')"
+            :help="$t('views.SettingsObservabilityView.export_interval_description')"
+          >
+            <Input
               v-model.number="exportIntervalSeconds"
               type="number"
               min="1"
               data-testid="settings-observability-export-interval"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.SettingsObservabilityView.export_interval_description') }}</p>
-          </div>
+          </Field>
         </DataCard>
 
         <DataCard
@@ -161,14 +162,15 @@
               <span class="text-sm font-medium">{{ $t('views.SettingsObservabilityView.enable_langsmith_tracing') }}</span>
             </div>
             <div v-if="langsmithEnabled">
-              <label for="settingsobservabilityview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsObservabilityView.api_key') }}</label>
-              <textarea id="settingsobservabilityview-field-1"
-                v-model="langsmithApiKey"
-                data-testid="settings-observability-langsmith-api-key"
-                rows="3"
-                class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                :placeholder="hasLangsmithKey ? $t('views.SettingsObservabilityView.leave_blank_to_keep_existing_key') : $t('views.SettingsObservabilityView.enter_langsmith_api_key')"
-              />
+              <Field id="settingsobservabilityview-field-1" :label="$t('views.SettingsObservabilityView.api_key')">
+                <Textarea
+                  v-model="langsmithApiKey"
+                  data-testid="settings-observability-langsmith-api-key"
+                  rows="3"
+                  class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  :placeholder="hasLangsmithKey ? $t('views.SettingsObservabilityView.leave_blank_to_keep_existing_key') : $t('views.SettingsObservabilityView.enter_langsmith_api_key')"
+                />
+              </Field>
               <div class="mt-1 flex items-center gap-2">
                 <button
                   type="button"
@@ -253,6 +255,9 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import Button from '../components/ui/Button.vue'
 import { X } from '@lucide/vue'
 

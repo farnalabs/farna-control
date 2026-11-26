@@ -581,25 +581,29 @@ test.describe('authenticated SYSTEM routes — light theme (FAR-2761)', { tag: "
   }
 })
 
-// FAR-2351 — the neutral PrimeVue badge (`.p-badge-secondary`, the sidebar's
-// plan-tier chip) measured 1.11:1 on /admin/trigger-events and /admin/audit:
-// `#d4d4d8` ink on a `#dbe0e6` fill, 10px bold. The finding only reproduces in
-// the state the light-mode audit above cannot reach, because our palette and
-// PrimeVue's colour scheme flip on DIFFERENT switches: the page is light when
-// `.light` is present, while PrimeVue picks its palette from `.dark`
-// (`darkModeSelector: '.dark'` in main.ts, and `index.html` ships
-// `class="dark"`). A page that has `.light` but still carries `.dark` — which is
-// exactly how a light-mode audit that only ADDS `.light` measures it (see
-// json-viewer.spec.ts) — therefore read the badge ink from PrimeVue's dark
-// scheme (`--p-surface-300` = zinc-300 `#d4d4d8`) while its fill came from our
-// light palette (the token bridge maps `--p-surface-800` to
-// `hsl(var(--muted))` = `#dbe0e6`).
+// FAR-2351 — the sidebar's plan-tier chip measured 1.11:1 on
+// /admin/trigger-events and /admin/audit: `#d4d4d8` ink on a `#dbe0e6` fill,
+// 10px bold. At the time the chip was a PrimeVue badge (`.p-badge-secondary`),
+// and the finding only reproduced in the state the light-mode audit above
+// cannot reach, because our palette and PrimeVue's colour scheme flip on
+// DIFFERENT switches: the page is light when `.light` is present, while
+// PrimeVue picked its palette from `.dark` (`darkModeSelector: '.dark'` in
+// main.ts, and `index.html` ships `class="dark"`). A page that has `.light` but
+// still carries `.dark` — exactly how a light-mode audit that only ADDS
+// `.light` measures it (see json-viewer.spec.ts) — therefore read the badge ink
+// from PrimeVue's dark scheme (`--p-surface-300` = zinc-300 `#d4d4d8`) while
+// its fill came from our light palette (the token bridge maps
+// `--p-surface-800` to `hsl(var(--muted))` = `#dbe0e6`).
 //
-// So this scan deliberately reproduces that mixed state, and asserts the
-// `color-contrast` rule is clean. Reverting the `html.light .p-badge-secondary`
-// override in style.css brings the violation straight back, which the
-// drop-`.dark` light-theme loop above would not catch.
-test.describe('light page with a stale .dark class — PrimeVue badges (FAR-2351)', { tag: "@regression" }, () => {
+// The chip is now the custom Badge primitive (`Badge.vue`, rendered
+// `.badge.badge-status-muted`), which pairs our `--muted` fill with our
+// `--muted-foreground` ink rather than PrimeVue's surface scale, so it no
+// longer reads the dark scheme under a stale `.dark`. This scan still
+// reproduces that mixed state and asserts the `color-contrast` rule is clean on
+// the chip: what it guards is "the plan-tier chip stays legible when `.light`
+// is layered over a stale `.dark`", which the drop-`.dark` light-theme loop
+// above would not reach.
+test.describe('light page with a stale .dark class — sidebar plan-tier chip (FAR-2351)', { tag: "@regression" }, () => {
   for (const path of ['/admin/trigger-events', '/admin/audit']) {
     test(`${path} has no color-contrast violations when .light is added over .dark`, { tag: "@regression" }, async ({ page, env }) => {
       test.setTimeout(ROUTE_AUDIT_TIMEOUT)
@@ -626,10 +630,12 @@ test.describe('light page with a stale .dark class — PrimeVue badges (FAR-2351
       expect(classes, 'the light theme must be active').toContain('light')
       expect(classes, 'the stale dark class must still be present').toContain('dark')
 
-      // Guard the target: without a rendered neutral badge the scan would be
-      // vacuously clean.
-      const badges = page.locator('.p-badge')
-      await expect(badges.first()).toBeVisible()
+      // Guard the target: without a rendered plan-tier chip the scan would be
+      // vacuously clean. It is the custom Badge primitive now — the PrimeVue
+      // `.p-badge` it replaced is gone from the product — so target it by its
+      // test id.
+      const tierBadge = page.locator('[data-testid="sidebar-tier-badge"]')
+      await expect(tierBadge.first()).toBeVisible()
 
       const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()
       const contrastViolations = filterViolations(results.violations).filter(v => v.id === 'color-contrast')
@@ -684,6 +690,24 @@ test.describe('keyboard focus indicator on a formerly agent-themed page (FAR-276
       reached = await control.evaluate((el) => document.activeElement === el)
     }
     expect(reached, 'Tab must reach the sidebar link on /settings/mcp').toBe(true)
+
+    // activeElement flips a frame before the browser finishes the
+    // `:focus-visible` style recalc, so a read taken immediately after the last
+    // Tab can catch the element's *initial* outline (none / 3px / currentColor)
+    // even though the base rule lands on the next frame. That race made this
+    // test flake on PR #3523 (run 45694368651: got an outline colour equal to
+    // the link's own `--muted-foreground`). Poll for the rule to land; deleting
+    // the base rule still times out and fails, so the guard keeps its teeth.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const el = document.activeElement as HTMLElement | null
+            return el ? getComputedStyle(el).outlineStyle : 'none'
+          }),
+        { timeout: 5000, message: 'the base :focus-visible outline must apply to the focused control' },
+      )
+      .toBe('solid')
 
     const indicator = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null

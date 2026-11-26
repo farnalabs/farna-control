@@ -21,26 +21,24 @@
         heading-level="h2"
       >
         <div class="space-y-4">
-          <div>
-            <label for="settingsteamsview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTeamsView.name') }}</label>
-            <input id="settingsteamsview-field-2"
+          <Field id="settingsteamsview-field-2" :label="$t('views.SettingsTeamsView.name')">
+            <Input
               v-model="createName"
               type="text"
               data-testid="settings-teams-create-name"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SettingsTeamsView.placeholder_name')"
             />
-          </div>
-          <div>
-            <label for="settingsteamsview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTeamsView.description') }}</label>
-            <textarea id="settingsteamsview-field-1"
+          </Field>
+          <Field id="settingsteamsview-field-1" :label="$t('views.SettingsTeamsView.description')">
+            <Textarea
               v-model="createDescription"
               rows="2"
               data-testid="settings-teams-create-description"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SettingsTeamsView.placeholder_description')"
-            ></textarea>
-          </div>
+            />
+          </Field>
           <div class="flex items-center gap-2">
             <Button :disabled="!createName.trim() || creatingTeam" data-testid="settings-teams-create-submit" @click="createTeam">
               {{ creatingTeam ? $t('views.SettingsTeamsView.creating') : $t('views.SettingsTeamsView.create') }}
@@ -88,7 +86,7 @@
 
           <section v-if="expandedTeamId === team.id" :id="'settings-teams-panel-' + team.id" class="p-4" :aria-label="$t('views.SettingsTeamsView.team_details', { name: team.name })">
             <div v-if="renameTeamId === team.id" class="mb-4 flex items-center gap-2">
-              <input :aria-label="$t('views.SettingsTeamsView.name')" v-model="renameName" type="text" data-testid="settings-teams-rename-name" class="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" @keyup.enter="saveRename" />
+              <Input :aria-label="$t('views.SettingsTeamsView.name')" v-model="renameName" type="text" data-testid="settings-teams-rename-name" class="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" @keyup.enter="saveRename" />
               <Button :disabled="!renameName.trim() || renamingTeam" data-testid="settings-teams-rename-save" @click="saveRename">
                 {{ renamingTeam ? $t('views.SettingsTeamsView.saving') : $t('views.SettingsTeamsView.save') }}
               </Button>
@@ -253,6 +251,9 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import TeamNotificationEndpoints from '../components/TeamNotificationEndpoints.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import { ChevronRight, Plus } from '@lucide/vue'

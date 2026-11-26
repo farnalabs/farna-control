@@ -1308,6 +1308,25 @@ def _sweep_missing_key_result(stale_seconds: int, not_applicable: str | None) ->
     return CheckResult(status="degraded", detail="sweep has never run")
 
 
+def _sweep_deferred_note(data: dict[str, Any]) -> str:
+    """Suffix naming work a sweep deliberately DEFERRED (FAR-2782).
+
+    A deferral is a first-class, positively-identified "this part of the tick
+    could not run yet" — the fresh-install case where ``saq-system`` ticks
+    before the backend's boot-time checkpointer DDL has created the LangGraph
+    ``checkpoints`` table, so the SAQ zero-progress arm is skipped rather than
+    attempted. It is NOT an error: the sweep ran, and the condition is bounded
+    by the table's existence (the next tick after the backend boot finishes
+    runs the arm, and the marker disappears). The missing schema itself is
+    reported by the gating ``checkpointer`` check, so nothing is silenced here
+    — this only stops the sweep's advisory check from claiming a failure it
+    never had. A persisted ``error`` still reports degraded (checked above,
+    before this note is ever reached).
+    """
+    deferred = data.get("deferred")
+    return f"; deferred: {deferred}" if deferred else ""
+
+
 async def _check_sweep_stats_advisory(key: str, stale_seconds: int, count_key: str, *, not_applicable: str | None = None) -> CheckResult:
     """Shared ADVISORY reader for a sweep's Redis liveness stats key.
 
@@ -1397,7 +1416,7 @@ async def _check_sweep_stats_advisory(key: str, stale_seconds: int, count_key: s
         )
     return CheckResult(
         status="ok",
-        detail=f"last_run_at={last_run_at}, {count_key}={count}",
+        detail=f"last_run_at={last_run_at}, {count_key}={count}{_sweep_deferred_note(data)}",
     )
 
 

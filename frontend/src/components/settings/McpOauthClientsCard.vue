@@ -106,15 +106,16 @@
   >
     <div class="space-y-4 py-2">
       <div>
-        <label for="settingsmcpview-oauth-name" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsMcpView.oauth_client_name') }}</label>
-        <input id="settingsmcpview-oauth-name"
-          v-model="oauthName"
-          type="text"
-          data-testid="settings-mcp-oauth-name"
-          class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          :placeholder="$t('views.SettingsMcpView.oauth_client_name_placeholder')"
-          @blur="oauthNameTouched = true"
-        />
+        <Field id="settingsmcpview-oauth-name" :label="$t('views.SettingsMcpView.oauth_client_name')">
+          <Input
+            v-model="oauthName"
+            type="text"
+            data-testid="settings-mcp-oauth-name"
+            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            :placeholder="$t('views.SettingsMcpView.oauth_client_name_placeholder')"
+            @blur="oauthNameTouched = true"
+          />
+        </Field>
         <p
           v-if="oauthNameTouched && !oauthName.trim()"
           class="mt-1 text-sm text-destructive"
@@ -124,16 +125,20 @@
       </div>
 
       <div>
-        <label for="settingsmcpview-oauth-redirects" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsMcpView.redirect_uris') }}</label>
-        <textarea id="settingsmcpview-oauth-redirects"
-          v-model="oauthRedirectUris"
-          rows="3"
-          data-testid="settings-mcp-oauth-redirect-uris"
-          class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          :placeholder="$t('views.SettingsMcpView.redirect_uri_placeholder')"
-          @blur="oauthRedirectTouched = true"
-        />
-        <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.SettingsMcpView.redirect_uris_hint') }}</p>
+        <Field
+          id="settingsmcpview-oauth-redirects"
+          :label="$t('views.SettingsMcpView.redirect_uris')"
+          :help="$t('views.SettingsMcpView.redirect_uris_hint')"
+        >
+          <Textarea
+            v-model="oauthRedirectUris"
+            rows="3"
+            data-testid="settings-mcp-oauth-redirect-uris"
+            class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            :placeholder="$t('views.SettingsMcpView.redirect_uri_placeholder')"
+            @blur="oauthRedirectTouched = true"
+          />
+        </Field>
         <p
           v-if="oauthRedirectTouched && oauthRedirectList.length === 0"
           class="mt-1 text-sm text-destructive"
@@ -152,17 +157,19 @@
         <legend class="mb-1 block text-sm font-medium">{{ $t('views.SettingsMcpView.scopes') }}</legend>
 
         <div v-if="scopesLoaded" class="mb-2">
-          <label for="settingsmcpview-oauth-scope-search" class="mb-1 block text-xs font-medium text-muted-foreground">
-            {{ $t('views.SettingsMcpView.scope_search_label') }}
-          </label>
-          <input
+          <Field
             id="settingsmcpview-oauth-scope-search"
-            v-model="scopeFilter"
-            type="search"
-            data-testid="settings-mcp-oauth-scope-filter"
-            :placeholder="$t('views.SettingsMcpView.scope_search_placeholder')"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
+            :label="$t('views.SettingsMcpView.scope_search_label')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
+              v-model="scopeFilter"
+              type="search"
+              data-testid="settings-mcp-oauth-scope-filter"
+              :placeholder="$t('views.SettingsMcpView.scope_search_placeholder')"
+              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </Field>
         </div>
 
         <p
@@ -263,9 +270,9 @@
       <div>
         <p class="mb-1 text-sm font-medium">{{ $t('views.SettingsMcpView.client_id') }}</p>
         <div class="relative">
-          <input :aria-label="$t('views.SettingsMcpView.client_id')"
+          <Input :aria-label="$t('views.SettingsMcpView.client_id')"
             type="text"
-            :value="createdOauthClientId"
+            :model-value="createdOauthClientId"
             readonly
             data-testid="settings-mcp-oauth-client-id"
             class="w-full rounded-lg border border-input bg-muted px-3 py-2 font-mono text-sm"
@@ -284,9 +291,9 @@
       <div>
         <p class="mb-1 text-sm font-medium">{{ $t('views.SettingsMcpView.client_secret') }}</p>
         <div class="relative">
-          <input :aria-label="$t('views.SettingsMcpView.client_secret')"
+          <Input :aria-label="$t('views.SettingsMcpView.client_secret')"
             :type="oauthSecretMasked ? 'password' : 'text'"
-            :value="createdOauthClientSecret"
+            :model-value="createdOauthClientSecret"
             readonly
             data-testid="settings-mcp-oauth-client-secret"
             class="w-full rounded-lg border border-input bg-muted px-3 py-2 font-mono text-sm"
@@ -338,6 +345,9 @@ import { formatApiError } from '../../lib/api/formatError'
 import type { components } from '../../lib/api/client'
 import Button from '../ui/Button.vue'
 import DataCard from '../ui/DataCard.vue'
+import Field from '../ui/Field.vue'
+import Input from '../ui/Input.vue'
+import Textarea from '../ui/Textarea.vue'
 import { DataTable, type Column, type DataTableRow } from '../ui/data-table'
 import Dialog from 'primevue/dialog'
 import EmptyState from '../shared/EmptyState.vue'

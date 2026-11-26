@@ -28,6 +28,18 @@ Postgres and proves the whole self-hosted disaster-recovery loop:
      the seeded rows are still there
  10. ``alembic upgrade heads`` again, assert it is back at head with the seeded
      rows still intact
+ 11. restore a PRE-UPGRADE snapshot over a FORWARD-migrated schema: step the
+     source back one revision and snapshot it there, so the dump's SCHEMA STATE
+     is one revision behind the head this binary declares (an upgrade snapshots
+     before it migrates), migrate it forward again, add the object shape a later
+     release's migration adds (a table whose FK targets the existing
+     ``organisations`` primary key) and change a seeded row, then restore the
+     snapshot with ``--verify-target-schema``. Assert the replay succeeds, the
+     database is back at the snapshot's revision, the seeded rows are back (the
+     post-snapshot change is undone), the forward-drift object is gone, and the
+     pre-restore safety dump was written. This is the documented compose
+     recovery (FAR-2667/FAR-2763): a snapshot that cannot be restored onto the
+     database it protects is not a recovery point.
 
 Every step failure exits non-zero: no step is reported as having run unless
 it ran, and the downgrade/upgrade steps assert the recorded revision actually
@@ -95,6 +107,12 @@ BACKEND_DIR = REPO_ROOT / "backend"
 
 _SEED_PIPELINE_NAME = "Backup Gate Pipeline"
 _CHECKPOINT_TABLES = ("checkpoints", "checkpoint_blobs", "checkpoint_writes")
+
+# FAR-2763: the forward-drift leg. The probe table and the post-snapshot marker
+# stand in for what a LATER release's migration adds after a snapshot is taken.
+_DRIFT_PROBE_TABLE = "pre_upgrade_drift_probe"
+_POST_SNAPSHOT_PIPELINE_NAME = "Written After The Snapshot"
+_SAFETY_DUMP_GLOB = "pre-restore-dump-*"
 
 # Every artefact ``farna-control backup`` must produce. All six are asserted after the
 # backup so a silently-missing export fails the gate instead of leaving an
@@ -596,10 +614,25 @@ def _ensure_settings_env() -> None:
 
 
 def _invoke_cli(argv: list[str]) -> None:
+    """Run the in-product CLI in-process, with ``backend/`` as the CWD.
+
+    The product resolves its migration tree through ``backend/alembic.ini``,
+    whose ``script_location`` is a CWD-relative path. Invoked from the
+    repository root (where this gate runs), that lookup fails and every archive
+    records ``schema_versions: ["unknown"]`` — which the restore's
+    ``--verify-target-schema`` correctly refuses, so step 11 could never reach
+    the replay. The packaged deployment runs the CLI from the backend directory,
+    and so must the gate.
+    """
     from click.testing import CliRunner
     from farna.cli.backup import cli
 
-    result = CliRunner().invoke(cli, argv, catch_exceptions=False)
+    previous_cwd = Path.cwd()
+    os.chdir(BACKEND_DIR)
+    try:
+        result = CliRunner().invoke(cli, argv, catch_exceptions=False)
+    finally:
+        os.chdir(previous_cwd)
     if result.exit_code != 0:
         _fail(f"`modulo {argv[0]}` exited {result.exit_code}\n{result.output}")
 
@@ -620,6 +653,75 @@ def _assert_backup_artefacts(backup_dir: Path) -> None:
     dump_size = (backup_dir / "database.sql").stat().st_size
     if dump_size <= 0:
         _fail(f"backup produced an empty database.sql in {backup_dir}")
+
+
+# -- Forward drift (FAR-2763) -------------------------------------------------
+
+
+def _add_forward_drift_object(database_url: str) -> None:
+    """Add the object shape a LATER release's migration would have added.
+
+    The migration chain is shipped and frozen, so the gate cannot invent an
+    N+k migration. The shape that broke the replay is precise, though: a table
+    whose foreign key targets the pre-existing ``organisations`` primary key,
+    created AFTER the snapshot. The dump's ``--clean`` preamble then cannot
+    drop ``organisations_pkey`` ("other objects depend on it") and the replay
+    aborts — the exact FAR-2763 failure, for any upgrade, not just one pair.
+    """
+    with psycopg.connect(database_url, autocommit=True) as conn:
+        conn.execute(
+            f"CREATE TABLE public.{_DRIFT_PROBE_TABLE} "
+            "(id uuid PRIMARY KEY, organisation_id uuid NOT NULL REFERENCES public.organisations(id))"
+        )
+    print(f"      added public.{_DRIFT_PROBE_TABLE} with an FK to organisations_pkey (forward drift)")
+
+
+def _mark_post_snapshot_row(database_url: str) -> None:
+    """Change a seeded row AFTER the snapshot: the restore must undo it."""
+    with psycopg.connect(database_url, autocommit=True) as conn:
+        updated = conn.execute(
+            "UPDATE pipelines SET name = %s",
+            (_POST_SNAPSHOT_PIPELINE_NAME,),
+        ).rowcount
+    if updated != 1:
+        _fail(f"the post-snapshot marker update touched {updated} rows, expected 1")
+    with psycopg.connect(database_url) as conn, conn.cursor() as cur:
+        cur.execute("SELECT name FROM pipelines")
+        names = [row[0] for row in cur.fetchall()]
+    if names != [_POST_SNAPSHOT_PIPELINE_NAME]:
+        _fail(f"the post-snapshot marker did not take effect (pipelines.name = {names!r})")
+    print(f"      renamed the seeded pipeline to {_POST_SNAPSHOT_PIPELINE_NAME!r} after the snapshot")
+
+
+def _assert_forward_drift_reverted(database_url: str) -> None:
+    """The drift object must be GONE — the restore returns the snapshot's state."""
+    with psycopg.connect(database_url) as conn, conn.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s)", (f"public.{_DRIFT_PROBE_TABLE}",))
+        probe = cur.fetchone()[0]
+    if probe is not None:
+        _fail(f"after forward-drift restore: public.{_DRIFT_PROBE_TABLE} survived the replay — the target did not return to the snapshot's state")
+    print(f"      forward-drift object public.{_DRIFT_PROBE_TABLE} is gone")
+
+
+def _restore_pre_upgrade_snapshot(database_url: str, drift_snapshot: Path) -> None:
+    """Replay the earlier-revision snapshot over the forward-migrated database."""
+    _invoke_cli(
+        [
+            "restore",
+            str(drift_snapshot),
+            "--db-url",
+            database_url,
+            "--yes",
+            # The compose recovery's own identity guard: the target is AHEAD of
+            # the snapshot, which must take the documented rollback branch
+            # rather than being refused.
+            "--verify-target-schema",
+            # Keep the pre-restore safety dump (it protects a restore that
+            # wipes a live database) but put it in the scratch directory.
+            "--safety-dump-dir",
+            str(drift_snapshot),
+        ]
+    )
 
 
 # -- Restore posture --------------------------------------------------------
@@ -809,38 +911,38 @@ def main(argv: list[str] | None = None) -> int:
     print(f"server: {database_url.split('@')[-1]}")
     print(f"head revision: {head}\n")
 
-    print(f"[1/10] Resetting scratch databases '{source_name}' / '{restored_name}'")
+    print(f"[1/11] Resetting scratch databases '{source_name}' / '{restored_name}'")
     _drop_database(maintenance, source_name)
     _drop_database(maintenance, restored_name)
     _create_database(maintenance, source_name)
     _create_database(maintenance, restored_name)
 
-    print("[2/10] Provisioning the runtime roles the migration chain requires")
+    print("[2/11] Provisioning the runtime roles the migration chain requires")
     _provision_roles(maintenance)
 
-    print(f"[3/10] alembic upgrade heads from scratch on '{source_name}'")
+    print(f"[3/11] alembic upgrade heads from scratch on '{source_name}'")
     _run_alembic(source_url, "upgrade", "heads")
     current = _current_revision(source_url)
     if current != head:
         _fail(f"upgrade heads left the database at {current}, expected {head}")
     print(f"      at head: {current}")
 
-    print("[4/10] Seeding representative data through the ORM")
+    print("[4/11] Seeding representative data through the ORM")
     expected = _seed_data(source_url)
     print(f"      pipeline {expected['pipeline']} / run {expected['run']}")
 
-    print("[5/10] Creating the LangGraph checkpoint tables (as app startup does)")
+    print("[5/11] Creating the LangGraph checkpoint tables (as app startup does)")
     _create_checkpoint_tables(source_url)
     _seed_checkpoint_rows(source_url, expected)
     _assert_checkpoint_rows(source_url, expected, "after seeding")
 
-    print(f"[6/10] Running 'farna-control backup' on '{source_name}'")
+    print(f"[6/11] Running 'farna-control backup' on '{source_name}'")
     _ensure_settings_env()
     backup_dir = Path(tempfile.mkdtemp(prefix="modulo-dr-gate-"))
     _invoke_cli(["backup", "--db-url", source_url, "--output-dir", str(backup_dir)])
     _assert_backup_artefacts(backup_dir)
 
-    print(f"[7/10] Running 'farna-control restore' into empty database '{restored_name}'")
+    print(f"[7/11] Running 'farna-control restore' into empty database '{restored_name}'")
     # Roles are cluster-scoped and absent from the dump, so break farna_control_app's
     # posture here: step 8's assertion must prove the posture path repairs it.
     _break_app_role_posture(database_url)
@@ -858,7 +960,7 @@ def main(argv: list[str] | None = None) -> int:
         ]
     )
 
-    print("[8/10] Asserting data integrity after restore")
+    print("[8/11] Asserting data integrity after restore")
     _assert_integrity(restored_url, expected, "after restore")
     _assert_checkpoint_rows(restored_url, expected, "after restore")
     # `farna-control restore` derives its app role from --db-url, which here is the
@@ -867,7 +969,7 @@ def main(argv: list[str] | None = None) -> int:
     _apply_runtime_role_posture(restored_url)
     _assert_restore_posture(restored_url)
 
-    print(f"[9/10] alembic downgrade -1 on the restored database (expect {parent})")
+    print(f"[9/11] alembic downgrade -1 on the restored database (expect {parent})")
     _run_alembic(restored_url, "downgrade", "-1")
     downgraded = _current_revision(restored_url)
     if downgraded == head:
@@ -878,7 +980,7 @@ def main(argv: list[str] | None = None) -> int:
     _assert_integrity(restored_url, expected, "after downgrade")
     _assert_checkpoint_rows(restored_url, expected, "after downgrade")
 
-    print("[10/10] alembic upgrade heads again, back to head")
+    print("[10/11] alembic upgrade heads again, back to head")
     _run_alembic(restored_url, "upgrade", "heads")
     upgraded = _current_revision(restored_url)
     if upgraded != head:
@@ -886,6 +988,41 @@ def main(argv: list[str] | None = None) -> int:
     print(f"      now at: {upgraded}")
     _assert_integrity(restored_url, expected, "after downgrade/upgrade")
     _assert_checkpoint_rows(restored_url, expected, "after downgrade/upgrade")
+
+    print(
+        "[11/11] Restoring a pre-upgrade snapshot over a FORWARD-migrated schema "
+        "(snapshot's schema state at N, target at N+1 plus an FK onto an existing PK — FAR-2763)"
+    )
+    drift_snapshot = Path(tempfile.mkdtemp(prefix="farna-dr-gate-upgrade-"))
+    try:
+        # An upgrade snapshots the database BEFORE it migrates, so the snapshot
+        # must genuinely be behind the schema the restore replays over: step
+        # back one revision, snapshot, then migrate forward again.
+        _run_alembic(source_url, "downgrade", "-1")
+        snapshot_revision = _current_revision(source_url)
+        if snapshot_revision != parent:
+            _fail(f"the pre-upgrade snapshot would be taken at {snapshot_revision}, expected {parent}")
+        _invoke_cli(["backup", "--db-url", source_url, "--output-dir", str(drift_snapshot)])
+        _assert_backup_artefacts(drift_snapshot)
+        _run_alembic(source_url, "upgrade", "heads")
+        if _current_revision(source_url) != head:
+            _fail("the source database did not return to head before the forward-drift restore")
+        _add_forward_drift_object(source_url)
+        _mark_post_snapshot_row(source_url)
+
+        _restore_pre_upgrade_snapshot(source_url, drift_snapshot)
+
+        restored_to = _current_revision(source_url)
+        if restored_to != parent:
+            _fail(f"the forward-drift restore left the database at {restored_to}, expected the snapshot's {parent}")
+        _assert_integrity(source_url, expected, "after forward-drift restore")
+        _assert_checkpoint_rows(source_url, expected, "after forward-drift restore")
+        _assert_forward_drift_reverted(source_url)
+        if not list(drift_snapshot.glob(_SAFETY_DUMP_GLOB)):
+            _fail("the forward-drift restore took no pre-restore safety dump of the database it overwrote")
+        print("      pre-restore safety dump written; the snapshot replayed over the later schema")
+    finally:
+        shutil.rmtree(drift_snapshot, ignore_errors=True)
 
     if not args.keep_databases:
         _drop_database(maintenance, source_name)
@@ -895,7 +1032,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(f"\nKept for inspection: databases {source_name}, {restored_name}; backup artefacts in {backup_dir}.")
 
-    print("\nGATE PASSED: pg_dump backup -> restore -> alembic downgrade -> upgrade round-trip verified.")
+    print("\nGATE PASSED: pg_dump backup -> restore -> alembic downgrade -> upgrade round-trip verified,")
+    print("plus the FAR-2763 pre-upgrade snapshot restored over a forward-migrated database.")
     return 0
 
 

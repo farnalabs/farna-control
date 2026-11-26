@@ -102,26 +102,24 @@
           </div>
           <form @submit.prevent="createBackend">
             <div class="space-y-4">
-              <div>
-                <label for="adminmodelbackendsview-field-14" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.name') }}</label>
-                <input id="adminmodelbackendsview-field-14"
+              <Field id="adminmodelbackendsview-field-14" :label="$t('views.AdminModelBackendsView.name')">
+                <Input
                   v-model="formData.name"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.name_placeholder')"
                   data-testid="admin-model-backends-name-input"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-13" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.display_name') }}</label>
-                <input id="adminmodelbackendsview-field-13"
+              </Field>
+              <Field id="adminmodelbackendsview-field-13" :label="$t('views.AdminModelBackendsView.display_name')">
+                <Input
                   v-model="formData.display_name"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.my_llm_backend')"
                   data-testid="admin-model-backends-display-name-input"
                 />
-              </div>
+              </Field>
               <div>
                 <label for="adminmodelbackendsview-field-12" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.provider') }}</label>
                 <Select
@@ -141,15 +139,19 @@
 </Select>
               </div>
               <div v-if="showBaseUrl">
-                <label for="adminmodelbackendsview-field-11" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.base_url') }}</label>
-                <input id="adminmodelbackendsview-field-11"
-                  v-model="formData.base_url"
-                  type="url"
-                  class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                  :placeholder="$t('views.AdminModelBackendsView.base_url_placeholder')"
-                  data-testid="admin-model-backends-base-url-input"
-                />
-                <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminModelBackendsView.base_url_help') }}</p>
+                <Field
+                  id="adminmodelbackendsview-field-11"
+                  :label="$t('views.AdminModelBackendsView.base_url')"
+                  :help="$t('views.AdminModelBackendsView.base_url_help')"
+                >
+                  <Input
+                    v-model="formData.base_url"
+                    type="url"
+                    class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    :placeholder="$t('views.AdminModelBackendsView.base_url_placeholder')"
+                    data-testid="admin-model-backends-base-url-input"
+                  />
+                </Field>
                 <label class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     v-model="formData.allow_insecure_http"
@@ -161,36 +163,33 @@
                 </label>
                 <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminModelBackendsView.allow_insecure_http_help') }}</p>
               </div>
-              <div>
-                <label for="adminmodelbackendsview-field-10" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.model_id') }}</label>
-                <input id="adminmodelbackendsview-field-10"
+              <Field id="adminmodelbackendsview-field-10" :label="$t('views.AdminModelBackendsView.model_id')">
+                <Input
                   v-model="formData.model_id"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.model_id_placeholder')"
                   data-testid="admin-model-backends-model-id-input"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-9" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.api_key') }}</label>
-                <input id="adminmodelbackendsview-field-9"
+              </Field>
+              <Field id="adminmodelbackendsview-field-9" :label="$t('views.AdminModelBackendsView.api_key')">
+                <Input
                   v-model="formData.api_key"
                   type="password"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.api_key_placeholder')"
                   data-testid="admin-model-backends-api-key-input"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-8" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.default_params_json') }}</label>
-                <textarea id="adminmodelbackendsview-field-8"
+              </Field>
+              <Field id="adminmodelbackendsview-field-8" :label="$t('views.AdminModelBackendsView.default_params_json')">
+                <Textarea
                   v-model="formData.default_params"
                   rows="4"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.default_params_placeholder')"
                   data-testid="admin-model-backends-params-input"
-                ></textarea>
-              </div>
+                />
+              </Field>
               <div>
                 <label for="adminmodelbackendsview-field-7" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.visibility') }}</label>
                 <Select
@@ -410,43 +409,44 @@
         >
           <form @submit.prevent="updateBackend">
             <div class="space-y-4">
-              <div>
-                <label for="adminmodelbackendsview-field-6" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.name') }}</label>
-                <input id="adminmodelbackendsview-field-6"
+              <Field id="adminmodelbackendsview-field-6" :label="$t('views.AdminModelBackendsView.name')">
+                <Input
                   v-model="formData.name"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   data-testid="admin-model-backends-edit-name"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-5" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.display_name') }}</label>
-                <input id="adminmodelbackendsview-field-5"
+              </Field>
+              <Field id="adminmodelbackendsview-field-5" :label="$t('views.AdminModelBackendsView.display_name')">
+                <Input
                   v-model="formData.display_name"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   data-testid="admin-model-backends-edit-display-name"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-4" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.model_id') }}</label>
-                <input id="adminmodelbackendsview-field-4"
+              </Field>
+              <Field id="adminmodelbackendsview-field-4" :label="$t('views.AdminModelBackendsView.model_id')">
+                <Input
                   v-model="formData.model_id"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   data-testid="admin-model-backends-edit-model-id"
                 />
-              </div>
+              </Field>
               <div v-if="showBaseUrl">
-                <label for="adminmodelbackendsview-field-15" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.base_url') }}</label>
-                <input id="adminmodelbackendsview-field-15"
-                  v-model="formData.base_url"
-                  type="url"
-                  class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                  :placeholder="$t('views.AdminModelBackendsView.base_url_placeholder')"
-                  data-testid="admin-model-backends-edit-base-url"
-                />
-                <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminModelBackendsView.base_url_help') }}</p>
+                <Field
+                  id="adminmodelbackendsview-field-15"
+                  :label="$t('views.AdminModelBackendsView.base_url')"
+                  :help="$t('views.AdminModelBackendsView.base_url_help')"
+                >
+                  <Input
+                    v-model="formData.base_url"
+                    type="url"
+                    class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    :placeholder="$t('views.AdminModelBackendsView.base_url_placeholder')"
+                    data-testid="admin-model-backends-edit-base-url"
+                  />
+                </Field>
                 <label class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     v-model="formData.allow_insecure_http"
@@ -458,25 +458,23 @@
                 </label>
                 <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminModelBackendsView.allow_insecure_http_help') }}</p>
               </div>
-              <div>
-                <label for="adminmodelbackendsview-field-3" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.api_key_leave_blank_to_keep_existing') }}</label>
-                <input id="adminmodelbackendsview-field-3"
+              <Field id="adminmodelbackendsview-field-3" :label="$t('views.AdminModelBackendsView.api_key_leave_blank_to_keep_existing')">
+                <Input
                   v-model="formData.api_key"
                   type="password"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.enter_new_key_to_replace')"
                   data-testid="admin-model-backends-edit-api-key"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.default_params_json') }}</label>
-                <textarea id="adminmodelbackendsview-field-2"
+              </Field>
+              <Field id="adminmodelbackendsview-field-2" :label="$t('views.AdminModelBackendsView.default_params_json')">
+                <Textarea
                   v-model="formData.default_params"
                   rows="4"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm"
                   data-testid="admin-model-backends-edit-params"
-                ></textarea>
-              </div>
+                />
+              </Field>
               <div>
                 <label for="adminmodelbackendsview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.visibility') }}</label>
                 <Select
@@ -547,6 +545,9 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { useProductAnalytics } from '../composables/useProductAnalytics'
 import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'

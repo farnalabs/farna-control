@@ -15,7 +15,7 @@ bdd:
   - backend/tests/bdd/features/system_admin/system_admin_users.feature
 depends-on:
   - feat-teams
-status: partial
+status: covered
 ---
 
 # System Orgs
@@ -56,7 +56,7 @@ manage org-level licenses.
 - [x] Org-level license management: GET/PUT/DELETE on
       `/api/v1/admin/orgs/{org_id}/license` with validation via
       `parse_and_verify` (`admin_orgs.py`)
-      <!-- behaviour: system-orgs-06 | tests: none -->
+      <!-- behaviour: system-orgs-06 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature -->
 - [x] GET `/api/v1/admin/orgs/{org_id}/license` resolves the effective org
       license - the org's own `settings_json.license_key` when it verifies,
       otherwise the system license; `has_license=false` only when neither
@@ -83,6 +83,13 @@ manage org-level licenses.
       <!-- behaviour: system-orgs-11 | tests: backend/tests/bdd/features/system_admin/system_admin_orgs.feature, backend/tests/bdd/features/system_admin/system_admin_users.feature -->
 
 ## QA History
+
+- 2026-11-25: **Improve Architecture product-map walk** - bound
+  `system-orgs-06` (org-level license GET/PUT/DELETE with `parse_and_verify`
+  validation) to the executing `system_admin_orgs.feature` scenarios that
+  already prove the same surface for `system-orgs-07`/`-08`/`-09`. Every ticked
+  behaviour now resolves, so the derived status moves from `partial` to
+  `covered`. No product code changed.
 - 2026-10-06: **Improve Architecture product-map walk** - tracked the FAR-1517
   durable org-deletion audit record: `DELETE /api/v1/admin/orgs/{org_id}` now
   writes `org_deletion_completed` to the org-independent `system_audit_events`

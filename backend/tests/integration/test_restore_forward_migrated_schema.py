@@ -171,19 +171,24 @@ def _write_client_shims(shims_dir: Path, docker: str) -> None:
     shims_dir.mkdir(parents=True, exist_ok=True)
     psql = """#!/usr/bin/env bash
 set -euo pipefail
-args=(); file=""
+args=(); files=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    -f) file="$2"; shift 2 ;;
+    -f) files+=("$2"); shift 2 ;;
     postgres://*|postgresql://*) shift ;;
     *) args+=("$1"); shift ;;
   esac
 done
-if [ -z "$file" ]; then echo "psql shim: no -f" >&2; exit 2; fi
-in_container="/tmp/farna-test-$$-$(basename "$file")"
-"$FARNA_TEST_DOCKER" cp "$file" "$FARNA_TEST_PG_CONTAINER:$in_container" >/dev/null
+if [ ${#files[@]} -eq 0 ]; then echo "psql shim: no -f" >&2; exit 2; fi
+fargs=(); i=0
+for f in "${files[@]}"; do
+  i=$((i+1))
+  in_container="/tmp/farna-test-$$-$i-$(basename "$f")"
+  "$FARNA_TEST_DOCKER" cp "$f" "$FARNA_TEST_PG_CONTAINER:$in_container" >/dev/null
+  fargs+=(-f "$in_container")
+done
 exec "$FARNA_TEST_DOCKER" exec -e PGPASSWORD "$FARNA_TEST_PG_CONTAINER" psql "${args[@]}" \
-  -h 127.0.0.1 -p 5432 -U "$FARNA_TEST_PG_USER" -d "$FARNA_TEST_PG_DB" -f "$in_container"
+  -h 127.0.0.1 -p 5432 -U "$FARNA_TEST_PG_USER" -d "$FARNA_TEST_PG_DB" "${fargs[@]}"
 """
     pg_dump = """#!/usr/bin/env bash
 set -euo pipefail

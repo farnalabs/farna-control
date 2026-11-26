@@ -56,7 +56,7 @@
 import FilterBar from '../shared/FilterBar.vue'
 import EmptyState from '../shared/EmptyState.vue'
 import SkeletonBlock from '../shared/SkeletonBlock.vue'
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 import type { components } from '../../lib/api/client'
 
 export type SchemaItem = components['schemas']['farna__api__routes__schemas__SchemaResponse']

@@ -314,16 +314,18 @@ arbitrary file and print its digest. psql runs with `-X`, so an operator's
 zero.
 
 `--verify-target-schema` is the compose path's stand-in for the data-dir
-instance identity: it proceeds when the target records the snapshot's
-revisions, and also when the target has MIGRATED PAST them (the rollback the
-snapshot exists for), naming the migrations being rolled back. A target that is
-unrelated — a different revision train, or not a bootstrapped database — is
-refused; `--replace-cluster` overrides it. The disk pre-flight measures the
-DATABASE's filesystem — pass `--target-fs` (or set `DB_CAPACITY_PATH`, which
-the compose deployment does) when the archive is on a different volume from
-the database. The path is only `statvfs`'d, so it does not need to be readable;
-the compose database volume is not, and the pre-flight degrades with a loud
-warning when it cannot measure.
+instance identity: it refuses a target whose recorded revision is not in the
+archive's lineage (a different release train, or not a Farna Control database
+at all). A target the newer release has migrated PAST the archive is accepted,
+because that is the rollback the archive exists for: the restore returns the
+database to the archived revision with the archived data, naming the migrations
+being rolled back. `--replace-cluster` overrides the refusal.
+The disk pre-flight measures the DATABASE's filesystem — pass `--target-fs` (or
+set `DB_CAPACITY_PATH`, which the compose deployment does) when the archive is
+on a different volume from the database. The value only has to be a path on
+that volume: it is only `statvfs`'d, so it does not need to be readable — a
+permission the operator does not have is fine, and the pre-flight degrades with
+a loud warning when it cannot measure.
 
 Before the dump is applied, the replay recreates the target's `public` schema
 **in the same `psql` transaction as the dump**. pg_dump's `--clean` preamble
@@ -481,7 +483,16 @@ throwaway Postgres 16 it:
    parent - a downgrade that was skipped fails the gate rather than passing
    silently;
 8. runs `alembic upgrade heads` and asserts the revision is back at head, with
-   the seeded rows still intact.
+   the seeded rows still intact;
+9. restores a PRE-UPGRADE snapshot over a forward-migrated database - the
+   compose recovery. The source is stepped back one revision and snapshotted
+   there, migrated forward again, then given the object a later release's
+   migration would add (a table whose foreign key targets the existing
+   `organisations` primary key) and a changed row; the restore must replay with
+   `--verify-target-schema`, land back on the snapshot's revision, restore the
+   seeded rows, remove the drift object and write its pre-restore safety dump.
+   A snapshot that cannot be restored onto the database it protects is not a
+   recovery point (FAR-2763).
 
 A `downgrade()` that cannot run, a dump that cannot be restored, or data lost
 in either direction fails the job.

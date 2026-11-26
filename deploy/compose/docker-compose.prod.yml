@@ -19,6 +19,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+      # Same cold-first-start grace as the root compose's `db` (see the long
+      # rationale there): a first-run initdb plus the entrypoint's setup takes
+      # longer than the 25s retry budget, and `farna-control` below waits on
+      # this condition, so without the grace a clean install fails at `up`.
+      start_period: 120s
     restart: unless-stopped
 
   redis:

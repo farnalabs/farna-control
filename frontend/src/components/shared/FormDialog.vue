@@ -10,14 +10,14 @@
     <template #footer>
       <div class="flex gap-2 justify-end">
         <Button
-          severity="secondary"
-          outlined
+          variant="secondary"
           :disabled="cancelDisabled"
           :data-testid="cancelTestId"
           @click="modelValue = false"
         >{{ $t('common.cancel') }}</Button>
         <Button
-          :severity="confirmSeverity"
+          :variant="confirmVariant"
+          :outlined="confirmOutlined"
           :data-testid="confirmTestId"
           :disabled="confirmDisabled || loading"
           :loading="loading"
@@ -31,9 +31,9 @@
 </template>
 
 <script setup lang="ts">
-import { useId } from 'vue'
+import { computed, useId } from 'vue'
 import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 
 // PrimeVue names a dialog via `aria-labelledby="<id>_header"` and renders the
 // matching id on its default title span. Because this component replaces the
@@ -51,12 +51,29 @@ const props = withDefaults(defineProps<{
   loading?: boolean
   /** Disable Cancel while an in-flight request must not be dismissed. */
   cancelDisabled?: boolean
-  confirmSeverity?: 'primary' | 'secondary' | 'success' | 'info' | 'warn' | 'help' | 'danger' | 'contrast'
+  /*
+   * The confirm action's tone. Narrowed to the tones the shared Button
+   * primitive can express without changing rendering, so an unsupported
+   * PrimeVue severity cannot silently fall back to primary. Every call site
+   * passes `danger` or nothing.
+   */
+  confirmSeverity?: 'primary' | 'secondary' | 'danger'
   cancelTestId?: string
   confirmTestId?: string
   /** Dialog width — the historical default is 28rem. */
   width?: string
 }>(), { width: '28rem' })
+
+const confirmVariant = computed<'primary' | 'secondary' | 'danger'>(() => {
+  if (props.confirmSeverity === 'danger') return 'danger'
+  if (props.confirmSeverity === 'secondary') return 'secondary'
+  return 'primary'
+})
+
+// The primitive's `secondary` variant is outlined; the historical
+// `confirmSeverity="secondary"` rendered solid, so keep it solid with the
+// primitive's documented outlined override.
+const confirmOutlined = computed<boolean | null>(() => (props.confirmSeverity === 'secondary' ? false : null))
 
 const modelValue = defineModel<boolean>('open')
 const emit = defineEmits<{

@@ -213,4 +213,55 @@ describe('FieldMappingPair', () => {
       expect(wrapper.text()).toContain('Target field')
     }
   })
+
+  it('adds a mapping chosen in the picker', async () => {
+    const wrapper = mount(FieldMappingPair, {
+      props: {
+        sourceFields: mockSourceFields,
+        targetFields: mockTargetFields,
+        mappings: {},
+        direction: 'input',
+      },
+    })
+    const addMappingBtn = wrapper.findAll('button').find(b => b.text().includes('Add mapping'))
+    await addMappingBtn!.trigger('click')
+    await nextTick()
+
+    const selects = wrapper.findAllComponents({ name: 'Select' })
+    selects[0].vm.$emit('update:modelValue', 'body')
+    selects[1].vm.$emit('update:modelValue', 'content')
+    await nextTick()
+
+    const addBtn = wrapper.findAll('button').find(b => b.text().trim() === 'Add')
+    expect(addBtn).toBeTruthy()
+    await addBtn!.trigger('click')
+    await nextTick()
+
+    const emitted = wrapper.emitted('update:mappings')
+    expect(emitted).toBeTruthy()
+    expect((emitted![0][0] as Record<string, string>).body).toBe('content')
+  })
+
+  it('closes the picker when Cancel is clicked', async () => {
+    const wrapper = mount(FieldMappingPair, {
+      props: {
+        sourceFields: mockSourceFields,
+        targetFields: mockTargetFields,
+        mappings: {},
+        direction: 'input',
+      },
+    })
+    const addMappingBtn = wrapper.findAll('button').find(b => b.text().includes('Add mapping'))
+    await addMappingBtn!.trigger('click')
+    await nextTick()
+    expect(wrapper.text()).toContain('Source field')
+
+    const cancelBtn = wrapper.findAll('button').find(b => b.text().trim() === 'Cancel')
+    expect(cancelBtn).toBeTruthy()
+    await cancelBtn!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).not.toContain('Source field')
+    expect(wrapper.text()).toContain('Add mapping')
+  })
 })

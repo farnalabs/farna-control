@@ -36,7 +36,8 @@
             <Button
               type="button"
               data-testid="variant-batch-back"
-              variant="outlined"
+              variant="primary"
+              :outlined="true"
               class="border border-input bg-background text-sm font-medium hover:bg-muted/50"
               @click="router.push('/variants/compare')"
             >
@@ -251,7 +252,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
@@ -329,7 +330,7 @@ function statusBadgeClass(run: VariantBatchRun): string {
     return 'badge badge-status-destructive capitalize'
   }
   if (run.run_status === 'cancelled' || run.run_status === 'eval_failed') return 'badge badge-status-warning capitalize'
-  if (nonTerminalStatuses.has(run.run_status)) return 'badge badge-status-info capitalize'
+  if (nonTerminalStatuses.has(run.run_status)) return 'badge badge-status-primary capitalize'
   return 'badge badge-status-muted capitalize'
 }
 
@@ -343,7 +344,7 @@ function batchStatusBadgeClass(status: string): string {
   if (status === 'complete') return 'badge badge-status-success capitalize'
   if (status === 'failed') return 'badge badge-status-destructive capitalize'
   if (status === 'partial' || status === 'cancelled') return 'badge badge-status-warning capitalize'
-  if (status === 'running' || status === 'pending') return 'badge badge-status-info capitalize'
+  if (status === 'running' || status === 'pending') return 'badge badge-status-primary capitalize'
   return 'badge badge-status-muted capitalize'
 }
 
