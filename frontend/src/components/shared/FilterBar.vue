@@ -1,21 +1,14 @@
 <template>
   <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
     <div v-if="search" data-testid="filter-bar-search-wrapper" class="relative w-full sm:w-auto">
-      <svg
-        class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none"
-        xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        aria-hidden="true" focusable="false"
-      >
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.3-4.3" />
-      </svg>
-      <input :aria-label="search.placeholder || $t('common.search')"
-        data-testid="filter-bar-search"
-        :value="searchValue"
-        type="text"
+      <SearchInput
+        :model-value="searchValue"
+        :aria-label="search.placeholder || $t('common.search')"
         :placeholder="search.placeholder || $t('common.search')"
-        class="w-full rounded-lg border border-input bg-background py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring sm:w-auto"
-        @input="$emit('update:search', ($event.target as HTMLInputElement).value)"
+        input-class="w-full sm:w-auto"
+        class="w-full"
+        data-testid="filter-bar-search"
+        @update:model-value="$emit('update:search', $event)"
       />
     </div>
     <AppSelect
@@ -54,6 +47,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSelect from './AppSelect.vue'
+import SearchInput from '../ui/SearchInput.vue'
 
 const props = defineProps<{
   search?: { placeholder?: string }

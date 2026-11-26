@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import SchemaFieldEditor from '../components/schema/SchemaFieldEditor.vue'
+import Input from '../components/ui/Input.vue'
 import SchemaEditorForm from '../components/schema/SchemaEditorForm.vue'
 import SchemaJsonPreview from '../components/schema/SchemaJsonPreview.vue'
 import SchemaVersionHistory from '../components/schema/SchemaVersionHistory.vue'
@@ -100,6 +101,33 @@ describe('SchemaFieldEditor', () => {
     const emitted = wrapper.emitted('update:field')
     expect(emitted).toBeTruthy()
     expect((emitted![0] as unknown[])[0]).toMatchObject({ _key: 1, name: 'full_name' })
+  })
+
+  it('normalises a null text-input event to an empty string', async () => {
+    const wrapper = mount(SchemaFieldEditor, {
+      props: { field: baseField, index: 0, isFirst: true, isLast: false },
+      global: {
+        stubs: {
+          Select: { template: '<div><slot /></div>' },
+          SelectTrigger: { template: '<button type="button"><slot /></button>' },
+          SelectContent: { template: '<div><slot /></div>' },
+          SelectItem: { template: '<div><slot /></div>' },
+          SelectValue: { template: '<span><slot /></span>' },
+        },
+      },
+    })
+
+    const inputByTestId = (id: string) =>
+      wrapper.findAllComponents(Input).find((c) => c.attributes('data-testid') === id)!
+
+    await inputByTestId('schema-editor-field-name').vm.$emit('update:model-value', null)
+    await inputByTestId('schema-editor-field-description').vm.$emit('update:model-value', null)
+    await inputByTestId('schema-editor-field-default').vm.$emit('update:model-value', null)
+
+    const emitted = wrapper.emitted('update:field') as Array<[SchemaField]>
+    expect(emitted[0][0]).toMatchObject({ name: '' })
+    expect(emitted[1][0]).toMatchObject({ description: '' })
+    expect(emitted[2][0]).toMatchObject({ defaultValue: '' })
   })
 
   it('updates every editable field and honors disabled movement controls', async () => {

@@ -89,7 +89,7 @@ import { api } from '../lib/api/client'
 import { decodeJwtPayload } from '../lib/jwt'
 import { usePlanStore } from '../stores/planStore'
 import SettingsMcpView from '../views/SettingsMcpView.vue'
-import Badge from 'primevue/badge'
+import Badge from '../components/ui/Badge.vue'
 import McpOauthClientsCard from '../components/settings/McpOauthClientsCard.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
@@ -446,15 +446,15 @@ describe('SettingsMcpView', () => {
     expect(statusBadges(wrapper)).toEqual(['Revoked'])
   })
 
-  it('gives each key status a distinct badge severity (FAR-1296)', async () => {
+  it('gives each key status a distinct badge variant (FAR-1296)', async () => {
     const wrapper = mountView(mockMcpConfig, threeStateKeys, mockNoOAuthClients)
     await nextTick()
     await nextTick()
     await nextTick()
-    const severities = wrapper
+    const variants = wrapper
       .findAll('[data-testid="settings-mcp-key-status"]')
-      .map((c) => c.findComponent(Badge).props('severity'))
-    expect(severities).toEqual(['success', 'warn', 'secondary'])
+      .map((c) => c.findComponent(Badge).props('variant'))
+    expect(variants).toEqual(['success', 'warning', 'neutral'])
   })
 
   it('opens create key dialog with name and role fields', async () => {

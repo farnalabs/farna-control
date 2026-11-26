@@ -74,19 +74,20 @@
               {{ isRemoved(element.id) ? $t('views.DeterminationView.review_derived_restore') : $t('views.DeterminationView.review_derived_remove') }}
             </button>
           </div>
-          <div class="space-y-1">
-            <label class="block text-xs text-muted-foreground" :for="statementId(element.id)">
-              {{ $t('views.DeterminationView.review_derived_statement') }}
-            </label>
-            <input
-              :id="statementId(element.id)"
+          <Field
+            :id="statementId(element.id)"
+            :label="$t('views.DeterminationView.review_derived_statement')"
+            label-class="block text-xs text-muted-foreground"
+            class="space-y-1"
+          >
+            <Input
               v-model="drafts[element.id].statement"
               type="text"
               class="w-full rounded border px-2 py-1 text-sm disabled:opacity-60"
               :disabled="isRemoved(element.id)"
               :data-testid="`determination-review-statement-${element.id}`"
             />
-          </div>
+          </Field>
           <div class="space-y-1">
             <label class="block text-xs text-muted-foreground" :for="confidenceId(element.id)">
               {{ $t('views.DeterminationView.review_derived_confidence') }}
@@ -158,17 +159,20 @@
     </section>
 
     <section class="space-y-2">
-      <label class="block text-sm font-medium" :for="reasonId">
-        {{ $t('views.DeterminationView.review_reason') }}
-      </label>
-      <textarea
+      <Field
         :id="reasonId"
-        v-model="reason"
-        rows="3"
-        class="w-full rounded border px-3 py-2 text-sm"
-        data-testid="determination-review-reason"
-      />
-      <p class="text-xs text-muted-foreground">{{ $t('views.DeterminationView.review_reason_hint') }}</p>
+        :label="$t('views.DeterminationView.review_reason')"
+        label-class="block text-sm font-medium"
+        :help="$t('views.DeterminationView.review_reason_hint')"
+        help-class="text-xs text-muted-foreground"
+      >
+        <Textarea
+          v-model="reason"
+          rows="3"
+          class="w-full rounded border px-3 py-2 text-sm"
+          data-testid="determination-review-reason"
+        />
+      </Field>
       <p
         v-if="showReasonRequired"
         class="text-sm text-destructive-text"
@@ -219,6 +223,9 @@ import AppSelect from '../shared/AppSelect.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
 import DataCard from '../ui/DataCard.vue'
 import Checkbox from '../ui/Checkbox.vue'
+import Field from '../ui/Field.vue'
+import Input from '../ui/Input.vue'
+import Textarea from '../ui/Textarea.vue'
 import { formatDateShortWithTime } from '../../lib/formatDate'
 import { isUnsettledConfidence } from './confidencePresentation'
 import type {

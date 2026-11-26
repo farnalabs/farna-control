@@ -27,7 +27,7 @@ Only `feature`, `fix`, and `breaking` produce a changelog entry. -->
      docs/product-map/README.md
 
        Proves: backend/tests/unit/api/test_health.py::test_liveness_ok
-       Proves: frontend/src/__tests__/ActionRow.spec.ts::stacks below sm
+       Proves: frontend/src/__tests__/Badge.spec.ts::defaults to the neutral variant
 -->
 
 Proves: <!-- fill in above, one test per line; an empty line is ignored, so

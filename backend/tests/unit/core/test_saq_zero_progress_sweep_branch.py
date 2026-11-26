@@ -15,6 +15,7 @@ dispatcher_reconcile the Error Dashboard group is still fed.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -482,3 +483,110 @@ class AsyncMockNone:
 
     async def __call__(self, *args: object, **kwargs: object) -> None:
         return None
+
+
+class TestPreCheckpointSchemaTick:
+    """FAR-2782 — a tick that runs before the backend's checkpointer DDL.
+
+    The SAQ zero-progress arm is the only statement in this sweep that
+    references the LangGraph ``checkpoints`` table, which is created by the
+    backend's boot-time saver DDL (``api.main._init_checkpointer``) and never by
+    Alembic. ``saq-system`` starts as soon as ``db`` is healthy and does not run
+    the entrypoint, so on a fresh install its first ticks hit a fully-migrated
+    database with no ``checkpoints`` table. PostgreSQL resolves every relation
+    in a statement at parse/plan time, so the arm's ``UPDATE`` raised
+    ``relation "checkpoints" does not exist`` even though it would have matched
+    no rows — and the wrapper persisted that as the sweep's reported failure.
+    These tests pin the DEFERRAL: that one arm is skipped, everything else still
+    runs, and the tick reports a deferral instead of an error.
+    """
+
+    @staticmethod
+    def _settings() -> MagicMock:
+        settings = MagicMock()
+        settings.saq_never_dispatched_window = 300
+        settings.saq_worker_lost_window = 600
+        settings.saq_zero_progress_max_age_minutes = 200
+        settings.dispatcher_reconcile_terminalize_max_per_tick = 25
+        return settings
+
+    async def test_absent_checkpoint_schema_skips_only_the_zero_progress_arm(self) -> None:
+        org_id = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
+        conn = _CapturingConn(org_rows=[(org_id,)])
+        with patch.object(pe, "get_settings", return_value=self._settings()):
+            result = await pe.stale_run_recovery_sweep(
+                _CapturingEngine(conn),  # type: ignore[arg-type]
+                checkpoint_schema_present=False,
+            )
+
+        # The arm's UPDATE — the one statement that cannot be planned without
+        # the checkpoints relation — never reaches the database at all.
+        assert [s for s in conn.statements if "dispatcher='saq'" in s] == []
+        # ... while the arms that depend only on the Alembic schema still ran.
+        assert [s for s in conn.statements if "error_code = 'never_dispatched'" in s]
+        # A deferral, never an error: the tick did not fail.
+        assert "error" not in result
+        assert result["zero_progress_deferred"] == "checkpointer_schema_missing"
+        assert result["saq_zero_progress_swept"] == 0
+
+    async def test_present_checkpoint_schema_runs_the_arm_and_reports_no_deferral(self) -> None:
+        """The default keeps today's behaviour exactly: the arm runs and no
+        deferral marker is emitted (so the deferral can never become a silent
+        way to stop the arm on a healthy install)."""
+        org_id = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
+        conn = _CapturingConn(org_rows=[(org_id,)])
+        with patch.object(pe, "get_settings", return_value=self._settings()):
+            result = await pe.stale_run_recovery_sweep(_CapturingEngine(conn))  # type: ignore[arg-type]
+
+        assert len([s for s in conn.statements if "dispatcher='saq'" in s]) == 1
+        assert result["zero_progress_deferred"] is None
+
+    def test_probe_asks_the_catalog_instead_of_referencing_the_relation(self) -> None:
+        """The probe must not name ``checkpoints`` as a FROM/UPDATE target —
+        that is exactly what raises. ``to_regclass`` is a catalog lookup that
+        returns NULL for a missing relation and resolves through the session
+        search_path like the arm's own unqualified reference."""
+        assert str(pe._CHECKPOINT_SCHEMA_PROBE_SQL) == "SELECT to_regclass('checkpoints') IS NOT NULL"
+
+    async def test_probe_reports_an_absent_relation(self) -> None:
+        class _Conn:
+            async def __aenter__(self) -> Self:
+                return self
+
+            async def __aexit__(self, *args: object) -> bool:
+                return False
+
+            async def scalar(self, _stmt: object) -> bool:
+                return False
+
+        class _Engine:
+            def connect(self) -> _Conn:
+                return _Conn()
+
+        assert await pe.langgraph_checkpoint_schema_present(_Engine()) is False  # type: ignore[arg-type]
+
+    async def test_probe_fails_open_to_running_the_arm(self) -> None:
+        """An unevaluable probe must leave the sweep's behaviour exactly as it
+        was — run the arm and report whatever the real statements do — so a
+        probe bug can never suppress a genuine failure."""
+
+        class _ExplodingEngine:
+            def connect(self) -> object:
+                raise RuntimeError("connection pool exhausted")
+
+        assert await pe.langgraph_checkpoint_schema_present(_ExplodingEngine()) is True  # type: ignore[arg-type]
+
+    async def test_probe_lets_cancellation_propagate(self) -> None:
+        """Cancellation is never swallowed by the fail-open path: a cancelled
+        tick must stay cancelled so the worker can stop, not be reported as a
+        healthy sweep."""
+
+        class _CancellingEngine:
+            def connect(self) -> object:
+                raise asyncio.CancelledError
+
+        try:
+            await pe.langgraph_checkpoint_schema_present(_CancellingEngine())  # type: ignore[arg-type]
+        except asyncio.CancelledError:
+            return
+        raise AssertionError("CancelledError must propagate, not be caught by the fail-open path")

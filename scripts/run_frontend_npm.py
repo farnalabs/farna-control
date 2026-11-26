@@ -110,9 +110,24 @@ def _load_package_scripts() -> dict:
         return json.load(fh).get("scripts", {})
 
 
+def _local_eslint_bin() -> Path:
+    """Return the path to the workspace-local eslint binary."""
+    return FRONTEND_DIR / "node_modules" / ".bin" / "eslint"
+
+
+def _npx_cache_dir() -> Path:
+    """Return the shared npx cache directory the fallback resolves through.
+
+    ``npx`` installs a package into ``~/.npm/_npx/<hash>`` shared by every
+    checkout on the machine, so a broken entry there fails the hook for every
+    worktree that lacks ``frontend/node_modules``.
+    """
+    return Path.home() / ".npm" / "_npx"
+
+
 def _eslint_command() -> list[str]:
     """Return the command prefix used to run eslint."""
-    eslint_bin = FRONTEND_DIR / "node_modules" / ".bin" / "eslint"
+    eslint_bin = _local_eslint_bin()
     if not eslint_bin.is_file():
         # Fallback: use npx (slower but always available).  On Windows the
         # npx shim is a .cmd that CreateProcess cannot launch directly, so
@@ -123,6 +138,26 @@ def _eslint_command() -> list[str]:
     if sys.platform == "win32":
         return [_CMD_EXE, "/c", str(eslint_bin)]
     return [str(eslint_bin)]
+
+
+def _warn_npx_fallback() -> None:
+    """Warn that the hook is about to use the shared, non-reproducible npx cache."""
+    print(
+        f"{Path(__file__).name}: warning: frontend/node_modules/.bin/eslint is "
+        "missing - falling back to `npx eslint`, which resolves through a "
+        "shared, machine-wide npx cache that is not reproducible and may be "
+        "broken. Run `pnpm install --frozen-lockfile` in frontend/ so the "
+        "local binary is used instead.",
+        file=sys.stderr,
+    )
+
+
+def _report_npx_failure(returncode: int) -> None:
+    """Print an actionable error after a failed npx fallback invocation."""
+    print(
+        f"{Path(__file__).name}: error: `npx eslint` failed (exit code {returncode}). The shared npx cache at {_npx_cache_dir()} may be incomplete. Run `pnpm install --frozen-lockfile` in frontend/ to use the local eslint binary instead of the npx fallback.",
+        file=sys.stderr,
+    )
 
 
 def _run_eslint_on_staged(extra_args: list[str]) -> int:
@@ -142,7 +177,12 @@ def _run_eslint_on_staged(extra_args: list[str]) -> int:
         )
         return 0
     cmd = [*_eslint_command(), "--cache", "--cache-location", ".cache/eslint", *staged]
+    using_npx = not _local_eslint_bin().is_file()
+    if using_npx:
+        _warn_npx_fallback()
     result = subprocess.run(cmd, cwd=FRONTEND_DIR, check=False)
+    if using_npx and result.returncode != 0:
+        _report_npx_failure(result.returncode)
     return result.returncode
 
 

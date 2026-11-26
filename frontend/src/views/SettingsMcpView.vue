@@ -50,7 +50,7 @@
               <Button variant="secondary" size="sm" data-testid="settings-mcp-copy-url" @click="copyServerUrl">
                 {{ copiedField === 'server-url' ? $t('views.SettingsMcpView.copied') : $t('views.SettingsMcpView.copy') }}
               </Button>
-              <Badge :severity="publicUrlConfigured ? 'info' : 'secondary'">
+              <Badge :variant="publicUrlConfigured ? 'info' : 'neutral'">
                 {{ publicUrlConfigured ? $t('views.SettingsMcpView.active') : $t('views.SettingsMcpView.local_only') }}
               </Badge>
             </div>
@@ -135,7 +135,7 @@
                 <td class="table-cell">
                   <div class="flex items-center gap-2">
                     <Badge
-                      :severity="key.account_kind === 'human' ? 'success' : 'info'"
+                      :variant="key.account_kind === 'human' ? 'success' : 'info'"
                       class="text-xs"
                     >{{ key.account_kind === 'human' ? $t('views.SettingsMcpView.human') : $t('views.SettingsMcpView.service') }}</Badge>
                     <span class="font-medium">{{ key.account_display_name }}</span>
@@ -143,7 +143,7 @@
                   </div>
                 </td>
                 <td class="table-cell" data-testid="settings-mcp-key-status">
-                  <Badge :severity="apiKeyStatusMeta(key).severity">{{ apiKeyStatusMeta(key).label }}</Badge>
+                  <Badge :variant="apiKeyStatusMeta(key).variant">{{ apiKeyStatusMeta(key).label }}</Badge>
                 </td>
                 <td class="table-cell text-muted-foreground">
                   {{ key.last_used_at ? formatDate(key.last_used_at) : $t('views.SettingsMcpView.never') }}
@@ -222,15 +222,16 @@
     >
       <div class="space-y-4 py-2">
         <div>
-          <label for="settingsmcpview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsMcpView.key_name') }}</label>
-          <input id="settingsmcpview-field-2"
-            v-model="createKeyName"
-            type="text"
-            data-testid="settings-mcp-create-key-name"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            :placeholder="$t('views.SettingsMcpView.key_placeholder_example')"
-            @blur="createKeyNameTouched = true"
-          />
+          <Field id="settingsmcpview-field-2" :label="$t('views.SettingsMcpView.key_name')">
+            <Input
+              v-model="createKeyName"
+              type="text"
+              data-testid="settings-mcp-create-key-name"
+              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :placeholder="$t('views.SettingsMcpView.key_placeholder_example')"
+              @blur="createKeyNameTouched = true"
+            />
+          </Field>
           <p
             v-if="createKeyNameTouched && !createKeyName.trim()"
             class="mt-1 text-sm text-destructive"
@@ -315,9 +316,9 @@
           <div>
             <p class="mb-1 text-sm font-medium">{{ $t('views.SettingsMcpView.api_key') }}</p>
             <div class="relative">
-              <input :aria-label="$t('views.SettingsMcpView.api_key')"
+              <Input :aria-label="$t('views.SettingsMcpView.api_key')"
                 :type="keyMasked ? 'password' : 'text'"
-                :value="createdKeyValue"
+                :model-value="createdKeyValue"
                 readonly
                 class="w-full rounded-lg border border-input bg-muted px-3 py-2 font-mono text-sm"
               />
@@ -365,9 +366,11 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
-import Badge from 'primevue/badge'
 import Button from '../components/ui/Button.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Badge from '../components/ui/Badge.vue'
 import Dialog from 'primevue/dialog'
 import FormDialog from '../components/shared/FormDialog.vue'
 import { usePlanStore } from '../stores/planStore'
@@ -763,14 +766,14 @@ function apiKeyStatus(key: ApiKeyItem): ApiKeyStatus {
   return 'active'
 }
 
-function apiKeyStatusMeta(key: ApiKeyItem): { severity: 'success' | 'warn' | 'secondary'; label: string } {
+function apiKeyStatusMeta(key: ApiKeyItem): { variant: 'success' | 'warning' | 'neutral'; label: string } {
   switch (apiKeyStatus(key)) {
     case 'active':
-      return { severity: 'success', label: t('views.SettingsMcpView.active') }
+      return { variant: 'success', label: t('views.SettingsMcpView.active') }
     case 'expired':
-      return { severity: 'warn', label: t('views.SettingsMcpView.expired') }
+      return { variant: 'warning', label: t('views.SettingsMcpView.expired') }
     default:
-      return { severity: 'secondary', label: t('views.SettingsMcpView.revoked') }
+      return { variant: 'neutral', label: t('views.SettingsMcpView.revoked') }
   }
 }
 

@@ -66,12 +66,12 @@
         />
 
         <form class="space-y-4" @submit.prevent="saveRule">
-          <div>
-            <label for="evidence-redaction-key-pattern" class="mb-1 block text-sm font-medium">
-              {{ $t('views.AdminEvidenceRedaction.key_pattern') }}
-            </label>
-            <input
-              id="evidence-redaction-key-pattern"
+          <Field
+            id="evidence-redaction-key-pattern"
+            :label="$t('views.AdminEvidenceRedaction.key_pattern')"
+            :help="$t('views.AdminEvidenceRedaction.key_pattern_hint')"
+          >
+            <Input
               v-model="form.key_pattern"
               type="text"
               maxlength="255"
@@ -80,10 +80,7 @@
               class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60"
               data-testid="admin-evidence-redaction-key-pattern"
             />
-            <p class="mt-1 text-xs text-muted-foreground">
-              {{ $t('views.AdminEvidenceRedaction.key_pattern_hint') }}
-            </p>
-          </div>
+          </Field>
 
           <div>
             <label for="evidence-redaction-role" class="mb-1 block text-sm font-medium">
@@ -282,6 +279,8 @@ import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/schema'
 import { useDataFetch } from '../composables/useDataFetch'

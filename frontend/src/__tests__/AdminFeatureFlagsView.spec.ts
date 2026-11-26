@@ -134,6 +134,46 @@ describe('AdminFeatureFlagsView', () => {
     expect(wrapper.text()).toContain('Valid')
   })
 
+  it('renders an active license key and an invalid status', async () => {
+    // The default fixture is unlicensed + valid; this pins the opposite state so
+    // both arms of the licence-key and status Badge variants render.
+    const licensedInvalidFlags = {
+      ...mockFlagsData,
+      license: { tier: 'team', has_license_key: true, is_valid: false },
+      would_activate: [],
+    }
+    api.GET = vi.fn((path: string) => {
+      if (path.startsWith('/api/v1/admin/feature-flags') && path.includes('org-override')) {
+        return Promise.resolve({ data: { override: null }, error: undefined })
+      }
+      if (path === '/api/v1/plan') {
+        return Promise.resolve({ data: mockPlanData, error: undefined })
+      }
+      if (path === '/api/v1/admin/feature-flags') {
+        return Promise.resolve({ data: licensedInvalidFlags, error: undefined })
+      }
+      if (path === '/api/v1/admin/license') {
+        return Promise.resolve({ data: mockLicenseData, error: undefined })
+      }
+      if (path === '/api/v1/admin/tiers') {
+        return Promise.resolve({ data: mockTiersData, error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    }) as unknown as typeof api.GET
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const wrapper = mount(AdminFeatureFlagsView, {
+      global: { plugins: [pinia] },
+    })
+    for (let i = 0; i < 10; i++) {
+      await flushPromises()
+    }
+
+    expect(wrapper.text()).toContain('Active')
+    expect(wrapper.text()).toContain('Invalid')
+  })
+
   it('renders the "Would activate" section for enterprise-tier flags', async () => {
     const wrapper = await mountView()
     expect(wrapper.text()).toContain('Would activate with a license key')

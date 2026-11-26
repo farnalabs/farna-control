@@ -96,4 +96,15 @@ describe('ParameterPortForm resolveDefaultFallback (SonarCloud coverage)', () =>
     const options = select.props('options') as Array<{ value: string }>
     expect(options).toHaveLength(1)
   })
+
+  it('renders the description hint when a non-string port provides one', () => {
+    const port = { ...makePort('boolean'), description: 'Pick a value' }
+    const wrapper = mount(ParameterPortForm, { props: { port, modelValue: false } })
+    expect(wrapper.text()).toContain('Pick a value')
+  })
+
+  it('labels an enabled boolean port as "Enabled"', () => {
+    const wrapper = mount(ParameterPortForm, { props: { port: makePort('boolean'), modelValue: true } })
+    expect(wrapper.text()).toContain('Enabled')
+  })
 })

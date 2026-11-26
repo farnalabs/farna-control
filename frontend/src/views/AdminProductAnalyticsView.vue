@@ -51,25 +51,25 @@
             <div>
               <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminProductAnalyticsView.consent_level') }}</span>
               <p class="mt-0.5">
-                <span :class="store.transparency.consent_level === 'all' ? 'badge badge-status-success' : 'badge badge-status-muted'" data-testid="consent-level">
+                <Badge :variant="store.transparency.consent_level === 'all' ? 'success' : 'neutral'" data-testid="consent-level">
                   {{ consentLevelLabel }}
-                </span>
+                </Badge>
               </p>
             </div>
             <div>
               <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminProductAnalyticsView.egress') }}</span>
               <p class="mt-0.5">
-                <span :class="egressAllowed ? 'badge badge-status-success' : 'badge badge-status-muted'" data-testid="egress-allowed">
+                <Badge :variant="egressAllowed ? 'success' : 'neutral'" data-testid="egress-allowed">
                   {{ egressAllowed ? $t('views.AdminProductAnalyticsView.egress_allowed') : $t('views.AdminProductAnalyticsView.egress_blocked') }}
-                </span>
+                </Badge>
               </p>
             </div>
             <div>
               <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminProductAnalyticsView.instance_switch') }}</span>
               <p class="mt-0.5">
-                <span :class="instanceEnabled ? 'badge badge-status-success' : 'badge badge-status-muted'" data-testid="instance-enabled">
+                <Badge :variant="instanceEnabled ? 'success' : 'neutral'" data-testid="instance-enabled">
                   {{ instanceEnabled ? $t('views.AdminProductAnalyticsView.enabled') : $t('views.AdminProductAnalyticsView.disabled') }}
-                </span>
+                </Badge>
               </p>
             </div>
             <div>
@@ -123,6 +123,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { parseISO } from 'date-fns'
 import PageHeader from '../components/shared/PageHeader.vue'
+import Badge from '../components/ui/Badge.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import Checkbox from '../components/ui/Checkbox.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'

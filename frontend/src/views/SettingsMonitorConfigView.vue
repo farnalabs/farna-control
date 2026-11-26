@@ -63,14 +63,15 @@
 
                 <div v-if="b.enabled" class="space-y-3">
                   <div v-for="field in b.fields" :key="field.key">
-                    <label for="settingsmonitorconfigview-field-1" class="block text-xs text-muted-foreground mb-1">{{ field.label }}</label>
-                    <input id="settingsmonitorconfigview-field-1"
-                      v-model="field.value"
-                      :type="field.secret && !field.revealed ? 'password' : 'text'"
-                      :placeholder="field.placeholder"
-                      class="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      @input="onDirty"
-                    />
+                    <Field :label="field.label" label-class="block text-xs text-muted-foreground mb-1">
+                      <Input
+                        v-model="field.value"
+                        :type="field.secret && !field.revealed ? 'password' : 'text'"
+                        :placeholder="field.placeholder"
+                        class="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        @input="onDirty"
+                      />
+                    </Field>
                     <div v-if="field.secret" class="mt-1">
                       <button type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="field.revealed = !field.revealed">
                         {{ field.revealed ? $t('common.hide') : $t('common.show') }}
@@ -113,6 +114,8 @@ import type { MonitorConfig } from '../monitor/types'
 import PageHeader from '../components/shared/PageHeader.vue'
 import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import Button from '../components/ui/Button.vue'
 

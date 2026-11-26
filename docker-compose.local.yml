@@ -15,6 +15,11 @@ services:
       interval: 3s
       timeout: 5s
       retries: 10
+      # Same cold-first-start grace as the root compose's `db` (see the long
+      # rationale there). The faster 3s interval and 10 retries are kept for
+      # steady-state detection; start_period keeps the first-run initdb from
+      # consuming that retry budget.
+      start_period: 120s
 
   redis-local:
     image: redis:8-alpine

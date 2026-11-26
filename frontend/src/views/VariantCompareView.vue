@@ -112,13 +112,13 @@
               <span class="tabular-nums">{{ $t('views.variantCompare.runs', { count: Number(row.run_count ?? 0) }) }}</span>
             </template>
             <template #cell-degraded="{ row }">
-              <span
+              <Badge
                 v-if="row.degraded"
-                class="badge badge-status-warning"
+                variant="warning"
                 :title="$t('views.variantCompare.degradedTooltip')"
               >
                 {{ $t('views.variantCompare.degradedBadge') }}
-              </span>
+              </Badge>
               <span v-else class="text-xs text-muted-foreground">—</span>
             </template>
             <template #cell-actions="{ row }">
@@ -185,24 +185,27 @@
                 >
                   <div class="flex flex-col gap-1.5">
                     <div>
-                  <span
+                  <Badge
                     v-if="getCellStatus(node, v.name) === 'pass'"
-                    class="badge badge-status-success capitalize"
+                    variant="success"
+                    class="capitalize"
                   >
                     {{ $t('views.variantCompare.statusPass') }}
-                  </span>
-                  <span
+                  </Badge>
+                  <Badge
                     v-else-if="getCellStatus(node, v.name) === 'fail'"
-                    class="badge badge-status-destructive capitalize"
+                    variant="danger"
+                    class="capitalize"
                   >
                     {{ $t('views.variantCompare.statusFail') }}
-                  </span>
-                  <span
+                  </Badge>
+                  <Badge
                     v-else-if="getCellStatus(node, v.name) === 'partial'"
-                    class="badge badge-status-warning capitalize"
+                    variant="warning"
+                    class="capitalize"
                   >
                     {{ $t('views.variantCompare.statusPartial') }}
-                  </span>
+                  </Badge>
                       <span
                         v-else
                         class="text-xs text-muted-foreground"
@@ -356,6 +359,7 @@ import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
+import Badge from '../components/ui/Badge.vue'
 import { formatApiError } from '../lib/api/formatError'
 import Button from '../components/ui/Button.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
