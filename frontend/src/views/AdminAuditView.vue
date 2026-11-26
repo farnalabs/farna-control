@@ -105,12 +105,11 @@
         @update:filter="(key, value) => { if (key === 'event_type') filterEventType = value }"
       >
         <template #after>
-          <input
+          <SearchInput
             v-model="filterActor"
-            type="text"
             :aria-label="$t('views.AdminAuditView.actor_id')"
             :placeholder="$t('views.AdminAuditView.actor_id')"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            class="w-full"
             data-testid="admin-audit-actor"
           />
           <Field
@@ -546,6 +545,7 @@ import Notice from '../components/shared/Notice.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
 import Field from '../components/ui/Field.vue'
 import Input from '../components/ui/Input.vue'
+import SearchInput from '../components/ui/SearchInput.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../lib/api/client'

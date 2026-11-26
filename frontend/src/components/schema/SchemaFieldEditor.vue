@@ -28,17 +28,20 @@
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label :for="`schema-editor-field-${field._key}-name`" class="mb-1 block text-xs text-muted-foreground">{{ $t('views.SchemaEditorView.field_name') }}</label>
-            <input :id="`schema-editor-field-${field._key}-name`"
-              :value="field.name"
+          <Field
+            :id="`schema-editor-field-${field._key}-name`"
+            :label="$t('views.SchemaEditorView.field_name')"
+            label-class="mb-1 block text-xs text-muted-foreground"
+          >
+            <Input
+              :model-value="field.name"
               type="text"
               data-testid="schema-editor-field-name"
               class="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SchemaEditorView.field_name_placeholder')"
-              @input="update({ name: ($event.target as HTMLInputElement).value })"
+              @update:model-value="update({ name: String($event ?? '') })"
             />
-          </div>
+          </Field>
           <div>
             <label :for="`schema-editor-field-${field._key}-type`" class="mb-1 block text-xs text-muted-foreground">{{ $t('views.SchemaEditorView.field_type') }}</label>
             <Select
@@ -61,28 +64,34 @@
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label :for="`schema-editor-field-${field._key}-description`" class="mb-1 block text-xs text-muted-foreground">{{ $t('views.SchemaEditorView.field_description') }}</label>
-            <input :id="`schema-editor-field-${field._key}-description`"
-              :value="field.description"
+          <Field
+            :id="`schema-editor-field-${field._key}-description`"
+            :label="$t('views.SchemaEditorView.field_description')"
+            label-class="mb-1 block text-xs text-muted-foreground"
+          >
+            <Input
+              :model-value="field.description"
               type="text"
               data-testid="schema-editor-field-description"
               class="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SchemaEditorView.optional')"
-              @input="update({ description: ($event.target as HTMLInputElement).value })"
+              @update:model-value="update({ description: String($event ?? '') })"
             />
-          </div>
-          <div>
-            <label :for="`schema-editor-field-${field._key}-default`" class="mb-1 block text-xs text-muted-foreground">{{ $t('views.SchemaEditorView.default_value') }}</label>
-            <input :id="`schema-editor-field-${field._key}-default`"
-              :value="field.defaultValue"
+          </Field>
+          <Field
+            :id="`schema-editor-field-${field._key}-default`"
+            :label="$t('views.SchemaEditorView.default_value')"
+            label-class="mb-1 block text-xs text-muted-foreground"
+          >
+            <Input
+              :model-value="field.defaultValue"
               type="text"
               data-testid="schema-editor-field-default"
               class="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SchemaEditorView.optional')"
-              @input="update({ defaultValue: ($event.target as HTMLInputElement).value })"
+              @update:model-value="update({ defaultValue: String($event ?? '') })"
             />
-          </div>
+          </Field>
         </div>
 
         <div class="flex items-center gap-4">
@@ -114,6 +123,8 @@
 <script setup lang="ts">
 import type { SchemaField } from '../../utils/schema-definition'
 import Select from '../shared/AppSelect.vue'
+import Field from '../ui/Field.vue'
+import Input from '../ui/Input.vue'
 import { ChevronUp, ChevronDown, Trash2 } from '@lucide/vue'
 
 const field = defineModel<SchemaField>('field', { required: true })

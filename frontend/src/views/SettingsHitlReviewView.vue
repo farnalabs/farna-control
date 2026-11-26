@@ -36,14 +36,14 @@
     <span :data-value="option.value">{{ option.label }}</span>
   </template>
 </Select>
-          <input :aria-label="$t('views.SettingsHitlReviewView.date_label')"
+          <Input :aria-label="$t('views.SettingsHitlReviewView.date_label')"
             v-model="dateFrom"
             type="date"
             data-testid="hitl-review-date-from"
             class="w-full sm:w-auto rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             @change="loadGates"
           />
-          <input :aria-label="$t('views.SettingsHitlReviewView.date_label')"
+          <Input :aria-label="$t('views.SettingsHitlReviewView.date_label')"
             v-model="dateTo"
             type="date"
             data-testid="hitl-review-date-to"
@@ -104,16 +104,18 @@
       </span>
       <!-- Bulk reject shared reason input -->
       <div v-if="showBulkRejectInput" class="mt-3 flex flex-wrap items-end gap-3">
-        <label class="flex-1">
-          <span class="mb-1 block text-sm font-medium">{{ $t('views.SettingsHitlReviewView.bulk_reject_reason_label') }}</span>
-          <textarea
+        <Field
+          :label="$t('views.SettingsHitlReviewView.bulk_reject_reason_label')"
+          class="flex-1"
+        >
+          <Textarea
             v-model="bulkRejectReason"
             rows="2"
             data-testid="hitl-review-bulk-reject-reason"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             :placeholder="$t('views.SettingsHitlReviewView.bulk_reject_reason_placeholder')"
           />
-        </label>
+        </Field>
         <div class="flex gap-2">
           <button
             type="button"
@@ -391,6 +393,9 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import HitlReviewCard from '../components/hitl/HitlReviewCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import { usePlanStore } from '../stores/planStore'
 import { useHitlReviewState } from '../composables/useHitlReviewState'
 import { formatApiError } from '../lib/api/formatError'

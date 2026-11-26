@@ -16,19 +16,15 @@
       data-testid="evidence-run-picker"
     >
       <div class="flex flex-wrap items-end gap-3">
-        <div class="min-w-72 flex-1">
-          <label for="evidence-run-search" class="mb-1 block text-sm font-medium">
-            {{ $t('views.EvidenceView.run_search') }}
-          </label>
-          <input
-            id="evidence-run-search"
+        <Field id="evidence-run-search" :label="$t('views.EvidenceView.run_search')" class="min-w-72 flex-1">
+          <Input
             v-model="runSearch"
             type="search"
             data-testid="evidence-run-search"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             :placeholder="$t('views.EvidenceView.run_search_placeholder')"
           />
-        </div>
+        </Field>
         <div class="min-w-72 flex-1">
           <label for="evidence-recent-run" class="mb-1 block text-sm font-medium">
             {{ $t('views.EvidenceView.recent_run') }}
@@ -63,43 +59,31 @@
     </DataCard>
 
     <form class="flex flex-wrap items-end gap-3" @submit.prevent="load">
-      <div>
-        <label for="evidence-run-id" class="mb-1 block text-sm font-medium">
-          {{ $t('views.EvidenceView.manual_run_id') }}
-        </label>
-        <input
-          id="evidence-run-id"
+      <Field id="evidence-run-id" :label="$t('views.EvidenceView.manual_run_id')">
+        <Input
           v-model="runId"
           type="text"
           data-testid="evidence-run-id"
           class="w-72 rounded-lg border border-input bg-background px-3 py-2 text-sm"
           :placeholder="$t('views.EvidenceView.run_id_placeholder')"
         />
-      </div>
-      <div>
-        <label for="evidence-node-id" class="mb-1 block text-sm font-medium">
-          {{ $t('views.EvidenceView.node_id') }}
-        </label>
-        <input
-          id="evidence-node-id"
+      </Field>
+      <Field id="evidence-node-id" :label="$t('views.EvidenceView.node_id')">
+        <Input
           v-model="nodeId"
           type="text"
           data-testid="evidence-node-id"
           class="w-56 rounded-lg border border-input bg-background px-3 py-2 text-sm"
         />
-      </div>
-      <div>
-        <label for="evidence-key" class="mb-1 block text-sm font-medium">
-          {{ $t('views.EvidenceView.key') }}
-        </label>
-        <input
-          id="evidence-key"
+      </Field>
+      <Field id="evidence-key" :label="$t('views.EvidenceView.key')">
+        <Input
           v-model="keyFilter"
           type="text"
           data-testid="evidence-key"
           class="w-56 rounded-lg border border-input bg-background px-3 py-2 text-sm"
         />
-      </div>
+      </Field>
       <button
         type="submit"
         data-testid="evidence-load"
@@ -177,6 +161,8 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { fetchRuns, type RunListItem } from '../lib/api/runs'
