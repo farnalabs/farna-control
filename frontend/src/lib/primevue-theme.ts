@@ -56,6 +56,14 @@ export const PRIMEVUE_TOKEN_BRIDGE: PrimeVueTokenBridgeEntry[] = [
   // Destructive
   { source: 'destructive', target: 'form-field-invalid-border-color' },
 
+  // Button — the secondary severity's label. Aura resolves it to the raw surface
+  // scale (surface.500 light / surface.400 dark) and it measures 4.39:1 on the
+  // light bg-muted/30 card (FAR-2764). Route both variants of the severity
+  // through our text-safe muted ink. One semantic feeds two component tokens
+  // (the inverse of card/popover/foreground sharing text-color).
+  { source: 'muted-foreground', target: 'button-outlined-secondary-color' },
+  { source: 'muted-foreground', target: 'button-text-secondary-color' },
+
   // Focus ring
   { source: 'ring', target: 'focus-ring-color' },
   { source: 'focus-ring', target: 'focus-ring-color' },

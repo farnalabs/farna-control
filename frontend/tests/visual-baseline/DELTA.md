@@ -188,6 +188,73 @@ This was validated by re-measurement, not by inspection: the first capture after
 the downgrade was up to 6.1 % different per page; the final capture is 0 % on 15
 of 23 pages and icon-only on the remaining 8.
 
+## FAR-2764 — secondary button label ink (deliberate colour change)
+
+The secondary severity's button label was the last route excluded from the
+light-theme WCAG AA scan. On `/settings/mcp` the secondary-outlined "Copy"
+button measured **4.39:1** in light mode — Aura's
+`colorScheme.light.outlined.secondary.color` (`surface.500`, `#64748b`) on the
+`bg-muted/30` card surface (`#f4f6f7`), below the 4.5:1 AA floor. The fix routes
+**both** variants of the severity through our text-safe `--muted-foreground` ink
+in the token bridge (`src/lib/primevue-theme.ts`):
+
+```ts
+{ source: 'muted-foreground', target: 'button-outlined-secondary-color' },
+{ source: 'muted-foreground', target: 'button-text-secondary-color' },
+```
+
+Aura reuses `…secondary.color` for rest, hover and active on both the outlined
+and text variants, so one entry per variant covers every state. Nothing else
+changes: the outline border, the solid `secondary` tokens, the plain/ghost
+variants, the focus ring and the disabled token (`opacity: 0.6`) are untouched.
+
+Measured with the standard workflow — capture the tree before and after this
+change with `primevue-visual-baseline.spec.ts`, then `compare.mjs` the two
+directories. The capture emulates the app's **default dark scheme**, so the
+component delta it records is the dark one:
+
+| Change | Before | After |
+| --- | --- | --- |
+| token `--p-button-outlined-secondary-color` | `#a1a1aa` (Aura `surface.400`) | `hsl(216 12% 60%)` = `#8d97a5` |
+| token `--p-button-text-secondary-color` | `#a1a1aa` | `hsl(216 12% 60%)` |
+| `.p-button` computed `color` (secondary) | `rgb(161, 161, 170)` | `rgb(141, 151, 165)` |
+
+That is the only component-style delta in the whole 23-capture set — 10 button
+instances across 5 captures, each differing only on the recoloured label glyphs:
+
+| Capture | `.p-button` colour changes | Differing pixels | Share |
+| --- | --- | --- | --- |
+| `desktop-settings-mcp` | 2 | 125 | 0.012 % |
+| `desktop-settings-license-dialog` | 2 | 227 | 0.022 % |
+| `desktop-pipelines-folder-dialog` | 2 | 226 | 0.022 % |
+| `desktop-parameter-schemas-tabs` | 1 | 332 | 0.032 % |
+| `desktop-admin-users-dialog` | 3 | 527 | 0.051 % |
+
+Every other capture is pixel-identical except `desktop-pipeline-editor`, whose
+2.887 % difference carries **no** component-style change — it is the Vue Flow
+canvas node-position jitter already known to be non-deterministic (the bounding
+box moves, nothing recolours), unrelated to this change.
+
+Two token-*dump* additions, not rendered differences: on routes that render no
+secondary button, `--p-button-outlined-secondary-color` and
+`--p-button-text-secondary-color` were previously absent (PrimeVue injects a
+component's tokens only once it mounts) and are now present, because the bridge
+writes them on `:root` unconditionally. Those captures stay 0 px different.
+
+Contrast after the change, measured in the running app on
+`button[data-testid="settings-mcp-copy-url"]`:
+
+| Theme | Before (label ink → effective bg) | Ratio | After | Ratio |
+| --- | --- | --- | --- | --- |
+| light | `#64748b` on `#f4f6f7` (`bg-muted/30` over the card) | 4.39:1 ✗ | `#4b5563` | **6.97:1** ✓ |
+| dark | `#a1a1aa` on `#161c24` (dark `bg-muted/30` card) | 6.70:1 | `#8d97a5` | **5.81:1** ✓ |
+
+(The light ink also measures 7.56:1 on plain white; the dark ink ~6.53:1 on the
+page background. AA floor 4.5:1.)
+
+The committed `v5/` reference is a retained PrimeVue-5.0.4 record and is **not**
+rewritten by this change.
+
 ## Contradictions with the brief
 
 1. **Base font size runs the other way** (see above): both versions use a 16px

@@ -280,20 +280,15 @@ const SYSTEM_ADMIN_ROUTES = [
 // DARK-scanned (they must be in AUTHENTICATED_ROUTES/SYSTEM_ADMIN_ROUTES — the
 // integrity test enforces that). Add an entry ONLY for a route with a measured
 // light-theme finding, never because it is awkward.
-const LIGHT_EXCLUDED_ROUTES: readonly string[] = [
-  // /settings/mcp — REAL light-theme WCAG AA failure, blocked on a shared
-  // PrimeVue token/design decision (not hacked around here):
-  //   rule: color-contrast, impact serious, 1 node
-  //   target: button[data-testid="settings-mcp-copy-url"]
-  //   fg #64748b (PrimeVue secondary-outlined label = colorScheme.light
-  //   .outlined.secondary.color, surface.500) on bg #f4f6f8 (the card's
-  //   `bg-muted/30` surface): measured 4.39:1, AA floor 4.5:1.
-  // LIGHT-ONLY by construction: the dark counterpart is a different pair
-  // (surface.400 on a dark surface), which the DARK scan covers and passes. The
-  // label colour is a shared PrimeVue secondary-button token, so a global
-  // change needs a design decision and a full-suite re-verification.
-  '/settings/mcp',
-]
+//
+// Currently EMPTY: FAR-2764 fixed the last light-theme AA failure, so every
+// route is light-scanned again. /settings/mcp's secondary-outlined "Copy" label
+// measured 4.39:1 on the bg-muted/30 card (PrimeVue
+// colorScheme.light.outlined.secondary.color, surface.500). The secondary
+// severity's label now routes through our text-safe --muted-foreground via the
+// token bridge (src/lib/primevue-theme.ts), for both the outlined and text
+// variants, restoring AA on the light card.
+const LIGHT_EXCLUDED_ROUTES: readonly string[] = []
 
 const LIGHT_AUTHENTICATED_ROUTES = AUTHENTICATED_ROUTES.filter((p) => !LIGHT_EXCLUDED_ROUTES.includes(p))
 
@@ -343,8 +338,15 @@ function collectRenderErrors(page: import('@playwright/test').Page) {
 // LIGHT exclusion must still be DARK-scanned (otherwise it is not a light-only
 // gap, it is an untested route). Cheap and env-independent.
 test('scanned route sets are unique and every light exclusion is dark-covered', { tag: "@local-mock" }, () => {
+  // The uniqueness check is the live assertion today.
   const darkScanned = [...AUTHENTICATED_ROUTES, ...SYSTEM_ADMIN_ROUTES]
   expect(new Set(darkScanned).size, 'a route must not be scanned twice').toBe(darkScanned.length)
+  // Forward guard: LIGHT_EXCLUDED_ROUTES is currently EMPTY (FAR-2764 fixed the
+  // last light-only failure, so this loop is a no-op today). It is kept so that
+  // any route re-added as a light-only exclusion must still be dark-scanned —
+  // the alternative, deleting the loop, would let a future exclusion silently
+  // become an untested route. The loop being vacuous while the list is empty is
+  // stated here rather than hidden.
   for (const path of LIGHT_EXCLUDED_ROUTES) {
     expect(darkScanned, `${path} is light-excluded but must still be dark-scanned`).toContain(path)
   }
