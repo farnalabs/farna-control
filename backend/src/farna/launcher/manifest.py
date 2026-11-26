@@ -77,6 +77,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 MANIFEST_NAME = "RELEASE_MANIFEST.json"
 SIGNATURE_SUFFIX = ".sig"
 SIGNATURE_NAME = "RELEASE_MANIFEST.json.sig"
+# Schema v1: the manifest's ``generated_at`` field carries the SOURCE COMMIT SHA
+# the release was built from (the exact commit the publishing job checked out),
+# NOT a timestamp. Every published manifest has always carried a commit SHA, so
+# this is de facto the source-commit provenance field; do not reinterpret it as
+# a clock value or rename it under schema v1.
 MANIFEST_SCHEMA_VERSION = 1
 _RELEASE = "modulo"
 
@@ -311,7 +316,13 @@ def build_release_manifest(
     components: dict[str, str],
     artifacts: list[dict[str, str]],
 ) -> dict[str, Any]:
-    """Assemble a canonical manifest body (CI calls it with exact args)."""
+    """Assemble a canonical manifest body (CI calls it with exact args).
+
+    ``generated_at`` is the SOURCE COMMIT SHA the release was built from
+    (schema v1), not a timestamp: the publishing job passes the exact commit it
+    checked out, which makes the signed manifest the provenance record for that
+    build.
+    """
     return {
         "manifest_version": MANIFEST_SCHEMA_VERSION,
         "release": release,

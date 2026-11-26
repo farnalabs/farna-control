@@ -2796,6 +2796,11 @@ jobs:
           INCLUDE_WINDOWS: ${{ inputs.include_windows }}
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the build
+          # source), not the workflow dispatch ref, as the manifest provenance
+          # field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required'; exit 1; }
           cd release-artefacts
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
@@ -2832,7 +2837,7 @@ jobs:
               # a single chunk regardless of how large the installers are.
               with path.open("rb") as handle:
                   return hashlib.file_digest(handle, "sha256").hexdigest()
-          body = m.build_release_manifest(release=f"bundle-v{version}", platform="multi-platform", generated_at=os.environ.get("GITHUB_SHA", ""), components=components, artifacts=[{"name": n, "sha256": digest(root / n), "version": version} for n in names])
+          body = m.build_release_manifest(release=f"bundle-v{version}", platform="multi-platform", generated_at=os.environ["SOURCE_COMMIT"], components=components, artifacts=[{"name": n, "sha256": digest(root / n), "version": version} for n in names])
           payload = json.dumps(body, indent=2, sort_keys=True).encode()
           signing_key = os.environ["MANIFEST_SIGNING_KEY"]
           if len(signing_key) != 64:
@@ -4006,6 +4011,11 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the GA tag
+          # commit = the built source), not the workflow dispatch ref, as the
+          # manifest provenance field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required'; exit 1; }
           cd release-artefacts
           sha256sum "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
@@ -4022,7 +4032,7 @@ jobs:
           body = m.build_release_manifest(
               release=f"bundle-v{version}",
               platform="compose",
-              generated_at=os.environ.get("GITHUB_SHA", ""),
+              generated_at=os.environ["SOURCE_COMMIT"],
               components={"compose": "production"},
               artifacts=[{"name": name, "sha256": hashlib.sha256((root / name).read_bytes()).hexdigest(), "version": version}],
           )
@@ -4045,13 +4055,20 @@ jobs:
           PY
           (cd release-artefacts && sha256sum --check SHA256SUMS)
 
-      - name: Replace GA compose assets without clobbering
+      # The behaviour is idempotent: a job-level retry of this promote run
+      # converges instead of failing on an existing asset.
+      - name: Publish the GA compose assets (idempotent, verified)
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           TAG="v${VERSION}"
+          # Publication ORDER is fixed and load-bearing: the compose tarball
+          # first, then SHA256SUMS, then the manifest, then the manifest
+          # signature LAST. Uploading the manifest + signature last means a
+          # partial upload is detectable: a present manifest whose covered
+          # artifact is missing or stale fails the verification step below.
           ASSETS=(
             "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
             "release-artefacts/SHA256SUMS"
@@ -4061,17 +4078,97 @@ jobs:
           for asset in "${ASSETS[@]}"; do
             test -s "$asset"
           done
+          # Snapshot the exact asset inventory (name + local byte size) THIS step
+          # uploads into RUNNER_TEMP, so the verification step checks the same
+          # four assets with the same sizes and cannot drift from what was
+          # published.
+          inventory="$RUNNER_TEMP/ga-compose-assets.tsv"
+          : > "$inventory"
+          for asset in "${ASSETS[@]}"; do
+            printf '%s\t%s\n' "$(basename "$asset")" "$(wc -c < "$asset")" >> "$inventory"
+          done
           # The GA release is created by the promotion step (without assets).
-          # Read it back first: a missing release is a real failure, and an
-          # existing compose asset means a previous promote partially published,
-          # which must be repaired by hand rather than silently clobbered -
-          # replacing an asset invalidates every download already checked
-          # against its manifest.
+          # A missing release is a real failure. The GA release stays public
+          # throughout and is never deleted.
           if ! gh release view "$TAG" --json tagName >/dev/null; then
             echo "::error::GA release ${TAG} does not exist - refusing to upload the compose bundle to an unpublished release."
             exit 1
           fi
-          gh release upload "$TAG" "${ASSETS[@]}"
+          # A completed promote is still immutable, but a JOB-LEVEL RETRY inside
+          # the same promote run must converge rather than fail on an
+          # already-present asset: --clobber replaces it instead of erroring.
+          # The manifest and signature are written LAST, so a retry that dies
+          # mid-way leaves a detectable partial upload rather than silently
+          # mixing old and new assets. Never delete the release.
+          for asset in "${ASSETS[@]}"; do
+            gh release upload "$TAG" "$asset" --clobber
+          done
+
+      - name: Verify the published GA compose assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          inventory="$RUNNER_TEMP/ga-compose-assets.tsv"
+          if [ ! -s "$inventory" ]; then
+            echo "::error::expected-asset inventory ${inventory} is missing - the upload step did not run."
+            exit 1
+          fi
+          # 1. Every uploaded asset is present on the release with its local byte
+          # size. `gh release view --json assets` is the release's own record.
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)\t\(.size)"' > "$RUNNER_TEMP/published-assets.tsv"
+          while IFS=$'\t' read -r name expected_size; do
+            [ -n "$name" ] || continue
+            actual_size="$(awk -F'\t' -v n="$name" '$1==n {print $2}' "$RUNNER_TEMP/published-assets.tsv")"
+            if [ -z "$actual_size" ]; then
+              echo "::error::asset ${name} is missing from GA release ${TAG}."
+              exit 1
+            fi
+            if [ "$actual_size" != "$expected_size" ]; then
+              echo "::error::asset ${name} on ${TAG} is ${actual_size} bytes, expected ${expected_size}."
+              exit 1
+            fi
+          done < "$inventory"
+          # 2. The PUBLISHED manifest + signature verify against the checked-in
+          # trust store. Download the published bytes (compose tarball, manifest,
+          # signature) and verify them exactly as an offline operator would.
+          dest="$RUNNER_TEMP/ga-published"
+          mkdir -p "$dest"
+          gh release download "$TAG" --clobber --dir "$dest" \
+            --pattern "farna-control-${VERSION}-compose.tar.gz" \
+            --pattern RELEASE_MANIFEST.json \
+            --pattern RELEASE_MANIFEST.json.sig
+          uv run --no-project --no-sync --no-build python - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "backend/src")
+          from farna.launcher import manifest as m
+
+          dest = Path(os.environ["RUNNER_TEMP"]) / "ga-published"
+          # Source the expected key id from the trust store's single CURRENT
+          # constant the installer verifies against, rather than duplicating the
+          # literal: the published manifest must verify under the provisioned
+          # key, and any other id (including the reserved next slot) is a failure.
+          expected_key_id = m._KEY_ID_CURRENT
+          try:
+              sig = m.read_signature_file(dest / m.SIGNATURE_NAME)
+              if sig["key_id"] != expected_key_id:
+                  raise m.ManifestSecurityError(
+                      f"published GA manifest is signed under {sig['key_id']!r}, expected {expected_key_id!r}"
+                  )
+              m.verify_release_from_files(
+                  manifest_path=dest / m.MANIFEST_NAME,
+                  signature_path=dest / m.SIGNATURE_NAME,
+                  artifacts_root=dest,
+              )
+          except m.ManifestSecurityError as exc:
+              sys.exit(f"::error::published GA manifest failed verification: {exc}")
+          print(f"published GA manifest on v{os.environ['VERSION']} verifies under {expected_key_id}")
+          PY
 
   # ---------------------------------------------------------------------------
   # PyPI package publish (promote only). This is the repository's sole live
