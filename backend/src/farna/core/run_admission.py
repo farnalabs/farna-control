@@ -41,9 +41,9 @@ from sqlalchemy import DateTime, and_, bindparam, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from farna.core.dispatch_phases import PHASE_FIRST_NODE_DISPATCHED
-from farna.core.run_lifecycle import ACTIVE_RUN_STATUSES, AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS, TRIGGER_SLOT_HOLDING_STATUSES
 from farna.db.models.run import Run
 from farna.db.sqlstates import is_row_lock_timeout
+from farna.lifecycle import ACTIVE_RUN_STATUSES, AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS, TRIGGER_SLOT_HOLDING_STATUSES
 from farna.settings import get_settings
 
 _log = logging.getLogger(__name__)

@@ -22,22 +22,24 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.compiler import SQLCompiler
 
-from farna.core.run_lifecycle import (
+from farna.db.models.base import JSONB_COL, JSONB_COL_NONE_AS_NULL, ONDELETE_SET_NULL, OrgScoped
+from farna.lifecycle import (
     ACTIVE_RUN_STATUSES,
+    ALL_RUN_STATUSES,
     AWAITING_HUMAN_STATUS,
     HITL_ACTIONABLE_RUN_STATUSES,
     HITL_CLAIMABLE_RUN_STATUSES,
     HITL_PARKED_STATUS,
     ONGOING_ACTIVE_STATUSES,
     PIPELINE_CAPACITY_STATUSES,
+    REDISPATCHABLE_STATUSES,
     RUN_STATUS_WHITELIST,
     SUCCESS_STATUSES,
     TERMINAL_STATUSES,
 )
-from farna.db.models.base import JSONB_COL, JSONB_COL_NONE_AS_NULL, ONDELETE_SET_NULL, OrgScoped
 
 # FAR-2705: the run-status vocabulary and every derived projection now live in
-# the dependency-free leaf ``farna.core.run_lifecycle`` (the transition table is
+# the dependency-free leaf ``farna.lifecycle`` (the transition table is
 # the single source of truth). The names are re-exported here because this model
 # module is the historical import site for every consumer, and ``__all__`` marks
 # them as intentional re-exports (never dead imports).
@@ -49,10 +51,17 @@ __all__ = [
     "HITL_PARKED_STATUS",
     "ONGOING_ACTIVE_STATUSES",
     "PIPELINE_CAPACITY_STATUSES",
+    "REDISPATCHABLE_STATUSES",
     "RUN_STATUS_WHITELIST",
     "SUCCESS_STATUSES",
     "TERMINAL_STATUSES",
 ]
+
+#: The ``ck_runs_status`` CHECK text is DERIVED from the lifecycle vocabulary —
+#: never a second hand-written literal list. A status added to the table lands
+#: in the constraint automatically; the unit test parses this constraint back
+#: and asserts it equals ``ALL_RUN_STATUSES``.
+CK_RUNS_STATUS_SQL: str = "status IN (" + ", ".join(f"'{status}'" for status in sorted(ALL_RUN_STATUSES)) + ")"
 
 if TYPE_CHECKING:
     from farna.db.models.organisation import Organisation
@@ -62,7 +71,7 @@ if TYPE_CHECKING:
 
 
 # TERMINAL_STATUSES / SUCCESS_STATUSES / ACTIVE_RUN_STATUSES are imported above
-# from ``farna.core.run_lifecycle`` — the transition table there is the single
+# from ``farna.lifecycle`` — the transition table there is the single
 # source of truth (FAR-2705). The vocabulary is a subset of the
 # ``ck_runs_status`` CHECK constraint below; the never-entered
 # ``waiting_for_lock`` sub-state was excised in migration 0074/0075 (rows
@@ -160,7 +169,7 @@ RUN_GROUP_KIND_VALUES: frozenset[str] = frozenset({RUN_GROUP_KIND_RETRY, RUN_GRO
 # HITL_PARKED_STATUS / AWAITING_HUMAN_STATUS, PIPELINE_CAPACITY_STATUSES,
 # HITL_ACTIONABLE_RUN_STATUSES, HITL_CLAIMABLE_RUN_STATUSES and
 # ONGOING_ACTIVE_STATUSES are all imported above from
-# ``farna.core.run_lifecycle`` (FAR-2705). Their derivation:
+# ``farna.lifecycle`` (FAR-2705). Their derivation:
 #
 # * PIPELINE_CAPACITY_STATUSES is the executing projection: a run parked on a
 #   human decision is not executing (the 2026-09-04 incident: 20
@@ -214,7 +223,7 @@ class Run(OrgScoped):
             name="ck_runs_trigger_type",
         ),
         CheckConstraint(
-            "status IN ('pending', 'running', 'awaiting_human', 'claimed', 'unknown', 'hitl_parked', 'complete', 'failed', 'cancelled', 'eval_failed', 'stalled', 'budget_exceeded', 'router_no_match', 'cost_ceiling_exceeded', 'compensation_failed', 'rejected')",
+            CK_RUNS_STATUS_SQL,
             name="ck_runs_status",
         ),
         UniqueConstraint("organisation_id", "run_number", name="uq_runs_org_run_number"),

@@ -230,7 +230,6 @@ from farna.core.mcp.scope_validator import (
 from farna.core.pipeline_engine.error_codes import map_legacy_code, present_error
 from farna.core.pipeline_engine.errors import ResumeClaimSupersededError
 from farna.core.rate_limiter import TokenBucketRegistry
-from farna.core.run_lifecycle import AWAITING_HUMAN_STATUS, HITL_ACTIONABLE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.core.run_provenance import run_provenance_fields
 from farna.core.runtime_config.key_bridge import public_url_is_configured
 from farna.core.secrets_backend import (
@@ -265,6 +264,7 @@ from farna.db.models.run import (
 from farna.db.rls import bootstrap_read, set_rls_org, set_rls_user_context
 from farna.db.settings_resolver import resolve_authz_enforce
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
+from farna.lifecycle import AWAITING_HUMAN_STATUS, HITL_ACTIONABLE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.settings import get_settings
 from farna.util import callable_label
 
@@ -6779,7 +6779,7 @@ async def _cancel_run_impl(run_id: str) -> dict[str, Any]:
         # pipeline_execution._salvage_cancelled_run_cost attributes
         # marker-provable spend from its persisted attempt marker
         # (FAR-1914 C2).
-        was_paused = run.status in ("awaiting_human", "claimed", "hitl_parked")
+        was_paused = run.status in HITL_ACTIONABLE_RUN_STATUSES
         # FAR-1233: this is the AGENT-initiated cancel leg (the MCP tool), so
         # the reason distinguishes it from an operator clicking Cancel in the
         # UI. The acting account is read fail-open (absent -> the caller

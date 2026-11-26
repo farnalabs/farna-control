@@ -30,7 +30,6 @@ from farna.core.feature_flags import (
     resolve_effective_license,
     resolve_plan_context,
 )
-from farna.core.run_lifecycle import HITL_ACTIONABLE_RUN_STATUSES
 from farna.db.crud.account import get_account_by_id
 from farna.db.crud.base import PageResult
 from farna.db.crud.organisation import get_organisation
@@ -46,6 +45,7 @@ from farna.db.models.team import Team
 from farna.db.models.team_membership import TeamMembership
 from farna.db.rls import set_rls_org, set_rls_user_context
 from farna.db.soft_delete import include_soft_deleted
+from farna.lifecycle import HITL_ACTIONABLE_RUN_STATUSES
 from farna.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)

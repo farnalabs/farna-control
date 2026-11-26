@@ -96,15 +96,6 @@ forbidden_modules =
     farna.core
     farna.api
 ignore_imports =
-    # FAR-2705: the run lifecycle's status vocabulary, transition table and
-    # every derived status projection live in the DEPENDENCY-FREE leaf
-    # ``farna.core.run_lifecycle`` (it imports nothing from ``farna``). The ORM
-    # module is the historical import site for every consumer, so it re-exports
-    # the names from that leaf. This is not business logic flowing into the DB
-    # layer: it is a pure data module in ``core`` (the same shape as the
-    # ``core.exceptions`` exemptions below), and it cannot live under
-    # ``farna.db`` because that is precisely the layering this contract protects.
-    farna.db.models.run -> farna.core.run_lifecycle
     # FAR-523 trigger-delivery bootstrap: the shared trigger/org resolver in
     # db.crud.trigger raises the engine's TriggerNotFoundError (same
     # exception-mapping category as the pipeline_snapshot -> core.exceptions
@@ -247,15 +238,6 @@ forbidden_modules =
 ignore_imports =
     # Shell resolves workspace sessions via the DB layer.
     farna.connectors.shell -> farna.db.session
-    # FAR-2705: the run model re-exports the DEPENDENCY-FREE data leaf
-    # ``farna.core.run_lifecycle`` (pure status/transition data; see the
-    # db-does-not-import-core exemption). Ignoring that single terminal edge
-    # removes the only chain from a connector into core:
-    #   connectors.shell -> db.crud.environment_profile -> db.crud.team_scope
-    #   -> db.models.run -> core.run_lifecycle
-    # No connector imports core behaviour; the chain ends in a data table that
-    # imports nothing from ``farna``.
-    farna.db.models.run -> farna.core.run_lifecycle
     # FAR-587: shell's hub-resolution guard maps the hub's typed
     # ProviderNotConfiguredError to the connector's fail-soft ValueError
     # contract - a single exception-type import (no core behaviour flows in).

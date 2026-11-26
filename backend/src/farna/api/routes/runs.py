@@ -136,6 +136,7 @@ from farna.db.models.run_node_outputs import RunNodeOutput
 from farna.db.models.trigger import Trigger
 from farna.db.rls import set_rls_org, set_rls_user_context
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
+from farna.lifecycle import HITL_ACTIONABLE_RUN_STATUSES
 from farna.otel_bridge import trace_id_for_thread
 from farna.settings import Settings, get_settings
 
@@ -2322,7 +2323,7 @@ async def _cancel_run(session: AsyncSession, principal: TenantPrincipal, run_id:
     # decisions were never finalize-eligible (it is the awaiting_human state
     # after expiry), so cancelling it must NOT run finalize_cost (the run
     # holds no accrued-spend accounting the cancel path owns).
-    was_paused = run.status in ("awaiting_human", "claimed", "hitl_parked")
+    was_paused = run.status in HITL_ACTIONABLE_RUN_STATUSES
     # FAR-1233: record WHY (an operator asked) and WHO (the acting account)
     # in the same write that flips the run cancelled.
     await request_cancellation(

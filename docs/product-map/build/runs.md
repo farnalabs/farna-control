@@ -14,7 +14,7 @@ code:
   - backend/src/farna/core/pipeline_execution.py
   - backend/src/farna/core/exceptions.py
   - backend/src/farna/db/models/run.py
-  - backend/src/farna/core/run_lifecycle.py
+  - backend/src/farna/lifecycle.py
   - backend/src/farna/db/migrations/versions/0350_baseline_schema.py
   - backend/src/farna/db/models/run_attempt.py
   - backend/src/farna/db/crud/run_attempts.py
@@ -68,13 +68,14 @@ prompt-reveal actions, and error-state recovery BDD (`failed_state` / `recovery`
 
 ## Run lifecycle state model
 
-`backend/src/farna/core/run_lifecycle.py` is the single source of truth for the
+`backend/src/farna/lifecycle.py` is the single source of truth for the
 run statuses and the legal transitions between them (`TRANSITIONS`:
 `(from_status, action, to_status)`, each action documented on one line). Every
 derived status set is a projection of that table — `ACTIVE_RUN_STATUSES`,
 `EXECUTING_STATUSES` / `PIPELINE_CAPACITY_STATUSES`, `LIVE_STATUSES`,
 `TRIGGER_SLOT_HOLDING_STATUSES`, `HITL_CLAIMABLE_RUN_STATUSES`,
-`HITL_ACTIONABLE_RUN_STATUSES` and `ONGOING_ACTIVE_STATUSES` — so two consumers
+`HITL_ACTIONABLE_RUN_STATUSES`, `REDISPATCHABLE_STATUSES` and
+`ONGOING_ACTIVE_STATUSES` - so two consumers
 can no longer disagree about what "executing" means (the 26-hour capacity
 incident was exactly that disagreement).
 
@@ -83,11 +84,15 @@ A non-terminal run is in exactly one class: `queued` (`pending`), `in_flight`
 work) or `parked` (`awaiting_human`, `hitl_parked`). A terminal status has no
 outgoing transition; every non-terminal status has at least one.
 
-The table is pinned by `backend/tests/unit/core/test_run_lifecycle.py` (structure
-+ shipped-value equality, including the proof that an unexplained status or a
-projection that drops one fails the invariant checks) and exercised against the
-real functions by the Hypothesis state machine in
-`backend/tests/integration/test_run_lifecycle_stateful.py`.
+The table is pinned by `backend/tests/unit/core/test_run_lifecycle.py` (frozen
+literal snapshots of every documented projection, the parsed `ck_runs_status`
+constraint asserted equal to the vocabulary, and the proof that a seventh
+non-terminal status — or a projection that drops one — fails the pins) and
+exercised against the real functions by the Hypothesis state machine in
+`backend/tests/integration/test_run_lifecycle_stateful.py` (its own isolated
+database, non-superuser RLS, real capacity admission and the real
+`dispatcher_reconcile` tick). The PR run uses a small deterministic budget; a
+larger budget runs nightly in `.github/workflows/lifecycle-stateful-nightly.yml`.
 
 ## Behaviors
 

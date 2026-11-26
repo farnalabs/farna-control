@@ -43,7 +43,6 @@ from farna.auth.jwt import create_claim_token as _create_claim_jwt
 from farna.auth.jwt import decode_claim_token as _decode_claim_jwt
 from farna.core.audit_logger import append_audit_event
 from farna.core.hitl_manager.sweep_alarm import maybe_alarm_approve_sweep
-from farna.core.run_lifecycle import HITL_ACTIONABLE_RUN_STATUSES, HITL_CLAIMABLE_RUN_STATUSES
 from farna.db.crud.row_lock import set_mutation_row_lock_timeout
 from farna.db.crud.run import unpark_parked_run
 from farna.db.crud.team_scope import account_team_scope_clause
@@ -51,6 +50,7 @@ from farna.db.models.hitl_claim import HitlClaim
 from farna.db.models.pipeline import Pipeline
 from farna.db.models.run import Run
 from farna.db.models.team_membership import TeamMembership
+from farna.lifecycle import HITL_ACTIONABLE_RUN_STATUSES, HITL_CLAIMABLE_RUN_STATUSES
 from farna.settings import HITL_CLAIM_TTL_SECONDS
 
 if TYPE_CHECKING:

@@ -92,7 +92,6 @@ from farna.core.hitl_manager import (
 )
 from farna.core.notifier import Notifier
 from farna.core.pipeline_engine.executor import PipelineExecutor, SandboxCapacityExceededError
-from farna.core.run_lifecycle import AWAITING_HUMAN_STATUS, HITL_ACTIONABLE_RUN_STATUSES
 from farna.db.crud.hitl_review_config import (
     EVENT_HUMAN_ONLY_DENIED,
     edge_source_or_target,
@@ -115,6 +114,7 @@ from farna.db.models.pipeline_snapshot import PipelineSnapshot as SnapModel
 from farna.db.models.run import Run
 from farna.db.rls import set_rls_org, set_rls_user_context
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
+from farna.lifecycle import ACTION_CLAIM_GATE, AWAITING_HUMAN_STATUS, HITL_ACTIONABLE_RUN_STATUSES, STATUS_CLAIMED, transitions_for_action
 from farna.settings import get_settings
 
 _CODE_HITL_APPROVE = "hitl.approve"
@@ -125,6 +125,12 @@ _CODE_HITL_LIST_ORG_PENDING_REVIEWS = "hitl.list_org_pending_reviews"
 _CODE_HITL_LIST_ORG_REVIEWS = "hitl.list_org_reviews"
 
 logger = logging.getLogger(__name__)
+
+#: The gate-claim status write's admissible source statuses, DERIVED from the
+#: lifecycle transition table (FAR-2705): the sources of the ``claim_gate``
+#: edges that land in ``claimed``. A source without a declared edge can never be
+#: written, so the table — not a hand-written literal — decides.
+_GATE_CLAIM_TO_CLAIMED_ALLOWED_FROM: frozenset[str] = frozenset(transition.from_status for transition in transitions_for_action(ACTION_CLAIM_GATE) if transition.to_status == STATUS_CLAIMED and transition.from_status is not None)
 
 
 def _build_resume_executor(engine: AsyncEngine) -> PipelineExecutor:
@@ -855,8 +861,8 @@ async def claim_review(
                 session,
                 run_id,
                 principal.organisation_id,
-                target_status="claimed",
-                allowed_from=frozenset({"awaiting_human"}),
+                target_status=STATUS_CLAIMED,
+                allowed_from=_GATE_CLAIM_TO_CLAIMED_ALLOWED_FROM,
             )
     except ProgrammingError as exc:
         logger.exception(_CODE_HITL_CLAIM_REVIEW)

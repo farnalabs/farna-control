@@ -62,7 +62,6 @@ from farna.core.dispatch_phases import (
     PHASE_SPEND_CHECK,
     PHASE_STREAMING,
 )
-from farna.core.run_lifecycle import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.db.crud.run import get_run
 from farna.db.models.run_attempt import (
     ATTEMPT_TERMINAL_REASON_COMPLETED,
@@ -73,6 +72,7 @@ from farna.db.models.run_attempt import (
     ATTEMPT_TERMINAL_REASON_WORKER_LOST,
 )
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
+from farna.lifecycle import ACTIVE_RUN_STATUSES, HITL_ACTIONABLE_RUN_STATUSES, TERMINAL_STATUSES
 
 __all__ = [
     "PHASE_CAPACITY_CHECK",
@@ -4748,11 +4748,12 @@ async def stale_run_recovery_sweep(
 # ---------------------------------------------------------------------------
 
 
-# Claimable resume statuses: 'awaiting_human'/'claimed' (F6a) plus 'hitl_parked'
-# (FAR-604). The parked status literal matches db.models.run:HITL_PARKED_STATUS —
-# it cannot be interpolated into these templates (raw-sql-fstring), so keep the
-# two in sync by hand; the runs status CHECK constraint (ck_runs_status) pins the
-# vocabulary. Parked rows are claimable UNCONDITIONALLY of heartbeat freshness:
+# Claimable resume statuses: the gate-claim endpoints derived from the lifecycle
+# transition table (FAR-2705) — ``awaiting_human``/``claimed`` (F6a) plus
+# ``hitl_parked`` (FAR-604). The SQL list below is built from that projection, so
+# a status added to the table can never desynchronise these templates (there is
+# no second hand-written literal list). Parked rows are claimable
+# UNCONDITIONALLY of heartbeat freshness:
 # nothing heartbeats a parked run (no worker owns it), so a heartbeat gate would
 # strand it forever. Atomicity fences concurrent claims instead: the first
 # claimer moves the row to 'running', a concurrent claimer then sees a fresh
@@ -4767,11 +4768,15 @@ async def stale_run_recovery_sweep(
 # unconditional and safe for every other resume-claim caller (HITL resume,
 # recover-node): those rows already carry false, so the write is a no-op
 # for them.
+#: The resume-claim source statuses as a SQL literal list, derived from
+#: ``HITL_ACTIONABLE_RUN_STATUSES`` (the lifecycle table keeps it authoritative).
+_RESUME_CLAIM_SOURCE_STATUS_SQL = ", ".join(f"'{status}'" for status in sorted(HITL_ACTIONABLE_RUN_STATUSES))
+
 _RESUME_CLAIM_UPDATE_SQL = text(
     "UPDATE runs SET status='running', heartbeat_at=now(), claim_count=claim_count+1, "  # nosec B608  # noqa: S608 - concatenates module constants only (never caller data)
     "dispatch_phase='claimed', dispatch_phase_entered_at=now(), "
     "guardrail_override_resume_pending=false, " + _CLAIM_HISTORY_APPEND + "WHERE id=:rid AND organisation_id=:oid "
-    "AND (status IN ('awaiting_human', 'claimed', 'hitl_parked') "
+    f"AND (status IN ({_RESUME_CLAIM_SOURCE_STATUS_SQL}) "
     "     OR (status = 'running' AND heartbeat_at < now() - (:stale_seconds * interval '1 second'))) "
     "AND claim_count < :claim_cap "
     "RETURNING id"
@@ -4781,7 +4786,7 @@ _RESUME_CLAIM_UPDATE_SQL_WITH_TOKEN = text(
     "UPDATE runs SET status='running', heartbeat_at=now(), claim_count=claim_count+1, claim_token=:tok, "  # nosec B608  # noqa: S608 - concatenates module constants only (never caller data)
     "dispatch_phase='claimed', dispatch_phase_entered_at=now(), "
     "guardrail_override_resume_pending=false, " + _CLAIM_HISTORY_APPEND + "WHERE id=:rid AND organisation_id=:oid "
-    "AND (status IN ('awaiting_human', 'claimed', 'hitl_parked') "
+    f"AND (status IN ({_RESUME_CLAIM_SOURCE_STATUS_SQL}) "
     "     OR (status = 'running' AND heartbeat_at < now() - (:stale_seconds * interval '1 second'))) "
     "AND claim_count < :claim_cap "
     "RETURNING id"

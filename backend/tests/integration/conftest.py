@@ -54,6 +54,36 @@ os.environ.setdefault("FARNA_CONTROL_DEV_MODE", "true")
 
 BACKEND_ROOT = Path(__file__).parents[2]
 
+#: Org-scoped tables whose RLS the migrations ENABLE. The testcontainers
+#: postgres user is the table owner/superuser, so the shared fixture also FORCEs
+#: RLS to make isolation assertions meaningful for engines that connect as it.
+_FORCE_RLS_TABLES: tuple[str, ...] = (
+    "org_daily_run_counts",
+    "org_memberships",
+    "audit_events",
+    "schemas",
+    "teams",
+    "connector_instances",
+    "library_primitives",
+    "model_backends",
+    "org_api_keys",
+    "schema_versions",
+    "agents",
+    "pipelines",
+    "pipeline_edges",
+    "pipeline_snapshots",
+    "triggers",
+    "runs",
+    "run_node_outputs",
+    "webhook_dedup_hashes",
+    "hitl_claims",
+    "notification_delivery_log",
+    "trigger_events",
+    "webhook_payloads",
+    "environment_profiles",
+    "cost_components",
+)
+
 
 # ---------------------------------------------------------------------------
 # Docker availability detection — fails the session early when Docker is
@@ -464,32 +494,7 @@ def migrated_db_url(db_url: str, session_monkeypatch: pytest.MonkeyPatch) -> str
             # superuser role too. In production, the farna_control_app role is not a superuser
             # so RLS applies automatically — but testcontainers run as the DB superuser
             # which bypasses ENABLE RLS, hence the explicit FORCE in tests.
-            for _tbl in (
-                "org_daily_run_counts",
-                "org_memberships",
-                "audit_events",
-                "schemas",
-                "teams",
-                "connector_instances",
-                "library_primitives",
-                "model_backends",
-                "org_api_keys",
-                "schema_versions",
-                "agents",
-                "pipelines",
-                "pipeline_edges",
-                "pipeline_snapshots",
-                "triggers",
-                "runs",
-                "run_node_outputs",
-                "webhook_dedup_hashes",
-                "hitl_claims",
-                "notification_delivery_log",
-                "trigger_events",
-                "webhook_payloads",
-                "environment_profiles",
-                "cost_components",
-            ):
+            for _tbl in _FORCE_RLS_TABLES:
                 await conn.execute(text(f"ALTER TABLE {_tbl} FORCE ROW LEVEL SECURITY"))
 
             await conn.commit()
@@ -497,6 +502,138 @@ def migrated_db_url(db_url: str, session_monkeypatch: pytest.MonkeyPatch) -> str
 
     asyncio.run(_migrate_shared_db())
     return db_url
+
+
+def _with_database(database_url: str, database: str) -> str:
+    """Swap the database name in an asyncpg URL (keeps credentials/host/port)."""
+    prefix, _, rest = database_url.partition("://")
+    host_part, _, _db = rest.partition("/")
+    return f"{prefix}://{host_part}/{database}"
+
+
+# ---------------------------------------------------------------------------
+# Per-module isolated database
+# ---------------------------------------------------------------------------
+# The run-lifecycle stateful module drives the GLOBAL park/slot sweeps
+# (``park_expired_hitl_runs`` / ``reconcile_pipeline_slots``): they enumerate
+# EVERY organisation, so against the shared testcontainer they would reap other
+# tests' rows (``grace_seconds=0`` / ``stale_seconds=1`` make every neighbour a
+# candidate). A dedicated database makes those sweeps total over THIS module's
+# own data only, so no other test's rows can be touched by construction.
+#
+# The name is per xdist worker: under ``--dist load`` the module's tests can be
+# split across workers, and each worker needs its own database (two workers
+# racing on one CREATE DATABASE would collide).
+def _isolated_lifecycle_database() -> str:
+    worker = "".join(ch for ch in os.environ.get("PYTEST_XDIST_WORKER", "gw0").lower() if ch.isalnum())
+    return f"far2705_run_lifecycle_{worker}"
+
+
+async def _create_database(admin_url: str, database: str) -> None:
+    engine = create_async_engine(admin_url, poolclass=NullPool, isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)'))
+            await conn.execute(text(f'CREATE DATABASE "{database}"'))
+    finally:
+        await engine.dispose()
+
+
+async def _drop_database(admin_url: str, database: str) -> None:
+    engine = create_async_engine(admin_url, poolclass=NullPool, isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)'))
+    finally:
+        await engine.dispose()
+
+
+async def _apply_test_schema_surface(database_url: str) -> None:
+    """Checkpoint tables + FORCE RLS on the org-scoped tables (test-only surface)."""
+    from farna.core.pipeline_engine.modulo_saver import ModuloPostgresSaver
+
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            for ddl in ModuloPostgresSaver.MIGRATIONS:
+                await conn.execute(text(ddl))
+            for table in _FORCE_RLS_TABLES:
+                await conn.execute(text(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY"))
+            await conn.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _grant_role_on_database(database_url: str, role: str) -> None:
+    """Grant full DML on a database to a NOLOGIN role (``SET ROLE`` target)."""
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text(f'GRANT USAGE ON SCHEMA public TO "{role}"'))
+            await conn.execute(text(f'GRANT ALL ON ALL TABLES IN SCHEMA public TO "{role}"'))
+            await conn.execute(text(f'GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO "{role}"'))
+            await conn.execute(text(f'GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO "{role}"'))
+            await conn.execute(text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{role}"'))
+            await conn.execute(text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "{role}"'))
+            await conn.execute(text(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO "{role}"'))
+            await conn.commit()
+    finally:
+        await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="module")
+async def isolated_lifecycle_db_url(
+    migrated_db_url: str,
+    non_superuser_role: str,
+    session_monkeypatch: pytest.MonkeyPatch,
+) -> AsyncGenerator[str, None]:
+    """A dedicated, fully migrated database for the run-lifecycle stateful module.
+
+    Created from scratch (``CREATE DATABASE`` + ``alembic upgrade heads``) and
+    dropped on teardown, with the non-superuser role granted on it so every
+    engine this module builds runs under real RLS. The global park/slot sweeps
+    can therefore never see — let alone reap — another test's rows.
+    """
+    from farna.db.bootstrap_role import bootstrap_roles
+
+    database = _isolated_lifecycle_database()
+    await _create_database(migrated_db_url, database)
+    isolated_url = _with_database(migrated_db_url, database)
+    app_url = _with_credentials(isolated_url, "farna_control_app", "apppass")
+    sys_url = _with_credentials(isolated_url, "farna_control_system", "syspass")
+    bg_url = _with_credentials(isolated_url, "farna_control_breakglass", "bgpass")
+
+    config = Config(BACKEND_ROOT / "alembic.ini")
+    config.set_main_option("sqlalchemy.url", isolated_url)
+    config.set_main_option("script_location", str(BACKEND_ROOT / "src" / "farna" / "db" / "migrations"))
+    config.config_file_name = None
+
+    def _upgrade() -> None:
+        # env.py resolves DATABASE_ADMIN_URL first, so it must name THIS database
+        # for the duration of the upgrade (the shared fixture patches the same
+        # names for its own upgrade).
+        with patch.dict(
+            os.environ,
+            {
+                "DATABASE_URL": isolated_url,
+                "DATABASE_ADMIN_URL": isolated_url,
+                "FARNA_CONTROL_BREAK_GLASS_DATABASE_URL": bg_url,
+                "FARNA_CONTROL_SYSTEM_DATABASE_URL": sys_url,
+            },
+        ):
+            command.upgrade(config, "heads")
+
+    try:
+        await asyncio.to_thread(_upgrade)
+        await bootstrap_roles(isolated_url, app_url)
+        await _apply_test_schema_surface(isolated_url)
+        await _grant_role_on_database(isolated_url, non_superuser_role)
+        # The dispatcher_reconcile tick connects through the system role; grant
+        # it the DML the sweep needs on this database too.
+        await _grant_role_on_database(isolated_url, "farna_control_system")
+        yield isolated_url
+    finally:
+        await _drop_database(migrated_db_url, database)
 
 
 @pytest_asyncio.fixture(scope="session")

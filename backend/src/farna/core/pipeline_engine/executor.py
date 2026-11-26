@@ -183,7 +183,6 @@ from farna.core.run_context.autonomy import (
     AutonomyLevel,
     autonomy_level_rank,  # noqa: F401
 )
-from farna.core.run_lifecycle import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.core.run_provenance import run_provenance_fields
 from farna.core.spend_ceiling import ORG_CEILING_EXCEEDED, evaluate_org_spend_ceiling
 from farna.core.trigger_engine.agent_signal import fire_agent_signal
@@ -220,6 +219,7 @@ from farna.db.models.run import Run
 from farna.db.models.run_attempt import ATTEMPT_TERMINAL_REASON_RESET
 from farna.db.rls import set_rls_execution_context, set_rls_org
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, is_lock_abort, sqlstate_of  # noqa: F401
+from farna.lifecycle import ACTIVE_RUN_STATUSES, TERMINAL_STATUSES
 from farna.otel_bridge import LangGraphOtelBridge, trace_id_for_thread  # noqa: F401
 
 # ---------------------------------------------------------------------------

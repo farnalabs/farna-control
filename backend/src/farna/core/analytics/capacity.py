@@ -74,7 +74,6 @@ from farna.core.analytics.service import (
     _guarded_session,
     _rate_limited,
 )
-from farna.core.run_lifecycle import EXECUTING_STATUSES, LIVE_STATUSES, PARKED_STATUSES
 from farna.db.crud.run import (
     ERROR_CODE_ORG_CAPACITY_LIMITED,
     ERROR_CODE_PIPELINE_CAPACITY,
@@ -82,6 +81,7 @@ from farna.db.crud.run import (
 )
 from farna.db.models.pipeline import Pipeline
 from farna.db.models.run import Run
+from farna.lifecycle import EXECUTING_STATUSES, LIVE_STATUSES, PARKED_STATUSES
 from farna.settings import Settings
 
 # Raw-row cap for the capacity scan. The window is short by design (minutes /

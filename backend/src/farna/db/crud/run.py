@@ -79,6 +79,7 @@ from farna.db.models.run import (
 from farna.db.rls import OutputsRlsMismatch, read_rls_org
 from farna.db.sqlstates import DUAL_WRITE_RETRYABLE_SQLSTATES, sqlstate_of
 from farna.db.unique_violation import is_unique_violation
+from farna.lifecycle import allowed_from_for_target
 
 _log = logging.getLogger(__name__)
 
@@ -4538,8 +4539,11 @@ async def transition_run(
     under concurrency:
 
     * ``status IN (allowed_from)`` — the transition only applies when the row
-      is currently in an admissible source state (terminal writes pass the
-      non-terminal states).
+      is currently in an admissible source state. When *allowed_from* is omitted
+      it is DERIVED from the lifecycle transition table
+      (:func:`farna.lifecycle.allowed_from_for_target`): only a source status
+      with a declared edge into *target_status* is admissible, so an edge the
+      table does not declare can never be taken.
     * ``(:tok IS NULL OR claim_token = :tok)`` — when *claim_token* is given the
       write is FENCED to the claim that owns the run; a superseded executor's
       token no longer matches and the write is a no-op (rowcount 0).
@@ -4575,7 +4579,7 @@ async def transition_run(
     if target_status not in RUN_STATUS_WHITELIST:
         raise ValueError(f"invalid run status: {target_status!r}")
     if allowed_from is None:
-        allowed_from = RUN_STATUS_WHITELIST
+        allowed_from = allowed_from_for_target(target_status)
     result = await session.execute(
         _TRANSITION_SQL,
         {

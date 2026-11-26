@@ -79,7 +79,6 @@ from farna.core.retry_budget import (
     retry_executions_consumed,
     retry_max_executions,
 )
-from farna.core.run_lifecycle import ONGOING_ACTIVE_STATUSES, TERMINAL_STATUSES
 from farna.core.runtime_config.telemetry_bridge import is_telemetry_enabled
 
 # FAR-190 streak engine lives in its own module (extracted so cron_helpers can
@@ -102,6 +101,7 @@ from farna.db.models.run import (
 from farna.db.models.run_node_outputs import SENTINEL_NODE_ID_PREFIX
 from farna.db.settings_resolver import PAUSE_SKIP_REASON, org_is_paused, org_row_is_paused
 from farna.db.sqlstates import is_row_lock_timeout, is_statement_timeout
+from farna.lifecycle import HITL_ACTIONABLE_RUN_STATUSES, ONGOING_ACTIVE_STATUSES, REDISPATCHABLE_STATUSES, TERMINAL_STATUSES
 from farna.settings import (
     MAX_NODE_TIMEOUT_SECONDS,
     SAQ_SETUP_GRACE_DEFAULT_SECONDS,
@@ -6811,7 +6811,7 @@ def _build_re_dispatch_predicate(
         # pending reenqueue-window leg above (fenced-reset signature,
         # idempotency-gated).
         and_(
-            Run.status.in_(("awaiting_human", "claimed", "hitl_parked")),
+            Run.status.in_(sorted(HITL_ACTIONABLE_RUN_STATUSES)),
             Run.dispatcher == "saq",
             Run.heartbeat_at < func_now_minus(stale_window),
         ),
@@ -6942,7 +6942,7 @@ def _reconcile_job_type(status: str) -> str:
     :func:`_awaiting_human_has_committed_decision`) — never with an empty
     decision.
     """
-    return "resume_run" if status in ("awaiting_human", "claimed", "hitl_parked") else "execute_run"
+    return "resume_run" if status in HITL_ACTIONABLE_RUN_STATUSES else "execute_run"
 
 
 async def _latest_committed_decision_row(
@@ -9842,7 +9842,7 @@ async def _fetch_reconcile_org_rows(
     row_select = row_select.join(PipelineSnapshot, PipelineSnapshot.id == Run.snapshot_id, isouter=True)
     row_select = row_select.where(
         Run.organisation_id == org_id,
-        Run.status.in_(("pending", "running", "awaiting_human", "claimed", "hitl_parked")),
+        Run.status.in_(sorted(REDISPATCHABLE_STATUSES)),
         re_dispatch_predicate,
         _reconcile_capacity_marker_exclusion(tuning.capacity_redispatch_seconds),
     )
@@ -10684,7 +10684,7 @@ async def _resolve_hitl_resume_or_skip(
     as the other two statuses. Extracted unchanged from
     ``_reconcile_one_row``.
     """
-    if row.status not in ("awaiting_human", "claimed", "hitl_parked"):
+    if row.status not in HITL_ACTIONABLE_RUN_STATUSES:
         return False, None
     if not await _awaiting_human_has_committed_decision(session, org_id, row.id):
         summary["skipped"] += 1

@@ -90,8 +90,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from farna.core.dispatch_phases import PHASE_FIRST_NODE_DISPATCHED
-from farna.core.run_lifecycle import TERMINAL_STATUSES
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
+from farna.lifecycle import TERMINAL_STATUSES
 from farna.settings import get_settings
 
 _log = logging.getLogger(__name__)

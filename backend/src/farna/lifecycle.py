@@ -18,6 +18,8 @@ Every derived run-status set in the codebase is a *projection* of this module:
 * :data:`ONGOING_ACTIVE_STATUSES` — the ongoing-trigger top-up population:
   queued plus in-flight runs (a recovering run is deliberately excluded: a
   stuck ``unknown`` run is not a fresh unit of work).
+* :data:`REDISPATCHABLE_STATUSES` — active minus the indeterminate ``unknown``
+  outcome: the statuses the dispatcher/reconcile re-dispatch legs select.
 
 The 26-hour capacity incident (2026-09-04) happened because two hand-maintained
 projections of this same relation disagreed: the pipeline gate counted
@@ -27,10 +29,14 @@ disagreement structurally impossible.
 
 Dependency-free by design
 -------------------------
-This module imports nothing from ``farna``. Both the DB layer
-(``farna.db.models.run``) and the core/API layers import it, so it must stay a
-leaf: importing a db model or a route here would create a cycle, and importing
-any ``farna.core`` business module would make the DB layer depend on core.
+This module lives at the top of the package (``farna.lifecycle``) and imports
+nothing from ``farna``. Both the DB layer (``farna.db.models.run``) and the
+core/API layers import it, so it must stay a leaf: importing a db model or a
+route here would create a cycle, and importing any ``farna.core`` business
+module would make the DB layer depend on core. Being outside ``farna.core`` and
+``farna.api`` is what lets the layering contracts
+(``db-does-not-import-core`` / ``connectors-do-not-import-core``) hold without
+an exemption.
 
 Status classes
 --------------
@@ -208,7 +214,11 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(STATUS_CLAIMED, "claim_expired", STATUS_AWAITING_HUMAN, "an expired gate claim returns the run to awaiting_human"),
     # --- hitl_parked ------------------------------------------------------
     Transition(STATUS_HITL_PARKED, ACTION_CLAIM_GATE, STATUS_HITL_PARKED, "a parked run's gate stays claimable and the run stays parked"),
+    Transition(STATUS_HITL_PARKED, "resume_claim", STATUS_RUNNING, "the resume claim takes a parked run back to running once its gate is decided"),
     Transition(STATUS_HITL_PARKED, ACTION_UNPARK, STATUS_AWAITING_HUMAN, "a committed decision un-parks the run into normal admission"),
+    Transition(STATUS_HITL_PARKED, ACTION_CANCEL, STATUS_CANCELLED, "an operator cancels a parked run"),
+    # --- claimed (same-account re-claim, FAR-686 token recovery) ----------
+    Transition(STATUS_CLAIMED, "reclaim_same_account", STATUS_CLAIMED, "the same reviewer re-claims their own held gate (self-transition), never another account's"),
     # --- unknown ----------------------------------------------------------
     Transition(STATUS_UNKNOWN, ACTION_RECONCILE_UNKNOWN, STATUS_COMPLETE, "an operator's same-key re-run reconciles the outcome to complete"),
     Transition(STATUS_UNKNOWN, "reconcile_unknown_failed", STATUS_FAILED, "an operator's same-key re-run reconciles the outcome to failed"),
@@ -217,7 +227,6 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(STATUS_RUNNING, ACTION_CANCEL, STATUS_CANCELLED, "an operator cancels a running run (cancel wins over every writer)"),
     Transition(STATUS_AWAITING_HUMAN, ACTION_CANCEL, STATUS_CANCELLED, "an operator cancels a run waiting on a human"),
     Transition(STATUS_CLAIMED, ACTION_CANCEL, STATUS_CANCELLED, "an operator cancels a run whose gate is claimed"),
-    Transition(STATUS_HITL_PARKED, ACTION_CANCEL, STATUS_CANCELLED, "an operator cancels a parked run"),
     Transition(STATUS_UNKNOWN, ACTION_CANCEL, STATUS_CANCELLED, "an operator cancels a run whose outcome was indeterminate"),
 )
 
@@ -237,6 +246,23 @@ class LifecycleModelError(ValueError):
 def transitions_from(status: str, transitions: tuple[Transition, ...] = TRANSITIONS) -> tuple[Transition, ...]:
     """Every transition whose source is *status* (empty for a terminal status)."""
     return tuple(transition for transition in transitions if transition.from_status == status)
+
+
+def allowed_from_for_target(target_status: str, transitions: tuple[Transition, ...] = TRANSITIONS) -> frozenset[str]:
+    """Every status the table declares a transition INTO *target_status* from.
+
+    This is the guard a writer passes as ``allowed_from``: a write whose source
+    status is not a declared edge is rejected by the conditional UPDATE, so an
+    edge missing from the table is structurally impossible to take (the table,
+    not a hand-written literal, decides). Empty when nothing may enter the
+    status — the write can then never apply.
+    """
+    return frozenset(t.from_status for t in transitions if t.to_status == target_status and t.from_status is not None)
+
+
+def transitions_for_action(action: str, transitions: tuple[Transition, ...] = TRANSITIONS) -> tuple[Transition, ...]:
+    """Every transition named *action* (the edge list a writer's guard derives from)."""
+    return tuple(transition for transition in transitions if transition.action == action)
 
 
 def lifecycle_violations(statuses: tuple[Status, ...] = STATUSES, transitions: tuple[Transition, ...] = TRANSITIONS) -> list[str]:
@@ -327,6 +353,7 @@ def derive_projections(statuses: tuple[Status, ...] = STATUSES, transitions: tup
         "LIVE_STATUSES": active,
         "TRIGGER_SLOT_HOLDING_STATUSES": active - queued,
         "ONGOING_ACTIVE_STATUSES": queued | in_flight,
+        "REDISPATCHABLE_STATUSES": active - recovering,
         "HITL_CLAIMABLE_RUN_STATUSES": claim_sources,
         "HITL_ACTIONABLE_RUN_STATUSES": claim_sources | claim_targets,
         "SUCCESS_STATUSES": frozenset({STATUS_COMPLETE}),
@@ -368,6 +395,13 @@ TRIGGER_SLOT_HOLDING_STATUSES: frozenset[str] = _PROJECTIONS["TRIGGER_SLOT_HOLDI
 #: executed. ``unknown`` (a stuck recovery) and parked runs are excluded.
 ONGOING_ACTIVE_STATUSES: frozenset[str] = _PROJECTIONS["ONGOING_ACTIVE_STATUSES"]
 
+#: Active statuses a dispatcher/reconcile re-dispatch leg may select: the active
+#: vocabulary minus ``unknown`` (an indeterminate outcome is reconciled by an
+#: operator re-run with the same idempotency key, never re-dispatched as a fresh
+#: unit of work — see ``ACTIVE_RUN_STATUSES`` and the transient-status docstring
+#: in ``farna.db.models.run``).
+REDISPATCHABLE_STATUSES: frozenset[str] = _PROJECTIONS["REDISPATCHABLE_STATUSES"]
+
 #: Statuses from which a gate claim may ACQUIRE (FAR-645).
 HITL_CLAIMABLE_RUN_STATUSES: frozenset[str] = _PROJECTIONS["HITL_CLAIMABLE_RUN_STATUSES"]
 
@@ -390,6 +424,7 @@ DOCUMENTED_PROJECTIONS: tuple[str, ...] = (
     "LIVE_STATUSES",
     "TRIGGER_SLOT_HOLDING_STATUSES",
     "ONGOING_ACTIVE_STATUSES",
+    "REDISPATCHABLE_STATUSES",
     "HITL_CLAIMABLE_RUN_STATUSES",
     "HITL_ACTIONABLE_RUN_STATUSES",
     "TERMINAL_STATUSES",

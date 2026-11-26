@@ -1,0 +1,55 @@
+name: "Run lifecycle stateful (nightly)"
+
+# FAR-2705: the PR state-machine run is deliberately small (4 examples x 6 steps,
+# derandomized) so it fits the integration budget. That is too small to be
+# evidence on its own, so the same Hypothesis machine runs here every night with
+# a much larger budget. Coverage of every rule is proven in the PR run by driving
+# the machine's own rules; this job explores far more interleavings.
+on:
+  schedule:
+    - cron: "10 4 * * *"    # 04:10 UTC daily
+  workflow_dispatch:
+
+# Authenticate GitHub git fetches so `uv sync --frozen` can resolve git-pinned
+# dependencies without an anonymous fetch-by-SHA, which GitHub rejects from CI.
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/.insteadOf'
+  GIT_CONFIG_VALUE_0: "https://github.com/"
+
+permissions:
+  contents: read
+
+jobs:
+  lifecycle-stateful:
+    name: Run lifecycle state machine (large budget)
+    # Docker is available on this runner; the suite spins its own Postgres
+    # through Testcontainers, so no service containers are needed.
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install backend deps
+        run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541: backend lockfile pins source-archive deps (pytest-bdd, ibm-cos-sdk); --frozen pins exact revisions so builds are deterministic.
+      - name: Run lifecycle state machine with the nightly budget
+        shell: bash
+        timeout-minutes: 100
+        run: |
+          uv run --no-build --no-sync pytest tests/integration/test_run_lifecycle_stateful.py \
+            -q --tb=short --timeout=1800 \
+            -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+          FARNA_CONTROL_LIFECYCLE_MAX_EXAMPLES: "50"
+          FARNA_CONTROL_LIFECYCLE_STEP_COUNT: "25"
