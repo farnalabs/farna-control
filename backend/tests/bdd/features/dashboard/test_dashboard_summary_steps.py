@@ -7,7 +7,7 @@ through the shared TestClient + mock-session pattern used by
 aggregation queries (active pipelines, status counts, teams, eval stats,
 daily trend, recent runs, config warnings, and the optional ``days`` period
 block) on SQL text, so the scenarios assert the actual API contract — widget
-shape, idle folding of pending/claimed into ``idle``, single-counted
+shape, idle folding of queued/parked work into ``idle``, single-counted
 ``total_runs``, the additive ``period`` block, and the 1..90 ``days`` bound.
 The story Redis cache is neutralised to keep the assertions deterministic.
 """
@@ -25,6 +25,7 @@ from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
+from farna.lifecycle import PARKED_STATUSES, QUEUED_STATUSES, STATUS_AWAITING_HUMAN
 from farna.settings import Settings, get_settings
 
 scenarios("dashboard_summary.feature")
@@ -34,7 +35,11 @@ _ACCOUNT_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 _TEAM_ID = uuid.UUID("00000000-0000-0000-0000-000000000011")
 
 _TRACKED = ("running", "awaiting_human", "failed", "idle")
-_IDLE = ("pending", "claimed", "hitl_parked")
+# The endpoint's ``idle`` projection, derived from ``farna.lifecycle`` exactly
+# as the route derives it (queued + parked, minus the statuses with their own
+# card). ``claimed`` is IN FLIGHT and therefore counted as its own status, not
+# as idle work.
+_IDLE = tuple(sorted((QUEUED_STATUSES | PARKED_STATUSES) - {STATUS_AWAITING_HUMAN}))
 
 
 class _Row:
@@ -318,7 +323,7 @@ def _then_status_counts(request: Any, running: int, failed: int, idle: int) -> N
     assert counts["idle"] == idle, f"idle={counts['idle']}, expected {idle}"
 
 
-@then("total_runs counts pending/claimed only once and equals 10")
+@then("total_runs counts queued/parked work only once and equals 10")
 def _then_total_runs_single_count(request: Any) -> None:
     body = _body(request)
     counts = body["run_counts_by_status"]

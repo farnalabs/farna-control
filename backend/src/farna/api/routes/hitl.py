@@ -92,6 +92,7 @@ from farna.core.hitl_manager import (
 )
 from farna.core.notifier import Notifier
 from farna.core.pipeline_engine.executor import PipelineExecutor, SandboxCapacityExceededError
+from farna.core.run_admission import evaluate_gate_claim_admission
 from farna.db.crud.hitl_review_config import (
     EVENT_HUMAN_ONLY_DENIED,
     edge_source_or_target,
@@ -813,6 +814,23 @@ async def claim_review(
                 # on claim exactly like on the decision routes. The check
                 # short-circuits browser JWTs before writing anything.
                 await _enforce_human_only_gate(session, principal, run_id, review_id, "claim")
+                # FAR-2705: a claim that moves an awaiting_human run to
+                # ``claimed`` acquires a PIPELINE execution slot (the committed
+                # decision resumes straight into execution), so the claim is
+                # capacity-admitted through the SAME production decision the
+                # run-lifecycle state machine drives. At cap the claim is
+                # refused (409) and NOTHING is written: the transaction rolls
+                # back, the run stays ``awaiting_human`` and its gate stays open
+                # for a later claim once a slot frees. Without this check a
+                # reviewer claiming a gate could push the pipeline past its
+                # ``max_concurrent_runs`` cap (reproduced at cap 2 with three
+                # capacity-holding runs).
+                admission = await evaluate_gate_claim_admission(session, run_id=run_id, org_id=principal.organisation_id)
+                if not admission.allowed:
+                    raise ProblemException(
+                        ProblemType.CONFLICT,
+                        detail=(f"Pipeline is at its concurrency limit ({admission.used}/{admission.limit} run slots in use); the review is still open — claim it again once a slot frees."),
+                    )
                 gate = await mgr.claim(
                     session,
                     run_id=run_id,

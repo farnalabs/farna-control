@@ -22,6 +22,7 @@ from farna.api.routes.hitl import HumanOnlyDenied, _emit_human_only_denial_audit
 from farna.auth.dependencies import get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal
 from farna.core.hitl_manager import NotTeamMemberError, RunNotAwaitingError
+from farna.core.run_admission import GateClaimAdmission
 from farna.db.crud.hitl_review_config import EVENT_HUMAN_ONLY_DENIED, MSG_HUMAN_ONLY_DENY, MSG_HUMAN_ONLY_UNRESOLVED
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session, configure_rls_preamble
@@ -52,6 +53,24 @@ def _make_settings() -> Settings:
         fernet_key=_VALID_32,
         admin_password="testpass",
     )
+
+
+@pytest.fixture(autouse=True)
+def _gate_claim_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default the gate-claim capacity admission to "admitted" in this module.
+
+    FAR-2705's claim route now reads the pipeline's occupancy before claiming
+    (``evaluate_gate_claim_admission``); these resilience tests use a mocked
+    session that cannot answer that read, and they assert the claim's error
+    mapping, not the admission. The refusal path is pinned in
+    ``test_hitl_routes_coverage.py`` and end-to-end by the run-lifecycle
+    stateful integration test.
+    """
+
+    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID) -> GateClaimAdmission:
+        return GateClaimAdmission(allowed=True, used=0, limit=1)
+
+    monkeypatch.setattr("farna.api.routes.hitl.evaluate_gate_claim_admission", _admit)
 
 
 @pytest.fixture

@@ -84,6 +84,15 @@ A non-terminal run is in exactly one class: `queued` (`pending`), `in_flight`
 work) or `parked` (`awaiting_human`, `hitl_parked`). A terminal status has no
 outgoing transition; every non-terminal status has at least one.
 
+Every entry into execution is capacity-admitted against the pipeline's
+`max_concurrent_runs`: the executor's `_check_capacity` on a queued claim, the
+HITL claim route's `evaluate_gate_claim_admission` on a gate claim
+(`awaiting_human` -> `claimed`), and — FAR-2705 — the capacity predicate inside
+the RESUME claim UPDATE (`claim_resume_run_async`). A resume refused at cap
+matches no row, so the run keeps its committed decision in
+`awaiting_human`/`hitl_parked` and `dispatcher_reconcile` re-dispatches the
+resume once a slot frees (a committed human decision is queued, never failed).
+
 The table is pinned by `backend/tests/unit/core/test_run_lifecycle.py` (frozen
 literal snapshots of every documented projection, the parsed `ck_runs_status`
 constraint asserted equal to the vocabulary, and the proof that a seventh

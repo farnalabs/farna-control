@@ -47,6 +47,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna._types import _DICT_STR_ANY
+from farna.lifecycle import SUCCESS_STATUSES
 from farna.util.uuid import coerce_uuid
 
 _log = logging.getLogger(__name__)
@@ -55,11 +56,12 @@ _log = logging.getLogger(__name__)
 EVIDENCE_PROBE_TIMEOUT_SECONDS: float = 3.0
 
 #: Run statuses eligible for the reconciliation sweep. Only genuinely
-#: terminalized ``complete`` runs (not all terminal statuses) are no-op
-#: eligible — a failed/cancelled run is already a declared failure (§13.3).
-#: Kept as a set so the sweep filter reads through the shared status-enum
-#: convention instead of a raw ``status == "complete"`` comparison.
-RECONCILE_COMPLETE_STATUSES: tuple[str, ...] = ("complete",)
+#: terminalized SUCCESS runs (``lifecycle.SUCCESS_STATUSES`` — today just
+#: ``complete``) are no-op eligible — a failed/cancelled run is already a
+#: declared failure (§13.3). Imported rather than re-spelled so widening the
+#: success set cannot leave the sweep behind; kept as a tuple because the sweep
+#: binds it directly into ``Run.status.in_(...)``.
+RECONCILE_COMPLETE_STATUSES: tuple[str, ...] = tuple(sorted(SUCCESS_STATUSES))
 
 #: Keys inside a node's ``output_json`` that the harness itself may stamp and
 #: which therefore do NOT count as agent-produced content. The agent contract

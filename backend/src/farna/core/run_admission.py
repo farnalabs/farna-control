@@ -34,6 +34,7 @@ import uuid
 from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -41,9 +42,11 @@ from sqlalchemy import DateTime, and_, bindparam, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from farna.core.dispatch_phases import PHASE_FIRST_NODE_DISPATCHED
+from farna.db.crud.run import count_active_runs_for_pipeline
+from farna.db.models.pipeline import Pipeline
 from farna.db.models.run import Run
 from farna.db.sqlstates import is_row_lock_timeout
-from farna.lifecycle import ACTIVE_RUN_STATUSES, AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS, TRIGGER_SLOT_HOLDING_STATUSES
+from farna.lifecycle import ACTIVE_RUN_STATUSES, AWAITING_HUMAN_STATUS, HITL_PARKED_STATUS, STATUS_AWAITING_HUMAN, TRIGGER_SLOT_HOLDING_STATUSES
 from farna.settings import get_settings
 
 _log = logging.getLogger(__name__)
@@ -138,6 +141,67 @@ async def count_trigger_slot_occupancy(session: Any, trigger_id: uuid.UUID) -> i
         )
     )
     return int(result.scalar_one() or 0)
+
+
+@dataclass(frozen=True, slots=True)
+class GateClaimAdmission:
+    """Whether one HITL gate claim may acquire a PIPELINE execution slot.
+
+    ``limit`` is the pipeline's ``max_concurrent_runs`` and ``used`` the runs
+    already holding one of those slots (this run excluded). ``allowed`` is the
+    production verdict: ``used < limit``, or unconditionally when the claim
+    takes no slot (see :func:`evaluate_gate_claim_admission`).
+    """
+
+    allowed: bool
+    used: int
+    limit: int
+
+
+async def evaluate_gate_claim_admission(session: Any, *, run_id: uuid.UUID, org_id: uuid.UUID) -> GateClaimAdmission:
+    """Decide whether a HITL gate claim for *run_id* may take a PIPELINE slot.
+
+    The REST claim route moves an ``awaiting_human`` run to ``claimed``, and
+    ``claimed`` is capacity-holding (``lifecycle.PIPELINE_CAPACITY_STATUSES``):
+    the reviewer's committed decision resumes the graph straight into
+    execution. So a claim is an ADMISSION into the pipeline's concurrency and
+    must be refused at cap — before this gate existed, a reviewer claiming a
+    gate could push a pipeline past ``max_concurrent_runs`` (reproduced at cap 2
+    with three capacity-holding runs), which is the same double-admission class
+    the 2026-09-04 capacity incident came from.
+
+    Semantics (all decided here, so the route and the stateful test share ONE
+    production decision):
+
+    * a run that is not ``awaiting_human`` takes no slot with this claim — a
+      ``hitl_parked`` run stays parked, and a ``claimed`` run already holds its
+      slot — so it is always admitted;
+    * ``max_concurrent_runs`` is read from the pipeline row (``<= 0`` means
+      unlimited, the executor's convention) and the occupancy from
+      :func:`farna.db.crud.run.count_active_runs_for_pipeline` (running /
+      claimed / unknown — a parked run holds no PIPELINE slot, FAR-604 D1),
+      excluding this run so a re-claim never counts itself out;
+    * a missing run/pipeline row is admitted: the claim path's own guards own
+      those errors (``GateNotFoundError`` / the fenced transition), and this
+      helper must not turn them into a capacity refusal.
+
+    The caller runs this INSIDE its claim transaction, so a refusal rolls the
+    whole claim back and the run is left ``awaiting_human`` with its gate still
+    open. Like the executor's ``_check_capacity`` this is a soft cap (no
+    advisory lock): a simultaneous claim of two different gates can still
+    overshoot by one, and the pipeline's admission reconciles on the next
+    attempt — the cap is a throughput bound, not a lock.
+    """
+    row = (await session.execute(select(Run.status, Run.pipeline_id, Pipeline.max_concurrent_runs).join(Pipeline, Pipeline.id == Run.pipeline_id).where(Run.id == run_id, Run.organisation_id == org_id))).one_or_none()
+    if row is None:
+        # Missing run/pipeline: not a capacity question. Let the claim path
+        # raise its own not-found / fenced-transition outcome.
+        return GateClaimAdmission(allowed=True, used=0, limit=0)
+    status, pipeline_id, limit = row
+    if status != STATUS_AWAITING_HUMAN or limit <= 0:
+        return GateClaimAdmission(allowed=True, used=0, limit=int(limit))
+    used = await count_active_runs_for_pipeline(session, pipeline_id, include_pending=False, exclude_run_id=run_id)
+    return GateClaimAdmission(allowed=used < limit, used=used, limit=int(limit))
 
 
 # heartbeat_stale is the FAR-604 P1 code for the heartbeat-stale slot

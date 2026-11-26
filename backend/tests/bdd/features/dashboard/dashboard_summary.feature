@@ -4,7 +4,8 @@ Feature: Home Dashboard Summary
   So that I can monitor health at a glance without querying the database directly
 
   `GET /api/v1/dashboard/summary` aggregates the whole org: total runs (with
-  pending/claimed slot-holders folded into `idle` so each run is counted once),
+  the lifecycle's non-executing queued/parked runs folded into `idle` so each
+  run is counted once; `claimed` is in flight and counts as itself),
   active pipelines, per-status run counts, per-team metrics, non-guardrail eval
   pass rate with per-pipeline detail, a 7-day run/eval/spend trend, recent runs,
   and non-blocking config warnings. Responses are org-RLS-scoped, permission
@@ -21,13 +22,13 @@ Feature: Home Dashboard Summary
     And the summary contains a 7-day trend with run counts and spend
     And the summary contains recent runs and config warnings
 
-  Scenario: Status counts fold idle slot-holders into idle and count each run once
+  Scenario: Status counts fold idle work into idle and count each run once
     Given the org has runs with statuses pending=2, claimed=3, running=4, failed=1
     And I am authenticated as an admin
     When I request GET /api/v1/dashboard/summary
     Then the response status is 200
-    And the summary run_counts_by_status has running=4, failed=1, and idle=5
-    And total_runs counts pending/claimed only once and equals 10
+    And the summary run_counts_by_status has running=4, failed=1, and idle=2
+    And total_runs counts queued/parked work only once and equals 10
 
   Scenario: The summary carries an additive period block when days is requested
     Given I am authenticated as an admin

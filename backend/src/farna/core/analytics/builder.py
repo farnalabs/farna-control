@@ -42,6 +42,7 @@ from farna.db.crud.run import CAPACITY_MARKERS, ERROR_CODE_CAPACITY_TIMEOUT
 from farna.db.crud.team_scope import team_scope_clause
 from farna.db.models.pipeline import Pipeline
 from farna.db.models.run_daily_facts import RunDailyFact
+from farna.lifecycle import SUCCESS_STATUSES
 
 __all__ = [
     "CAPACITY_ERROR_CODES",
@@ -63,9 +64,12 @@ __all__ = [
     "to_utc_aware",
 ]
 
-_COMPLETE_STATUS = "complete"
 _FAILED_STATUS = "failed"
 _STALLED_STATUS = "stalled"
+# ``complete_count`` is the SUCCESS projection, imported from the lifecycle
+# table rather than re-spelled: widening the success set (a future status that
+# also means "delivered") must move the analytics success rate with it. The
+# label stays ``complete_count`` — it is the published analytics field name.
 
 # Error codes that mark a failed run as a STALL — the run made no progress
 # (no node dispatched, a node exceeded its wall-clock timeout, or a sandbox
@@ -298,7 +302,7 @@ def build_facts_query(query: AnalyticsQuery) -> tuple[sa.Select[Any], dict[str, 
     select_cols += [
         # Complete-run count for success_rate — a FILTER keeps it out of the
         # group key while staying computable at day granularity.
-        sa.func.count(RunDailyFact.id).filter(RunDailyFact.status == _COMPLETE_STATUS).label("complete_count"),
+        sa.func.count(RunDailyFact.id).filter(RunDailyFact.status.in_(sorted(SUCCESS_STATUSES))).label("complete_count"),
         sa.func.count(RunDailyFact.id).label("count"),
         sa.func.sum(RunDailyFact.total_cost_usd).label("total_cost_usd"),
         sa.func.sum(RunDailyFact.total_tokens).label("total_tokens"),

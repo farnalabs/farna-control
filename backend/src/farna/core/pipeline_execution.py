@@ -72,7 +72,7 @@ from farna.db.models.run_attempt import (
     ATTEMPT_TERMINAL_REASON_WORKER_LOST,
 )
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
-from farna.lifecycle import ACTIVE_RUN_STATUSES, HITL_ACTIONABLE_RUN_STATUSES, TERMINAL_STATUSES
+from farna.lifecycle import ACTIVE_RUN_STATUSES, HITL_ACTIONABLE_RUN_STATUSES, PIPELINE_CAPACITY_STATUSES, TERMINAL_STATUSES
 
 __all__ = [
     "PHASE_CAPACITY_CHECK",
@@ -4864,14 +4864,53 @@ async def stale_run_recovery_sweep(
 #: ``HITL_ACTIONABLE_RUN_STATUSES`` (the lifecycle table keeps it authoritative).
 _RESUME_CLAIM_SOURCE_STATUS_SQL = ", ".join(f"'{status}'" for status in sorted(HITL_ACTIONABLE_RUN_STATUSES))
 
+#: The statuses a resume claim would make / keep capacity-holding, derived from
+#: ``PIPELINE_CAPACITY_STATUSES`` (the lifecycle table is the authority).
+_PIPELINE_CAPACITY_STATUS_SQL = ", ".join(f"'{status}'" for status in sorted(PIPELINE_CAPACITY_STATUSES))
+
+#: The RESUME claim's capacity predicate (FAR-2705, capacity-leak fix).
+#:
+#: A resume claim moves a parked / awaiting_human run straight into ``running``,
+#: and both that status and the ``claimed`` a reviewer's gate claim takes hold a
+#: PIPELINE slot (``PIPELINE_CAPACITY_STATUSES``). Without this predicate the
+#: resume was the one entry into execution capacity that never consulted the
+#: pipeline cap: a decided gate on a run parked while other runs filled the
+#: pipeline resumed BESIDE them, over-admitting the pipeline until something
+#: finished (the stateful FAR-2705 invariant caught exactly that at cap 2).
+#:
+#: The occupancy and the cap are read INSIDE this UPDATE, so the admission is
+#: as atomic as the claim itself and no caller-supplied number can widen it:
+#:
+#: * the count EXCLUDES this row (``r2.id <> runs.id``) — a ``claimed`` or
+#:   stale-``running`` row already holds its own slot, so it must not count
+#:   itself out of its own re-claim;
+#: * the cap is the pipeline's own ``max_concurrent_runs``, where ``<= 0`` means
+#:   unlimited (the same convention ``PipelineExecutor._check_capacity`` uses).
+#:
+#: A claim refused here matches no row, so the run stays ``awaiting_human`` /
+#: ``claimed`` / ``hitl_parked`` with its committed decision intact and
+#: ``dispatcher_reconcile``'s F6a branch re-dispatches the resume once a slot
+#: frees — the same queued-not-failed contract as a row-lock timeout (FAR-1831:
+#: a committed human decision is never bounced).
+_RESUME_CLAIM_CAPACITY_SQL = (
+    "AND ("  # nosec B608  # noqa: S608 - concatenates module constants only (never caller data)
+    "coalesce((SELECT p.max_concurrent_runs FROM pipelines p WHERE p.id = runs.pipeline_id), 0) <= 0 "
+    "OR ("
+    "SELECT count(*) FROM runs r2 WHERE r2.pipeline_id = runs.pipeline_id "
+    "AND r2.organisation_id = runs.organisation_id "
+    "AND r2.id <> runs.id "
+    f"AND r2.status IN ({_PIPELINE_CAPACITY_STATUS_SQL})"
+    ") < (SELECT p.max_concurrent_runs FROM pipelines p WHERE p.id = runs.pipeline_id)"
+    ") "
+)
+
 _RESUME_CLAIM_UPDATE_SQL = text(
     "UPDATE runs SET status='running', heartbeat_at=now(), claim_count=claim_count+1, "  # nosec B608  # noqa: S608 - concatenates module constants only (never caller data)
     "dispatch_phase='claimed', dispatch_phase_entered_at=now(), "
     "guardrail_override_resume_pending=false, " + _CLAIM_HISTORY_APPEND + "WHERE id=:rid AND organisation_id=:oid "
     f"AND (status IN ({_RESUME_CLAIM_SOURCE_STATUS_SQL}) "
     "     OR (status = 'running' AND heartbeat_at < now() - (:stale_seconds * interval '1 second'))) "
-    "AND claim_count < :claim_cap "
-    "RETURNING id"
+    "AND claim_count < :claim_cap " + _RESUME_CLAIM_CAPACITY_SQL + "RETURNING id"
 )
 
 _RESUME_CLAIM_UPDATE_SQL_WITH_TOKEN = text(
@@ -4880,8 +4919,7 @@ _RESUME_CLAIM_UPDATE_SQL_WITH_TOKEN = text(
     "guardrail_override_resume_pending=false, " + _CLAIM_HISTORY_APPEND + "WHERE id=:rid AND organisation_id=:oid "
     f"AND (status IN ({_RESUME_CLAIM_SOURCE_STATUS_SQL}) "
     "     OR (status = 'running' AND heartbeat_at < now() - (:stale_seconds * interval '1 second'))) "
-    "AND claim_count < :claim_cap "
-    "RETURNING id"
+    "AND claim_count < :claim_cap " + _RESUME_CLAIM_CAPACITY_SQL + "RETURNING id"
 )
 
 
@@ -4895,22 +4933,32 @@ def build_resume_claim_update(
 
     Claimable rows (plan F6a + FAR-604):
 
-      * ``status IN ('awaiting_human', 'claimed', 'hitl_parked')`` — the gate
-        decision has already been committed by the caller, the run is waiting
-        to resume. ``hitl_parked`` (FAR-604) is the parked counterpart of
-        ``awaiting_human``: the park-sweep vs decide race (decision tx commits
-        while the park UPDATE is in flight) leaves a run parked with a
-        committed decision, the reconcile loop re-enqueues ``resume_run`` for
-        it, and the claim must match it or the resume is a silent no-op that
-        re-enqueues forever (``status='running'`` is the correct resume
-        transition out of parked). Literal ``'hitl_parked'`` mirrors
-        ``db.models.run.HITL_PARKED_STATUS`` (see the template comment).
+      * the source statuses are DERIVED from ``HITL_ACTIONABLE_RUN_STATUSES``
+        (``awaiting_human`` / ``claimed`` / ``hitl_parked``) — the ``from_status``
+        and ``to_status`` of the lifecycle table's gate-claim transitions — and
+        interpolated into the template as ``_RESUME_CLAIM_SOURCE_STATUS_SQL``.
+        There is no second hand-written literal list to keep in step: a status
+        added to the table (or a new gate-claim endpoint) reaches this claim
+        automatically. The gate decision has already been committed by the
+        caller, so the run is waiting to resume. ``hitl_parked`` (FAR-604) is
+        the parked counterpart of ``awaiting_human``: the park-sweep vs decide
+        race (decision tx commits while the park UPDATE is in flight) leaves a
+        run parked with a committed decision, the reconcile loop re-enqueues
+        ``resume_run`` for it, and the claim must match it or the resume is a
+        silent no-op that re-enqueues forever (``status='running'`` is the
+        correct resume transition out of parked).
       * ``status = 'running'`` with a stale heartbeat — a mid-resume crash left
         the run running but the worker died.
 
     The single ``UPDATE ... WHERE ... RETURNING id`` claims atomically
     (no check-then-act window); a concurrent claimer loses because the row
     transitions out of the claimable state in the same statement.
+
+    The claim is also CAPACITY-ADMITTED in that same statement (FAR-2705): a
+    resumed run holds a PIPELINE slot, so the UPDATE additionally requires the
+    pipeline's ``max_concurrent_runs`` to have room for it. See
+    ``_RESUME_CLAIM_CAPACITY_SQL`` — a refused claim matches no row and the run
+    stays parked with its decision for ``dispatcher_reconcile`` to retry.
 
     ``claim_cap`` bounds the number of claims (claim_count) per run; callers
     resolve it from settings (``SAQ_RUN_CLAIM_CAP``, default 20) via
@@ -4964,6 +5012,14 @@ async def claim_resume_run_async(
     heartbeat and loses the atomic UPDATE. The gate decision itself is committed
     by the caller (HITL endpoints / recover-node) before dispatch. Rotates
     ``runs.claim_token`` to a fresh per-claim value (plan F3a).
+
+    Capacity-admitted (FAR-2705): the claim also requires room in the pipeline's
+    ``max_concurrent_runs``, read in the same statement, because the transition
+    this claim performs (parked -> ``running``) acquires a PIPELINE slot. At cap
+    the claim matches no row, returns ``None``, and the run stays parked with
+    its committed decision for ``dispatcher_reconcile`` to re-dispatch — the
+    resume is never over-admitted beside the runs already holding the slots.
+    The source-status set is derived from ``HITL_ACTIONABLE_RUN_STATUSES``.
 
     ``claim_cap`` bounds the number of claims (claim_count) per run; when
     omitted it resolves from settings (``SAQ_RUN_CLAIM_CAP``, default 20) via
@@ -5051,7 +5107,11 @@ async def resume_run(
     cap = _resolve_claim_cap(claim_cap)
     claim_token = await claim_resume_run_async(async_engine, str(rid), str(oid), claim_cap=cap)
     if not claim_token:
-        _log.warning("resume_run: run %s not claimed (wrong state or claim cap)", rid)
+        # FAR-2705: a pipeline-capacity refusal lands here too (the claim is
+        # capacity-admitted). The run keeps its committed decision and stays
+        # parked; dispatcher_reconcile's F6a branch re-dispatches this job once a
+        # PIPELINE slot frees, so this is a bounded wait, not a lost resume.
+        _log.warning("resume_run: run %s not claimed (wrong state, claim cap, or pipeline at capacity)", rid)
         return {"status": "not_claimed"}
 
     # FAR-1627: scope this claim's ownership for the worker-shutdown handoff.

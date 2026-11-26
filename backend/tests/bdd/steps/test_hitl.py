@@ -32,6 +32,26 @@ def ctx():
     return {}
 
 
+@pytest.fixture(autouse=True)
+def _gate_claim_capacity_admits(monkeypatch):
+    """Admit every gate claim by default in these scenarios.
+
+    FAR-2705 added a production capacity admission to the claim route
+    (``evaluate_gate_claim_admission``): a claim at a pipeline's cap is refused
+    with a 409. These scenarios drive the claim contract over a mocked session
+    (which cannot answer the admission's read), so the admission is stubbed to
+    admit; the refusal path is pinned by
+    ``tests/unit/api/test_hitl_routes_coverage.py`` and end-to-end by the
+    run-lifecycle stateful integration test.
+    """
+    from farna.core.run_admission import GateClaimAdmission
+
+    async def _admit(_session, *, run_id, org_id):
+        return GateClaimAdmission(allowed=True, used=0, limit=1)
+
+    monkeypatch.setattr("farna.api.routes.hitl.evaluate_gate_claim_admission", _admit)
+
+
 # ============================================================================
 # HITL Approval Gate
 # ============================================================================

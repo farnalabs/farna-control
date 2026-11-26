@@ -39,6 +39,7 @@ from farna.core.hitl_manager import (
     GateNotFoundError,
     RunNotAwaitingError,
 )
+from farna.core.run_admission import GateClaimAdmission
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session
 
@@ -106,6 +107,50 @@ def _gate_mock(*, claim_token: str | None = "tok-123") -> MagicMock:
 
 def _claim_gate(http: TestClient) -> object:
     return http.post(f"/api/v1/runs/{_RUN_ID}/hitl/gate-1/claim", json={"expiry_minutes": 15})
+
+
+@pytest.fixture(autouse=True)
+def _gate_claim_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default the gate-claim capacity admission to "admitted" in this module.
+
+    FAR-2705 added a production admission read to the claim route
+    (``evaluate_gate_claim_admission``): at a pipeline cap a claim is refused
+    with a 409 instead of over-admitting the pipeline. These tests assert the
+    claim's own semantics over a mocked session (which cannot answer that read),
+    so the admission is stubbed to admit here; its refusal path is pinned
+    explicitly by ``test_claim_gate_at_capacity_returns_409_without_claiming``
+    below and end-to-end by the run-lifecycle stateful integration test.
+    """
+
+    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID) -> GateClaimAdmission:
+        return GateClaimAdmission(allowed=True, used=0, limit=1)
+
+    monkeypatch.setattr("farna.api.routes.hitl.evaluate_gate_claim_admission", _admit)
+
+
+def test_claim_gate_at_capacity_returns_409_without_claiming(client: tuple[TestClient, AsyncMock]) -> None:
+    """FAR-2705: a claim at the pipeline cap is refused and writes NOTHING.
+
+    Reproduces the reported leak at the route boundary: ``claimed`` is
+    capacity-holding, so a claim that would take the pipeline past its
+    ``max_concurrent_runs`` must 409 (the run stays ``awaiting_human``) rather
+    than flip the run and over-admit the pipeline.
+    """
+    http, _session = client
+    with (
+        patch(
+            "farna.api.routes.hitl.evaluate_gate_claim_admission",
+            new=AsyncMock(return_value=GateClaimAdmission(allowed=False, used=2, limit=2)),
+        ),
+        patch("farna.api.routes.hitl.HITLManager.claim", new=AsyncMock()) as claim,
+        patch("farna.api.routes.hitl.transition_run", new=AsyncMock()) as transition,
+    ):
+        resp = _claim_gate(http)
+
+    assert resp.status_code == 409, resp.text
+    assert "concurrency limit" in resp.json()["detail"]
+    claim.assert_not_awaited()
+    transition.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

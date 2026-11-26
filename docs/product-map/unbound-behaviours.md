@@ -1284,7 +1284,7 @@ test. The list is ratcheted shrink-only in the baseline: it may not grow.
   - refs: backend/tests/unit/api/test_costs_routes_coverage.py, backend/tests/unit/db/crud/test_spend_anomaly.py
 - `costs-15` - Cost-component admin CRUD (attribution of spend to named components) in
   - refs: backend/tests/unit/core/cost_controller/test_cost_components_crud.py
-- `dashboard-01` - `GET /api/v1/dashboard/summary` returns `total_runs` (excluding pending/claimed),
+- `dashboard-01` - `GET /api/v1/dashboard/summary` returns `total_runs` (each run counted once:
   - refs: backend/tests/unit/api/test_dashboard.py
 - `dashboard-03` - `GET /api/v1/dashboard/daily-run-counts` returns daily counts grouped by run
   - refs: backend/tests/unit/api/test_daily_run_counts.py

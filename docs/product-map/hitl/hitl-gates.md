@@ -87,9 +87,23 @@ from, are projections of the run-lifecycle transition table
 human does not execute. The claim route's fenced status flip also derives its
 `allowed_from` guard from the same table (the sources of the `claim_gate` edges
 into `claimed`), so an edge the table does not declare cannot be taken.
+
+Because `claimed` IS capacity-holding (a reviewer holds the gate and the
+committed decision resumes straight into execution), the REST claim route is
+CAPACITY-ADMITTED: `evaluate_gate_claim_admission`
+(`backend/src/farna/core/run_admission.py`) refuses a claim that would take the
+pipeline past its `max_concurrent_runs` with a 409, rolls the whole claim
+transaction back, and leaves the run `awaiting_human` with the gate still open
+for a later claim once a slot frees. Claiming a `hitl_parked` run takes no slot
+(the run stays parked) and is always admitted; a `claimed` run already holds its
+slot. Without this check a reviewer claiming a gate could push a pipeline past
+its cap (reproduced at cap 2 with three capacity-holding runs) — the same class
+as the 2026-09-04 capacity incident.
+
 `backend/tests/unit/core/test_run_lifecycle.py` and the stateful integration
 test pin both projections, so a gate can never be listed as actionable while its
-run is terminal, and a decided gate always un-parks the run.
+run is terminal, a decided gate always un-parks the run, and the pipeline's
+capacity projection is never exceeded.
 
 ## Behaviors
 

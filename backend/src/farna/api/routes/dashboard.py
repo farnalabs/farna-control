@@ -48,7 +48,14 @@ from farna.db.models.run import Run
 from farna.db.models.run_daily_facts import RunDailyFact
 from farna.db.models.team import Team
 from farna.db.rls import set_rls_org, set_rls_user_context
-from farna.lifecycle import ACTIVE_RUN_STATUSES, SUCCESS_STATUSES, TERMINAL_STATUSES
+from farna.lifecycle import (
+    ACTIVE_RUN_STATUSES,
+    PARKED_STATUSES,
+    QUEUED_STATUSES,
+    STATUS_AWAITING_HUMAN,
+    SUCCESS_STATUSES,
+    TERMINAL_STATUSES,
+)
 from farna.settings import get_settings
 
 _MSG_DATABASE_TEMPORARILY_UNAVAILABLE = "The database is temporarily unavailable."
@@ -75,15 +82,28 @@ def _safe_float(value: object, default: float = 0.0) -> float:
 
 _TRACKED_STATUSES = ("running", "awaiting_human", "failed", "idle")
 
-# Statuses that hold a slot without actively executing — surfaced as ``idle``.
-# ``hitl_parked`` (qa F11) belongs here: a parked run holds no PIPELINE slot
-# (FAR-604 D1) and is the awaiting_human state after expiry, so the dashboard
-# folds it into the same "idle" bucket — otherwise parked runs vanish from
-# every per-status view (they are neither ``running`` nor ``awaiting_human``
-# nor ``failed``) and drop out of the team totals.
+# ``idle`` is the dashboard's "waiting, not executing" bucket: the lifecycle's
+# non-executing statuses (``queued`` + ``parked``), minus the ones this view
+# already surfaces as their own card (``awaiting_human``). Derived from
+# ``farna.lifecycle`` — never hand-listed — so a status added to the table (or
+# moved between classes) cannot silently drop out of, or leak into, this
+# projection.
+#
+# Why each member:
+# * ``pending`` — admitted, not yet claimed: no PIPELINE slot, no card.
+# * ``hitl_parked`` (qa F11) — the awaiting_human state after gate expiry; it
+#   holds no PIPELINE slot (FAR-604 D1) and has no card of its own, so it folds
+#   here instead of vanishing from every per-status view and the team totals.
+#
+# Why ``claimed`` is NOT a member: it is ``in_flight`` (``PIPELINE_CAPACITY_
+# STATUSES``) — a reviewer holds the gate and the committed decision resumes
+# straight into execution, so it holds its slot. It is counted as its own status
+# (and therefore in ``total_runs``) rather than as idle work.
+# Why ``unknown`` is NOT a member: it is ``recovering`` — it still holds its
+# slot and is an incident to reconcile, not idle capacity.
 # ``waiting_for_lock`` was excised in migration 0074/0075 (rows backfilled to
-# ``pending``), so it must not appear here.
-_IDLE_STATUSES = ("pending", "claimed", "hitl_parked")
+# ``pending``), so it cannot appear here.
+_IDLE_STATUSES: tuple[str, ...] = tuple(sorted((QUEUED_STATUSES | PARKED_STATUSES) - {STATUS_AWAITING_HUMAN}))
 
 # Allowed rolling-window sizes for the period-scoped summary (FAR-92) — any
 # 1..90 (matching /trends ge=1, le=90); enforced by the Query params and the

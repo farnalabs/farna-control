@@ -20,12 +20,19 @@ Isolation (FAR-2705 qa):
 After EVERY step it asserts, against the database and ``farna.lifecycle``:
 
 * capacity is never exceeded (the pipeline execution projection is the bound, and
-  production admission — not the test driver — is what enforces it);
+  production admission — not the test driver — is what enforces it: the executor's
+  ``_check_capacity`` on a claim, ``evaluate_gate_claim_admission`` on a gate claim,
+  and the capacity predicate INSIDE the resume-claim UPDATE). Every attempt is made
+  unconditionally and the PRODUCTION outcome is asserted — a refusal must leave the
+  run where it was and consume nothing;
 * a gate is never claimed twice;
 * no run is terminal while it has an open gate;
 * every non-terminal run is queued/executing/parked (exactly one class), never
   executing and parked at the same time;
-* a decided gate always un-parks a ``hitl_parked`` run.
+* a decided gate always un-parks a ``hitl_parked`` run;
+* the foreign tenancy is untouched — its LIVE run (future heartbeat) never moves,
+  and a companion test proves the global slot sweep really does reach that org
+  (it resets the deliberately stale run there).
 """
 
 from __future__ import annotations
@@ -48,14 +55,13 @@ from hypothesis import strategies as st
 from hypothesis.stateful import Bundle, RuleBasedStateMachine, invariant, multiple, rule, run_state_machine_as_test
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
 
 from farna import lifecycle
 from farna.core import cron_helpers
 from farna.core.hitl_manager import AlreadyClaimedError, GateAlreadyDecidedError, GateNotFoundError, HITLManager
 from farna.core.pipeline_engine.executor import PipelineExecutor
 from farna.core.pipeline_execution import claim_resume_run_async, claim_run_async, mark_complete
-from farna.core.run_admission import park_expired_hitl_runs, reconcile_pipeline_slots
+from farna.core.run_admission import evaluate_gate_claim_admission, park_expired_hitl_runs, reconcile_pipeline_slots
 from farna.db.crud.run import create_run, request_cancellation, transition_run
 from farna.db.rls import set_rls_org
 
@@ -66,10 +72,27 @@ _T = TypeVar("_T")
 _PIPELINE_CAPACITY = 2
 _GRAPH: dict[str, Any] = {"nodes": [], "edges": []}
 
+#: The statuses the lifecycle table declares for a gate claim INTO ``claimed``
+#: (the route's ``_GATE_CLAIM_TO_CLAIMED_ALLOWED_FROM``, derived here instead of
+#: imported from the API layer so the test pins the TABLE, not the route).
+_GATE_CLAIM_TO_CLAIMED_ALLOWED_FROM: frozenset[str] = frozenset(transition.from_status for transition in lifecycle.transitions_for_action(lifecycle.ACTION_CLAIM_GATE) if transition.to_status == lifecycle.STATUS_CLAIMED and transition.from_status is not None)
+
 
 # ---------------------------------------------------------------------------
 # A private event loop, because Hypothesis rules are synchronous.
 # ---------------------------------------------------------------------------
+#: Per-operation bound for one coroutine on the private loop — a HANG detector,
+#: not a performance budget. A single op is a handful of statements, but one
+#: exercise of a GLOBAL sweep (``reconcile_pipeline_slots`` /
+#: ``park_expired_hitl_runs``) opens a bounded transaction per organisation, and
+#: at the nightly budget this module's isolated database holds every example's
+#: organisations. A 30s bound turned a slow-but-healthy sweep on a loaded host
+#: into a ``TimeoutError`` failure of the nightly budget (which must fail on a
+#: product assertion or not at all). The pytest-level ``--timeout`` remains the
+#: real cap on the test.
+_OP_TIMEOUT_SECONDS = 300.0
+
+
 class _LoopRunner:
     def __init__(self) -> None:
         self._loop = asyncio.new_event_loop()
@@ -81,7 +104,7 @@ class _LoopRunner:
         self._loop.run_forever()
 
     def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
-        return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout=30)
+        return asyncio.run_coroutine_threadsafe(coro, self._loop).result(timeout=_OP_TIMEOUT_SECONDS)
 
     def close(self) -> None:
         self._loop.call_soon_threadsafe(self._loop.stop)
@@ -90,7 +113,19 @@ class _LoopRunner:
 
 
 async def _create_engine(database_url: str, role: str | None = None) -> AsyncEngine:
-    engine = create_async_engine(database_url, echo=False, poolclass=NullPool)
+    """The module's engine, POOLED on its own private loop.
+
+    Deliberately not ``NullPool`` (which the shared conftest engines use because
+    they cross event loops). This engine lives on the module's private loop for
+    the whole test, and the machine opens/closes a connection for essentially
+    every operation — ~1,250 steps at the nightly budget (50 examples x 25).
+    With NullPool each of those is a FRESH TCP connection, and on Windows the
+    ephemeral-port range plus the 4-minute TIME_WAIT keeps several thousand
+    sockets alive: part-way through the nightly run a new connect blocks and
+    every later operation times out (observed: a plain ``SELECT`` past a 300s
+    bound at ~example 40). Pooling keeps the socket count constant.
+    """
+    engine = create_async_engine(database_url, echo=False, pool_size=4, max_overflow=4, pool_timeout=60)
     if role is not None:
 
         @event.listens_for(engine.sync_engine, "checkout")
@@ -212,9 +247,27 @@ async def _seed_foreign_tenant(
     pipeline_id: uuid.UUID,
     snapshot_id: uuid.UUID,
     run_id: uuid.UUID,
+    stale_run_id: uuid.UUID,
     review_id: str,
 ) -> None:
-    """A second org with a running run and an open gate — the tenant boundary."""
+    """A second org with a LIVE running run, a STALE one and an open gate.
+
+    The tenant boundary needs both shapes to stay meaningful:
+
+    * *run_id* is a genuinely in-flight run: its ``heartbeat_at`` is in the
+      FUTURE, so no stale-window sweep (``reconcile_pipeline_slots`` with any
+      ``stale_seconds``, the dead-heartbeat reap, the park sweep) has a reason
+      to touch it. Its status must therefore never change. Seeding a run whose
+      heartbeat is simply "now" made the nightly budget fail: at 25 steps the
+      seed→sweep latency exceeds the machine's 1-second sweep window, the run
+      is legitimately stale by then, production resets it to ``pending``, and
+      the assertion blamed the tenant boundary for correct sweep behaviour.
+    * *stale_run_id* is deliberately stale (heartbeat 2h ago) and carries NO
+      gate. The GLOBAL slot sweep must reach it — that is what proves the sweep
+      really enumerates this other organisation, so "the live foreign run was
+      not touched" cannot be satisfied vacuously by a sweep that cannot see the
+      org at all.
+    """
     async with engine.connect() as conn:
         await conn.begin()
         await _insert_org(conn, org_id)
@@ -225,8 +278,9 @@ async def _seed_foreign_tenant(
         await conn.execute(
             text(
                 "INSERT INTO runs (id, organisation_id, pipeline_id, snapshot_id, account_id, trigger_type, status, input_hash, "
-                "langgraph_thread_id, run_number, claim_count, claim_token, idempotency_key) "
-                "VALUES (:id, :oid, :pid, :sid, :uid, 'manual', 'running', 'hash', :thread, :rn, 1, 'foreign-token', :key)"
+                "langgraph_thread_id, run_number, claim_count, claim_token, idempotency_key, heartbeat_at) "
+                "VALUES (:id, :oid, :pid, :sid, :uid, 'manual', 'running', 'hash', :thread, :rn, 1, 'foreign-token', :key, "
+                "now() + interval '1 day')"
             ),
             {
                 "id": str(run_id),
@@ -237,6 +291,24 @@ async def _seed_foreign_tenant(
                 "thread": f"{org_id}:{run_id}",
                 "rn": 1,
                 "key": f"{pipeline_id}:1",
+            },
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO runs (id, organisation_id, pipeline_id, snapshot_id, account_id, trigger_type, status, input_hash, "
+                "langgraph_thread_id, run_number, claim_count, claim_token, idempotency_key, heartbeat_at) "
+                "VALUES (:id, :oid, :pid, :sid, :uid, 'manual', 'running', 'hash', :thread, :rn, 1, 'stale-token', :key, "
+                "now() - interval '2 hours')"
+            ),
+            {
+                "id": str(stale_run_id),
+                "oid": str(org_id),
+                "pid": str(pipeline_id),
+                "sid": str(snapshot_id),
+                "uid": str(account_id),
+                "thread": f"{org_id}:{stale_run_id}",
+                "rn": 2,
+                "key": f"{pipeline_id}:2",
             },
         )
         await conn.execute(
@@ -268,6 +340,7 @@ class RunLifecycleMachine(RuleBasedStateMachine):
         self.foreign_snapshot_id = uuid.uuid4()
         self.foreign_account_id = uuid.uuid4()
         self.foreign_run_id = uuid.uuid4()
+        self.foreign_stale_run_id = uuid.uuid4()
         self.foreign_review_id = f"foreign-gate-{uuid.uuid4().hex[:8]}"
         self._tokens: dict[tuple[uuid.UUID, str], str] = {}
         self._claimed_by: dict[tuple[uuid.UUID, str], uuid.UUID] = {}
@@ -280,6 +353,7 @@ class RunLifecycleMachine(RuleBasedStateMachine):
                 pipeline_id=self.foreign_pipeline_id,
                 snapshot_id=self.foreign_snapshot_id,
                 run_id=self.foreign_run_id,
+                stale_run_id=self.foreign_stale_run_id,
                 review_id=self.foreign_review_id,
             )
         )
@@ -295,13 +369,29 @@ class RunLifecycleMachine(RuleBasedStateMachine):
             return row.scalar_one_or_none()
 
     async def _foreign_status(self) -> str | None:
+        return await self._foreign_run_status(self.foreign_run_id)
+
+    async def _foreign_stale_status(self) -> str | None:
+        return await self._foreign_run_status(self.foreign_stale_run_id)
+
+    async def _foreign_run_status(self, run_id: uuid.UUID) -> str | None:
         async with self._engine.connect() as conn:
             await conn.execute(text("SELECT set_config('app.organisation_id', :val, true)"), {"val": str(self.foreign_org_id)})
             row = await conn.execute(
                 text("SELECT status FROM runs WHERE id = :rid AND organisation_id = :oid"),
-                {"rid": str(self.foreign_run_id), "oid": str(self.foreign_org_id)},
+                {"rid": str(run_id), "oid": str(self.foreign_org_id)},
             )
             return row.scalar_one_or_none()
+
+    async def _gate_claimed(self, run_id: uuid.UUID, review_id: str) -> bool:
+        """True when some account holds this gate (undecided)."""
+        async with self._engine.connect() as conn:
+            await conn.execute(text("SELECT set_config('app.organisation_id', :val, true)"), {"val": str(self.org_id)})
+            row = await conn.execute(
+                text("SELECT count(*) FROM hitl_claims WHERE run_id = :rid AND organisation_id = :oid AND review_id = :gate AND decision IS NULL AND account_id IS NOT NULL"),
+                {"rid": str(run_id), "oid": str(self.org_id), "gate": review_id},
+            )
+            return int(row.scalar_one()) > 0
 
     async def _admit_under_capacity(self, run_id: uuid.UUID, claim_token: str) -> Any:
         """Drive the PRODUCTION capacity admission (never a driver-side pre-check).
@@ -391,30 +481,67 @@ class RunLifecycleMachine(RuleBasedStateMachine):
 
     @rule(gate=gates)
     def claim_gate(self, gate: tuple[uuid.UUID, str]) -> None:
-        """Real ``HITLManager.claim`` + the claim route's fenced status flip."""
+        """The claim route's transaction: PRODUCTION capacity admission, then claim.
+
+        The attempt is unconditional with respect to capacity — the machine never
+        reasons "the pipeline looks full, so skip". The production decision
+        (:func:`farna.core.run_admission.evaluate_gate_claim_admission`, the same
+        call the REST claim route makes) decides, and this rule asserts the
+        production OUTCOME:
+
+        * admitted  -> ``HITLManager.claim`` + the fenced ``claimed`` flip;
+        * refused   -> the route's 409 rolls the whole transaction back, so the
+          gate is unclaimed, the run is unchanged and no capacity was consumed.
+          Before FAR-2705 the claim skipped admission entirely and a legal claim
+          could push a cap-2 pipeline to three capacity-holding runs.
+        """
         run, review_id = gate
-        status = self._run(self._status(run))
-        if status not in lifecycle.HITL_CLAIMABLE_RUN_STATUSES or (run, review_id) in self._claimed_by:
+        if self._run(self._status(run)) not in lifecycle.HITL_CLAIMABLE_RUN_STATUSES or (run, review_id) in self._claimed_by:
             return
-
-        async def _claim() -> str:
-            factory = async_sessionmaker(self._engine, expire_on_commit=False)
-            async with factory() as session, session.begin():
-                await set_rls_org(session, self.org_id)
-                claimed = await HITLManager().claim(session, run_id=run, review_id=review_id, org_id=self.org_id, claimant_id=self.account_one)
-                if status == lifecycle.STATUS_AWAITING_HUMAN:
-                    await transition_run(
-                        session,
-                        run,
-                        self.org_id,
-                        target_status=lifecycle.STATUS_CLAIMED,
-                        allowed_from=frozenset({lifecycle.STATUS_AWAITING_HUMAN}),
-                    )
-                return claimed.claim_token
-
-        self._tokens[(run, review_id)] = self._run(_claim())
+        status_before = self._run(self._status(run))
+        capacity_before = self._run(self.capacity_used())
+        token = self._run(self._claim_gate(run, review_id))
+        if token is None:
+            # Refused at cap: nothing written, no slot taken, gate still open.
+            assert self._run(self.capacity_used()) == capacity_before, "a refused claim must not consume capacity"
+            assert self._run(self._status(run)) == status_before, "a refused claim must not move the run"
+            assert not self._run(self._gate_claimed(run, review_id)), "a refused claim must not hold the gate"
+            self._observed.add("claim_gate_refused_at_capacity")
+            return
+        self._tokens[(run, review_id)] = token
         self._claimed_by[(run, review_id)] = self.account_one
+        if status_before == lifecycle.STATUS_AWAITING_HUMAN:
+            assert self._run(self._status(run)) == lifecycle.STATUS_CLAIMED
+        else:
+            # A parked run stays parked while its gate is claimed (FAR-604): a
+            # claim is not a decision.
+            assert self._run(self._status(run)) == lifecycle.STATUS_HITL_PARKED
         self._observed.add("claim_gate")
+
+    async def _claim_gate(self, run_id: uuid.UUID, review_id: str) -> str | None:
+        """One claim transaction, exactly like ``claim_review``'s route body.
+
+        Returns the claim token, or ``None`` when the production admission
+        refused the claim at capacity (the route raises its 409 and the
+        ``session.begin()`` context rolls the transaction back).
+        """
+        factory = async_sessionmaker(self._engine, expire_on_commit=False)
+        async with factory() as session, session.begin():
+            await set_rls_org(session, self.org_id)
+            admission = await evaluate_gate_claim_admission(session, run_id=run_id, org_id=self.org_id)
+            if not admission.allowed:
+                return None
+            claimed = await HITLManager().claim(session, run_id=run_id, review_id=review_id, org_id=self.org_id, claimant_id=self.account_one)
+            # The route's flip is fenced to the statuses the lifecycle table
+            # declares for a gate claim into ``claimed`` (a parked claim no-ops).
+            await transition_run(
+                session,
+                run_id,
+                self.org_id,
+                target_status=lifecycle.STATUS_CLAIMED,
+                allowed_from=_GATE_CLAIM_TO_CLAIMED_ALLOWED_FROM,
+            )
+            return claimed.claim_token
 
     @rule(gate=gates)
     def claim_gate_again_as_another_account(self, gate: tuple[uuid.UUID, str]) -> None:
@@ -516,15 +643,31 @@ class RunLifecycleMachine(RuleBasedStateMachine):
 
     @rule(run=runs)
     def resume_after_decision(self, run: uuid.UUID) -> None:
-        """Real ``claim_resume_run_async`` — only when a gate decision is committed."""
-        if self._run(self._status(run)) not in (lifecycle.STATUS_AWAITING_HUMAN, lifecycle.STATUS_CLAIMED, lifecycle.STATUS_HITL_PARKED):
+        """Real ``claim_resume_run_async`` — only when a gate decision is committed.
+
+        The resume claim is capacity-admitted in its own UPDATE (FAR-2705): a
+        resume that would take the pipeline past its cap matches no row, so the
+        run keeps its committed decision and stays parked for
+        ``dispatcher_reconcile`` to re-dispatch. Both outcomes are asserted —
+        the run moves to ``running`` only when a token was returned.
+        """
+        status_before = self._run(self._status(run))
+        if status_before not in (lifecycle.STATUS_AWAITING_HUMAN, lifecycle.STATUS_CLAIMED, lifecycle.STATUS_HITL_PARKED):
             return
         if not self._run(self._has_decided_gate(run)) or self._run(self._has_undecided_gate(run)):
             return
+        capacity_before = self._run(self.capacity_used())
         token = self._run(claim_resume_run_async(self._engine, str(run), str(self.org_id)))
         if token is not None:
             assert self._run(self._status(run)) == lifecycle.STATUS_RUNNING
+            assert self._run(self.capacity_used()) <= _PIPELINE_CAPACITY
             self._observed.add("resume_after_decision")
+            return
+        # Capacity-refused resume: the row stays where it was (decision intact)
+        # and no slot is taken — dispatcher_reconcile retries it later.
+        assert self._run(self._status(run)) == status_before, "a capacity-refused resume must leave the run parked"
+        assert self._run(self.capacity_used()) == capacity_before
+        self._observed.add("resume_refused_at_capacity")
 
     @rule(run=runs)
     def complete_run(self, run: uuid.UUID) -> None:
@@ -860,6 +1003,108 @@ def test_a_capacity_leak_trips_the_invariant(
 
 async def _always_zero(*_args: Any, **_kwargs: Any) -> int:
     return 0
+
+
+def test_a_gate_claim_and_a_resume_at_capacity_cannot_overshoot(lifecycle_runtime: tuple[_LoopRunner, AsyncEngine]) -> None:
+    """The reported capacity leak, pinned for BOTH entries into execution.
+
+    A legal HITL gate claim (``awaiting_human`` -> ``claimed``) and a resume
+    claim (parked -> ``running``) both acquire a PIPELINE slot, and neither was
+    capacity-checked before FAR-2705: at cap 2 with two capacity-holding runs,
+    either one produced a THIRD capacity-holding run. This drives the real
+    production paths — ``evaluate_gate_claim_admission`` + ``HITLManager.claim``
+    + the fenced flip for the gate claim, the real ``claim_resume_run_async``
+    (capacity-admitted in its own UPDATE) for the resume — and asserts each is
+    REFUSED at cap and admitted the moment a slot frees. The overshoot is
+    therefore impossible, not merely unobserved.
+    """
+    runner, engine = lifecycle_runtime
+    observed: set[str] = set()
+    machine = RunLifecycleMachine(runner, engine, observed)
+
+    # Fill the pipeline (cap 2).
+    one = machine.admit()
+    machine.claim_run(one)
+    two = machine.admit()
+    machine.claim_run(two)
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+
+    # ``one`` parks at a gate, freeing its slot; a third run takes that slot.
+    gate_one = machine.request_hitl(one)
+    assert runner.run(machine._status(one)) == lifecycle.STATUS_AWAITING_HUMAN
+    three = machine.admit()
+    machine.claim_run(three)
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+
+    # --- gate claim at cap: REFUSED, nothing written -----------------------
+    machine.claim_gate(gate_one)
+    assert "claim_gate_refused_at_capacity" in observed, "a gate claim at cap must be refused by production"
+    assert runner.run(machine._status(one)) == lifecycle.STATUS_AWAITING_HUMAN, "a refused claim leaves the run awaiting_human"
+    assert not runner.run(machine._gate_claimed(one, gate_one[1])), "a refused claim must not hold the gate"
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY, "a refused claim must not consume a slot"
+
+    # Free a slot: the SAME claim now succeeds and takes it (cap held, not exceeded).
+    machine.cancel_without_open_gate(three)
+    assert runner.run(machine._status(three)) == lifecycle.STATUS_CANCELLED
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY - 1
+    machine.claim_gate(gate_one)
+    assert runner.run(machine._status(one)) == lifecycle.STATUS_CLAIMED
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+
+    # --- resume claim at cap: REFUSED in the claim's own UPDATE ------------
+    # Park ``two``'s gate while it is running, then let the park sweep move it
+    # out of review state — a parked run holds no slot, so claiming its gate is
+    # admitted even at cap (a claim is not a decision).
+    gate_two = machine.request_hitl(two)
+    machine.park_expired_review(two)
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_HITL_PARKED
+    machine.claim_gate(gate_two)
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_HITL_PARKED, "a parked claim stays parked"
+    machine.decide_gate(gate_two, "approved")
+    # The decision un-parks the run; the pipeline is still full (one + a new run).
+    four = machine.admit()
+    machine.claim_run(four)
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_AWAITING_HUMAN
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+
+    machine.resume_after_decision(two)
+    assert "resume_refused_at_capacity" in observed, "a resume claim at cap must be refused by production"
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_AWAITING_HUMAN, "a refused resume leaves the run (and its decision) parked"
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+
+    # Free a slot: the resume now succeeds, so the committed decision is never lost.
+    machine.cancel_without_open_gate(four)
+    assert runner.run(machine._status(four)) == lifecycle.STATUS_CANCELLED
+    machine.resume_after_decision(two)
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_RUNNING
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+
+    machine.capacity_is_never_exceeded()
+
+
+def test_global_slot_sweep_reaches_the_foreign_org_but_never_moves_a_live_run(
+    lifecycle_runtime: tuple[_LoopRunner, AsyncEngine],
+) -> None:
+    """The cross-tenant invariant is not vacuous, and a live run is never swept.
+
+    ``the_foreign_tenant_is_untouched`` asserts the other org's run is still
+    ``running`` after every step. That would also pass if the sweep could not
+    see the other org at all, so this test proves the sweep DOES enumerate it:
+    the deliberately STALE foreign run is reset to ``pending`` by the real
+    ``reconcile_pipeline_slots``, while the live foreign run (heartbeat in the
+    future — a genuinely in-flight run) is untouched by the same sweep.
+    """
+    runner, engine = lifecycle_runtime
+    observed: set[str] = set()
+    machine = RunLifecycleMachine(runner, engine, observed)
+
+    assert runner.run(machine._foreign_status()) == lifecycle.STATUS_RUNNING
+    assert runner.run(machine._foreign_stale_status()) == lifecycle.STATUS_RUNNING
+
+    runner.run(reconcile_pipeline_slots(engine, stale_seconds=1))
+
+    assert runner.run(machine._foreign_stale_status()) == lifecycle.STATUS_PENDING, "the global slot sweep must reach the other organisation's stale run — otherwise the cross-tenant invariant proves nothing"
+    assert runner.run(machine._foreign_status()) == lifecycle.STATUS_RUNNING, "a live run with a fresh heartbeat must never be swept"
 
 
 # ---------------------------------------------------------------------------

@@ -28,7 +28,9 @@ org/`days` to keep the landing page fast.
 
 ## Behaviors
 
-- [x] `GET /api/v1/dashboard/summary` returns `total_runs` (excluding pending/claimed),
+- [x] `GET /api/v1/dashboard/summary` returns `total_runs` (each run counted once:
+      the lifecycle's non-executing queued/parked runs — `pending` / `hitl_parked` —
+      are folded into `idle`, while the in-flight `claimed` status counts as itself),
       `active_pipelines`, `run_counts_by_status`, per-team metrics, `eval_pass_rate`,
       `trend` (7-day), `recent_runs`, `config_warnings`, and an optional `period` block
       when `days` is given (1..90, else 422); responses are cached
@@ -55,6 +57,15 @@ org/`days` to keep the landing page fast.
   headline pass rate does not reflect guardrail-blocked runs.
 
 ## QA History
+- 2026-11-26: **run-lifecycle QA (FAR-2705)**: the summary's `idle` bucket is now
+  DERIVED from `farna.lifecycle` — the non-executing queued/parked statuses
+  (`pending` + `hitl_parked`) — instead of the hand-listed
+  `("pending", "claimed", "hitl_parked")`, which contradicted the transition table:
+  `claimed` is IN FLIGHT (a reviewer holds the gate and the committed decision
+  resumes straight into execution) and is therefore counted as its own status, not
+  as idle work. `total_runs` still counts each run exactly once (the idle bucket
+  replaces its raw members in the sum). Pinned by `test_dashboard.py`,
+  `dashboard_summary.feature` and the BDD steps.
 - 2026-10-29: **Saved Views removed (FAR-2233)**: the `saved_views` / `view_modes`
   plan flags, the `/api/v1/views` CRUD API, the `SavedView` model + CRUD, the
   `GET /api/v1/viewmodel/views` read model, and the `/admin/views` page

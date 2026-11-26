@@ -5,6 +5,7 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from tests.bdd.conftest import _mock_team, _shaped_execute, _shared_state
@@ -13,6 +14,26 @@ with contextlib.suppress(FileNotFoundError, OSError):
     scenarios("../features/teams/stale_jwt_revocation.feature")
 
 ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+@pytest.fixture(autouse=True)
+def _gate_claim_capacity_admits(monkeypatch):
+    """Admit every gate claim by default in these scenarios.
+
+    FAR-2705 added a production capacity admission to the claim route
+    (``evaluate_gate_claim_admission``, an extra session read BEFORE the
+    manager's claim). These scenarios shape the route's session reads in
+    decision order to assert the DB-live membership denial, so the admission is
+    stubbed to admit and its refusal path is pinned by
+    ``tests/unit/api/test_hitl_routes_coverage.py`` and the run-lifecycle
+    stateful integration test.
+    """
+    from farna.core.run_admission import GateClaimAdmission
+
+    async def _admit(_session, *, run_id, org_id):
+        return GateClaimAdmission(allowed=True, used=0, limit=1)
+
+    monkeypatch.setattr("farna.api.routes.hitl.evaluate_gate_claim_admission", _admit)
 
 
 @given(parsers.parse('a user "{username}" exists'))

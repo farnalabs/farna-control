@@ -548,14 +548,17 @@ class TestDashboardSummary:
         response = unauth_client.get("/api/v1/dashboard/summary")
         assert response.status_code in (401, 403)
 
-    def test_total_runs_excludes_pending_and_claimed(self) -> None:
-        """``total_runs`` must not double-count ``pending``/``claimed`` runs.
+    def test_total_runs_counts_each_run_once(self) -> None:
+        """``total_runs`` must not double-count the runs folded into ``idle``.
 
-        Those statuses are aggregated into ``idle`` (FAR dashboard semantics),
-        so summing every ``status_counts`` value double-counts them. Seeds runs
-        in ``pending``, ``claimed``, ``running``, and ``failed`` and asserts
-        ``total_runs == running + failed + idle`` — a regression test for the
-        fix at ``dashboard.py`` ``total_runs`` (previously ``sum(status_counts.values())``).
+        ``idle`` is the dashboard's non-executing bucket — the lifecycle's
+        queued + parked statuses (``pending`` / ``hitl_parked``), derived from
+        ``farna.lifecycle``. A ``claimed`` run is IN FLIGHT and therefore counted
+        as its own status, never folded into ``idle``. Seeding ``pending``,
+        ``claimed``, ``running`` and ``failed`` asserts
+        ``total_runs == claimed + running + failed + idle`` — a regression test
+        for the ``total_runs`` fix at ``dashboard.py`` (previously
+        ``sum(status_counts.values())``, which double-counted every folded run).
         """
         mock_session = _make_status_count_mock_session({"pending": 2, "claimed": 3, "running": 4, "failed": 1})
 
@@ -587,11 +590,12 @@ class TestDashboardSummary:
         assert counts["claimed"] == 3
         assert counts["running"] == 4
         assert counts["failed"] == 1
-        # idle aggregates the pending/claimed slot holders.
-        assert counts["idle"] == 5
+        # ``idle`` aggregates only the non-executing (queued/parked) runs: a
+        # claimed run is in flight and stays its own status.
+        assert counts["idle"] == 2
         # The fix: total_runs counts each run exactly once — idle replaces its
-        # raw pending/claimed components instead of adding on top of them.
-        assert body["total_runs"] == counts["running"] + counts["failed"] + counts["idle"]
+        # raw pending component instead of adding on top of it.
+        assert body["total_runs"] == counts["claimed"] + counts["running"] + counts["failed"] + counts["idle"]
         assert body["total_runs"] == 10
 
 
