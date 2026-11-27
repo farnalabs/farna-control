@@ -1224,7 +1224,7 @@ jobs:
           print(f"Verified SHA256SUMS and the signed RELEASE_MANIFEST for {tag} against the published asset digests.")
           PY
 
-      # Records which DMGs are staple-verified, per artefact, so the 30-minute
+      # Records which DMGs are staple-verified, per artefact, so the 3-hourly
       # backstop short-circuits only when there is genuinely nothing left to do.
       # Written last: the marker's presence is a claim that the post-upload
       # verification above passed (or that the metadata was already consistent).
@@ -1370,7 +1370,7 @@ jobs:
   #
   # release-unified.yml dispatches the held publisher ONCE. If the ticket is
   # still not fetchable that run's `staple` job fails and no release is created;
-  # the 30-minute scheduled backstop only scans EXISTING bundle-v* releases, so
+  # the 3-hourly scheduled backstop only scans EXISTING bundle-v* releases, so
   # without this job the held release would be stranded while release-unified
   # is green. This job re-dispatches the held publisher until it publishes,
   # bounded by `retry_deadline` so a ticket that never arrives fails loudly for
