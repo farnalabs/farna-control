@@ -4,10 +4,10 @@ Farna Control API Example: Complete Workflow
 Demonstrates a full end-to-end workflow:
   1. Login with email/password
   2. Create a pipeline
-  3. Create an agent
-  4. Add the agent as a node to the pipeline graph
+  3. Create input and output schemas
+  4. Create an agent bound to those schemas
   5. Configure a connector binding
-  6. Create a schema, assign to the agent
+  6. Add the agent as a node to the pipeline graph
   7. Trigger a run
   8. Monitor via WebSocket
   9. Handle any HITL gates that arise
@@ -83,6 +83,7 @@ def main():
     agent_id = None
     connector_id = None
     schema_id = None
+    output_schema_id = None
     run_id = None
 
     # httpx supports both sync and async; we use sync for simplicity
@@ -133,7 +134,7 @@ def main():
             schema = resp.json()
             schema_id = schema["id"]
             # Create a version of the schema
-            client.post(
+            version_resp = client.post(
                 f"/api/v1/schemas/{schema_id}/versions",
                 json={
                     "version": "1.0.0",
@@ -150,14 +151,50 @@ def main():
                 },
                 headers=headers,
             )
-            print(f"  Schema: {schema['name']} ({schema_id})")
+            if version_resp.status_code != 201:
+                bail(f"Create input schema version failed: {version_resp.status_code} {version_resp.text}")
+            print(f"  Input schema: {schema['name']} ({schema_id})")
         else:
             print(f"  Schema creation skipped ({resp.status_code}): {resp.text}")
             # Use existing schema if available
             schemas = client.get("/api/v1/schemas", params={"page": 1, "page_size": 1}, headers=headers)
             if schemas.status_code == 200 and schemas.json()["items"]:
                 schema_id = schemas.json()["items"][0]["id"]
-                print(f"  Using existing schema: {schema_id}")
+                print(f"  Using existing input schema: {schema_id}")
+
+        if not schema_id:
+            bail("No input schema available; create one before running this example.")
+
+        # The agent requires an output schema as well as an input schema. A
+        # permissive object keeps the demo runnable against any model backend.
+        resp = client.post(
+            "/api/v1/schemas",
+            json={
+                "name": "PR Review Output",
+                "description": "Output schema for the code review agent",
+            },
+            headers=headers,
+        )
+        if resp.status_code == 201:
+            output_schema = resp.json()
+            output_schema_id = output_schema["id"]
+            version_resp = client.post(
+                f"/api/v1/schemas/{output_schema_id}/versions",
+                json={
+                    "version": "1.0.0",
+                    "version_number": 1,
+                    "definition_json": {"type": "object"},
+                    "published": True,
+                },
+                headers=headers,
+            )
+            if version_resp.status_code != 201:
+                bail(f"Create output schema version failed: {version_resp.status_code} {version_resp.text}")
+            print(f"  Output schema: {output_schema['name']} ({output_schema_id})")
+        else:
+            # Reuse the input schema when output-schema creation is not allowed.
+            output_schema_id = schema_id
+            print(f"  Output schema creation skipped ({resp.status_code}); reusing {schema_id}")
 
         # ═══════════════════════════════════════════════════════════
         # STEP 4: Create an Agent
@@ -168,6 +205,11 @@ def main():
         backend_id = None
         if backends.status_code == 200 and backends.json()["items"]:
             backend_id = backends.json()["items"][0]["id"]
+        if not backend_id:
+            bail(
+                "No model backend is configured. Create one first "
+                "(POST /api/v1/model-backends) and re-run this example."
+            )
 
         agent_payload = {
             "name": "Code Reviewer",
@@ -182,9 +224,12 @@ def main():
                 "Diff:\n{{diff}}"
             ),
             "input_schema_id": schema_id,
+            "output_schema_id": output_schema_id,
+            "model_backend_id": backend_id,
+            # Both fields are required by AgentCreate even when empty/null.
+            "required_environment_capabilities": [],
+            "template_id": None,
         }
-        if backend_id:
-            agent_payload["model_backend_id"] = backend_id
 
         resp = client.post("/api/v1/agents", json=agent_payload, headers=headers)
         if resp.status_code != 201:
@@ -209,6 +254,9 @@ def main():
                 json={
                     "name": "Demo Filesystem Connector",
                     "connector_type_id": "filesystem",
+                    # ConnectorCreate requires a non-empty credentials string
+                    # even for the filesystem connector, which does not use it.
+                    "credentials": "unused-for-filesystem",
                     "config_json": {"base_path": "/var/lib/modulo/connector-data/modulo-demo"},
                 },
                 headers=headers,
