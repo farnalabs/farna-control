@@ -703,7 +703,12 @@ jobs:
           FRONTEND_PRESENT: ${{ steps.fe_cov.outputs.present }}
           TRAIN_BASE_REF: ${{ inputs.base_ref }}
         run: |
-          uv venv .venv
+          # NO `uv venv` here: the `uv sync` step above already created
+          # backend/.venv (this job's working directory), and a second
+          # `uv venv .venv` fails closed with "A virtual environment already
+          # exists at: .venv". Install the pinned diff-cover INTO that synced
+          # environment instead - `uv venv --clear` would delete the project's
+          # dependencies that run_coverage_gate.py needs.
           uv pip install --python .venv --no-build "diff-cover==10.5.1"
           EXTRA_ARGS=()
           if [ "$FRONTEND_PRESENT" != "true" ]; then

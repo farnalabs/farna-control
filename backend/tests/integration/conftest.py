@@ -1143,6 +1143,9 @@ async def integration_client(db_url: str, app_engine: AsyncEngine) -> AsyncClien
     app.dependency_overrides.clear()
 
 
+_log = logging.getLogger(__name__)
+
+
 async def dispose_process_global_engines() -> None:
     """Dispose and clear every process-global async-engine cache.
 
@@ -1164,10 +1167,16 @@ async def dispose_process_global_engines() -> None:
     Call this from the coroutine that runs on the private loop, BEFORE the loop
     closes. Resetting each cache makes the next caller recreate an engine bound
     to the then-current loop and database URL.
+
+    The one process-global ``redis.asyncio`` client is closed here too: the SAQ
+    enqueue path (``farna.core.dispatch._enqueue_saq``) creates it lazily in a
+    module global and nothing ever closes it, so without this it leaks a socket
+    transport past the end of the suite (see the block at the end of this
+    function).
     """
     from farna.api import dependencies as api_dependencies
     from farna.cli import break_glass
-    from farna.core import cron_helpers, saq_worker
+    from farna.core import cron_helpers, dispatch, saq_worker
     from farna.core.error_tracking import saq_hooks
     from farna.core.reports import scheduler
     from farna.db import session as db_session
@@ -1215,3 +1224,35 @@ async def dispose_process_global_engines() -> None:
     break_glass._bg_engine_url = None
     break_glass._bg_factory = None
     break_glass._bg_factory_url = None
+
+    # ``farna.core.dispatch`` lazily creates ONE process-global redis client in
+    # ``_enqueue_saq`` (the real trigger/reconcile enqueue path) and never closes
+    # it. A module global keeps that client - and its open socket transport -
+    # alive until interpreter shutdown, so the session loop closes underneath a
+    # live connection and the transport's ``__del__`` emits
+    # ``ResourceWarning: unclosed transport <_SelectorSocketTransport fd=N>``.
+    # That message does not match ``_is_unclosed_asyncpg_connection`` above (it
+    # requires asyncpg's "unclosed connection <asyncpg.connection.Connection"),
+    # so the quarantine cannot attribute it and the warning instead lands on
+    # whichever item's teardown runs last - observed on the merge-train
+    # integration shard 2, reported against its last-collected item (the final
+    # module in the shard sorts last, so the final gc sweep is its teardown).
+    # Close it on the live loop, here, so the socket is really closed rather
+    # than leaked into the next suite or the interpreter shutdown.
+    #
+    # The lock is re-created too: ``asyncio.Lock`` binds to the first loop that
+    # acquires it, so a client created on a private ``asyncio.run`` loop would
+    # otherwise leave a lock bound to a closed loop. Failing to close is logged,
+    # never raised - this helper runs in teardown paths that must not mask a real
+    # failure - and the global is reset either way so the next caller reconnects.
+    shared_redis = dispatch._shared_redis
+    if shared_redis is not None:
+        try:
+            await shared_redis.aclose()
+        except Exception:
+            _log.warning(
+                "dispose_process_global_engines: closing the shared dispatch redis client failed; resetting it so the next caller reconnects",
+                exc_info=True,
+            )
+    dispatch._shared_redis = None
+    dispatch._shared_redis_lock = asyncio.Lock()
