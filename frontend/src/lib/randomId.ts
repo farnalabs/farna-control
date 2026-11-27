@@ -22,3 +22,23 @@ export function randomId(prefix?: string): string {
   }
   return prefix ? `${prefix}-${id}` : id
 }
+
+/**
+ * A canonical version-4 UUID, for ids the API stores as `uuid.UUID`.
+ *
+ * `randomId()` is not enough there: its last fallback is not a UUID. And
+ * `crypto.randomUUID` only exists in a secure context, so a self-hosted
+ * instance served over plain HTTP takes the byte-based path.
+ */
+export function randomUuid(): string {
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID()
+  const bytes =
+    cryptoApi && typeof cryptoApi.getRandomValues === 'function'
+      ? cryptoApi.getRandomValues(new Uint8Array(16))
+      : Uint8Array.from({ length: 16 }, () => Math.floor(Math.random() * 256)) // NOSONAR: only when no CSPRNG exists
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}

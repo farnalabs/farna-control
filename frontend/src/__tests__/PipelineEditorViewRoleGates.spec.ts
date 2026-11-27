@@ -17,7 +17,13 @@ const useApiFns = vi.hoisted(() => ({
   post: vi.fn(async () => ({})),
 }))
 
-const state = vi.hoisted(() => ({ role: 'viewer', empty: false }))
+const state = vi.hoisted(() => ({
+  role: 'viewer',
+  empty: false,
+  pipeline: {} as Record<string, unknown>,
+  /** URLs the mock API refuses with a 403. */
+  refused: [] as string[],
+}))
 
 const graph = vi.hoisted(() => {
   const node = (id: string, x: number, y: number) => ({
@@ -52,13 +58,16 @@ vi.mock('../composables/useApi', () => ({
 
 vi.mock('../lib/api/client', () => {
   const get = (url: string) => {
+    if (state.refused.includes(url)) {
+      return Promise.resolve({ data: undefined, error: { status: 403, detail: 'refused-by-server' } })
+    }
     if (url.includes('/pipelines/{pipeline_id}/graph')) {
       const data = state.empty ? { nodes: [], edges: [] } : structuredClone(graph)
       return Promise.resolve({ data, error: undefined })
     }
     if (url === '/api/v1/pipelines/{pipeline_id}') {
       return Promise.resolve({
-        data: { id: 'test-pipeline-id', name: 'Test Pipeline', run_enabled: true },
+        data: { id: 'test-pipeline-id', name: 'Test Pipeline', run_enabled: true, ...state.pipeline },
         error: undefined,
       })
     }
@@ -126,7 +135,18 @@ const present = (ids: string[]) => ids.filter((id) => byTestId(id).exists())
 const flowProps = () => wrapper!.findComponent(VueFlow).props() as Record<string, unknown>
 
 const EDIT_CONTROLS = ['save', 'node-type-select', 'add-node', 'arrange-graph']
-const SETTINGS_CONTROLS = ['rename', 'toolbar-group-settings', 'archive', 'pause', 'delete']
+const SETTINGS_CONTROLS = ['rename', 'archive', 'pause', 'delete']
+/** Settings every role reads; a role without `pipeline.update` gets them disabled. */
+const SETTING_FIELDS = ['max-duration', 'circuit-breaker-threshold', 'hitl-review-window', 'queue-timeout']
+const SETTING_SELECTS = ['max-autonomy', 'owner-team']
+const GOVERNANCE_SURFACES = [
+  'toolbar-group-settings',
+  ...SETTING_FIELDS,
+  ...SETTING_SELECTS,
+  'autonomy-panel-toggle',
+  'retry-policy-toggle',
+]
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const WRITE_CONTROLS = [...EDIT_CONTROLS, ...SETTINGS_CONTROLS, 'save-as-template', 'run']
 const READ_CONTROLS = ['version-timeline', 'fit-view', 'canvas']
 
@@ -139,6 +159,10 @@ beforeEach(async () => {
   route.params = { id: 'test-pipeline-id' }
   route.query = {}
   state.empty = false
+  state.pipeline = {}
+  state.refused = []
+  vi.mocked(api.PATCH).mockClear()
+  vi.mocked(api.DELETE).mockClear()
   vi.mocked(api.PUT).mockClear()
   vi.mocked(api.POST).mockClear()
   fakeLayout()
@@ -292,5 +316,128 @@ describe('PipelineEditorView - role gates (FAR-2855)', () => {
 
     const actions = ['empty-rename', 'empty-archive', 'empty-delete', 'empty-add-node', 'empty-show-me', 'empty-template']
     expect(present(actions)).toStrictEqual(actions)
+  })
+})
+
+describe('PipelineEditorView - client-generated ids (FAR-2855)', () => {
+  // The API types node and edge ids as uuid.UUID: any other shape is refused,
+  // and with it every later save and every run that saves first.
+  it('sends UUIDs for an added node and for edges connected to it', async () => {
+    const { wrapper } = await mountEditor('operator')
+    const vm = wrapper.vm as any
+
+    vm.addNode('agent')
+    const addedNode = vm.rawNodes.at(-1).id
+    wrapper.findComponent(VueFlow).vm.$emit('connect', { source: 'review', target: addedNode })
+    vm.connectNodes('risk', 'open_pr')
+    await vm.saveGraph()
+
+    const [url, options] = vi.mocked(api.PUT).mock.calls.at(-1) as unknown as [string, { body: any }]
+    expect(url).toBe('/api/v1/pipelines/{pipeline_id}/graph')
+    const newNodes = options.body.nodes.slice(graph.nodes.length)
+    const newEdges = options.body.edges.slice(graph.edges.length)
+    expect(newNodes).toHaveLength(1)
+    expect(newEdges).toHaveLength(2)
+    for (const { id } of [...newNodes, ...newEdges]) expect(id).toMatch(UUID)
+    expect(newEdges[0].target_node_id).toBe(addedNode)
+  })
+})
+
+describe('PipelineEditorView - governance stays readable (FAR-2855)', () => {
+  it.each(['viewer', 'runner'])('shows a %s every setting with its control disabled', async (role) => {
+    state.pipeline = { max_duration_seconds: 900 }
+    await mountEditor(role)
+
+    expect(present(GOVERNANCE_SURFACES)).toStrictEqual(GOVERNANCE_SURFACES)
+    for (const id of SETTING_FIELDS) expect(byTestId(id).attributes('disabled'), id).toBeDefined()
+    expect((byTestId('max-duration').element as HTMLInputElement).value).toBe('900')
+    for (const id of SETTING_SELECTS) expect(byTestId(id).classes(), id).toContain('p-disabled')
+  })
+
+  it('leaves the same controls enabled for an operator', async () => {
+    await mountEditor('operator')
+
+    for (const id of SETTING_FIELDS) expect(byTestId(id).attributes('disabled'), id).toBeUndefined()
+    for (const id of SETTING_SELECTS) expect(byTestId(id).classes(), id).not.toContain('p-disabled')
+  })
+
+  it('shows a viewer the retry policy with no way to change or save it', async () => {
+    const { wrapper } = await mountEditor('viewer')
+
+    await byTestId('retry-policy-toggle').trigger('click')
+    await flushPromises()
+
+    const panel = byTestId('retry-policy-panel')
+    const inputs = panel.findAll('input')
+    expect(inputs.length).toBeGreaterThanOrEqual(5)
+    for (const input of inputs) expect(input.attributes('disabled')).toBeDefined()
+    expect(byTestId('retry-policy-save').exists()).toBe(false)
+    expect(byTestId('retry-policy-close').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows a viewer the autonomy levels without demote or promote', async () => {
+    await mountEditor('viewer')
+
+    await byTestId('autonomy-panel-toggle').trigger('click')
+    await flushPromises()
+
+    const panel = wrapper!.find('[data-testid="progressive-autonomy-panel"]')
+    for (const level of ['default', 'ceiling', 'earned']) {
+      expect(panel.find(`[data-testid="progressive-autonomy-${level}"]`).exists()).toBe(true)
+    }
+    for (const action of ['target', 'reason', 'demote', 'promote']) {
+      expect(panel.find(`[data-testid="progressive-autonomy-${action}"]`).exists()).toBe(false)
+    }
+  })
+
+  it('shows a viewer a tripped circuit breaker without the reset', async () => {
+    state.pipeline = { circuit_breaker_tripped: true }
+    await mountEditor('viewer')
+
+    expect(byTestId('circuit-breaker-tripped').exists()).toBe(true)
+    expect(byTestId('circuit-breaker-reset').exists()).toBe(false)
+  })
+
+  it('fires no write from any settings handler for a viewer', async () => {
+    const { wrapper } = await mountEditor('viewer')
+    const vm = wrapper.vm as any
+
+    for (const id of SETTING_FIELDS) {
+      await byTestId(id).trigger('change')
+      await byTestId(id).trigger('blur')
+    }
+    vm.maxDurationInput = 60
+    vm.hitlReviewWindowInput = 120
+    vm.queueTimeoutInput = 120
+    vm.circuitBreakerInput = '5'
+    vm.renameName = 'renamed'
+    for (const handler of ['updateMaxDuration', 'updateCircuitBreakerThreshold', 'updateHitlReviewWindow', 'updateQueueTimeout', 'saveRetryPolicy', 'handleRename', 'handleArchive', 'handleUnarchive', 'handlePause', 'handleResume', 'handleDelete', 'resetCircuitBreaker']) {
+      await vm[handler]()
+    }
+    await vm.updateMaxAutonomyLevel('fully_autonomous')
+    await vm.updateOwnerTeam('team-1')
+    await vm.updateEnvironmentProfile('profile-1')
+    await vm.saveGraph()
+    await flushPromises()
+
+    expect(api.PATCH).not.toHaveBeenCalled()
+    expect(api.PUT).not.toHaveBeenCalled()
+    expect(api.POST).not.toHaveBeenCalled()
+    expect(api.DELETE).not.toHaveBeenCalled()
+  })
+
+  it('does not report a refused team list to a viewer', async () => {
+    state.refused = ['/api/v1/teams']
+    await mountEditor('viewer')
+
+    expect(byTestId('owner-team-error').exists()).toBe(false)
+  })
+
+  it('still reports a refused team list to someone who could change the team', async () => {
+    state.refused = ['/api/v1/teams']
+    await mountEditor('operator')
+
+    expect(byTestId('owner-team-error').text()).toContain('refused-by-server')
   })
 })

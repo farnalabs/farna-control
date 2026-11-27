@@ -189,7 +189,10 @@
               <span v-if="saveGraphError" class="max-w-40 truncate text-xs text-destructive" :title="saveGraphError" data-testid="pipeline-editor-save-error">{{ saveGraphError }}</span>
             </div>
           </template>
-          <template v-if="!isViewing && canUpdatePipeline">
+          <!-- FAR-2855: the settings are governance information, so every role
+               sees them; a role without `pipeline.update` gets them with every
+               control that writes disabled or absent. -->
+          <template v-if="!isViewing">
           <span :class="groupDividerClass" />
           <!-- Group: pipeline settings -->
           <div class="flex w-full flex-wrap items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 p-1.5 md:w-auto" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_settings')" data-testid="pipeline-editor-toolbar-group-settings">
@@ -213,8 +216,8 @@
               :class="['flex flex-wrap items-center gap-1.5', { 'max-md:hidden': !settingsOpen }]"
               @keydown.escape="onSettingsControlsKeydown"
             >
-            <button v-if="!pipeline?.archived_at" ref="firstSettingsControlRef" type="button" :class="btnToolbarSecondary" data-testid="pipeline-editor-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</button>
-            <button v-else type="button" :class="btnToolbarSecondary" data-testid="pipeline-editor-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</button>
+            <button v-if="canUpdatePipeline && !pipeline?.archived_at" ref="firstSettingsControlRef" type="button" :class="btnToolbarSecondary" data-testid="pipeline-editor-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</button>
+            <button v-else-if="canUpdatePipeline" type="button" :class="btnToolbarSecondary" data-testid="pipeline-editor-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</button>
             <!-- FAR-1530: per-pipeline Paused execution state. Paused is a
                  visible state, not an archived one - the pipeline stays in the
                  list and in the editor, it just starts no runs. Pause/Resume
@@ -224,14 +227,14 @@
                  never a pause toggle. The two conditions are mutually
                  exclusive, so exactly one of the pair renders when it should. -->
             <button
-              v-if="pipeline && !pipeline.archived_at && pipeline.run_enabled !== false"
+              v-if="canUpdatePipeline && pipeline && !pipeline.archived_at && pipeline.run_enabled !== false"
               type="button"
               :class="btnToolbarSecondary"
               data-testid="pipeline-editor-pause"
               @click="handlePause"
             >{{ $t('views.PipelineEditorView.pause') }}</button>
             <button
-              v-else-if="pipeline && !pipeline.archived_at && pipeline.run_enabled === false"
+              v-else-if="canUpdatePipeline && pipeline && !pipeline.archived_at && pipeline.run_enabled === false"
               type="button"
               :class="btnToolbarSecondary"
               :disabled="pipeline?.run_disabled_reason === 'circuit_breaker'"
@@ -248,6 +251,7 @@
                 min="0"
                 :placeholder="$t('views.PipelineEditorView.no_limit')"
                 class="w-20 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                :disabled="!canUpdatePipeline"
                 @change="updateMaxDuration"
                 data-testid="pipeline-editor-max-duration"
               />
@@ -264,6 +268,7 @@
                 :placeholder="$t('views.PipelineEditorView.no_limit')"
                 aria-describedby="pipeline-spend-circuit-breaker-help"
                 class="w-24 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                :disabled="!canUpdatePipeline"
                 @change="updateCircuitBreakerThreshold"
                 data-testid="pipeline-editor-circuit-breaker-threshold"
               />
@@ -302,6 +307,7 @@
                 option-value="value"
                 :title="$t('views.PipelineEditorView.max_autonomy_level_hint')"
                 :label="$t('views.PipelineEditorView.max_autonomy_level')"
+                :disabled="!canUpdatePipeline"
                 @update:model-value="updateMaxAutonomyLevel"
                 data-testid="pipeline-editor-max-autonomy"
               >
@@ -348,6 +354,7 @@
                   :max-level="pipeline?.max_autonomy_level ?? null"
                   :earned-level="pipeline?.earned_autonomy_level ?? null"
                   :earned-updated-at="pipeline?.earned_autonomy_updated_at ?? null"
+                  :can-manage="canUpdatePipeline"
                   @changed="onAutonomyChanged"
                 />
                 <div class="mt-3 flex justify-end">
@@ -387,6 +394,7 @@
                 :title="$t('views.PipelineEditorView.owner_team_hint')"
                 :label="$t('views.PipelineEditorView.owner_team_label')"
                 :pt="{ label: { 'aria-describedby': 'pipeline-owner-team-help' } }"
+                :disabled="!canUpdatePipeline"
                 @update:model-value="updateOwnerTeam"
                 data-testid="pipeline-editor-owner-team"
               >
@@ -439,6 +447,7 @@
                 :title="$t('views.PipelineEditorView.environment_profile_hint')"
                 :label="$t('views.PipelineEditorView.environment_profile_label')"
                 :pt="{ label: { 'aria-describedby': 'pipeline-environment-profile-help' } }"
+                :disabled="!canUpdatePipeline"
                 @update:model-value="updateEnvironmentProfile"
                 data-testid="pipeline-editor-environment-profile"
               >
@@ -481,6 +490,7 @@
                 :placeholder="$t('views.PipelineEditorView.hitl_review_window_inherit')"
                 :aria-describedby="'pipeline-hitl-review-window-help'"
                 class="w-24 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                :disabled="!canUpdatePipeline"
                 @change="updateHitlReviewWindow"
                 data-testid="pipeline-editor-hitl-review-window"
               />
@@ -506,6 +516,7 @@
                 :placeholder="$t('views.PipelineEditorView.queue_timeout_never')"
                 :aria-describedby="'pipeline-queue-timeout-help'"
                 class="w-24 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                :disabled="!canUpdatePipeline"
                 @change="updateQueueTimeout"
                 data-testid="pipeline-editor-queue-timeout"
               />
@@ -558,6 +569,7 @@
                       value="all"
                       v-model="retryPolicyMode"
                       class="h-4 w-4"
+                      :disabled="!canUpdatePipeline"
                       data-testid="pipeline-editor-retry-mode-all"
                     />
                     {{ $t('views.PipelineEditorView.retry_policy_mode_all') }}
@@ -568,6 +580,7 @@
                       value="specific"
                       v-model="retryPolicyMode"
                       class="h-4 w-4"
+                      :disabled="!canUpdatePipeline"
                       data-testid="pipeline-editor-retry-mode-specific"
                     />
                     {{ $t('views.PipelineEditorView.retry_policy_mode_specific') }}
@@ -584,6 +597,7 @@
                       :value="opt.value"
                       v-model="retryPolicyEvents"
                       class="h-4 w-4"
+                      :disabled="!canUpdatePipeline"
                       :data-testid="`pipeline-editor-retry-event-${opt.value}`"
                     />
                     {{ $t(opt.labelKey) }}
@@ -600,6 +614,7 @@
                     min="0"
                     max="5"
                     class="w-14 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                    :disabled="!canUpdatePipeline"
                     data-testid="pipeline-editor-retry-policy-max"
                   />
                 </div>
@@ -626,6 +641,7 @@
                     max="300"
                     step="1"
                     class="w-14 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                    :disabled="!canUpdatePipeline"
                     data-testid="pipeline-editor-retry-policy-delay"
                   />
                 </div>
@@ -641,6 +657,7 @@
                     max="10"
                     step="0.1"
                     class="w-14 rounded-md border border-input bg-background px-1.5 py-1 text-xs"
+                    :disabled="!canUpdatePipeline"
                     data-testid="pipeline-editor-retry-policy-multiplier"
                   />
                 </div>
@@ -682,6 +699,7 @@
                     {{ $t('views.PipelineEditorView.cancel') }}
                   </Button>
                   <Button
+                    v-if="canUpdatePipeline"
                     type="button"
                     size="sm"
                     :disabled="retryPolicySaving || retryPolicySaveBlocked"
@@ -1654,7 +1672,7 @@
                  no Save, no add/remove rows, and no live-state read either
                  (the frozen view must not present live agent config as if it
                  were frozen). -->
-            <AgentRunnerBindings v-if="!isViewing && canManageRunnerBindings" :agent-id="selectedNodeData.agent_id" />
+            <AgentRunnerBindings v-if="!isViewing" :agent-id="selectedNodeData.agent_id" :read-only="!canManageRunnerBindings" />
             <div v-if="selectedNodeData.context_files && Object.keys(selectedNodeData.context_files).length > 0">
               <dt class="text-muted-foreground text-xs uppercase tracking-wider">{{ $t('views.PipelineEditorView.context_files') }}</dt>
               <dd><ul class="list-inside list-disc text-xs text-muted-foreground"><li v-for="(content, fpath) in selectedNodeData.context_files" :key="fpath">{{ fpath }} <span class="text-[10px] opacity-60">({{ content.length }} bytes)</span></li></ul></dd>
@@ -2362,6 +2380,7 @@ import type { LocationQueryRaw } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import { usePipelineEditorPermissions } from '../composables/usePipelineEditorPermissions'
+import { randomUuid } from '../lib/randomId'
 import { useProductAnalytics } from '../composables/useProductAnalytics'
 import { spotlight } from '../composables/useSpotlight'
 import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
@@ -2787,6 +2806,7 @@ function syncHitlReviewWindowFromPipeline() {
 }
 
 async function updateHitlReviewWindow() {
+  if (!canUpdatePipeline.value) return
   const raw = String(hitlReviewWindowInput.value ?? '').trim()
   let seconds: number | null
   if (raw === '') {
@@ -2833,6 +2853,7 @@ function syncQueueTimeoutFromPipeline() {
 }
 
 async function updateQueueTimeout() {
+  if (!canUpdatePipeline.value) return
   const raw = String(queueTimeoutInput.value ?? '').trim()
   let seconds: number | null
   if (raw === '') {
@@ -3426,6 +3447,7 @@ async function onAutonomyChanged() {
 }
 
 async function saveRetryPolicy() {
+  if (!canUpdatePipeline.value) return
   if (retryPolicySaving.value) return
   retryPolicyError.value = null
   const max = Math.min(5, Math.max(0, Number(retryPolicyMaxRetries.value) || 0))
@@ -3965,6 +3987,7 @@ function onParamSetChange(value?: unknown) {
 }
 
 async function saveAsNewParamSet() {
+  if (!canCreateParamSet.value) return
   const schema = agentParamSchema(selectedNodeData.value?.agent_id)
   if (!schema) return
   const name = prompt('Name for new parameter set:')
@@ -4733,7 +4756,7 @@ function connectNodes(sourceId: string, targetId: string): void {
     announceCanvas(t('views.PipelineEditorView.canvas_connect_duplicate'))
     return
   }
-  const id = `edge-${Date.now()}`
+  const id = randomUuid()
   const edge = {
     id,
     source_node_id: sourceId,
@@ -5215,7 +5238,7 @@ function openTemplateLibrary() {
 
 function addNode(nodeType: 'agent' | 'router' | 'hitl' | 'connector' = newNodeType.value) {
   if (graphReadOnly.value) return
-  const id = `node-${Date.now()}`
+  const id = randomUuid()
   const newNode = {
     id,
     type: nodeType,
@@ -5384,6 +5407,7 @@ function openRenameDialog() {
 }
 
 async function handleRename() {
+  if (!canUpdatePipeline.value) return
   if (!renameName.value.trim()) return
   renaming.value = true
   renameError.value = null
@@ -5403,6 +5427,7 @@ async function handleRename() {
 }
 
 async function handleArchive() {
+  if (!canUpdatePipeline.value) return
   try {
     pipeline.value = throwOnError(await withTimeout((signal) => api.POST('/api/v1/pipelines/{pipeline_id}/archive', {
       params: { path: { pipeline_id: pipelineId } },
@@ -5414,6 +5439,7 @@ async function handleArchive() {
 }
 
 async function handleUnarchive() {
+  if (!canUpdatePipeline.value) return
   try {
     pipeline.value = throwOnError(await withTimeout((signal) => api.POST('/api/v1/pipelines/{pipeline_id}/unarchive', {
       params: { path: { pipeline_id: pipelineId } },
@@ -5428,6 +5454,7 @@ async function handleUnarchive() {
 // through the inline toolbar error (not `pageError`, which replaces the whole
 // editor and would drop the open graph over a failed toggle).
 async function handlePause() {
+  if (!canUpdatePipeline.value) return
   try {
     pipeline.value = throwOnError(await withTimeout((signal) => api.POST('/api/v1/pipelines/{pipeline_id}/pause', {
       params: { path: { pipeline_id: pipelineId } },
@@ -5440,6 +5467,7 @@ async function handlePause() {
 }
 
 async function handleResume() {
+  if (!canUpdatePipeline.value) return
   try {
     pipeline.value = throwOnError(await withTimeout((signal) => api.POST('/api/v1/pipelines/{pipeline_id}/resume', {
       params: { path: { pipeline_id: pipelineId } },
@@ -5452,6 +5480,7 @@ async function handleResume() {
 }
 
 async function handleDelete() {
+  if (!canDeletePipeline.value) return
   deleteError.value = null
   try {
     await withTimeout((signal) => api.DELETE('/api/v1/pipelines/{pipeline_id}', {
@@ -5465,6 +5494,7 @@ async function handleDelete() {
 }
 
 async function updateMaxDuration() {
+  if (!canUpdatePipeline.value) return
   const val = maxDurationInput.value && maxDurationInput.value > 0 ? maxDurationInput.value : undefined
   try {
     await withTimeout((signal) => api.PATCH('/api/v1/pipelines/{pipeline_id}', {
@@ -5480,6 +5510,7 @@ async function updateMaxDuration() {
 }
 
 async function updateCircuitBreakerThreshold() {
+  if (!canUpdatePipeline.value) return
   const raw = circuitBreakerInput.value
   const empty = raw === '' || raw === null || raw === undefined
   const parsed = empty ? null : Number(raw)
@@ -5502,6 +5533,7 @@ async function updateCircuitBreakerThreshold() {
 }
 
 async function resetCircuitBreaker() {
+  if (!canResetCircuitBreaker.value) return
   resettingCircuitBreaker.value = true
   try {
     await withTimeout((signal) => api.POST('/api/v1/admin/costs/circuit-breaker/{pipeline_id}/reset', {
@@ -5521,6 +5553,7 @@ async function resetCircuitBreaker() {
 }
 
 async function updateMaxAutonomyLevel(selected: unknown) {
+  if (!canUpdatePipeline.value) return
   const raw = String(selected ?? '')
   const val = raw === '' ? null : raw
   maxAutonomyInput.value = val
@@ -5597,7 +5630,9 @@ provide(PIPELINE_CONNECTORS_KEY, connectors)
 
 const ownerTeamError = computed(() => {
   if (ownerTeamUpdateError.value) return ownerTeamUpdateError.value
-  if (ownerTeamLoadError.value) {
+  // FAR-2855: a list that cannot be read only matters to someone choosing from
+  // it; a read-only user still sees the stored value.
+  if (ownerTeamLoadError.value && canUpdatePipeline.value) {
     return t('views.PipelineEditorView.owner_team_load_failed', { error: ownerTeamLoadError.value })
   }
   return null
@@ -5627,6 +5662,7 @@ function ownerTeamLabelForId(id: string): string {
 }
 
 async function updateOwnerTeam(selected: unknown) {
+  if (!canUpdatePipeline.value) return
   const raw = String(selected ?? '')
   const val = raw === '' ? null : raw
   ownerTeamInput.value = raw
@@ -5708,7 +5744,7 @@ const environmentProfileSelectOptions = computed(() => [
 const environmentProfileError = computed(() => {
   if (environmentProfileUpdateError.value) return environmentProfileUpdateError.value
   const loadError = environmentProfilesStore.error
-  if (showEnvironmentProfileControl.value && loadError) {
+  if (showEnvironmentProfileControl.value && loadError && canUpdatePipeline.value) {
     return t('views.PipelineEditorView.environment_profile_load_failed', { error: loadError })
   }
   return null
@@ -5744,6 +5780,7 @@ watch(
 )
 
 async function updateEnvironmentProfile(selected: unknown) {
+  if (!canUpdatePipeline.value) return
   const raw = String(selected ?? '')
   // '' clears (explicit null on the wire); anything else binds that profile.
   const val = raw === '' ? null : raw

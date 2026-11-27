@@ -7,6 +7,8 @@ import { api } from '../../lib/api/client'
 
 const props = defineProps<{
   agentId?: string | null
+  /** FAR-2855: list the bindings without any control that changes them. */
+  readOnly?: boolean
 }>()
 
 const { t } = useI18n()
@@ -22,6 +24,7 @@ const bindings = ref<BindingRow[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const error = ref('')
+const listUnavailable = ref(false)
 
 const newBackendId = ref<string | null>(null)
 const newTargetVar = ref('')
@@ -55,6 +58,7 @@ function removeRow(idx: number) {
 async function loadBindings(agentId: string) {
   loading.value = true
   error.value = ''
+  listUnavailable.value = false
   try {
     const [mbRes, bindingsRes] = await Promise.all([
       api.GET('/api/v1/model-backends'),
@@ -62,7 +66,9 @@ async function loadBindings(agentId: string) {
         params: { path: { agent_id: agentId } },
       }),
     ])
-    modelBackends.value = (((mbRes.data as { items?: Array<{ id: string; name: string; provider: string }> }).items ?? []) as Array<{ id: string; name: string; provider: string }>).filter((b) => b.provider)
+    modelBackends.value = (((mbRes.data as { items?: Array<{ id: string; name: string; provider: string }> } | undefined)?.items ?? []) as Array<{ id: string; name: string; provider: string }>).filter((b) => b.provider)
+    // A refused read must not be reported as "no bindings".
+    listUnavailable.value = Boolean(bindingsRes.error)
     bindings.value = (bindingsRes.data as { items: BindingRow[] } | undefined)?.items ?? []
   } finally {
     loading.value = false
@@ -70,6 +76,7 @@ async function loadBindings(agentId: string) {
 }
 
 async function save() {
+  if (props.readOnly) return
   saving.value = true
   error.value = ''
   try {
@@ -130,7 +137,9 @@ watch(
 </script>
 
 <template>
-  <div v-if="agentId" data-testid="pipeline-editor-runner-bindings">
+  <!-- A read-only user whose list read is refused gets no section at all,
+       rather than an error or a false "none". -->
+  <div v-if="agentId && !(readOnly && listUnavailable)" data-testid="pipeline-editor-runner-bindings">
     <dt class="text-muted-foreground text-xs uppercase tracking-wider" data-testid="pipeline-editor-runner-bindings-label">
       {{ $t('views.PipelineEditorView.runner_bindings') }}
     </dt>
@@ -149,6 +158,7 @@ watch(
           <span>{{ modelBackends.find((b) => b.id === row.model_backend_id)?.name || row.model_backend_id }}</span>
           <span class="font-mono text-[10px] opacity-70">{{ row.source_field }}</span>
           <button
+            v-if="!readOnly"
             type="button"
             class="text-muted-foreground hover:text-destructive"
             :aria-label="$t('views.PipelineEditorView.runner_bindings_remove')"
@@ -158,7 +168,7 @@ watch(
         </li>
       </ul>
       <p v-else-if="!loading" class="mt-1 text-[11px] text-muted-foreground">{{ $t('views.PipelineEditorView.runner_bindings_none') }}</p>
-      <div class="mt-2 grid grid-cols-3 gap-1">
+      <div v-if="!readOnly" class="mt-2 grid grid-cols-3 gap-1">
         <label class="col-span-1">
           <span class="sr-only">{{ $t('views.PipelineEditorView.runner_bindings_backend') }}</span>
           <Select
@@ -189,7 +199,7 @@ watch(
         />
       </div>
       <p v-if="error" class="mt-1 text-[11px] text-destructive">{{ error }}</p>
-      <div class="mt-2 flex gap-2">
+      <div v-if="!readOnly" class="mt-2 flex gap-2">
         <Button
           type="button"
           size="small"
