@@ -39,7 +39,7 @@ from farna.core.hitl_manager import (
     GateNotFoundError,
     RunNotAwaitingError,
 )
-from farna.core.run_admission import GateClaimAdmission
+from farna.core.run_admission import GATE_ACTION_RESUME, GateClaimAdmission
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session
 
@@ -122,7 +122,7 @@ def _gate_claim_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
     below and end-to-end by the run-lifecycle stateful integration test.
     """
 
-    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID) -> GateClaimAdmission:
+    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID, **_kwargs: object) -> GateClaimAdmission:
         return GateClaimAdmission(allowed=True, used=0, limit=1)
 
     monkeypatch.setattr("farna.api.routes.hitl.evaluate_gate_claim_admission", _admit)
@@ -151,6 +151,37 @@ def test_claim_gate_at_capacity_returns_409_without_claiming(client: tuple[TestC
     assert "concurrency limit" in resp.json()["detail"]
     claim.assert_not_awaited()
     transition.assert_not_awaited()
+
+
+def test_approve_at_capacity_returns_409_without_recording_the_decision(client: tuple[TestClient, AsyncMock]) -> None:
+    """FAR-2705: an approval at the pipeline cap is refused BEFORE it commits.
+
+    The second half of the reported leak: a ``hitl_parked`` run's gate is
+    claimable without a slot, and the approval used to commit the decision and
+    then resume the run into ``running`` — a third capacity-holding run at cap
+    2. The approval path must therefore evaluate the RESUME's capacity (the
+    same shared helper the claim uses, ``action=GATE_ACTION_RESUME``) inside the
+    decision transaction: at cap the shared 409 is returned and NOTHING is
+    written — the manager is never called, so the gate stays undecided, and no
+    resume is attempted.
+    """
+    http, _session = client
+    admission = AsyncMock(return_value=GateClaimAdmission(allowed=False, used=2, limit=2))
+    with (
+        patch("farna.api.routes.hitl.evaluate_gate_claim_admission", new=admission),
+        patch("farna.api.routes.hitl.HITLManager.approve", new=AsyncMock()) as approve,
+        patch("farna.api.routes.hitl._build_resume_executor") as build,
+    ):
+        resp = http.post(f"/api/v1/runs/{_RUN_ID}/hitl/gate-1/approve", json={"claim_token": "tok"})
+
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "concurrency limit" in detail
+    assert "decision was not recorded" in detail
+    approve.assert_not_awaited()
+    build.assert_not_called()
+    # The admission asked the RESUME question — not the claim one.
+    assert admission.await_args.kwargs["action"] == GATE_ACTION_RESUME
 
 
 # ---------------------------------------------------------------------------

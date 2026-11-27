@@ -23,6 +23,7 @@ from farna.api.routes.dashboard import (
     _get_cached_dashboard,
     _load_config_warnings,
     _load_daily_trend,
+    _load_team_metrics,
     _load_trend_run_and_spend,
     _set_cached_dashboard,
 )
@@ -32,6 +33,7 @@ from farna.db.models.base import Base
 from farna.db.models.daily_run_count import OrgDailyRunCount
 from farna.db.models.eval import Eval
 from farna.db.models.eval_result import EvalResult
+from farna.lifecycle import SUCCESS_STATUSES
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session
 
@@ -129,6 +131,18 @@ class _CapturingSession:
     async def execute(self, stmt: Any, *_args: object, **_kwargs: object) -> "_MockResult":
         self.statements.append(stmt)
         return self._result
+
+
+class _ScriptedSession:
+    """Fake AsyncSession returning one prepared result per execute(), in order."""
+
+    def __init__(self, results: list["_MockResult"]) -> None:
+        self._results = list(results)
+        self.statements: list[Any] = []
+
+    async def execute(self, stmt: Any, *_args: object, **_kwargs: object) -> "_MockResult":
+        self.statements.append(stmt)
+        return self._results.pop(0)
 
 
 def _make_mock_session() -> AsyncMock:
@@ -1027,6 +1041,48 @@ class TestFactsWindowRunDate:
         assert "created_at" not in sql
         assert "2026-01-01" in sql
         assert "2026-01-08" in sql
+
+    async def test_period_success_projection_is_the_shared_success_statuses(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The period ``success_rate`` numerator reads ``SUCCESS_STATUSES``.
+
+        FAR-2705: the numerator was a hand-written ``status == "complete"``
+        while the team ``completed`` count summed ``SUCCESS_STATUSES``. The two
+        numbers are the same fact and must move together, so a widened success
+        projection is applied to BOTH — pinned here by widening
+        ``dashboard.SUCCESS_STATUSES`` and asserting the facts window's compiled
+        filter AND the team-completed count follow it (reverting either to the
+        literal makes this test fail the moment the projection widens).
+        """
+        from farna.api.routes import dashboard as dashboard_module
+
+        widened = frozenset({*SUCCESS_STATUSES, "rejected"})
+        monkeypatch.setattr(dashboard_module, "SUCCESS_STATUSES", widened)
+        start, end = date(2026, 1, 1), date(2026, 1, 8)
+
+        # 1. The period success-rate numerator's SQL filter.
+        facts_session = _CapturingSession(_MockResult(rows=[_MockRow(**self._FACT_ROW)]))
+        await _facts_window(facts_session, _ORG_ID, start, end)
+        sql = self._compiled_sql(facts_session.statements[0])
+        expected_in = ", ".join(f"'{status}'" for status in sorted(widened))
+        assert f"status IN ({expected_in})" in sql
+        assert "status = 'complete'" not in sql
+
+        # 2. The team ``completed`` count — the SAME projection.
+        team_id = uuid.UUID(int=7)
+        team = _MockRow(id=team_id, name="Team A")
+        run_rows = [
+            _MockRow(owner_team_id=team_id, status="complete", cnt=2),
+            _MockRow(owner_team_id=team_id, status="rejected", cnt=3),
+            _MockRow(owner_team_id=team_id, status="failed", cnt=1),
+        ]
+        team_session = _ScriptedSession(
+            [
+                _MockResult(rows=run_rows),
+                _MockResult(rows=[_MockRow(owner_team_id=team_id, pipeline_cnt=1)]),
+            ]
+        )
+        metrics = await _load_team_metrics(team_session, _ORG_ID, [team])
+        assert metrics[0]["completed_runs"] == 5, "the team completed count must follow the same projection"
 
     async def test_compute_period_metrics_uses_day_boundaries(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Facts/status/spend windows get ``[today - days, today)`` day-bucket

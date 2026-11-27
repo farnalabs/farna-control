@@ -26,6 +26,26 @@ from farna.core.pipeline_engine.executor import (
 _ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
+@pytest.fixture(autouse=True)
+def _resume_pipeline_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Admit the resume-time pipeline capacity gate (FAR-2705).
+
+    ``_resume_load_and_validate`` asks the shared capacity decision before the
+    ``running`` write. These tests pin the CLAIM FENCE / arm selection over a
+    bare ``AsyncMock`` session, so the admission read is stubbed; the refusal
+    itself is pinned against real Postgres in
+    ``tests/integration/test_run_lifecycle_stateful.py``.
+    """
+
+    async def _admit(_session: object, *, run_id: Any, org_id: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "farna.core.pipeline_engine.executor._enforce_resume_pipeline_capacity",
+        _admit,
+    )
+
+
 def _compiled_cas_params(statement: Any) -> dict[str, Any]:
     return dict(statement.compile().params)
 

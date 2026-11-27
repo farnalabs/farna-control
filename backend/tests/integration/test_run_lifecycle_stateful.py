@@ -46,9 +46,10 @@ import uuid
 from collections.abc import Coroutine, Generator
 from datetime import timedelta
 from typing import Any, TypeVar
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from hypothesis import HealthCheck
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
@@ -59,7 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 from farna import lifecycle
 from farna.core import cron_helpers
 from farna.core.hitl_manager import AlreadyClaimedError, GateAlreadyDecidedError, GateNotFoundError, HITLManager
-from farna.core.pipeline_engine.executor import PipelineExecutor
+from farna.core.pipeline_engine.executor import PipelineExecutor, SandboxCapacityExceededError
 from farna.core.pipeline_execution import claim_resume_run_async, claim_run_async, mark_complete
 from farna.core.run_admission import evaluate_gate_claim_admission, park_expired_hitl_runs, reconcile_pipeline_slots
 from farna.db.crud.run import create_run, request_cancellation, transition_run
@@ -543,6 +544,50 @@ class RunLifecycleMachine(RuleBasedStateMachine):
             )
             return claimed.claim_token
 
+    async def _approve_via_route(self, run_id: uuid.UUID, review_id: str, claim_token: str) -> MagicMock:
+        """Drive the REAL REST ``approve_review`` handler (FAR-2705).
+
+        Not a re-implementation of the route body: the handler itself runs, on a
+        DI-shaped session (``autobegin=False``) and this module's engine, with a
+        browser principal — so its own transaction, capacity admission, manager
+        call and resume injection are production code. Only
+        ``_build_resume_executor`` is replaced (a mocked resume must not compile
+        a graph); the returned double records whether the resume ran.
+        """
+        from farna.api.routes.hitl import ApproveRequest, approve_review
+        from farna.auth.jwt import TenantPrincipal
+
+        factory = async_sessionmaker(self._engine, expire_on_commit=False, autobegin=False)
+        principal = TenantPrincipal(
+            username="far2705-lifecycle@test.local",
+            organisation_id=self.org_id,
+            account_id=self.account_one,
+            org_role="admin",
+        )
+        executor = MagicMock()
+        executor.resume = AsyncMock()
+        with patch("farna.api.routes.hitl._build_resume_executor", return_value=executor):
+            async with factory() as session:
+                await approve_review(
+                    run_id,
+                    review_id,
+                    ApproveRequest(claim_token=claim_token),
+                    session=session,
+                    engine=self._engine,
+                    principal=principal,
+                )
+        return executor
+
+    async def _gate_decision(self, run_id: uuid.UUID, review_id: str) -> str | None:
+        """The persisted decision of one gate (``None`` = still undecided)."""
+        async with self._engine.connect() as conn:
+            await conn.execute(text("SELECT set_config('app.organisation_id', :val, true)"), {"val": str(self.org_id)})
+            row = await conn.execute(
+                text("SELECT decision FROM hitl_claims WHERE run_id = :rid AND organisation_id = :oid AND review_id = :gate"),
+                {"rid": str(run_id), "oid": str(self.org_id), "gate": review_id},
+            )
+            return row.scalar_one_or_none()
+
     @rule(gate=gates)
     def claim_gate_again_as_another_account(self, gate: tuple[uuid.UUID, str]) -> None:
         """Illegal sequence: a second account must never acquire the same gate."""
@@ -790,6 +835,16 @@ class RunLifecycleMachine(RuleBasedStateMachine):
                 {"pid": str(self.pipeline_id), "oid": str(self.org_id), "statuses": sorted(lifecycle.PIPELINE_CAPACITY_STATUSES)},
             )
             return int(row.scalar_one())
+
+    async def capacity_holder_ids(self) -> set[str]:
+        """The ids of every run currently holding a PIPELINE slot."""
+        async with self._engine.connect() as conn:
+            await conn.execute(text("SELECT set_config('app.organisation_id', :val, true)"), {"val": str(self.org_id)})
+            rows = await conn.execute(
+                text("SELECT id FROM runs WHERE pipeline_id = :pid AND organisation_id = :oid AND status = ANY(:statuses)"),
+                {"pid": str(self.pipeline_id), "oid": str(self.org_id), "statuses": sorted(lifecycle.PIPELINE_CAPACITY_STATUSES)},
+            )
+            return {str(row[0]) for row in rows.fetchall()}
 
     # -- invariants (checked after every step) ---------------------------
     @invariant()
@@ -1075,6 +1130,65 @@ def test_a_gate_claim_and_a_resume_at_capacity_cannot_overshoot(lifecycle_runtim
     # Free a slot: the resume now succeeds, so the committed decision is never lost.
     machine.cancel_without_open_gate(four)
     assert runner.run(machine._status(four)) == lifecycle.STATUS_CANCELLED
+    machine.resume_after_decision(two)
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_RUNNING
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+
+    # --- approval at cap through the REAL REST handler: refused, nothing written
+    # The second half of the reported leak. A ``hitl_parked`` run's gate is
+    # claimable WITHOUT a slot (a claim is not a decision), so the claim cannot
+    # guard this: the approval itself must be capacity-admitted BEFORE the
+    # decision is committed, or the decision un-parks the run and the resume
+    # takes a THIRD capacity-holding slot at cap 2.
+    gate_three = machine.request_hitl(two)
+    machine.park_expired_review(two)
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_HITL_PARKED
+    machine.claim_gate(gate_three)
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_HITL_PARKED, "a parked claim stays parked"
+    approve_token = machine._tokens[gate_three]
+
+    # Fill the freed slot: the pipeline is at cap again.
+    five = machine.admit()
+    machine.claim_run(five)
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+    holders_before = runner.run(machine.capacity_holder_ids())
+
+    with pytest.raises(HTTPException) as excinfo:
+        runner.run(machine._approve_via_route(two, gate_three[1], approve_token))
+
+    assert excinfo.value.status_code == 409, excinfo.value.detail
+    assert "concurrency limit" in str(excinfo.value.detail)
+    # Nothing was written: the gate is undecided, the run stays parked, and no
+    # third capacity-holding run exists.
+    assert runner.run(machine._gate_decision(two, gate_three[1])) is None, "a capacity-refused approval must not record the decision"
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_HITL_PARKED, "a capacity-refused approval must leave the run parked"
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+    assert runner.run(machine.capacity_holder_ids()) == holders_before
+    assert str(two) not in holders_before
+
+    # Defence in depth, at the resume itself: even a resume that never passed
+    # the route (here driven directly, unfenced) is capacity-refused BEFORE it
+    # writes the run ``running``, so the second layer cannot over-admit either.
+    with pytest.raises(SandboxCapacityExceededError):
+        runner.run(
+            PipelineExecutor(engine).resume(
+                run_id=two,
+                org_id=machine.org_id,
+                resume_data={"action": "approved", "review_id": gate_three[1]},
+            )
+        )
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_HITL_PARKED, "the resume gate must refuse before the running write"
+    assert runner.run(machine._gate_decision(two, gate_three[1])) is None
+    assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY
+
+    # Free a slot: the SAME real handler approves, commits the decision, and
+    # resumes (the executor is the only double, so no graph is compiled).
+    machine.cancel_without_open_gate(five)
+    assert runner.run(machine._status(five)) == lifecycle.STATUS_CANCELLED
+    executor = runner.run(machine._approve_via_route(two, gate_three[1], approve_token))
+    executor.resume.assert_awaited_once()
+    assert runner.run(machine._gate_decision(two, gate_three[1])) == "approved", "the approval must commit once a slot frees"
+    assert runner.run(machine._status(two)) == lifecycle.STATUS_AWAITING_HUMAN, "the decision un-parks the run; the mocked resume takes no slot"
     machine.resume_after_decision(two)
     assert runner.run(machine._status(two)) == lifecycle.STATUS_RUNNING
     assert runner.run(machine.capacity_used()) == _PIPELINE_CAPACITY

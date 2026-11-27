@@ -279,6 +279,7 @@ from .executor_parts.run_shape import (
     _clamp_to_ceiling,
     _compute_otel_run_context,
     _connector_scope_agent_ids,
+    _enforce_resume_pipeline_capacity,
     _extract_chat_model_token_usage,
     _extract_llm_token_usage,
     _frozen_eval_mode_entries,
@@ -370,6 +371,7 @@ __all__ = [
     "_connector_failure_for_node",
     "_connector_failure_views",
     "_connector_scope_agent_ids",
+    "_enforce_resume_pipeline_capacity",
     "_extract_chat_model_token_usage",
     "_extract_llm_token_usage",
     "_frozen_eval_mode_entries",
@@ -2799,6 +2801,19 @@ class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
         run = await get_run(session, run_id)
         if run is None:
             raise RunNotFoundError(run_id)
+        # FAR-2705 (defence in depth): the ``running`` write below takes a
+        # PIPELINE slot, so it is capacity-admitted through the SAME production
+        # decision the HITL claim/approval routes use. A run that already holds
+        # its slot is admitted; only a parked/awaiting run at cap is refused,
+        # with the resume deferred (the decision stays committed).
+        #
+        # The admission is skipped when the caller's fence is already stale: a
+        # supersession is not a capacity question, so the fenced claim below
+        # must be the thing that reports it (``ResumeClaimSupersededError``)
+        # rather than being pre-empted by a capacity refusal.
+        fence_holds = expected_claim_status is None or (claim_token is not None and run.status == expected_claim_status and run.claim_token == claim_token)
+        if fence_holds:
+            await _enforce_resume_pipeline_capacity(session, run_id=run_id, org_id=org_id)
         if expected_claim_status is not None:
             if claim_token is None:
                 raise ValueError("expected_claim_status requires claim_token")

@@ -30,7 +30,7 @@ def _gate_claim_capacity_admits(monkeypatch):
     """
     from farna.core.run_admission import GateClaimAdmission
 
-    async def _admit(_session, *, run_id, org_id):
+    async def _admit(_session, *, run_id, org_id, **_kwargs):
         return GateClaimAdmission(allowed=True, used=0, limit=1)
 
     monkeypatch.setattr("farna.api.routes.hitl.evaluate_gate_claim_admission", _admit)

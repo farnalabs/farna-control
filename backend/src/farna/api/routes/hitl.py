@@ -92,7 +92,7 @@ from farna.core.hitl_manager import (
 )
 from farna.core.notifier import Notifier
 from farna.core.pipeline_engine.executor import PipelineExecutor, SandboxCapacityExceededError
-from farna.core.run_admission import evaluate_gate_claim_admission
+from farna.core.run_admission import GATE_ACTION_CLAIM, GATE_ACTION_RESUME, GateClaimAdmission, evaluate_gate_claim_admission
 from farna.db.crud.hitl_review_config import (
     EVENT_HUMAN_ONLY_DENIED,
     edge_source_or_target,
@@ -439,6 +439,53 @@ def _capacity_deferred_response(run_id: uuid.UUID, action: str) -> dict[str, str
     """
     logger.info("hitl.resume_capacity_deferred action=%s run=%s", action, run_id)
     return {"status": "queued", "run_id": str(run_id)}
+
+
+def _pipeline_capacity_conflict_detail(admission: GateClaimAdmission, action: str) -> str:
+    """The ONE 409 detail for a capacity-refused HITL gate action.
+
+    The claim route and every approval path (which evaluate the decision's
+    resume capacity BEFORE recording the decision, FAR-2705) share this status,
+    problem type and detail shape, so the operator sees the same attributable
+    conflict on both entry points and no route can invent a different one.
+
+    ``action`` only selects the retry guidance: a refused CLAIM leaves the gate
+    open for another claim; a refused DECISION writes nothing, so the reviewer
+    retries the decision once a slot frees. Both say the run is still parked
+    with its gate undecided — the state the transaction rollback guarantees.
+    """
+    retry = "claim it again once a slot frees." if action == GATE_ACTION_CLAIM else "the decision was not recorded — retry once a slot frees."
+    return f"Pipeline is at its concurrency limit ({admission.used}/{admission.limit} run slots in use); the review is still open — {retry}"
+
+
+def _raise_pipeline_capacity_conflict(admission: GateClaimAdmission, action: str) -> NoReturn:
+    """Raise :func:`_pipeline_capacity_conflict_detail` as the shared 409."""
+    raise ProblemException(
+        ProblemType.CONFLICT,
+        detail=_pipeline_capacity_conflict_detail(admission, action),
+    )
+
+
+async def _admit_gate_action(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    run_id: uuid.UUID,
+    action: str,
+) -> None:
+    """Refuse *action* with the shared 409 when it would over-admit the pipeline.
+
+    Runs INSIDE the caller's transaction, BEFORE the claim or the decision is
+    written, so a refusal rolls back to the untouched HITL state — the run stays
+    parked/awaiting and its gate stays open/undecided.
+    """
+    admission = await evaluate_gate_claim_admission(
+        session,
+        run_id=run_id,
+        org_id=principal.organisation_id,
+        action=action,
+    )
+    if not admission.allowed:
+        _raise_pipeline_capacity_conflict(admission, action)
 
 
 def _client_type(principal: TenantPrincipal) -> str:
@@ -825,12 +872,7 @@ async def claim_review(
                 # reviewer claiming a gate could push the pipeline past its
                 # ``max_concurrent_runs`` cap (reproduced at cap 2 with three
                 # capacity-holding runs).
-                admission = await evaluate_gate_claim_admission(session, run_id=run_id, org_id=principal.organisation_id)
-                if not admission.allowed:
-                    raise ProblemException(
-                        ProblemType.CONFLICT,
-                        detail=(f"Pipeline is at its concurrency limit ({admission.used}/{admission.limit} run slots in use); the review is still open — claim it again once a slot frees."),
-                    )
+                await _admit_gate_action(session, principal, run_id, GATE_ACTION_CLAIM)
                 gate = await mgr.claim(
                     session,
                     run_id=run_id,
@@ -1007,6 +1049,7 @@ async def _run_hitl_manager(
     answer: dict[str, Any] | None = None,
     validate_answer: bool = False,
     require_answer: bool = False,
+    admit_capacity: bool = False,
     **call_kwargs: Any,
 ) -> Any:
     """Open a tenant-scoped transaction and invoke a HITLManager decision method.
@@ -1039,6 +1082,18 @@ async def _run_hitl_manager(
     both require a declared choice to be answered), and it IMPLIES
     ``validate_answer`` — see the note directly below: an enforcement
     flag must never be able to silently switch its own enforcement off.
+
+    ``admit_capacity`` (FAR-2705): the pipeline-capacity admission for the
+    resume this decision triggers (``action=GATE_ACTION_RESUME``), evaluated
+    inside this transaction AFTER the human-only/answer guards and BEFORE the
+    decision is written. The approval paths set it; a refusal raises the shared
+    409 and rolls the transaction back, so the gate stays UNDECIDED and the run
+    stays parked. Without it a reviewer could claim a ``hitl_parked`` run (a
+    claim takes no slot) and approve it at cap: the decision un-parks the run
+    and its resume takes a third capacity-holding slot. Reject does not set it
+    (a rejection may terminate the run and must not be bounced by capacity);
+    its slot-taking resume is still gated at the resume write, where a denial
+    defers the resume rather than discarding the committed decision.
     """
     audit_action = action or mgr_method
     # FAR-907: ``require_answer`` is an ENFORCEMENT flag, so it must never be
@@ -1066,6 +1121,13 @@ async def _run_hitl_manager(
                 audit_action=audit_action,
                 call_kwargs=call_kwargs,
             )
+            if admit_capacity:
+                # FAR-2705: the resume this decision triggers acquires a
+                # PIPELINE slot, so it is admitted BEFORE the decision is
+                # recorded. A refusal raises the shared 409 here, inside the
+                # decision transaction: nothing is written and the gate stays
+                # undecided for a later approval once a slot frees.
+                await _admit_gate_action(session, principal, run_id, GATE_ACTION_RESUME)
             return await _invoke_hitl_manager(
                 mgr,
                 session,
@@ -1167,6 +1229,9 @@ async def approve_review(
         answer=req.answer,
         validate_answer=True,
         require_answer=True,
+        # FAR-2705: the committed approval resumes the graph, which takes a
+        # PIPELINE slot — admit it BEFORE the decision is recorded.
+        admit_capacity=True,
     )
 
     try:
@@ -1260,6 +1325,8 @@ async def approve_review_with_modification(
         answer=req.answer,
         validate_answer=True,
         require_answer=True,
+        # FAR-2705: admit the resume's PIPELINE slot BEFORE the decision commits.
+        admit_capacity=True,
     )
 
     try:
@@ -1358,6 +1425,15 @@ async def reject_review(
             resume_data=resume_data,
             check_sandbox_capacity=False,
         )
+    except SandboxCapacityExceededError:
+        # FAR-2705: the reject path is NOT pre-decision capacity-admitted (a
+        # rejection must never be bounced off the gate by a capacity limit — it
+        # may terminate the run and take no slot at all). The resume write is
+        # still gated, so a reject whose resume WOULD take a pipeline slot at
+        # cap lands here: the decision is already committed, the resume
+        # transaction rolled back, and dispatcher_reconcile's F6a leg retries it
+        # once a slot frees — the same queued-success contract as approve.
+        return _capacity_deferred_response(run_id, "reject")
     except Exception as exc:
         logger.exception("hitl.reject_review.resume_failed")
         raise HTTPException(
@@ -1424,6 +1500,8 @@ async def deliver_manual_output(
         output=req.output,
         decision_payload=resume_data,
         client_type=_client_type(principal),
+        # FAR-2705: admit the resume's PIPELINE slot BEFORE the decision commits.
+        admit_capacity=True,
     )
 
     try:
@@ -1491,6 +1569,8 @@ async def submit_manual_output(
         claim_token=req.claim_token,
         decision_payload=resume_data,
         client_type=_client_type(principal),
+        # FAR-2705: admit the resume's PIPELINE slot BEFORE the decision commits.
+        admit_capacity=True,
     )
 
     try:

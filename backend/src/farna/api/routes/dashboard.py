@@ -197,7 +197,12 @@ async def _facts_window(
                 func.count(func.distinct(RunDailyFact.pipeline_id)).label("active_pipelines"),
                 func.sum(RunDailyFact.total_tokens).label("tokens"),
                 func.avg(RunDailyFact.duration_ms).label("avg_duration_ms"),
-                func.count().filter(RunDailyFact.status == "complete").label("complete"),
+                # The success_rate numerator reads the SAME success projection
+                # the team ``completed`` count uses (``SUCCESS_STATUSES`` from
+                # ``farna.lifecycle``) — never a hand-written ``"complete"``
+                # literal, which would silently disagree with it the moment the
+                # projection widens (FAR-2705).
+                func.count().filter(RunDailyFact.status.in_(sorted(SUCCESS_STATUSES))).label("complete"),
             ).where(
                 RunDailyFact.organisation_id == org_id,
                 RunDailyFact.run_date >= start_date,

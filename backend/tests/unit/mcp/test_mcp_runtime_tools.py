@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 
 from farna.api.mcp_server import (
@@ -35,6 +36,25 @@ from tests.unit.api.mock_session import configure_mock_session, make_session_sco
 _PLACEHOLDER_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 _PLACEHOLDER_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")
 _API_KEY = "mk_testprefix_testsecretkey1234567890abc"
+
+
+@pytest.fixture(autouse=True)
+def _mcp_hitl_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default the MCP approval capacity admission to "admitted" (FAR-2705).
+
+    ``review_hitl`` now evaluates the approval's PIPELINE capacity through the
+    shared ``evaluate_gate_claim_admission`` BEFORE recording the decision. The
+    sessions in this module are scripted ``execute`` side effects that model the
+    calls each path makes, so the extra read is stubbed here to admit; the
+    refusal path is pinned by the REST route unit test and the run-lifecycle
+    stateful integration test.
+    """
+    from farna.core.run_admission import GateClaimAdmission
+
+    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID, **_kwargs: object) -> GateClaimAdmission:
+        return GateClaimAdmission(allowed=True, used=0, limit=1)
+
+    monkeypatch.setattr("farna.api.mcp_server.evaluate_gate_claim_admission", _admit)
 
 
 def _make_session_context(session: AsyncMock) -> AsyncMock:

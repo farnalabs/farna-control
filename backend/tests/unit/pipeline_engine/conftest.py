@@ -32,6 +32,33 @@ from farna.core.runtime_provider import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _resume_pipeline_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Admit the resume-time pipeline capacity gate for this directory (FAR-2705).
+
+    ``_resume_load_and_validate`` now asks the shared capacity decision
+    (``farna.core.run_admission.evaluate_gate_claim_admission``) before it
+    writes the run ``running``. The resume tests here drive hand-built session
+    doubles whose ``execute()`` sides are scripted to the previous query
+    sequence, so the extra admission read is stubbed out for the directory.
+
+    This is wiring, not coverage: the refusal itself is pinned against real
+    Postgres by ``tests/integration/test_run_lifecycle_stateful.py`` (the
+    executor's own ``resume`` raises ``SandboxCapacityExceededError`` at cap,
+    and the REST handler refuses the approval with a 409). A test that needs
+    the REAL gate can re-patch
+    ``farna.core.pipeline_engine.executor._enforce_resume_pipeline_capacity``.
+    """
+
+    async def _admit(_session: object, *, run_id: Any, org_id: Any) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "farna.core.pipeline_engine.executor._enforce_resume_pipeline_capacity",
+        _admit,
+    )
+
+
 class FakeFileIOProvider(RuntimeProvider):
     """In-memory stand-in for the FAR-1050 R2b flag-ON file-I/O primitives.
 

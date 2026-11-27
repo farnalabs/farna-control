@@ -99,6 +99,7 @@ from farna.api.routes.hitl import (
     _build_resume_executor,
     _capacity_deferred_response,
     _is_sandbox_capacity_exceeded,
+    _pipeline_capacity_conflict_detail,
     _restore_failed_mcp_resume_for_reconcile,
     _run_is_f6a_reconcile_candidate,
 )
@@ -230,6 +231,7 @@ from farna.core.mcp.scope_validator import (
 from farna.core.pipeline_engine.error_codes import map_legacy_code, present_error
 from farna.core.pipeline_engine.errors import ResumeClaimSupersededError
 from farna.core.rate_limiter import TokenBucketRegistry
+from farna.core.run_admission import GATE_ACTION_RESUME, evaluate_gate_claim_admission
 from farna.core.run_provenance import run_provenance_fields
 from farna.core.runtime_config.key_bridge import public_url_is_configured
 from farna.core.secrets_backend import (
@@ -7897,6 +7899,45 @@ def _hitl_error_response(exc: BaseException, run_id: str, review_id: str) -> dic
     return _tool_exception_error("Failed to process HITL action", exc, "mcp.review_hitl")
 
 
+#: The MCP HITL actions whose committed decision resumes the graph, and so must
+#: be pipeline-capacity-admitted BEFORE the decision is recorded (FAR-2705).
+#: ``reject`` is deliberately absent: a rejection may terminate the run (no
+#: reject route) and must never be bounced by a capacity limit; its slot-taking
+#: resume is still gated at the resume write, where a denial defers it.
+_MCP_RESUMING_HITL_ACTIONS: frozenset[str] = frozenset({"approve", "deliver_manual"})
+
+
+async def _admit_mcp_hitl_capacity(
+    session: Any,
+    *,
+    org_id: uuid.UUID,
+    run_id: uuid.UUID,
+    review_id: str,
+    action: str,
+) -> dict[str, Any] | None:
+    """Pre-decision pipeline admission for an MCP approval; ``None`` = admitted.
+
+    Mirrors the REST approval routes: the decision's resume takes a PIPELINE
+    slot, so at cap the decision must NOT be recorded (FAR-2705). Evaluating it
+    here, inside the decision transaction, means the returned error costs
+    nothing — the transaction ends without a write and the gate stays
+    undecided. Uses the SAME production decision as the REST claim/approval
+    paths (:func:`farna.core.run_admission.evaluate_gate_claim_admission`) and
+    the same detail text (``_pipeline_capacity_conflict_detail``).
+    """
+    if action not in _MCP_RESUMING_HITL_ACTIONS:
+        return None
+    admission = await evaluate_gate_claim_admission(session, run_id=run_id, org_id=org_id, action=GATE_ACTION_RESUME)
+    if admission.allowed:
+        return None
+    return {
+        "error": "pipeline_capacity",
+        "detail": _pipeline_capacity_conflict_detail(admission, GATE_ACTION_RESUME),
+        "run_id": str(run_id),
+        "review_id": review_id,
+    }
+
+
 async def _review_hitl_impl(
     run_id: str,
     review_id: str,
@@ -7961,6 +8002,15 @@ async def _review_hitl_impl(
         human_only_err = await _check_human_only_gate(s, org_id, run, review_id, action)
         if human_only_err:
             return human_only_err
+
+        # FAR-2705: at the pipeline's concurrency cap an approval whose resume
+        # would take a slot is refused HERE, before the decision is written —
+        # so the gate stays undecided and the caller can retry once a slot
+        # frees (a parked run is claimable without a slot, so the claim alone
+        # cannot prevent this).
+        capacity_err = await _admit_mcp_hitl_capacity(s, org_id=org_id, run_id=rid, review_id=review_id, action=action)
+        if capacity_err is not None:
+            return capacity_err
 
         try:
             decision = await _dispatch_hitl_action(

@@ -25,6 +25,26 @@ from tests.bdd.conftest import ORG_ID, USER_ID, _make_test_client
 scenarios("../features/hitl/gate_policies.feature")
 
 
+@pytest.fixture(autouse=True)
+def _gate_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default the gate-capacity admission to "admitted" (FAR-2705).
+
+    The approval routes now evaluate the resume's PIPELINE capacity (the shared
+    ``evaluate_gate_claim_admission``) inside the decision transaction. These
+    scenarios assert the router's own contract over the shared MOCKED session,
+    which cannot answer that read, so the admission is stubbed to admit here —
+    its refusal path is pinned by
+    ``tests/unit/api/test_hitl_routes_coverage.py`` and by the run-lifecycle
+    stateful integration test.
+    """
+    from farna.core.run_admission import GateClaimAdmission
+
+    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID, **_kwargs: object) -> GateClaimAdmission:
+        return GateClaimAdmission(allowed=True, used=0, limit=1)
+
+    monkeypatch.setattr("farna.api.routes.hitl.evaluate_gate_claim_admission", _admit)
+
+
 @pytest.fixture
 def ctx() -> dict[str, Any]:
     """Shared mutable context dict for the gate-policy scenarios."""

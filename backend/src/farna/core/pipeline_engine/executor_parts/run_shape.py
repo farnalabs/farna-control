@@ -46,7 +46,7 @@ from farna.db.models.policy_gate import PolicyGate
 from farna.db.models.run import Run
 from farna.otel_bridge import trace_id_for_thread
 
-from .support import RunNotFoundError, _log, _ref
+from .support import RunNotFoundError, SandboxCapacityExceededError, _log, _ref
 
 _WORKER_ID: str = f"{socket.gethostname()}:{os.getpid()}"
 
@@ -74,6 +74,54 @@ _INTERACTIVE_NODE_TYPES: frozenset[str] = frozenset({"manual"})
 
 _SANDBOX_AGENT_CACHE: OrderedDict[str, bool] = OrderedDict()
 _SANDBOX_AGENT_CACHE_MAX = 512
+
+
+async def _enforce_resume_pipeline_capacity(
+    session: AsyncSession,
+    *,
+    run_id: uuid.UUID,
+    org_id: uuid.UUID,
+) -> None:
+    """Admission gate for the ``running`` write of a resume (FAR-2705).
+
+    A resume claims the run ``running``, and ``running`` is capacity-holding
+    (``lifecycle.PIPELINE_CAPACITY_STATUSES``), so every resume is an admission
+    into the pipeline's ``max_concurrent_runs``. The approval routes already
+    admit the decision BEFORE recording it (a refusal is their 409 and writes
+    nothing); this is the defence-in-depth layer at the resume itself, so a
+    capacity fill that lands between the decision and the resume — or a resume
+    that never passed a route (recovery, reconcile) — cannot overshoot.
+
+    Uses the SAME production decision as the claim path
+    (:func:`farna.core.run_admission.evaluate_gate_claim_admission`,
+    ``action=GATE_ACTION_RESUME``), so the two entry points cannot drift. A run
+    that ALREADY holds a slot (``claimed`` / ``running`` / ``unknown`` — e.g. a
+    stale-running re-claim) takes nothing new and is admitted.
+
+    Refusal raises :class:`SandboxCapacityExceededError` — the established
+    "decision committed, resume deferred" outcome: the caller's resume
+    transaction rolls back (the run keeps its HITL status and its committed
+    decision), the route/MCP boundary answers its queued-success contract, and
+    ``dispatcher_reconcile``'s F6a leg re-dispatches once a slot frees.
+
+    The helper is the authority here (no duplicate capacity SQL): it admits a
+    missing run/pipeline row rather than converting it into a refusal, so the
+    claim write below still owns those outcomes. Read RLS-scoped: the caller has
+    already set the org context in its transaction.
+    """
+    from farna.core.run_admission import GATE_ACTION_RESUME, evaluate_gate_claim_admission
+
+    admission = await evaluate_gate_claim_admission(session, run_id=run_id, org_id=org_id, action=GATE_ACTION_RESUME)
+    if admission.allowed:
+        return
+    _log.warning(
+        "pipeline.resume_pipeline_capacity_denied run=%s — pipeline at its concurrency limit (%d/%d run slots in use); the decision is committed and the resume is deferred to dispatcher_reconcile",
+        run_id,
+        admission.used,
+        admission.limit,
+        extra={"run_id": str(run_id), "org_id": str(org_id)},
+    )
+    raise SandboxCapacityExceededError(org_id)
 
 
 def _governed_evaluation_mode(gate: PolicyGate) -> str:

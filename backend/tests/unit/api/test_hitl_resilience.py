@@ -67,7 +67,7 @@ def _gate_claim_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
     stateful integration test.
     """
 
-    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID) -> GateClaimAdmission:
+    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID, **_kwargs: object) -> GateClaimAdmission:
         return GateClaimAdmission(allowed=True, used=0, limit=1)
 
     monkeypatch.setattr("farna.api.routes.hitl.evaluate_gate_claim_admission", _admit)

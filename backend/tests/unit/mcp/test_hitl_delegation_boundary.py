@@ -30,11 +30,31 @@ from ``_check_human_only_gate``.
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from farna.api.mcp_server import review_hitl
 from farna.auth.permissions import is_delegable
 
 _PLACEHOLDER_ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000011")
 _PLACEHOLDER_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000013")
+
+
+@pytest.fixture(autouse=True)
+def _mcp_hitl_capacity_admits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Admit the MCP approval's pipeline capacity (FAR-2705).
+
+    ``review_hitl`` evaluates the approval's PIPELINE capacity before recording
+    the decision; this module drives the real tool over a scripted session, so
+    the extra read is stubbed to admit (the refusal path is pinned elsewhere).
+    """
+    from farna.core.run_admission import GateClaimAdmission
+
+    async def _admit(_session: object, *, run_id: uuid.UUID, org_id: uuid.UUID, **_kwargs: object) -> GateClaimAdmission:
+        return GateClaimAdmission(allowed=True, used=0, limit=1)
+
+    monkeypatch.setattr("farna.api.mcp_server.evaluate_gate_claim_admission", _admit)
+
+
 #: A human's OAuth token grant-set: the review surface plus every decision
 #: action the ``review_hitl`` tool can dispatch. One token, used for BOTH the
 #: allowed and the denied leg below.
