@@ -43,9 +43,9 @@ _MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migratio
 _PG_URL_ENV = "FARNA_2823_TEST_PG_URL"
 
 #: A real Python traceback: carries all three markers.
-_TRACEBACK_WITH_CODE = 'Traceback (most recent call last):\n  File "/app/src/modulo/core/pipeline_engine/executor.py", line 3970, in _stream_graph\n    raise RuntimeError("state not serializable")\nRuntimeError: state not serializable'
+_TRACEBACK_WITH_CODE = 'Traceback (most recent call last):\n  File "/app/src/farna/core/pipeline_engine/executor.py", line 3970, in _stream_graph\n    raise RuntimeError("state not serializable")\nRuntimeError: state not serializable'
 #: A partial traceback body: carries the frame + app-path markers, with no code.
-_TRACEBACK_NULL_CODE = '  File "/app/src/modulo/core/pipeline_engine/executor.py", line 42, in run\nValueError: boom'
+_TRACEBACK_NULL_CODE = '  File "/app/src/farna/core/pipeline_engine/executor.py", line 42, in run\nValueError: boom'
 #: A tidy summary that matches none of the markers - must stay byte-identical.
 _CLEAN_DETAIL = "Upstream connector returned HTTP 503; retry budget exhausted."
 #: A near-miss: mentions ".py" and "line" but NOT the '.py", line ' frame marker.

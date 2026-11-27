@@ -7,7 +7,7 @@ appends attribution to a ``traceback.format_exc()`` string, so a row can carry a
 multi-line traceback with absolute source paths, e.g. on staging::
 
     Traceback (most recent call last):
-      File "/app/src/modulo/core/pipeline_engine/executor.py", line 3970, in ...
+      File "/app/src/farna/core/pipeline_engine/executor.py", line 3970, in ...
 
 That field is exposed on REST/MCP run responses, so the internal server paths
 and code layout leak to every reader of the run. This migration is a one-time,
