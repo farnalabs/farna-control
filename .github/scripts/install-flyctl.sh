@@ -14,7 +14,7 @@
 # listed at https://api.github.com/repos/superfly/flyctl/releases/latest.
 set -euo pipefail
 
-FLYCTL_VERSION="${FLYCTL_VERSION:-v0.5.1}"
+FLYCTL_VERSION="${FLYCTL_VERSION:-v0.5.19}"
 FLYCTL_INSTALL="${FLYCTL_INSTALL:-$HOME/.fly}"
 
 version_num="${FLYCTL_VERSION#v}"
