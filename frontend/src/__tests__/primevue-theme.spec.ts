@@ -171,4 +171,52 @@ describe('PrimeVue token bridge guard', () => {
     expect(css).toContain('font-size: 0.75rem')
     styles[0].remove()
   })
+
+  /**
+   * The parity stylesheet is injected UNLAYERED, so it beats every declaration
+   * PrimeVue makes inside `@layer primevue` (FAR-2817 moved PrimeVue into that
+   * layer). That is exactly what a parity override wants - except for the
+   * components PrimeVue sizes through `-sm`/`-lg` class variants, where the
+   * variant's own token must keep winning. Before the layer change this rule
+   * did keep winning, by nothing more than document order, so the parity rule
+   * was written without a guard and silently took the size over the moment the
+   * order stopped mattering: every `size="small"` select re-typed at 14px
+   * instead of 12px and grew 28px -> 31px (four canvas visual baselines).
+   *
+   * This pins the invariant instead of one selector: ANY font-size declaration
+   * this stylesheet makes on a size-variant component must exclude that
+   * component's `-sm` and `-lg` classes.
+   */
+  it('never lets an unlayered parity rule override a PrimeVue size variant', () => {
+    document.getElementById(PRIMEVUE_V4_BASE_FONT_STYLE_ID)?.remove()
+    installPrimeVueV4BaseFontStyles(document)
+    const css = document.getElementById(PRIMEVUE_V4_BASE_FONT_STYLE_ID)?.textContent ?? ''
+    document.getElementById(PRIMEVUE_V4_BASE_FONT_STYLE_ID)?.remove()
+
+    // Components whose typography PrimeVue itself switches via `-sm` / `-lg`
+    // classes (each has a `--p-<component>-sm-font-size` token our density
+    // parity map pins).
+    const sizedComponents = ['p-button', 'p-inputtext', 'p-select']
+
+    const rules = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    const offenders: string[] = []
+    for (const [, selectorList, declarations] of rules) {
+      if (!/(^|;)\s*font-size\s*:/.test(declarations)) continue
+      for (const selector of selectorList.split(',').map((part) => part.trim())) {
+        // The component root is the selector's FIRST compound; `.p-select-overlay
+        // .p-select-option` is an overlay child, not a size-variant root.
+        const root = selector.match(/^\.([\w-]+)/)?.[1]
+        if (!root || !sizedComponents.includes(root)) continue
+        const guarded = selector.includes(`:not(.${root}-sm)`) && selector.includes(`:not(.${root}-lg)`)
+        if (!guarded) offenders.push(selector)
+      }
+    }
+
+    expect(offenders, 'a font-size rule outranks the PrimeVue -sm/-lg variant').toEqual([])
+    // The guard is present on the rule this test was written for...
+    expect(css).toContain('.p-select:not(.p-select-sm):not(.p-select-lg) .p-select-label')
+    // ...while the v5 line-height parity still applies to EVERY select size,
+    // small and large included, so it stays outside the guarded rule.
+    expect(css).toMatch(/\.p-select\s+\.p-select-label\s*\{[^}]*line-height:\s*1\.5/)
+  })
 })

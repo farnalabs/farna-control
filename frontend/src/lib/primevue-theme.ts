@@ -231,10 +231,24 @@ const PRIMEVUE_V4_BASE_FONT_CSS = `
 /* --p-select-font-size. v4 hardcodes 1rem on the label (not the root, which
    v5 leaves at the page's 16px). The line-height is explicit because a
    text-xs utility on the select root gives the label a 1.3333 inherited
-   line-height in v4, where v5's label always computes at 1.5. */
+   line-height in v4, where v5's label always computes at 1.5 - and it is kept
+   OUTSIDE the size guard, because v5's label computes at 1.5 for every size.
+
+   The font-size carries the same :not() guard as .p-button and .p-inputtext
+   above (FAR-2817). Until PrimeVue's CSS was moved into @layer primevue this
+   rule was unlayered and simply came FIRST in document order, so
+   .p-select-sm .p-select-label - PrimeVue's own form-field-sm font size
+   (0.75rem) - still won on a small select. An unlayered rule now beats every
+   layered PrimeVue declaration, so without the guard every size="small" select
+   re-typed at 14px instead of 12px and grew 28px -> 31px tall. Pinned by the
+   "never lets an unlayered parity rule override a PrimeVue size variant" case
+   in primevue-theme.spec.ts. */
 .p-select .p-select-label {
-  font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.p-select:not(.p-select-sm):not(.p-select-lg) .p-select-label {
+  font-size: 0.875rem;
 }
 
 /* --p-select-option-font-size / --p-select-option-group-font-size. v4 leaves
