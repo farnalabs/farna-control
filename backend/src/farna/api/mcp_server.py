@@ -14573,6 +14573,17 @@ async def resource_library_detail(primitive_type: str, slug: str) -> str:
         if p is None:
             return f"Library primitive '{slug}' of type '{primitive_type}' not found."
 
+        # ADR 070 §5: a team-scoped credential must not read another team's
+        # team-private primitive. ``get_primitive_by_slug`` filters only
+        # ``primitive_type`` + ``slug``, and ``library_primitives`` RLS keys the
+        # team policy on the key OWNER's memberships (not the key's own team),
+        # so only this explicit boundary holds. Return not-found on mismatch so
+        # the response never reveals the foreign row exists — the same
+        # indistinguishability the by-id REST read (FAR-2682
+        # ``_primitive_visible_to``) and the list resource already apply.
+        if team_boundary_blocked(_ctx_team_id_val(), p.owner_team_id):
+            return f"Library primitive '{slug}' of type '{primitive_type}' not found."
+
         tags_str = ", ".join(p.tags) if p.tags else ""
         rating_str = f"{p.average_rating:.2f}" if p.average_rating is not None else "N/A"
         downloads_str = str(p.download_count) if p.download_count is not None else "0"

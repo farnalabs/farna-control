@@ -308,6 +308,47 @@ async def test_library_resource_applies_the_same_team_boundary(
     assert _TAG_TERM not in body
 
 
+async def test_library_detail_resource_applies_the_same_team_boundary(
+    session: AsyncSession,
+) -> None:
+    """``resource_library_detail`` must clamp by slug like the list resource.
+
+    The detail read resolves via ``get_primitive_by_slug``, which filters only
+    ``primitive_type`` + ``slug`` (RLS keys the team policy on the key owner's
+    memberships, not the key's team), so without an explicit boundary a
+    team-A key reads team B's team-private primitive by slug.
+    """
+    seed = await _seed(session)
+
+    with _mcp_auth(team_id=_TEAM_A), _library_read_context(session):
+        foreign = await mcp_server.resource_library_detail("schema", seed.team_b.slug)
+        own = await mcp_server.resource_library_detail("schema", seed.team_a.slug)
+        org = await mcp_server.resource_library_detail("schema", seed.org.slug)
+
+    # The foreign team-B row is indistinguishable from a missing one.
+    assert "not found" in foreign
+    assert seed.team_b.name not in foreign
+    assert str(seed.team_b.id) not in foreign
+    assert _DESC_TERM not in foreign
+    assert _TAG_TERM not in foreign
+    # The caller's own team row and an org-level row remain readable.
+    assert seed.team_a.name in own
+    assert seed.org.name in org
+
+
+async def test_library_detail_resource_org_wide_caller_sees_team_b(
+    session: AsyncSession,
+) -> None:
+    """No regression: an org-wide credential (``_ctx_team_id=None``) is unscoped."""
+    seed = await _seed(session)
+
+    with _mcp_auth(team_id=None), _library_read_context(session):
+        body = await mcp_server.resource_library_detail("schema", seed.team_b.slug)
+
+    assert seed.team_b.name in body
+    assert _DESC_TERM in body
+
+
 # ---------------------------------------------------------------------------
 # The lister itself — the predicate is bound, not a post-filter
 # ---------------------------------------------------------------------------
