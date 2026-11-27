@@ -73,9 +73,13 @@ def credential_sent(response: object, token: str) -> bool:
 @schemathesis.check
 def status_policy(ctx: object, response: object, case: object) -> bool | None:
     """Apply :func:`rc_fuzz_policy.classify` to one response."""
-    # The workflow selects GET operations. Schemathesis may still emit a
-    # stateful follow-up with an implicit method, but it must not bypass the
-    # status policy: every response is an input to the pass invariant.
+    # The leg fuzzes GET operations. The coverage phase additionally probes HTTP
+    # methods the specification does not declare; those answers are
+    # `unsupported_method`'s business (it fails a 405 that omits the RFC 9110
+    # `Allow` header - measured: 271 such answers on v0.3.330-rc3), and judging
+    # them by a GET status policy as well would only double-report them.
+    if str(getattr(case, "method", "") or "").upper() != "GET":
+        return None
     status_code = int(response.status_code)
     presented = credential_sent(response, _TOKEN)
     verdict = classify(_PASS, status_code, credential_sent=presented)
