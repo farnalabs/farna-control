@@ -3006,7 +3006,8 @@ async def list_run_evals(
 
     Returns a paginated list of eval results with the eval definition name
     included for convenience. Requires the run to belong to the caller's
-    organisation.
+    organisation **and** to be inside the caller's team boundary (ADR 070 §4 —
+    the eval results are a run child reached by the run id).
 
     Optional query parameters ``node_id`` and ``eval_id`` filter results
     by the evaluation's target node or eval definition respectively. When
@@ -3025,6 +3026,11 @@ async def list_run_evals(
             )
             run = run_result.scalar_one_or_none()
             if run is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
+            # A child of another team's run must be refused exactly like the
+            # run-detail family refuses the run itself: 404, never a boundary
+            # error that confirms the run exists.
+            if not await run_visible_to_principal(session, principal, run):
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=MSG_RUN_NOT_FOUND)
 
             from sqlalchemy import func as sa_func
@@ -3788,6 +3794,16 @@ async def _fetch_compare_evals(
                 )
             ).scalar_one_or_none()
             if run_b is None:
+                raise HTTPException(status_code=404, detail="Run B not found")
+
+            # ADR 070 §4: comparing another team's runs is reading their eval
+            # results. Both runs must be inside the caller's team boundary —
+            # the same shared predicate the run-detail family uses — and a
+            # refusal is NOT FOUND so the comparison never confirms a foreign
+            # run exists.
+            if not await run_visible_to_principal(session, principal, run_a):
+                raise HTTPException(status_code=404, detail="Run A not found")
+            if not await run_visible_to_principal(session, principal, run_b):
                 raise HTTPException(status_code=404, detail="Run B not found")
 
             results_a = (

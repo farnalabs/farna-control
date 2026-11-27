@@ -42,6 +42,7 @@ from farna.api.dependencies import (
     require_permission,
     require_system_or_org_admin,
 )
+from farna.api.run_scope import load_run_in_scope
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
 from farna.core.audit_coverage import audited
@@ -206,6 +207,40 @@ async def _load_evidence_row(
         )
     )
     return result.scalar_one_or_none()
+
+
+#: Subject types whose fact belongs to a run (and therefore inherits the run's
+#: team boundary). Every other subject (``trigger_event``, ``system_state``,
+#: ``derived``) has no parent run and is org-level by declaration
+#: (``db/tenant_scope.py``).
+_RUN_SUBJECT_TYPES = frozenset({"run", "node_execution"})
+
+
+async def _subject_in_scope(
+    session: AsyncSession,
+    principal: TenantPrincipal,
+    subject_type: str,
+    subject_id: str,
+) -> bool:
+    """True when an evidence fact is inside the caller's team boundary.
+
+    A run/node-subject fact is bounded by its PARENT RUN through the shared
+    ``run_scope`` leaf, so evidence can never drift from the run-detail family
+    (#3442/#3512). The parent is loaded rather than judged from the row's own
+    ``owner_team_id`` on purpose: ADR 070 §4 says a NULL owner never means
+    "org-visible" for the runs family, and the run load resolves a pre-stamp
+    NULL against the pipeline TEAM-BLIND (fail-closed when unresolvable). A run
+    subject whose id cannot be parsed also fails CLOSED — an unresolvable
+    parent is never treated as org-level.
+
+    Non-run subjects stay org-visible (they have no run to inherit from).
+    """
+    if subject_type not in _RUN_SUBJECT_TYPES:
+        return True
+    run_id, _ = _split_run_and_node(subject_type, subject_id)
+    if run_id is None:
+        return False
+    return await load_run_in_scope(session, principal, run_id) is not None
 
 
 async def _load_redaction_rules(
@@ -462,6 +497,9 @@ async def get_evidence_endpoint(
 ) -> EvidenceRowResponse:
     """Return one evidence row for the caller org, redacted for their role.
 
+    A run/node-subject row also follows its PARENT RUN's team boundary (ADR 070
+    §4) — a 404, so a refused row is indistinguishable from a missing one.
+
     The 404 for a missing row is raised inside the body and passed through
     untouched by ``@handle_db_errors``; DB failures use the shared mapping.
     """
@@ -472,6 +510,14 @@ async def get_evidence_endpoint(
         await set_rls_user_context(session, principal.account_id, principal.org_role)
         row = await _load_evidence_row(session, org_id, evidence_id)
         if row is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail=_MSG_EVIDENCE_NOT_FOUND,
+            )
+        # A run/node-subject fact is a run child reached by the fact's OWN id:
+        # apply the same parent-run boundary the run-detail family applies, or
+        # the id becomes a side door around it (ADR 070 §4).
+        if not await _subject_in_scope(session, principal, row.subject_type, row.subject_id):
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
                 detail=_MSG_EVIDENCE_NOT_FOUND,
@@ -493,6 +539,11 @@ async def list_evidence_endpoint(
 
     At most :data:`_EVIDENCE_LIST_LIMIT` rows are returned.
 
+    ADR 070 §4: the list follows the PARENT RUN's team boundary. An
+    out-of-boundary or unknown run answers an empty list — the shape this route
+    already used for a run that does not exist, so a refusal never confirms the
+    run exists.
+
     The org's redaction rules are loaded ONCE per request and each row resolved
     in memory from that list — never one rule query per row. DB failures use the
     shared ``@handle_db_errors`` mapping; a read cannot produce a rule conflict.
@@ -502,6 +553,10 @@ async def list_evidence_endpoint(
     async with session.begin():
         await set_rls_org(session, org_id)
         await set_rls_user_context(session, principal.account_id, principal.org_role)
+        # The parent run is loaded BEFORE any child row is read, so a foreign
+        # run never even reaches the evidence table.
+        if not await _subject_in_scope(session, principal, "run", str(run_id)):
+            return []
         rows = await _load_evidence_rows(session, org_id, run_id, node_id, key)
         # Load the org's rules ONCE, then resolve each row in memory (N+1 fix).
         rules = await load_redaction_rules(session, org_id)

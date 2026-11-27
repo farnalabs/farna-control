@@ -130,6 +130,7 @@ class TestListEvidenceRedaction:
         row = _fake_evidence()
         with (
             _client("viewer") as client,
+            patch(f"{_ROUTES}._subject_in_scope", new=AsyncMock(return_value=True)),
             patch(f"{_ROUTES}._load_evidence_rows", new=AsyncMock(return_value=[row])),
             patch(f"{_ROUTES}.set_rls_org", new=AsyncMock()),
             patch(f"{_ROUTES}.set_rls_user_context", new=AsyncMock()),
@@ -150,6 +151,7 @@ class TestListEvidenceRedaction:
         row = _fake_evidence()
         with (
             _client("admin") as client,
+            patch(f"{_ROUTES}._subject_in_scope", new=AsyncMock(return_value=True)),
             patch(f"{_ROUTES}._load_evidence_rows", new=AsyncMock(return_value=[row])),
             patch(f"{_ROUTES}.set_rls_org", new=AsyncMock()),
             patch(f"{_ROUTES}.set_rls_user_context", new=AsyncMock()),
@@ -168,6 +170,7 @@ class TestListEvidenceRedaction:
         row = _fake_evidence()
         with (
             _client("runner") as client,
+            patch(f"{_ROUTES}._subject_in_scope", new=AsyncMock(return_value=True)),
             patch(f"{_ROUTES}._load_evidence_rows", new=AsyncMock(return_value=[row])),
             patch(f"{_ROUTES}.set_rls_org", new=AsyncMock()),
             patch(f"{_ROUTES}.set_rls_user_context", new=AsyncMock()),
@@ -183,6 +186,7 @@ class TestListEvidenceRedaction:
     def test_list_empty_returns_no_rows(self) -> None:
         with (
             _client("viewer") as client,
+            patch(f"{_ROUTES}._subject_in_scope", new=AsyncMock(return_value=True)),
             patch(f"{_ROUTES}._load_evidence_rows", new=AsyncMock(return_value=[])),
             patch(f"{_ROUTES}.set_rls_org", new=AsyncMock()),
             patch(f"{_ROUTES}.set_rls_user_context", new=AsyncMock()),
@@ -198,6 +202,7 @@ class TestListEvidenceErrorArms:
     def _get(self, side_effect: Exception) -> Any:
         with (
             _client("viewer") as client,
+            patch(f"{_ROUTES}._subject_in_scope", new=AsyncMock(return_value=True)),
             patch(f"{_ROUTES}._load_evidence_rows", new=AsyncMock(side_effect=side_effect)),
             patch(f"{_ROUTES}.set_rls_org", new=AsyncMock()),
             patch(f"{_ROUTES}.set_rls_user_context", new=AsyncMock()),
@@ -229,6 +234,7 @@ class TestGetEvidence:
         row = _fake_evidence()
         with (
             _client("viewer") as client,
+            patch(f"{_ROUTES}._subject_in_scope", new=AsyncMock(return_value=True)),
             patch(f"{_ROUTES}._load_evidence_row", new=AsyncMock(return_value=row)),
             patch(f"{_ROUTES}.set_rls_org", new=AsyncMock()),
             patch(f"{_ROUTES}.set_rls_user_context", new=AsyncMock()),

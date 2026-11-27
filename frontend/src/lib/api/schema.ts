@@ -8524,7 +8524,8 @@ export interface paths {
          *
          *     Returns a paginated list of eval results with the eval definition name
          *     included for convenience. Requires the run to belong to the caller's
-         *     organisation.
+         *     organisation **and** to be inside the caller's team boundary (ADR 070 §4 —
+         *     the eval results are a run child reached by the run id).
          *
          *     Optional query parameters ``node_id`` and ``eval_id`` filter results
          *     by the evaluation's target node or eval definition respectively. When
@@ -11117,6 +11118,9 @@ export interface paths {
          * Get Evidence Endpoint
          * @description Return one evidence row for the caller org, redacted for their role.
          *
+         *     A run/node-subject row also follows its PARENT RUN's team boundary (ADR 070
+         *     §4) — a 404, so a refused row is indistinguishable from a missing one.
+         *
          *     The 404 for a missing row is raised inside the body and passed through
          *     untouched by ``@handle_db_errors``; DB failures use the shared mapping.
          */
@@ -11141,6 +11145,11 @@ export interface paths {
          * @description List a run's evidence rows for the caller org, redacted for their role.
          *
          *     At most :data:`_EVIDENCE_LIST_LIMIT` rows are returned.
+         *
+         *     ADR 070 §4: the list follows the PARENT RUN's team boundary. An
+         *     out-of-boundary or unknown run answers an empty list — the shape this route
+         *     already used for a run that does not exist, so a refusal never confirms the
+         *     run exists.
          *
          *     The org's redaction rules are loaded ONCE per request and each row resolved
          *     in memory from that list — never one rule query per row. DB failures use the
