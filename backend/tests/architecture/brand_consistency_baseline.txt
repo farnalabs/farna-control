@@ -22,12 +22,7 @@
 .github/workflows/macos-installer.yml	40
 .github/workflows/macos-staple-retry.yml	2
 .github/workflows/main-integration.yml	10
-# The merge-train `build` job sets the same bot git identity (modulo-merge-bot /
-# bot@modulo.run) the train build script commits under - an internal identifier,
-# not user-facing brand copy (the identical pair is frozen for
-# .github/scripts/merge_train_build.py above). The old `queue` job's pair is the
-# pre-existing 2, so the allowance is 4 until rollout step 3 deletes that job.
-.github/workflows/merge-queue.yml	4
+.github/workflows/merge-queue.yml	2
 .github/workflows/merge-validate.yml	18
 .github/workflows/native-gate0.yml	1
 .github/workflows/native-release-smoke.yml	15

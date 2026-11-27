@@ -168,6 +168,67 @@ def _effective_prefix(
     return ""
 
 
+def _release_prefix(staged_release: dict[str, str], base: str) -> None:
+    """Record that ``base`` frees its numeric prefix (a delete, or a rename source)."""
+    if base:
+        staged_release[base.split("_", 1)[0]] = base
+
+
+def _claim_or_report(
+    prefix: str,
+    base: str,
+    message_template: str,
+    prefix_holder: dict[str, str],
+    staged_claim: dict[str, str],
+    staged_release: dict[str, str],
+) -> str | None:
+    """Claim ``prefix`` for ``base``, or return a collision line.
+
+    A collision is reported (with ``{holder}`` substituted) when the prefix is
+    already held by a different basename; otherwise ``base`` is staged as the
+    prefix's holder and ``None`` is returned.
+    """
+    holder = _effective_prefix(prefix, prefix_holder, staged_claim, staged_release)
+    if holder and holder != base:
+        return message_template.format(holder=holder)
+    staged_claim[prefix] = base
+    return None
+
+
+def _rename_collision(
+    num: int,
+    path: str,
+    extra: str,
+    prefix_holder: dict[str, str],
+    staged_claim: dict[str, str],
+    staged_release: dict[str, str],
+) -> str | None:
+    """Stage a rename entry (release its source prefix, claim its target)."""
+    _release_prefix(staged_release, Path(path).name)
+    new_base = Path(extra or "").name
+    new_prefix = new_base.split("_", 1)[0] if new_base else ""
+    if not new_prefix:
+        return None
+    template = f"PR #{num}: renames onto {new_base}, prefix {new_prefix} is already held by {{holder}}"
+    return _claim_or_report(new_prefix, new_base, template, prefix_holder, staged_claim, staged_release)
+
+
+def _add_collision(
+    num: int,
+    path: str,
+    prefix_holder: dict[str, str],
+    staged_claim: dict[str, str],
+    staged_release: dict[str, str],
+) -> str | None:
+    """Stage an add entry (claim its numeric prefix) and report any collision."""
+    base = Path(path).name
+    prefix = base.split("_", 1)[0] if base else ""
+    if not prefix:
+        return None
+    template = f"PR #{num}: adds {base}, numeric prefix {prefix} is already held by {{holder}}"
+    return _claim_or_report(prefix, base, template, prefix_holder, staged_claim, staged_release)
+
+
 def _prefix_collisions(
     num: int,
     diff: list[tuple[str, str, str]],
@@ -181,37 +242,17 @@ def _prefix_collisions(
     detail: list[str] = []
     staged_claim: dict[str, str] = {}
     staged_release: dict[str, str] = {}
-    collides = False
     for status, path, extra in diff:
         if status.startswith("R"):
-            old_base = Path(path).name
-            new_base = Path(extra or "").name
-            if old_base:
-                staged_release[old_base.split("_", 1)[0]] = old_base
-            new_prefix = new_base.split("_", 1)[0] if new_base else ""
-            if new_prefix:
-                holder = _effective_prefix(new_prefix, prefix_holder, staged_claim, staged_release)
-                if holder and holder != new_base:
-                    collides = True
-                    detail.append(f"PR #{num}: renames onto {new_base}, prefix {new_prefix} is already held by {holder}")
-                else:
-                    staged_claim[new_prefix] = new_base
+            message = _rename_collision(num, path, extra, prefix_holder, staged_claim, staged_release)
         elif status == "D":
-            base = Path(path).name
-            if base:
-                staged_release[base.split("_", 1)[0]] = base
+            _release_prefix(staged_release, Path(path).name)
+            message = None
         else:
-            base = Path(path).name
-            prefix = base.split("_", 1)[0] if base else ""
-            if not prefix:
-                continue
-            holder = _effective_prefix(prefix, prefix_holder, staged_claim, staged_release)
-            if holder and holder != base:
-                collides = True
-                detail.append(f"PR #{num}: adds {base}, numeric prefix {prefix} is already held by {holder}")
-            else:
-                staged_claim[prefix] = base
-    return collides, detail, staged_claim, staged_release
+            message = _add_collision(num, path, prefix_holder, staged_claim, staged_release)
+        if message:
+            detail.append(message)
+    return bool(detail), detail, staged_claim, staged_release
 
 
 def _newly_added_migration_path(repo_root: str, status: str, path: str, extra: str) -> str:

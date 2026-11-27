@@ -120,6 +120,37 @@ def test_prefix_collision_flags_add_against_a_held_prefix() -> None:
     assert "0100_new.py" in detail[0]
 
 
+def test_prefix_collision_flags_a_rename_onto_a_held_prefix() -> None:
+    diff = [("R100", f"{build.MIG_DIR}/0100_old.py", f"{build.MIG_DIR}/0100_new.py")]
+    collides, detail, claim, release = build._prefix_collisions(6, diff, {"0100": "0100_other.py"})
+    assert collides is True
+    assert "renames onto 0100_new.py" in detail[0]
+    assert not claim
+    assert release.get("0100") == "0100_old.py"
+
+
+def test_prefix_collision_rename_to_a_free_prefix_claims_it() -> None:
+    diff = [("R100", f"{build.MIG_DIR}/0100_old.py", f"{build.MIG_DIR}/0101_new.py")]
+    collides, detail, claim, release = build._prefix_collisions(7, diff, {})
+    assert collides is False
+    assert not detail
+    assert claim == {"0101": "0101_new.py"}
+    assert release == {"0100": "0100_old.py"}
+
+
+def test_prefix_collision_delete_frees_its_prefix_for_a_later_add() -> None:
+    # A delete stages a release of 0100, so the subsequent add of the same prefix
+    # is judged against the RELEASED state and does not collide.
+    diff = [
+        ("D", f"{build.MIG_DIR}/0100_old.py", ""),
+        ("A", f"{build.MIG_DIR}/0100_new.py", ""),
+    ]
+    collides, detail, claim, _release = build._prefix_collisions(8, diff, {"0100": "0100_old.py"})
+    assert collides is False
+    assert not detail
+    assert claim == {"0100": "0100_new.py"}
+
+
 def test_finish_writes_state_and_returns_success(tmp_path: Path) -> None:
     out = tmp_path / "state.json"
     rc = build._finish({"success": True, "excluded_prs": []}, out, ["a detail"], [1, 2])
