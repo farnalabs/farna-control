@@ -526,6 +526,24 @@ def test_sampled_routes_validate_a_representative_payload() -> None:
     assert not problems, "\n".join(problems)
 
 
+def test_openapi_checker_reaches_nested_array_items() -> None:
+    """A nested mismatch inside an array item is reported with its pointer.
+
+    The OpenAPI checker was recursive from the start; this pins that a nested
+    element (not just a top-level key) is validated, so the sampled route's
+    nested models cannot drift unnoticed.
+    """
+    from farna.api.main import app
+
+    app_schema = app.openapi()
+    node = _openapi_response_schema(app_schema, "/api/v1/me", "get")
+    broken = json.loads(json.dumps(SAMPLE_PAYLOADS["/api/v1/me"]))
+    broken["team_memberships"][0]["team_role"] = 7
+
+    problems = wire_mismatches(app_schema, node, broken)
+    assert any("team_memberships[0].team_role" in problem for problem in problems), problems
+
+
 def test_generated_frontend_types_accept_the_sample_payloads() -> None:
     """The generated frontend types accept the same payloads, recursively.
 
