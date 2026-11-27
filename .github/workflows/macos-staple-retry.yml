@@ -24,7 +24,7 @@ name: "macOS: Retry notarization stapling"
 # partially published release to repair.
 #
 # It is idempotent: an already-stapled DMG validates offline and the run is a
-# no-op success, so the schedule can run every 30 minutes safely.
+# no-op success, so the schedule can run every 3 hours safely.
 #
 # Republishing is CONSISTENCY-DRIVEN, not staple-state-driven. The publish job
 # hashes the release's actual asset bytes and compares them with the published
@@ -43,7 +43,7 @@ name: "macOS: Retry notarization stapling"
 # single-architecture dispatch records just the DMG it verified and leaves the
 # other explicitly unverified, so the next tick still completes it - the marker
 # never claims an artefact this job did not staple. That keeps a normal,
-# already-stapled release from spawning a paid macOS runner every 30 minutes,
+# already-stapled release from spawning a paid macOS runner every 3 hours,
 # while a genuinely deferred staple (no marker, or one artefact still unverified)
 # is still retried - bounded by the existing 24-hour propagation window.
 #
@@ -105,12 +105,13 @@ on:
         required: false
         default: false
   schedule:
-    # Backstop for a release whose in-run staple was deferred. The ticket
-    # propagation window is minutes-to-hours, so poll every 30 minutes. Once a
-    # run staples and verifies the release it records a MACOS_STAPLED.json
-    # marker, and resolve-target short-circuits on it - so a post-success tick
-    # is a no-op on a Linux runner, not another paid macOS job.
-    - cron: "*/30 * * * *"
+    # Fallback poller (not a primary trigger): every 3 hours on the hour - up to
+    # ~3h extra latency for a deferred staple, which the minutes-to-hours ticket
+    # propagation window absorbs. Once a run staples and verifies the release it
+    # records a MACOS_STAPLED.json marker and resolve-target short-circuits on it,
+    # so a post-success tick is a cheap no-op on a Linux runner, not another paid
+    # macOS job.
+    - cron: "0 */3 * * *"
 
 # One retry at a time: a second run must never clobber a release asset while the
 # first is regenerating the checksums and signed manifest.

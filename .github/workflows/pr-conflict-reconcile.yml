@@ -18,7 +18,8 @@ name: "Fix: PR Conflict Reconciler"
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Fallback poller (not a primary trigger): hourly at :17. A conflicted PR stays deadlocked until the next tick, so detection latency rises to up to ~1h - an accepted cost for a fallback that exists only to unstick PRs the webhook path cannot see.
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
