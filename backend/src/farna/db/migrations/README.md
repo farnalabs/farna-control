@@ -55,6 +55,11 @@ but cannot see uncommitted tables or be rehearsed; the migration connection alwa
 works but holds its locks to the end. Check which case yours is before choosing —
 do not "simplify" this to one connection for both.
 
+No migration in this repository currently uses the side-connection form; the only
+worked example, the `runs.error_detail` redaction, takes the exception branch
+instead. The default above is therefore documented from the rule rather than from
+an in-repo precedent.
+
 ## Keep internal detail out of stored text
 
 Do not persist raw tracebacks or internal source paths in a user-visible text
