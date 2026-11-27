@@ -1366,9 +1366,9 @@ async def read_run_blobs(
     in the read path was considered and DECIDED AGAINST: quarantined dicts
     carry ``__``-prefixed sentinel keys that the write path validates OUT of
     existence, so an overlaid read would serve a shape no legitimate write
-    could ever produce (and the Core quarantine table has no RLS policy to
-    scope an overlay through). Quarantine remains the remediation surface;
-    see docs/operations/drop-runs-blob-columns.md.
+    could ever produce (and the Core quarantine table is an ops/remediation
+    surface outside the ORM read path). Quarantine remains the remediation
+    surface; see docs/operations/drop-runs-blob-columns.md.
     """
     return await read_run_node_outputs_raw(session, run_id=run_id, organisation_id=organisation_id)
 

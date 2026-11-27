@@ -5,22 +5,6 @@
   "description": "Product-map behaviours that cannot be bound to a resolving, non-vacuous test yet, plus the shrink-only ratchets that govern them. See docs/product-map/README.md.",
   "generated_by": "scripts/run_behaviour_bindings_baseline.py --write-baseline",
   "entries": {
-    "analytics-07": {
-      "entry": "docs/product-map/analytics/analytics.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "analytics-08": {
-      "entry": "docs/product-map/analytics/analytics.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "analytics-09": {
-      "entry": "docs/product-map/analytics/analytics.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "analytics-13": {
-      "entry": "docs/product-map/analytics/analytics.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "assistant-01": {
       "entry": "docs/product-map/configure/assistant.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
@@ -569,75 +553,11 @@
       "entry": "docs/product-map/configure/guardrails.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
-    "health-checks-01": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-02": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "health-checks-03": {
       "entry": "docs/product-map/infra/health-checks.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
-    "health-checks-04": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-05": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-06": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-07": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-08": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-09": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-10": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-11": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-12": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-13": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "health-checks-14": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-15": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-16": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-17": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-18": {
       "entry": "docs/product-map/infra/health-checks.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
@@ -652,54 +572,6 @@
     "health-checks-21": {
       "entry": "docs/product-map/infra/health-checks.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-01": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-02": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-05": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
-    "hitl-gates-06": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-07": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-08": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-09": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-10": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-11": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
-    "hitl-gates-17": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
-    },
-    "hitl-gates-18": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "hitl-gates-19": {
-      "entry": "docs/product-map/hitl/hitl-gates.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
     },
     "hitl-gates-20": {
       "entry": "docs/product-map/hitl/hitl-gates.md",
@@ -1048,38 +920,6 @@
     "pipelines-03": {
       "entry": "docs/product-map/pipelines/pipelines.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-01": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-02": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-03": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-04": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-05": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-06": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-10": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-12": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
     },
     "product-analytics-06": {
       "entry": "docs/product-map/admin/product-analytics.md",
@@ -1898,7 +1738,6 @@
     "pipelines-12",
     "pipelines-13",
     "pipelines-15",
-    "plugins-11",
     "product-analytics-01",
     "product-analytics-03",
     "product-analytics-04",
@@ -2077,7 +1916,7 @@
     "backup-restore-09": "c61d7e3745267923",
     "backup-restore-10": "ca1bae4319e7f783",
     "backup-restore-11": "1208dba8efc2c4e8",
-    "backup-restore-12": "e2f32a646c3caf02",
+    "backup-restore-12": "455681192afdde61",
     "backup-restore-13": "9dbf95052dbe747a",
     "backup-restore-14": "61e95336c814805b",
     "backup-restore-15": "9a7e8a58dba52f29",
@@ -2539,7 +2378,7 @@
     "org-entity-04": "b4cc06ff1bfe96d0",
     "org-entity-05": "3451197d16383f67",
     "org-entity-06": "ee91d49ebcfde464",
-    "org-entity-07": "171727938fd0d175",
+    "org-entity-07": "3b012ad1cd002adb",
     "org-entity-08": "9153f51b4ae81f76",
     "org-entity-09": "9558049d1076ab30",
     "org-entity-10": "185e321c005c26aa",

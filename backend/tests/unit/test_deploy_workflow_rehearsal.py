@@ -84,8 +84,10 @@ def test_promote_rebuilds_compose_bundle_from_ga_tag_and_replaces_release_assets
     pull_idx = names.index("Verify the GA image is anonymously pullable")
     package_idx = names.index("Package final GA compose release bundle")
     sign_idx = names.index("Generate SHA256SUMS and sign the final GA manifest")
-    upload_idx = names.index("Replace GA compose assets without clobbering")
+    upload_idx = names.index("Publish the GA compose assets (idempotent, verified)")
+    verify_idx = names.index("Verify the published GA compose assets")
     assert pull_idx < package_idx < sign_idx < upload_idx
+    assert upload_idx < verify_idx
 
     pull_script = job["steps"][pull_idx]["run"]
     assert 'docker pull "$IMAGE"' in pull_script
@@ -107,7 +109,11 @@ def test_promote_rebuilds_compose_bundle_from_ga_tag_and_replaces_release_assets
     upload_script = job["steps"][upload_idx]["run"]
     assert 'gh release view "$TAG"' in upload_script
     assert 'gh release upload "$TAG"' in upload_script
+    assert "--clobber" in upload_script
     assert "farna-control-${VERSION}-compose.tar.gz" in upload_script
+
+    verify_script = job["steps"][verify_idx]["run"]
+    assert "verify_release_from_files" in verify_script
 
 
 def test_promote_retag_publishes_the_v_prefixed_ga_tag_the_compose_bundle_pins() -> None:
@@ -2981,6 +2987,13 @@ case "${1:-}" in
   registry)
     if [[ " $* " == *" --password-stdin "* ]]; then cat >/dev/null; fi
     printf 'helm login marker\\n' >> "$HARNESS_DIR/publication-markers" ;;
+  pull)
+    # FAR-2802: the promote step probes the registry for an already-published
+    # chart version before pushing. Nothing is published in this rehearsal, so
+    # the probe answers with the not-found error a real registry returns and the
+    # step pushes as before.
+    printf 'Error: failed to pull "oci://ghcr.io/example/repo/charts/farna-control": not found\\n' >&2
+    exit 1 ;;
   package)
     destination=""
     version=""
@@ -4417,6 +4430,15 @@ def _bundle_tag_harness(
     *,
     scenario: str,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """Execute the bundle-tag step against a git/gh stub.
+
+    The step now distinguishes the immutable ``bundle-v*`` ref from the GA
+    ``v*`` tag and proves ancestry through the compare API, so the stub models
+    each ref separately and answers ``gh api .../compare``. Scenarios with an
+    existing ``bundle-v`` tag that points elsewhere (``different``, ``behind``,
+    ``converge``, ``converge-identical``, ``promoted``) take the recut path and
+    differ only in the GA-tag and compare answers.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     calls = tmp_path / "calls.log"
@@ -4432,56 +4454,69 @@ case "$*" in
   'rev-parse HEAD') printf '%s\\n' {target} ;;
   'ls-remote --exit-code origin refs/tags/bundle-v0.1.0')
     case "$SCENARIO" in
-      annotated|lightweight|different|lightweight-fallback)
-        if [[ "$SCENARIO" == lightweight-fallback && ! -f {shlex.quote(str(state))} ]]; then
-          exit 2
-        fi
-        tag_sha={target}
-        [[ "$SCENARIO" == different ]] && tag_sha={other}
-        printf '%s\\trefs/tags/bundle-v0.1.0\\n' "$tag_sha"
-        exit 0
+      annotated|lightweight) printf '%s\\trefs/tags/bundle-v0.1.0\\n' {target}; exit 0 ;;
+      different|behind|converge|converge-identical|promoted)
+        printf '%s\\trefs/tags/bundle-v0.1.0\\n' {other}; exit 0
         ;;
       absent|push-mismatch|push-unknown|push-lightweight)
-        if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == push-lightweight ]]; then
-          printf '%s\\trefs/tags/bundle-v0.1.0\\n' {target}; exit 0
+        if [[ -f {shlex.quote(str(state))} ]]; then
+          if [[ "$SCENARIO" == push-mismatch ]]; then
+            printf '%s\\trefs/tags/bundle-v0.1.0\\n' {other}
+          else
+            printf '%s\\trefs/tags/bundle-v0.1.0\\n' {target}
+          fi
+          exit 0
         fi
-        if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == push-mismatch ]]; then
-          printf '%s\\trefs/tags/bundle-v0.1.0\\n' {other}; exit 0
-        fi
-        if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == push-lightweight ]]; then
-          printf '%s\\trefs/tags/bundle-v0.1.0\\n' {target}; exit 0
-        fi
-        if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == push-unknown ]]; then exit 128; fi
         exit 2
         ;;
       unknown) exit 128 ;;
     esac
     ;;
-      'ls-remote --exit-code origin refs/tags/bundle-v0.1.0^{{}}')
+  'ls-remote --exit-code origin refs/tags/bundle-v0.1.0^{{}}')
     case "$SCENARIO" in
       annotated) printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {target}; exit 0 ;;
-      different) printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {other}; exit 0 ;;
-      push-lightweight) exit 2 ;;
+      lightweight|push-lightweight|push-mismatch) exit 2 ;;
+      different|behind|converge|converge-identical|promoted)
+        printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {other}; exit 0
+        ;;
       absent)
         if [[ -f {shlex.quote(str(state))} ]]; then printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {target}; exit 0; fi
         exit 2
         ;;
-      push-mismatch) exit 2 ;;
       push-unknown) exit 128 ;;
+      *) exit 2 ;;
+    esac
+    ;;
+  'ls-remote --exit-code origin refs/tags/v0.1.0'*)
+    case "$SCENARIO" in
+      promoted) exit 0 ;;
+      ga-unknown) exit 128 ;;
       *) exit 2 ;;
     esac
     ;;
   'tag -a bundle-v0.1.0 -m Bundle release bundle-v0.1.0') exit 0 ;;
   'push origin bundle-v0.1.0') touch {shlex.quote(str(state))}; exit 0 ;;
-  *)
-    if [[ "$*" == 'ls-remote --exit-code origin refs/tags/bundle-v0.1.0^{{}}' ]]; then
-      if [[ -f {shlex.quote(str(state))} && "$SCENARIO" == absent ]]; then
-        printf '%s\\trefs/tags/bundle-v0.1.0^{{}}\\n' {target}; exit 0
-      fi
-      exit 2
-    fi
-    exit 0
+  *) exit 0 ;;
+esac
+""",
+    )
+    _write_executable(
+        bin_dir / "gh",
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> {shlex.quote(str(calls))}
+case "$*" in
+  api*compare*)
+    case "$SCENARIO" in
+      different) printf 'diverged\\n' ;;
+      behind) printf 'behind\\n' ;;
+      converge-identical) printf 'identical\\n' ;;
+      compare-unknown) exit 1 ;;
+      compare-weird) printf 'unexpected-status\\n' ;;
+      *) printf 'ahead\\n' ;;
+    esac
     ;;
+  *) exit 0 ;;
 esac
 """,
     )
@@ -4490,6 +4525,7 @@ esac
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
         "VERSION": "0.1.0",
         "SCENARIO": scenario,
+        "GITHUB_REPOSITORY": "farnalabs/farna-control",
     }
     result = _run_bash(_bundle_tag_script(), cwd=tmp_path, env=env)
     return result, calls
@@ -4512,10 +4548,61 @@ def test_bundle_tag_existing_exact_lightweight_target_is_idempotent(tmp_path: Pa
 
 
 @pytest.mark.posix_only
-def test_bundle_tag_existing_different_target_fails_without_push(tmp_path: Path) -> None:
-    result, calls = _bundle_tag_harness(tmp_path, scenario="different")
+@pytest.mark.parametrize("scenario", ["different", "behind"])
+def test_bundle_tag_unrelated_recut_target_fails_without_push(tmp_path: Path, scenario: str) -> None:
+    """A recut whose existing tag is not an ancestor is refused.
+
+    This is the genuine recut refusal: the bundle tag exists at another commit,
+    the GA tag is absent, and the compare status is ``diverged``/``behind``, so
+    the step must not push or repoint the immutable tag.
+    """
+    result, calls = _bundle_tag_harness(tmp_path, scenario=scenario)
     assert result.returncode != 0
-    assert "refusing to overwrite" in result.stdout
+    assert "bundle tag points at a commit unrelated to this release target" in result.stdout
+    assert "push origin bundle-v0.1.0" not in calls.read_text(encoding="utf-8")
+    assert "api" in calls.read_text(encoding="utf-8")
+
+
+@pytest.mark.posix_only
+@pytest.mark.parametrize("scenario", ["converge", "converge-identical"])
+def test_bundle_tag_recut_converges_on_an_ancestor_tag(tmp_path: Path, scenario: str) -> None:
+    """GA absent + compare ahead/identical converges without moving the tag."""
+    result, calls = _bundle_tag_harness(tmp_path, scenario=scenario)
+    assert result.returncode == 0, result.stderr
+    assert f"stays at {'b' * 40}" in result.stdout
+    assert "first published commit for this version" in result.stdout
+    assert f"Verified bundle-v0.1.0 at {'b' * 40} (converged tag)" in result.stdout
+    log = calls.read_text(encoding="utf-8")
+    assert "push origin bundle-v0.1.0" not in log
+    assert "api" in log
+    assert "compare" in log
+
+
+@pytest.mark.posix_only
+def test_bundle_tag_recut_refuses_once_the_ga_tag_is_promoted(tmp_path: Path) -> None:
+    """A recut of an already-promoted version is refused before any compare."""
+    result, calls = _bundle_tag_harness(tmp_path, scenario="promoted")
+    assert result.returncode != 0
+    assert "is already promoted (tag v0.1.0 exists); refusing to republish its bundle" in result.stdout
+    assert "refusing to overwrite the published bundle-v0.1.0 tag" in result.stdout
+    log = calls.read_text(encoding="utf-8")
+    assert "push origin bundle-v0.1.0" not in log
+    assert "compare" not in log
+
+
+@pytest.mark.posix_only
+def test_bundle_tag_recut_fails_when_the_compare_is_unknown(tmp_path: Path) -> None:
+    result, calls = _bundle_tag_harness(tmp_path, scenario="compare-unknown")
+    assert result.returncode != 0
+    assert "state UNKNOWN, refusing to republish" in result.stdout
+    assert "push origin bundle-v0.1.0" not in calls.read_text(encoding="utf-8")
+
+
+@pytest.mark.posix_only
+def test_bundle_tag_recut_fails_on_an_unexpected_compare_status(tmp_path: Path) -> None:
+    result, calls = _bundle_tag_harness(tmp_path, scenario="compare-weird")
+    assert result.returncode != 0
+    assert "Unexpected compare status 'unexpected-status'" in result.stdout
     assert "push origin bundle-v0.1.0" not in calls.read_text(encoding="utf-8")
 
 
@@ -4564,6 +4651,130 @@ def test_bundle_tag_publication_has_no_overwrite_escape_hatches() -> None:
     assert "--force" not in script
     assert "--clobber" not in script
     assert 'git push origin "$BUNDLE_TAG"' in script
+
+
+def _upload_step_script() -> str:
+    return _extract_publish_release_step_script("Create GitHub Release with assets")
+
+
+def _upload_step_harness(
+    tmp_path: Path,
+    *,
+    include_windows: bool,
+    release_has_windows: bool,
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """Execute the upload step against git/gh stubs to prove asset reconciliation.
+
+    The recut arm must delete a stale Windows installer BEFORE it replaces the
+    rest of the inventory, or the post-upload "unexpected asset" check fails
+    with no documented recovery (FAR-2789). A logical-line ordering assertion
+    cannot see the guard actually fire, so this runs the real step: the gh stub
+    models the existing release and its asset list and records every subcommand
+    in the order the script issues it.
+    """
+    version = "0.1.0"
+    target = "a" * 40
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    calls = tmp_path / "calls.log"
+    artefacts = tmp_path / "release-artefacts"
+    artefacts.mkdir()
+
+    for name in (
+        f"farna-control-{version}-linux-amd64.tar.gz",
+        f"FarnaControl-{version}-macos-arm64.dmg",
+        f"FarnaControl-{version}-macos-x86_64.dmg",
+        f"farna-control-{version}-compose.tar.gz",
+        f"farna-control_{version}_amd64.deb",
+        "openapi.json",
+        "SHA256SUMS",
+        "RELEASE_MANIFEST.json",
+        "RELEASE_MANIFEST.json.sig",
+        f"farna-control-{version}-windows-amd64.exe",
+    ):
+        (artefacts / name).write_bytes(b"payload")
+
+    calls_path = shlex.quote(str(calls))
+    _write_executable(
+        bin_dir / "git",
+        f"#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> {calls_path}\ncase \"$1\" in\n  rev-parse) printf '%s\\n' {target} ;;\n  describe) printf 'v0.0.0\\n' ;;\n  rev-list) printf '%s\\n' {target} ;;\n  *) exit 0 ;;\nesac\n",
+    )
+    _write_executable(
+        bin_dir / "python3",
+        "#!/usr/bin/env bash\nprintf 'generated changelog\\n'\n",
+    )
+    _write_executable(
+        bin_dir / "gh",
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f"printf '%s\\n' \"$*\" >> {calls_path}\n"
+        'case "$1 $2" in\n'
+        f"  'release list') printf 'bundle-v{version}\\n' ;;\n"
+        "  'release view')\n"
+        '    if [[ "$*" == *"--json assets"* ]] && [ "$RELEASE_HAS_WINDOWS" = "true" ]; then\n'
+        f"      printf '%s\\n' 'farna-control-{version}-windows-amd64.exe'\n"
+        "    fi ;;\n"
+        "  *) exit 0 ;;\n"
+        "esac\n",
+    )
+
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "VERSION": version,
+        "TAG": f"bundle-v{version}",
+        "RC_TAG": f"v{version}-rc1",
+        "INCLUDE_WINDOWS": "true" if include_windows else "false",
+        "MODE": "recut",
+        "TARGET_SHA": target,
+        "TARGET_PINNED": "false",
+        "GITHUB_REPOSITORY": "farnalabs/farna-control",
+        "RUNNER_TEMP": str(tmp_path),
+        "RELEASE_HAS_WINDOWS": "true" if release_has_windows else "false",
+    }
+    result = _run_bash(_upload_step_script(), cwd=tmp_path, env=env)
+    return result, calls
+
+
+@pytest.mark.posix_only
+def test_upload_step_removes_a_dropped_windows_asset_before_replacing(tmp_path: Path) -> None:
+    """A recut that shrinks the inventory deletes the stale .exe before upload."""
+    result, calls = _upload_step_harness(tmp_path, include_windows=False, release_has_windows=True)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "removed farna-control-0.1.0-windows-amd64.exe" in result.stdout
+
+    commands = calls.read_text(encoding="utf-8").splitlines()
+    delete_index = next(i for i, line in enumerate(commands) if line.startswith("release delete-asset"))
+    upload_index = next(i for i, line in enumerate(commands) if line.startswith("release upload"))
+    assert delete_index < upload_index, "the dropped Windows asset must be removed before the replacement upload"
+
+    delete = commands[delete_index]
+    assert "bundle-v0.1.0" in delete
+    assert "farna-control-0.1.0-windows-amd64.exe" in delete
+    assert "--yes" in delete.split()
+    assert "windows-amd64.exe" not in commands[upload_index], "a recut built without Windows must not re-upload the .exe"
+
+
+@pytest.mark.posix_only
+def test_upload_step_keeps_the_windows_asset_when_this_recut_includes_it(tmp_path: Path) -> None:
+    result, calls = _upload_step_harness(tmp_path, include_windows=True, release_has_windows=True)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = calls.read_text(encoding="utf-8").splitlines()
+    assert not any(line.startswith("release delete-asset") for line in commands)
+    uploads = [line for line in commands if line.startswith("release upload")]
+    assert any("farna-control-0.1.0-windows-amd64.exe" in line for line in uploads)
+
+
+@pytest.mark.posix_only
+def test_upload_step_does_not_delete_a_windows_asset_the_release_lacks(tmp_path: Path) -> None:
+    result, calls = _upload_step_harness(tmp_path, include_windows=False, release_has_windows=False)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = calls.read_text(encoding="utf-8").splitlines()
+    assert not any(line.startswith("release delete-asset") for line in commands)
+    assert any(line.startswith("release upload") for line in commands)
 
 
 def test_publish_release_guard_covers_exactly_its_needs() -> None:

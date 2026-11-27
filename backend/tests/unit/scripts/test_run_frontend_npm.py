@@ -63,10 +63,11 @@ def _patch_repo(
 
 def _recording_run(
     calls: list[tuple[list[str], dict[str, object]]],
+    returncode: int = 0,
 ) -> object:
     def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         calls.append((cmd, kwargs))
-        return subprocess.CompletedProcess(cmd, 0)
+        return subprocess.CompletedProcess(cmd, returncode)
 
     return run
 
@@ -165,6 +166,63 @@ def test_main_win32_npx_fallback_wraps_cmd_exe(tmp_path, monkeypatch):
     cmd, _kwargs = calls[0]
     assert cmd[:3] == ["cmd.exe", "/c", "npx"]
     assert cmd[-1] == "src/main.ts"
+
+
+# ---------------------------------------------------------------------------
+# ESLint npx fallback (FAR-2796): warn, name the fix, never report a pass
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_eslint_command_prefers_local_binary(tmp_path, monkeypatch, platform: str):
+    frontend = _patch_repo(tmp_path, monkeypatch)
+    eslint_bin = frontend / "node_modules" / ".bin" / "eslint"
+    eslint_bin.parent.mkdir(parents=True)
+    eslint_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "platform", platform)
+
+    cmd = mod._eslint_command()
+    prefix = ["cmd.exe", "/c"] if platform == "win32" else []
+    assert cmd == [*prefix, str(eslint_bin)]
+    assert "npx" not in cmd
+
+
+def test_npx_fallback_warns_and_names_the_fix(tmp_path, monkeypatch, capsys):
+    """The fallback prints a warning and the actionable install command."""
+    _patch_repo(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["run_frontend_npm.py", "lint", "frontend/src/main.ts"])
+    monkeypatch.setattr(mod.sys, "platform", "linux")
+
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(mod.subprocess, "run", _recording_run(calls))
+
+    assert mod.main() == 0
+    assert calls[0][0][:2] == ["npx", "eslint"]
+    err = capsys.readouterr().err
+    assert "warning" in err
+    assert "shared, machine-wide npx cache" in err
+    assert "pnpm install --frozen-lockfile" in err
+
+
+def test_npx_failure_keeps_nonzero_exit_and_reports_actionable_error(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """A failed npx run stays non-zero and names the command and cache path."""
+    _patch_repo(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["run_frontend_npm.py", "lint", "frontend/src/main.ts"])
+    monkeypatch.setattr(mod.sys, "platform", "linux")
+    npx_cache = tmp_path / "npm-cache" / "_npx"
+    monkeypatch.setattr(mod, "_npx_cache_dir", lambda: npx_cache)
+
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(mod.subprocess, "run", _recording_run(calls, returncode=1))
+
+    assert mod.main() == 1
+    err = capsys.readouterr().err
+    assert "error" in err
+    assert "npx eslint" in err
+    assert str(npx_cache) in err
+    assert "pnpm install --frozen-lockfile" in err
 
 
 # ---------------------------------------------------------------------------

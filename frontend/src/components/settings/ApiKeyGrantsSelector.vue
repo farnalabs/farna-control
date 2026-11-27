@@ -1,38 +1,33 @@
 <template>
   <fieldset class="space-y-2" data-testid="api-key-grants-selector">
     <legend class="mb-1 block text-sm font-medium">{{ $t('views.SettingsMcpView.grants_title') }}</legend>
-    <label for="api-key-grants-restrict" class="flex items-start gap-3 rounded-lg border p-3">
-      <input
-        id="api-key-grants-restrict"
-        v-model="restricted"
-        type="checkbox"
-        class="mt-1 h-4 w-4 rounded border-muted-foreground"
-        data-testid="api-key-grants-restrict"
-      />
+    <Checkbox
+      id="api-key-grants-restrict"
+      v-model="restricted"
+      class="flex items-start gap-3 rounded-lg border p-3"
+      control-class="mt-1 h-4 w-4 rounded border-muted-foreground"
+      data-testid="api-key-grants-restrict"
+    >
       <span>
         <span class="block text-sm">{{ $t('views.SettingsMcpView.grants_restrict_label') }}</span>
         <span class="block text-xs text-muted-foreground">{{ restricted ? $t('views.SettingsMcpView.grants_restricted_hint') : $t('views.SettingsMcpView.grants_role_bundle_hint') }}</span>
       </span>
-    </label>
+    </Checkbox>
     <div v-if="restricted" class="max-h-64 space-y-3 overflow-y-auto rounded-lg border p-3" data-testid="api-key-grants-list">
       <div v-for="group in groups" :key="group.prefix">
         <p class="mb-1 text-xs font-semibold uppercase text-muted-foreground">{{ groupLabel(group.prefix) }}</p>
-        <label
+        <Checkbox
           v-for="perm in group.items"
           :key="perm.name"
-          :for="`api-key-grant-${perm.name}`"
+          :id="`api-key-grant-${perm.name}`"
+          :model-value="selected.includes(perm.name)"
           class="flex items-center gap-2 py-0.5"
+          control-class="h-4 w-4 rounded border-muted-foreground"
+          :data-testid="`api-key-grant-${perm.name}`"
+          @update:model-value="toggle(perm.name)"
         >
-          <input
-            :id="`api-key-grant-${perm.name}`"
-            type="checkbox"
-            class="h-4 w-4 rounded border-muted-foreground"
-            :data-testid="`api-key-grant-${perm.name}`"
-            :checked="selected.includes(perm.name)"
-            @change="toggle(perm.name)"
-          />
           <span class="font-mono text-xs">{{ perm.name }}</span>
-        </label>
+        </Checkbox>
       </div>
       <p
         v-if="selected.length === 0"
@@ -47,6 +42,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Checkbox from '../ui/Checkbox.vue'
 
 /**
  * Grant-set picker for API key creation (FAR-1477).

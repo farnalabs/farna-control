@@ -38,12 +38,13 @@
 
       <template v-else>
         <div class="flex flex-wrap items-end gap-3">
-          <div class="w-32">
-            <label for="org-hitl-review-window-value" class="mb-1.5 block text-xs font-medium text-muted-foreground">
-              {{ $t('views.AdminOrgSettingsView.hitl_review_window_value') }}
-            </label>
-            <input
-              id="org-hitl-review-window-value"
+          <Field
+            id="org-hitl-review-window-value"
+            :label="$t('views.AdminOrgSettingsView.hitl_review_window_value')"
+            label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+            class="w-32"
+          >
+            <Input
               v-model="hitlWindowValue"
               type="number"
               min="1"
@@ -54,7 +55,7 @@
               aria-describedby="org-hitl-review-window-hint"
               data-testid="org-hitl-review-window-value"
             />
-          </div>
+          </Field>
           <div class="w-36">
             <label for="org-hitl-review-window-unit" class="mb-1.5 block text-xs font-medium text-muted-foreground">
               {{ $t('views.AdminOrgSettingsView.hitl_review_window_unit') }}
@@ -349,6 +350,8 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import Badge from '../components/ui/Badge.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import { ref, computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from '../components/ui/Button.vue'

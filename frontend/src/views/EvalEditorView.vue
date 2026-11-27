@@ -127,14 +127,15 @@
                     <p class="font-medium">{{ $t('views.EvalEditorView.judging.legacyNoticeTitle') }}</p>
                     <p class="mt-1 text-muted-foreground">{{ $t('views.EvalEditorView.judging.legacyNoticeBody') }}</p>
                     <pre class="mt-2 max-h-40 overflow-auto rounded bg-background p-2 font-mono text-[11px]">{{ legacyConfigJson }}</pre>
-                    <button
+                    <Button
                       type="button"
+                      size="sm"
+                      class="mt-2"
                       data-testid="eval-editor-migrate-legacy"
-                      class="mt-2 rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
                       @click="migrateLegacyConfig"
                     >
                       {{ $t('views.EvalEditorView.judging.migrateLegacy') }}
-                    </button>
+                    </Button>
                   </Notice>
 
                   <div v-else class="mt-3 space-y-3" data-testid="eval-editor-config">
@@ -269,14 +270,15 @@
                     <div class="rounded border border-dashed p-3">
                       <div class="mb-2 flex items-center justify-between gap-2">
                         <h4 class="text-xs font-semibold uppercase tracking-wide">{{ $t('views.EvalEditorView.judging.questions') }}</h4>
-                        <button
+                        <Button
                           type="button"
+                          variant="secondary"
+                          size="sm"
                           data-testid="eval-editor-question-add"
-                          class="rounded border border-input px-2 py-1 text-xs font-medium hover:bg-accent"
                           @click="addQuestion"
                         >
                           {{ $t('views.EvalEditorView.judging.addQuestion') }}
-                        </button>
+                        </Button>
                       </div>
 
                       <div
@@ -392,15 +394,16 @@
                         <div v-if="question.type === 'choice'" class="rounded border border-dashed p-2">
                           <div class="mb-2 flex items-center justify-between gap-2">
                             <span class="text-xs font-medium">{{ $t('views.EvalEditorView.judging.options') }}</span>
-                            <button
+                            <Button
                               type="button"
+                              variant="secondary"
+                              size="sm"
                               data-testid="eval-editor-question-add-option"
                               :disabled="question.options.length >= maxChoiceOptions"
-                              class="rounded border border-input px-2 py-0.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
                               @click="addOption(question)"
                             >
                               {{ $t('views.EvalEditorView.judging.addOption') }}
-                            </button>
+                            </Button>
                           </div>
                           <div
                             v-for="(option, optionIndex) in question.options"
@@ -460,15 +463,16 @@
                         <div v-if="question.type === 'score'" class="rounded border border-dashed p-2">
                           <div class="mb-2 flex items-center justify-between gap-2">
                             <span class="text-xs font-medium">{{ $t('views.EvalEditorView.judging.levels') }}</span>
-                            <button
+                            <Button
                               type="button"
+                              variant="secondary"
+                              size="sm"
                               data-testid="eval-editor-question-add-level"
                               :disabled="question.levels.length >= maxScoreLevels"
-                              class="rounded border border-input px-2 py-0.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
                               @click="addLevel(question)"
                             >
                               {{ $t('views.EvalEditorView.judging.addLevel') }}
-                            </button>
+                            </Button>
                           </div>
                           <div
                             v-for="(level, levelIndex) in question.levels"
@@ -874,15 +878,15 @@
               <Button :disabled="!canSave || saving" data-testid="eval-editor-save" @click="saveEval">
                 {{ saving ? $t('common.saving') : editingEvalId ? $t('views.EvalEditorView.update') : $t('common.save') }}
               </Button>
-                <button
+                <Button
                   type="button"
                   v-if="editingEvalId"
+                  variant="secondary"
                   data-testid="eval-editor-cancel"
-                  class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
                   @click="handleCancel"
                 >
                   {{ $t('common.cancel') }}
-                </button>
+                </Button>
               </div>
 
               <div v-if="formError" class="text-sm text-destructive">{{ formError }}</div>
@@ -970,15 +974,16 @@
                     <Trash2 class="h-4 w-4" aria-hidden="true" />
                   </button>
                   <div v-else-if="canDeleteEval" class="flex items-center gap-1">
-                    <button
+                    <Button
                       type="button"
+                      variant="danger"
+                      size="sm"
                       :disabled="deleting"
                       data-testid="eval-editor-confirm-delete"
-                      class="rounded bg-destructive-fill px-2 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50"
                       @click="deleteEval(ev.id)"
                     >
                       {{ deleting ? $t('common.deleting') : $t('common.confirm') }}
-                    </button>
+                    </Button>
                     <button
                       type="button"
                       data-testid="eval-editor-cancel-delete"
@@ -1021,7 +1026,7 @@ import { useCurrentUser } from '../composables/useCurrentUser'
 import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import { Pencil, Trash2 } from '@lucide/vue'
 import { api } from '../lib/api/client'

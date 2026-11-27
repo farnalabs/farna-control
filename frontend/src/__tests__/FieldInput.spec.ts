@@ -353,6 +353,7 @@ describe('Input', () => {
     expect(wrapper.get('[data-testid="control"]').attributes('aria-required')).toBe('true')
   })
 
+
   it('honours an explicit required attribute without a Field', () => {
     const wrapper = mount(Input, {
       props: { modelValue: '' },

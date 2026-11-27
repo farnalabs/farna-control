@@ -955,6 +955,15 @@ async def _fetch_primitives(
                 source=query.source,
                 cursor=query.cursor,
                 excluded_tiers=[] if query.include_in_dev else None,
+                # ADR 070 §5: the DB policy on ``library_primitives`` keys its
+                # team arm on the KEY OWNER's memberships, not on the
+                # credential's own team. This route is gated on
+                # ``require_permission`` (JWT-only), so ``principal.team_id`` is
+                # None today and the clamp is a no-op — but it is the same
+                # boundary the by-id read applies via ``_primitive_visible_to``
+                # (FAR-2682), and it keeps the listing correct if the route ever
+                # admits a team-scoped credential.
+                team_id=getattr(principal, "team_id", None),
             )
     except ProgrammingError:
         _log.exception("library.list_library_primitives_endpoint")
@@ -2267,6 +2276,9 @@ def _add_pipeline_edges(
                 id=uuid.uuid4(),
                 organisation_id=org_id,
                 pipeline_id=pipeline.id,
+                # ADR 070 Phase 1A: the installed edges become the new pipeline's
+                # live graph, so they take its owner (migration 0369).
+                owner_team_id=pipeline.owner_team_id,
                 source_node_id=uuid.UUID(edge_data["source_node_id"]),
                 target_node_id=uuid.UUID(edge_data["target_node_id"]),
                 edge_type=edge_data["edge_type"],
@@ -2352,6 +2364,16 @@ async def create_pipeline_from_template_endpoint(
             pipeline.graph_nodes_json = graph_nodes
             _add_pipeline_edges(session, principal.organisation_id, pipeline, edges)
             await session.flush()
+            # FAR-2819: assigning ``graph_nodes_json`` above dirties the row, so
+            # the flush issues an UPDATE whose server-side ``onupdate`` expires
+            # ``updated_at``. Reading it after this ``session.begin()`` block
+            # closes would lazy-load outside a transaction on an
+            # ``autobegin=False`` session (the DI default) and raise
+            # ``InvalidRequestError`` — surfaced as the session-contract 500.
+            # Reload the row inside the transaction (the same pattern the
+            # lifecycle-map create endpoint uses) so the response builder reads
+            # fully-loaded timestamps after commit.
+            await session.refresh(pipeline)
     except HTTPException:
         raise
     except IntegrityError:

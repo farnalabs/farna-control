@@ -17,6 +17,8 @@ Every release action runs through `.github/workflows/release-unified.yml` ("Rele
 
 **The unified pipeline owns every publication.** `release-unified.yml` pushes the four container images (and their versioned tags) to GHCR, pushes the Helm chart to the OCI registry, builds and signs the Linux release bundle through `bundle-release.yml`, builds and notarizes separate native macOS arm64 and x86_64 `.dmg` artifacts on `macos-15` and `macos-15-intel`, builds the native Windows payload (`windows-artifacts.yml`), then compiles, signs (Azure Trusted Signing) and attests the Windows installer (`windows-installer.yml`) before generating the final `SHA256SUMS` and signed `RELEASE_MANIFEST.json`. Windows native installer support is Beta scope (delivered by FAR-2337 / FAR-2338) and is not built on the Alpha release path: it is included in the release manifest and `SHA256SUMS` only when the Beta-only `include_windows` input is explicitly set to true (it defaults to false); its publication depends on a release running (no signed Windows installer is published yet), and real-host validation under FAR-2250 is still outstanding. It creates the GitHub Release from that final manifest/checksum chain, pushes the `bundle-v*` tag, publishes `farna-control` to PyPI on `promote`, and dispatches Deploy plus `rc-validate`. macOS arm64 and Intel x86_64 are supported as separate native artifacts; Rosetta is not required.
 
+**The signed manifest is the provenance record.** The signed `RELEASE_MANIFEST.json` records the exact source commit the publishing job checked out and built from: schema v1's `generated_at` field carries that commit SHA, not a timestamp and not the workflow's dispatch ref. The immutable `bundle-v<VERSION>` tag is a version anchor, not a per-recut commit pointer - a recut republishes the signed manifest, so what was actually built is read from the signed manifest, never inferred from the tag's commit.
+
 **Slow Apple notarization holds the release; it does not fail it.** A macOS DMG is published only once a notarization ticket is stapled to it and verified (FAR-2573). If Apple is still processing the submission when the macOS job's notary budget (a 90-minute `notarytool --wait` plus a 45-minute `notarytool info` poll) runs out, the job ends with a PENDING outcome instead of failing: the unstapled DMG still passes every non-ticket gate, publication is HELD, and `macos-staple-retry.yml` staples and publishes the release once Apple accepts it. The Apple submission id is kept in the run's `macos-notary-submission-<version>-<arch>` artifact. An `Invalid` or `Rejected` verdict is never retried: it fails the macOS job at build time, or fails the staple retry loudly (and stops its re-dispatch) if it arrives later (FAR-2577).
 
 The workflow defaults to workflow-level `permissions: contents: read`, with write scopes granted only on the job that needs them: the `release` job carries `contents: write` (push tags and the CHANGELOG commit, create the GitHub Release) and `actions: write` (`gh workflow run rc-validate.yml`). The `dry-run` and build jobs are read-only. A `release-unified-${{ github.ref }}` concurrency group with `cancel-in-progress: false` ensures two release actions can never interleave.
@@ -62,12 +64,20 @@ Do that only when the freeze is genuinely abandoned - a `cut`/`recut` that faile
 
 The unified workflow is the canonical entry point. Its `recut` mode publishes from the new RC tag created at current `main`; it never checks out or reuses the previous RC tag.
 
+A recut is **idempotent for a version that already published a bundle**. The bundle release is keyed on the version alone (`bundle-v<X.Y.Z>`, never on the RC tag), so when a recut finds the release already present it replaces its assets in place instead of refusing. The replacement is ordered: every portable/binary asset first, then `SHA256SUMS`, then `RELEASE_MANIFEST.json`, then `RELEASE_MANIFEST.json.sig` **last**, and a post-upload step then verifies that every expected asset is on the release at the local byte size and that the *published* manifest and signature verify against the checked-in trust store. The release is never deleted or hidden, so the public artefact is never briefly absent, and **no manual deletion of a published release is required** - deleting one is not part of the recovery path. The manifest covers every asset except `openapi.json` (which is generated after the manifest is built, so neither it nor `SHA256SUMS` covers it; the post-upload step verifies `openapi.json` by published byte size only), and the signature covers the manifest, so a verifiable manifest can only exist once the whole replacement has landed: an interrupted recut fails verification instead of certifying a half-replaced release. A recut whose inventory shrinks, specifically one that drops the conditional Windows installer by setting `include_windows` to false, removes that stale asset from the release before replacing the rest, so the post-upload inventory check still passes; any other unexplained asset remains a hard failure.
+
+The bundle tag itself is **immutable**. `bundle-v<X.Y.Z>` identifies the *first* published commit for that version, and the repository ruleset `release-tag-protection` targets `refs/tags/bundle-v*` with `deletion` and `update` rules at `active` enforcement, so the workflow never moves or deletes it. A recut of an already-published version therefore publishes new assets and a new signed manifest against that same release identity, and the manifest plus the release notes name the exact built commit the recut published. A recut is **refused once the GA tag `v<X.Y.Z>` exists**: a promoted version's bundle is immutable and is never republished.
+
+The GA release (`v<X.Y.Z>`) is the release record and is **never** Latest. Both `gh release edit` and `gh release create` for the GA tag pass `--latest=false`, because `gh release create` otherwise defaults to automatic latest selection and a GA release created after the bundle release would take the `/releases/latest` pointer. That pointer must always resolve to `bundle-v<X.Y.Z>`, the install artefact that `scripts/install.sh` and the marketing website consume; both reject a non-bundle tag, so a GA release at `/releases/latest` breaks installs and leaves the site silently serving its previous release.
+
+Why there is one stable bundle tag and not one per RC: the marketing website resolves `https://api.github.com/repos/farnalabs/farna-control/releases/latest`, rejects any draft or prerelease, strips the `bundle-v` prefix and then requires the resulting version to match `^\d+\.\d+\.\d+$` (the marketing website's release validation, which requires a strict X.Y.Z version). An RC-qualified tag (`bundle-v0.3.330-rc3`) would make an RC the latest non-prerelease release, fail that check, and leave the site silently serving its previous release for the whole RC window; it would also stop the newest-bundle selection in `release-unified.yml` from recognising the release (its filter only matches `bundle-v<X.Y.Z>`) and break every installer URL that resolves `/releases/latest`. Do not re-open "key the bundle tag on the RC" without that constraint.
+
 Use `recut` after a fix has been merged to `main` while the release freeze is active:
 
 1. Confirm the fix is on `main` and the previous RC remains identifiable.
 2. Dispatch `recut` for the same `X.Y.Z` version. The workflow selects the next free `vX.Y.Z-rcN`, tags the current `main` commit with it, and force-moves `release-freeze` to that new RC commit.
 3. The workflow then dispatches `Deploy: Staging + Prod` with `force_deploy=true`, so the freeze cannot throttle the soak deployment. It dispatches `rc-validate.yml` for the new RC only after the deploy dispatch is accepted.
-4. `rc-validate.yml` waits for `/api/v1/deployment` to report the new RC commit, runs the read-only Schemathesis checks, and pushes `validated/vX.Y.Z-rcN` at the RC commit only on success.
+4. `rc-validate.yml` boots the RC's own disposable compose stack (its own Postgres, its own generated secrets, its own seeded account), runs the read-only Schemathesis checks against it, and pushes `validated/vX.Y.Z-rcN` at the RC commit only on success. It never depends on a deployed environment: the soak host tracks `main`, so an RC tag - an ancestor of `main` - would be a downgrade there and could not start on a database `main` has already migrated past.
 5. Promote only after the validation marker exists and points at the latest RC commit. If validation fails, fix the issue on `main` and repeat this recut sequence; do not move the marker by hand.
 
 ## What `promote` requires (the four promote invariants)
@@ -87,6 +97,34 @@ The GA tag is the release identity, so it is created and pushed before anything 
 
 - A failed CHANGELOG commit/push turns the job **red** - it is a required deliverable.
 - Failed release-notes generation or a failed `gh release create` is a **warning only**, because the tag already exists and is intact.
+
+### Resuming a failed promote
+
+`promote` pushes the `vX.Y.Z` GA tag before the rest of the `release` job's GA publication steps run (the Helm chart, `CHANGELOG.md` and the GitHub Release, and the freeze lift at the end of that job). If the `release` job fails after the tag - but before it lifts `release-freeze` - a plain re-dispatch of `promote` cannot finish the release: safety 2 refuses because the GA tag already exists, and safety 4 refuses because `origin/main` is no longer the validated RC commit once the promote PR has squash-merged. The release is then stranded with the GA tag pushed but GA publication incomplete.
+
+The explicit resume path completes that release instead. Dispatch `promote` again with `resume=true`:
+
+```bash
+gh workflow run "Release: Unified Pipeline" -f mode=promote -f version=0.4.0 -f resume=true
+```
+
+`resume` is only valid with `mode=promote`; the workflow refuses it for `cut`, `recut` and `dry-run` at the first input-validation step. The release identity is re-derived from the frozen state, never from `main`:
+
+- the GA tag `vX.Y.Z` must exist on origin - it is the release commit, and its commit is what every downstream job checks out and attests;
+- `release-freeze` on origin must resolve to that exact GA commit. A missing freeze and a failed query both fail closed: a resume never treats an unknown state as absent;
+- the GA commit must have exactly one parent, because the promote PR is squash-merged. A merge commit, a root commit or an unreadable parent listing is a hard failure, so a release promoted by a non-squash merge cannot be resumed;
+- that single parent is the RC commit. A `vX.Y.Z-rc*` tag must point at it (the highest rc wins when several share the commit), and the `validated/<rc>` marker must exist on origin and point at the same commit.
+
+A resume creates, moves and deletes nothing. It skips safety 2 and safety 4, the freeze/publication-hold swap, the promote PR creation and merge, and the tag push, and it never creates, moves or deletes the GA tag or `release-freeze`. It checks out the GA commit and re-runs only the publication steps **inside the `release` job**. If the resume fails, the freeze is left where it is - at the GA commit - so another resume can re-verify and try again.
+
+> **The resume covers the `release` job, not the downstream publication jobs.** The PyPI upload (`publish-pypi`), the GA compose bundle (`promote-compose`) and the attestation (`attest-artefacts`) are separate jobs that run with `needs: release` - after the `release` job has already lifted `release-freeze`. A `resume=true` dispatch cannot reach them: it fails closed at preflight (and at the resume guard above) because the freeze is absent. Recover a failure in those jobs by re-running the failed jobs on the same workflow run (Actions -> Re-run failed jobs). Those jobs are idempotent and never read `release-freeze`, so a re-run succeeds with the freeze already gone. A resume dispatch and a re-run of failed jobs are different recovery paths: neither can substitute for the other.
+
+The publication steps are idempotent, so a resume (or a re-run of the failed downstream jobs) is safe after a partial publish and never overwrites anything already published:
+
+- **Helm chart** - before pushing, the workflow pulls `oci://ghcr.io/farnalabs/farna-control/charts/farna-control` at the target version. If that version is already published, the pulled `Chart.yaml` must report the same `version` and `appVersion`, and the push is skipped with a notice. Only a not-found error means "safe to push"; any other pull error is a hard failure. An existing chart version is never overwritten.
+- **PyPI** - runs as the downstream `publish-pypi` job, so a failure is recovered by re-running the failed job, not by a resume. Before uploading, the workflow queries `https://pypi.org/pypi/farna-control/<version>/json`. A 404 means the version is not published yet and the upload proceeds. An HTTP 200 means it is already published: the published filenames must exactly match the built `backend/dist/*.whl` and `backend/dist/*.tar.gz` filenames, and the upload is skipped; a different file set is a hard failure. Any other HTTP status fails closed. Wheels are not byte-reproducible, so the comparison is by filename, never by hash.
+- **Container images** - the GA retags are immutable SHA-derived tags, so re-running them is naturally idempotent.
+- **Freeze lift** - the final `release`-job step remains the only place that lifts the freeze, and it tolerates the freeze already being absent (it queries first; a genuinely unknown state still fails closed).
 
 ### Website rebuild hook (optional)
 
@@ -151,7 +189,8 @@ pre-upgrade snapshot before the previous release is started on the restored
 database.
 
 `rc-validate.yml` runs that Docker leg after the anonymous clean-host compose
-check and before the live pen test. It resolves the previous published
+check and before the fuzz leg (which boots and fuzzes the RC's own disposable
+stack). It resolves the previous published
 `bundle-v*` release as the rollback target, refuses to claim coverage when no
 previous release exists, and uploads the evidence directory as the
 `alpha-docker-upgrade-rollback-*` workflow artifact. The predecessor is the

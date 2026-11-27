@@ -28,16 +28,18 @@ Postgres and proves the whole self-hosted disaster-recovery loop:
      the seeded rows are still there
  10. ``alembic upgrade heads`` again, assert it is back at head with the seeded
      rows still intact
- 11. restore a PRE-UPGRADE snapshot over a FORWARD-MIGRATED database: step the
-     source back one revision, snapshot it there, migrate it forward again, add
-     the object shape a later migration adds (a table whose FK targets the
-     existing ``organisations`` primary key) and change a seeded row, then
-     restore the snapshot with ``--verify-target-schema``. Assert the replay
-     succeeds, the database is back at the snapshot's revision, the seeded rows
-     are back (the post-snapshot change is undone), the forward-drift object is
-     gone, and the pre-restore safety dump was written. This is the documented
-     compose recovery (FAR-2667/FAR-2763): a snapshot that cannot be restored
-     onto the database it protects is not a recovery point.
+ 11. restore a PRE-UPGRADE snapshot over a FORWARD-migrated schema: step the
+     source back one revision and snapshot it there, so the dump's SCHEMA STATE
+     is one revision behind the head this binary declares (an upgrade snapshots
+     before it migrates), migrate it forward again, add the object shape a later
+     release's migration adds (a table whose FK targets the existing
+     ``organisations`` primary key) and change a seeded row, then restore the
+     snapshot with ``--verify-target-schema``. Assert the replay succeeds, the
+     database is back at the snapshot's revision, the seeded rows are back (the
+     post-snapshot change is undone), the forward-drift object is gone, and the
+     pre-restore safety dump was written. This is the documented compose
+     recovery (FAR-2667/FAR-2763): a snapshot that cannot be restored onto the
+     database it protects is not a recovery point.
 
 Every step failure exits non-zero: no step is reported as having run unless
 it ran, and the downgrade/upgrade steps assert the recorded revision actually
@@ -612,10 +614,25 @@ def _ensure_settings_env() -> None:
 
 
 def _invoke_cli(argv: list[str]) -> None:
+    """Run the in-product CLI in-process, with ``backend/`` as the CWD.
+
+    The product resolves its migration tree through ``backend/alembic.ini``,
+    whose ``script_location`` is a CWD-relative path. Invoked from the
+    repository root (where this gate runs), that lookup fails and every archive
+    records ``schema_versions: ["unknown"]`` — which the restore's
+    ``--verify-target-schema`` correctly refuses, so step 11 could never reach
+    the replay. The packaged deployment runs the CLI from the backend directory,
+    and so must the gate.
+    """
     from click.testing import CliRunner
     from farna.cli.backup import cli
 
-    result = CliRunner().invoke(cli, argv, catch_exceptions=False)
+    previous_cwd = Path.cwd()
+    os.chdir(BACKEND_DIR)
+    try:
+        result = CliRunner().invoke(cli, argv, catch_exceptions=False)
+    finally:
+        os.chdir(previous_cwd)
     if result.exit_code != 0:
         _fail(f"`modulo {argv[0]}` exited {result.exit_code}\n{result.output}")
 
@@ -973,8 +990,8 @@ def main(argv: list[str] | None = None) -> int:
     _assert_checkpoint_rows(restored_url, expected, "after downgrade/upgrade")
 
     print(
-        "[11/11] Restoring a pre-upgrade snapshot over a FORWARD-migrated database "
-        "(snapshot at N, target at N+1 with an FK to an existing PK — FAR-2763)"
+        "[11/11] Restoring a pre-upgrade snapshot over a FORWARD-migrated schema "
+        "(snapshot's schema state at N, target at N+1 plus an FK onto an existing PK — FAR-2763)"
     )
     drift_snapshot = Path(tempfile.mkdtemp(prefix="farna-dr-gate-upgrade-"))
     try:

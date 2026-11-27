@@ -75,19 +75,19 @@ name: "Merge: Queue Watchdog"
 #     mode that the in-job sweep cannot.
 #
 # FAR-492 caveat: GitHub DROPS high-frequency cron events on high-activity
-# repos. The 30-minute schedule is deliberately slower to reduce runner spend;
+# repos. The 2-hourly schedule is deliberately slower to reduce runner spend;
 # treat every tick as best-effort and verify run history before trusting liveness.
 # Immediate recovery remains available through repository_dispatch from the
 # PR-Housekeeper or other automation.
 
 on:
   schedule:
-    # FAR-2369: run every 30 minutes at off-boundary minutes. This deliberately
-    # accepts slower breadth-over-speed recovery to reduce runner spend; dropped
-    # ticks remain covered by the escalation below and repository_dispatch.
-    # Offset from merge-queue.yml's hourly :07 tick so a healthy hourly pass is
-    # never re-armed by a simultaneous watchdog dispatch.
-    - cron: "22,52 * * * *"
+    # Fallback poller (not a primary trigger): every 2 hours at :22 - up to ~2h
+    # detection latency is accepted because the merge queue itself is hourly (:07),
+    # so a faster out-of-band sweep buys nothing (FAR-2369, breadth over speed).
+    # Off-boundary minutes; dropped ticks remain covered by the escalation below and
+    # repository_dispatch, which also gives an on-demand re-arm.
+    - cron: "22 */2 * * *"
   workflow_dispatch:
     inputs:
       max_freeze_hours:
@@ -491,8 +491,9 @@ jobs:
       # trap that made the 2026-09-17 incident ambiguous).
       #
       # Read-only (no gh run cancel, no dispatch, no writes) and it can never
-      # fail the job. Bounded to a 60-min window: this ticks every 30 min, so
-      # each cancellation is classified once or twice rather than forever.
+      # fail the job. Bounded to the WINDOW_MIN window (20 min): at a 2-hourly
+      # tick a cancellation is only classified if it falls inside that window, so
+      # some are not classified - advisory only, never gating.
       # `if: always()` because the queue is least healthy — and the
       # classification most useful — when the step above has failed.
       - name: Classify recent queue cancellations (pending dedupe vs stuck-runner vs mid-flight)

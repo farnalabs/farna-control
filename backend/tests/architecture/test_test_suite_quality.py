@@ -8194,7 +8194,12 @@ def _dead_container_literal_assert_violations(tree: ast.AST) -> list[tuple[int, 
             continue
         falsy = verdict == "always falsy"
         outcome = "always FAILS" if falsy != negated else "always PASSES"
-        kind = "a zero-argument builtin call that always returns an empty container" if isinstance(candidate, ast.Call) else ("an empty container literal" if falsy else "a non-empty container literal")
+        if isinstance(candidate, ast.Call):
+            kind = "a zero-argument builtin call that always returns an empty container"
+        elif falsy:
+            kind = "an empty container literal"
+        else:
+            kind = "a non-empty container literal"
         found.append(
             (
                 node.lineno,
@@ -8454,7 +8459,12 @@ def _is_non_deterministic_fresh_call(node: ast.AST) -> bool:
     if not _is_fresh_value_call(node):
         return False
     func = node.func
-    name = func.attr if isinstance(func, ast.Attribute) else (func.id if isinstance(func, ast.Name) else None)
+    if isinstance(func, ast.Attribute):
+        name = func.attr
+    elif isinstance(func, ast.Name):
+        name = func.id
+    else:
+        name = None
     return name not in _DETERMINISTIC_UUID_NAMES
 
 

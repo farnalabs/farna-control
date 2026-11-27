@@ -13,6 +13,7 @@ code:
   - fly.toml
 unit-tests:
   - backend/tests/unit/api/test_health.py
+  - backend/tests/unit/api/routes/test_health.py
   - backend/tests/unit/core/test_health_alerts.py
   - backend/tests/unit/core/test_alert_context.py
   - backend/tests/unit/core/watchdog/test_worker_liveness.py
@@ -51,15 +52,15 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
 ## Behaviors
 
 - [x] `GET /healthz` returns `{"status": "ok"}` and is advisory only (never flips readiness)
-      <!-- behaviour: health-checks-01 | tests: none -->
+      <!-- behaviour: health-checks-01 | tests: backend/tests/bdd/features/infra/health.feature -->
 - [x] `GET /healthz/ready` checks database connectivity (SELECT 1)
-      <!-- behaviour: health-checks-02 | tests: none -->
+      <!-- behaviour: health-checks-02 | tests: backend/tests/unit/api/test_health.py::test_database_check_ok_reports_latency, backend/tests/unit/api/test_health.py::test_database_check_times_out -->
 - [x] Redis connectivity check (degraded when not configured)
       <!-- behaviour: health-checks-03 | tests: none -->
 - [x] Checkpointer schema accessibility check (degraded on failure)
-      <!-- behaviour: health-checks-04 | tests: none -->
+      <!-- behaviour: health-checks-04 | tests: backend/tests/unit/api/test_health.py::test_checkpointer_check_times_out, backend/tests/unit/api/test_health.py::test_checkpointer_check_uses_engine_pool_not_fresh_connection -->
 - [x] Alembic migration status check (degraded when migrations are pending)
-      <!-- behaviour: health-checks-05 | tests: none -->
+      <!-- behaviour: health-checks-05 | tests: backend/tests/unit/api/test_health.py::test_migrations_report_pending_and_divergence, backend/tests/unit/api/test_health.py::test_migrations_check_times_out -->
 - [x] Database-hygiene sub-check (FAR-1445) – worst-table dead-tuple ratio
       (`n_dead_tup / (n_live_tup + n_dead_tup)` from `pg_stat_user_tables`, over a
       configurable dead-tuple floor, zero-size relations excluded from the pick) plus
@@ -67,28 +68,28 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       degrades (never `unavailable`, so never 503s readiness alone) on bloat at/above
       the configured ratio or on freeze age past 50% of the ceiling; thresholds via
       `FARNA_CONTROL_HEALTH_DB_HYGIENE_MIN_DEAD_TUPLES` / `FARNA_CONTROL_HEALTH_DB_HYGIENE_DEAD_RATIO`
-      <!-- behaviour: health-checks-06 | tests: none -->
+      <!-- behaviour: health-checks-06 | tests: backend/tests/unit/api/test_health.py::test_dead_rows_exactly_at_floor_are_degraded, backend/tests/unit/api/test_health.py::test_ratio_exactly_at_threshold_is_degraded, backend/tests/unit/api/test_health.py::test_freeze_age_exactly_at_warning_tier_is_degraded, backend/tests/unit/api/test_health.py::test_probe_binds_the_configured_dead_tuple_floor, backend/tests/unit/api/test_health.py::test_healthy_database_grades_ok -->
 - [x] A database-hygiene probe that does NOT complete within its budget (timeout, or the
       probe raising) reports `degraded` – "database-hygiene probe did not complete within
       Ns (likely an event-loop stall; see event_loop_lag) - hygiene not measured" – but is
       ADVISORY (FAR-1510): still listed in the body, never gating the aggregate and never
       firing the readiness alert, because no hygiene reading was taken. Only a completed
       reading graded over a threshold gates.
-      <!-- behaviour: health-checks-07 | tests: none -->
+      <!-- behaviour: health-checks-07 | tests: backend/tests/unit/api/test_health.py::test_timeout_reports_degraded_never_unavailable, backend/tests/unit/api/test_health.py::test_timeout_keeps_overall_ok_while_the_sub_check_stays_visible, backend/tests/unit/api/test_health.py::test_evaluate_readiness_does_not_degrade_on_a_timeout_alone, backend/tests/unit/api/test_health.py::test_crashed_probe_alone_leaves_aggregate_ok_with_visible_sub_check -->
 - [x] SAQ worker liveness check – a stopped worker pool for 4+ consecutive probe ticks 503s readiness (Plan F7)
-      <!-- behaviour: health-checks-08 | tests: none -->
+      <!-- behaviour: health-checks-08 | tests: backend/tests/unit/api/test_health.py::test_stale_four_probes_unavailable_when_gated, backend/tests/unit/api/test_health.py::test_dead_queue_escalates_to_unavailable -->
 - [x] System-cron liveness watchdog – fire_due_triggers missing 2x cadence 503s readiness (Plan F8)
-      <!-- behaviour: health-checks-09 | tests: none -->
+      <!-- behaviour: health-checks-09 | tests: backend/tests/unit/api/test_health.py::test_stale_heartbeat_escalates_to_unavailable, backend/tests/unit/api/test_health.py::test_no_heartbeat_anywhere_escalates_to_unavailable -->
 - [x] Stale-run recovery sweep outcome – ADVISORY, never gates readiness: a missing or
       >15min-stale sweep reports `degraded` to alert operators while the app stays
       healthy (`_check_stale_run_recovery`, health.py)
-      <!-- behaviour: health-checks-10 | tests: none -->
+      <!-- behaviour: health-checks-10 | tests: backend/tests/unit/api/routes/test_health.py::test_never_run_degraded, backend/tests/unit/api/routes/test_health.py::test_stale_run_degraded -->
 - [x] Dispatcher reconcile staleness – two tiers: `degraded` after 180s (3x the 60s
       system-cron cadence, so a single slow or missed tick alone never pages)
       is advisory (never flips readiness), `unavailable` past 5 minutes – the system
       worker's cron is silently dead and the fleet can no longer terminalize
       stalled/never-dispatched runs – 503s readiness
-      <!-- behaviour: health-checks-11 | tests: none -->
+      <!-- behaviour: health-checks-11 | tests: backend/tests/unit/api/routes/test_health.py::test_single_slow_tick_is_not_stale, backend/tests/unit/api/routes/test_health.py::test_just_past_unavailable_tier_is_unavailable, backend/tests/unit/api/routes/test_health.py::test_long_stale_unavailable -->
 - [x] Dispatcher reconcile detail counters (FAR-1621) – `_format_reconcile_detail`
       renders the outcome counters on every tier, including the per-org
       bounded-failure family so an alert email can tell the cases apart without
@@ -105,13 +106,13 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       lock/pool/connect/statement SKIPs deliberately leave `status="ok"` and
       `last_error=None` and carry their stage in the matching WARNING log line
       instead
-      <!-- behaviour: health-checks-12 | tests: none -->
+      <!-- behaviour: health-checks-12 | tests: backend/tests/unit/api/routes/test_health.py::test_fresh_run_detail_surfaces_per_org_bounded_failure_counters, backend/tests/unit/api/routes/test_health.py::test_fresh_run_detail_defaults_the_per_org_counters_to_zero -->
 - [x] Fleet worker / fleet system-cron aggregation (worker process-group health, ADR 021)
-      <!-- behaviour: health-checks-13 | tests: none -->
+      <!-- behaviour: health-checks-13 | tests: backend/tests/unit/api/test_health.py::test_any_live_worker_on_each_queue_ok, backend/tests/unit/api/test_health.py::test_fresh_heartbeat_on_any_machine_ok, backend/tests/unit/api/test_health.py::test_fleet_outage_unavailable_on_any_process_group, backend/tests/unit/api/test_health.py::test_fleet_wide_cron_death_unavailable_on_any_process_group -->
 - [x] Break-glass watchdog exposure is advisory and never contributes to readiness
       <!-- behaviour: health-checks-14 | tests: none -->
 - [x] Per-check timeout limits, configurable via `modulo_health_*_timeout_seconds` settings
-      <!-- behaviour: health-checks-15 | tests: none -->
+      <!-- behaviour: health-checks-15 | tests: backend/tests/unit/api/test_health.py::test_settings_defaults_apply, backend/tests/unit/api/test_health.py::test_per_check_timeout_falls_back_to_global, backend/tests/unit/api/test_health.py::test_per_check_timeout_override_wins, backend/tests/unit/api/test_health.py::test_database_check_times_out -->
 - [x] Overall status: `unavailable` if any gate is `unavailable`, `degraded` if any gate
       is `degraded`. Gates are `database`, `redis`, `checkpointer`, `migrations`,
       `saq_workers`, `system_crons`, a COMPLETED `db_hygiene` reading, and
@@ -121,11 +122,11 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
       `runner_workspace_reconcile`, `runner_marker_sweep`, `runner_health_probe`, the
       `degraded` tier of `dispatcher_reconcile`, and a database-hygiene probe that did
       not complete (FAR-1510). Source of truth: `evaluate_readiness` in health.py
-      <!-- behaviour: health-checks-16 | tests: none -->
+      <!-- behaviour: health-checks-16 | tests: backend/tests/unit/api/test_health.py::test_healthz_ready_all_ok, backend/tests/unit/api/test_health.py::test_healthz_ready_degraded_overall, backend/tests/unit/api/test_health.py::test_healthz_ready_unavailable_overall, backend/tests/unit/api/test_health.py::test_healthz_ready_dispatcher_degraded_stays_advisory, backend/tests/unit/api/test_health.py::test_hygiene_cannot_supply_the_503 -->
 - [x] 503 status code when overall unavailable
-      <!-- behaviour: health-checks-17 | tests: none -->
+      <!-- behaviour: health-checks-17 | tests: backend/tests/unit/api/test_health.py::test_healthz_ready_unavailable_overall -->
 - [x] Latency tracked per check
-      <!-- behaviour: health-checks-18 | tests: none -->
+      <!-- behaviour: health-checks-18 | tests: backend/tests/unit/api/test_health.py::test_database_check_ok_reports_latency, backend/tests/unit/api/test_health.py::test_healthz_ready_check_keys_present, backend/tests/bdd/features/infra/health.feature -->
 - [x] Fly.io deployment wiring – `fly.toml` `[[http_service.checks]]` probes `/healthz/ready`
       <!-- behaviour: health-checks-19 | tests: none -->
 - [x] Worker process-group health check via top-level `[checks]` (ADR 021)
@@ -255,6 +256,18 @@ unavailable. The AI agent can also be redirected to this infra-health surface vi
   liveness/readiness.
 
 ## QA History
+
+- 2026-11-26: **Improve Architecture product-map walk** – bound sixteen ticked but
+  previously unbound behaviours (01, 02, 04-13, 15-18) to their existing, running
+  tests: liveness (01), dependency probes (02, 04, 05), database hygiene and its
+  not-measured advisory (06, 07), worker/cron probe grace and fleet aggregation
+  (08, 09, 13), the advisory stale-run and slot sweeps (10), the dispatcher two-tier
+  staleness and bounded-failure detail counters (11, 12), per-check timeouts (15),
+  the readiness aggregate and 503 gate (16, 17), and per-check latency (18). Also
+  cited `backend/tests/unit/api/routes/test_health.py`, which holds the reconciler and
+  sweep cases. No product code changed; the remaining unbound behaviours (redis
+  not-configured, break-glass, Fly health-check wiring) stay in the shrink-only
+  baseline.
 
 - 2026-11-08: **Improve Architecture product-map walk** – verified that the former
   external uptime workflow is absent from `.github/workflows/` and that its replacement

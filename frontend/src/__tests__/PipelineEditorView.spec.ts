@@ -1146,6 +1146,36 @@ describe('PipelineEditorView — toolbar rendering', () => {
     wrapper.unmount()
   })
 
+  it('renders the migrated empty-state action buttons through the shared design-system Button', async () => {
+    ;(api.GET as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
+      if (url.includes('/pipelines/{pipeline_id}/graph')) {
+        return Promise.resolve({ data: { nodes: [], edges: [] }, error: undefined })
+      }
+      return Promise.resolve({ data: { items: [] }, error: undefined })
+    })
+    router.push('/pipelines/test-pipeline-id/editor')
+    await router.isReady()
+    const wrapper = await mountEditorLoaded()
+    ;(wrapper.vm as any).pipeline = { id: 'test-pipeline-id', name: 'Test Pipeline' }
+    await nextTick()
+
+    // FAR-2818: these empty-state actions were raw <button> elements; they now
+    // render through the shared design-system Button (a PrimeVue wrapper whose
+    // root carries `p-button`). A raw <button> carries none of these classes, so
+    // this assertion fails without the migration.
+    for (const testId of [
+      'pipeline-editor-empty-delete',
+      'pipeline-editor-empty-archive',
+      'pipeline-editor-empty-show-me',
+      'pipeline-editor-empty-template',
+    ]) {
+      const control = wrapper.get(`[data-testid="${testId}"]`)
+      expect(control.element.tagName).toBe('BUTTON')
+      expect(control.classes(), testId).toContain('p-button')
+    }
+    wrapper.unmount()
+  })
+
   it('routes Start from template to the pipeline-template library filter', async () => {
     ;(api.GET as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
       if (url.includes('/pipelines/{pipeline_id}/graph')) {

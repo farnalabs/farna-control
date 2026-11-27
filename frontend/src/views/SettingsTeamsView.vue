@@ -21,33 +21,31 @@
         heading-level="h2"
       >
         <div class="space-y-4">
-          <div>
-            <label for="settingsteamsview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTeamsView.name') }}</label>
-            <input id="settingsteamsview-field-2"
+          <Field id="settingsteamsview-field-2" :label="$t('views.SettingsTeamsView.name')">
+            <Input
               v-model="createName"
               type="text"
               data-testid="settings-teams-create-name"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SettingsTeamsView.placeholder_name')"
             />
-          </div>
-          <div>
-            <label for="settingsteamsview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTeamsView.description') }}</label>
-            <textarea id="settingsteamsview-field-1"
+          </Field>
+          <Field id="settingsteamsview-field-1" :label="$t('views.SettingsTeamsView.description')">
+            <Textarea
               v-model="createDescription"
               rows="2"
               data-testid="settings-teams-create-description"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SettingsTeamsView.placeholder_description')"
-            ></textarea>
-          </div>
+            />
+          </Field>
           <div class="flex items-center gap-2">
             <Button :disabled="!createName.trim() || creatingTeam" data-testid="settings-teams-create-submit" @click="createTeam">
               {{ creatingTeam ? $t('views.SettingsTeamsView.creating') : $t('views.SettingsTeamsView.create') }}
             </Button>
-            <button type="button" class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent" data-testid="settings-teams-create-cancel" @click="cancelCreate">
+            <Button variant="secondary" data-testid="settings-teams-create-cancel" @click="cancelCreate">
               {{ $t('views.SettingsTeamsView.cancel') }}
-            </button>
+            </Button>
           </div>
         </div>
         <ErrorAlert v-if="createError" compact class="mt-3" :message="createError" :retryable="false" />
@@ -63,20 +61,25 @@
       <div class="space-y-3">
         <BaseCard v-for="team in teams" :key="team.id" padding="none">
           <div class="flex items-start gap-3 p-4 max-sm:flex-wrap sm:items-center" :class="{ 'border-b': expandedTeamId === team.id }">
-            <button
-              type="button"
+            <Disclosure
+              :open="expandedTeamId === team.id"
+              :controls="'settings-teams-panel-' + team.id"
               :data-testid="'settings-teams-toggle-' + team.id"
               class="flex min-w-0 flex-1 items-start gap-3 border-none bg-transparent p-0 text-left sm:items-center"
-              :aria-expanded="expandedTeamId === team.id"
-              :aria-controls="'settings-teams-panel-' + team.id"
-              @click="toggleExpand(team.id)"
+              @update:open="toggleExpand(team.id)"
             >
-              <ChevronRight class="h-4 w-4 shrink-0 text-muted-foreground transition-transform" :class="{ 'rotate-90': expandedTeamId === team.id }" aria-hidden="true" />
-              <div class="min-w-0">
-                <p class="break-words font-medium">{{ team.name }}</p>
-                <p class="break-words text-sm text-muted-foreground">{{ team.description || '—' }}</p>
-              </div>
-            </button>
+              <template #trigger="{ open, chevronClass, rotationClass }">
+                <ChevronRight
+                  :class="[chevronClass, open && rotationClass]"
+                  class="h-4 w-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <div class="min-w-0">
+                  <p class="break-words font-medium">{{ team.name }}</p>
+                  <p class="break-words text-sm text-muted-foreground">{{ team.description || '—' }}</p>
+                </div>
+              </template>
+            </Disclosure>
             <div class="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 max-sm:ml-7 max-sm:w-full">
               <span class="text-sm text-muted-foreground">{{ $t('views.SettingsTeamsView.member_count', team.member_count) }}</span>
               <span class="text-sm text-muted-foreground" data-testid="settings-teams-owned-resource-count">
@@ -88,25 +91,25 @@
 
           <section v-if="expandedTeamId === team.id" :id="'settings-teams-panel-' + team.id" class="p-4" :aria-label="$t('views.SettingsTeamsView.team_details', { name: team.name })">
             <div v-if="renameTeamId === team.id" class="mb-4 flex items-center gap-2">
-              <input :aria-label="$t('views.SettingsTeamsView.name')" v-model="renameName" type="text" data-testid="settings-teams-rename-name" class="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" @keyup.enter="saveRename" />
+              <Input :aria-label="$t('views.SettingsTeamsView.name')" v-model="renameName" type="text" data-testid="settings-teams-rename-name" class="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" @keyup.enter="saveRename" />
               <Button :disabled="!renameName.trim() || renamingTeam" data-testid="settings-teams-rename-save" @click="saveRename">
                 {{ renamingTeam ? $t('views.SettingsTeamsView.saving') : $t('views.SettingsTeamsView.save') }}
               </Button>
-              <button type="button" class="rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent" data-testid="settings-teams-rename-cancel" @click="cancelRename">
+              <Button variant="secondary" data-testid="settings-teams-rename-cancel" @click="cancelRename">
                 {{ $t('views.SettingsTeamsView.cancel') }}
-              </button>
+              </Button>
             </div>
 
             <div v-if="deleteConfirmTeamId === team.id" class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
               <p class="text-sm font-medium text-destructive-text">{{ $t('views.SettingsTeamsView.delete_confirm_title', { name: team.name }) }}</p>
               <p class="mt-1 text-sm text-destructive-text">{{ $t('views.SettingsTeamsView.this_action_cannot_be_undone') }}</p>
               <div class="mt-3 flex items-center gap-2">
-                <button type="button" :disabled="deletingTeam" data-testid="settings-teams-delete-confirm" class="rounded-lg bg-destructive-fill px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50" @click="deleteTeam(team.id)">
+                <Button variant="danger" :disabled="deletingTeam" data-testid="settings-teams-delete-confirm" @click="deleteTeam(team.id)">
                   {{ deletingTeam ? $t('views.SettingsTeamsView.deleting') : $t('views.SettingsTeamsView.delete') }}
-                </button>
-                <button type="button" class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent" data-testid="settings-teams-delete-cancel" @click="deleteConfirmTeamId = null; deleteError = null">
+                </Button>
+                <Button variant="secondary" data-testid="settings-teams-delete-cancel" @click="deleteConfirmTeamId = null; deleteError = null">
                   {{ $t('views.SettingsTeamsView.cancel') }}
-                </button>
+                </Button>
                 <div v-if="deleteError" class="mt-2 text-sm text-destructive-text">{{ deleteError }}</div>
               </div>
             </div>
@@ -118,7 +121,7 @@
             </div>
             <ErrorAlert v-else-if="membersError[team.id]" compact class="mb-3" :message="membersError[team.id]" :retryable="false">
               <template #actions>
-                <button type="button" class="underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</button>
+                <Button variant="link" size="sm" class="underline" data-testid="settings-teams-members-retry" @click="loadMembers(team.id)">{{ $t('views.SettingsTeamsView.retry') }}</Button>
               </template>
             </ErrorAlert>
             <div v-else>
@@ -169,12 +172,12 @@
                     <td colspan="4" class="table-cell">
                       <div class="flex items-center gap-3">
                         <span class="text-sm text-destructive-text">{{ $t('views.SettingsTeamsView.remove_member_confirm') }}</span>
-                        <button type="button" :disabled="removingMember" data-testid="settings-teams-remove-confirm" class="rounded-lg bg-destructive-fill px-3 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50" @click="removeMember(team.id, member)">
+                        <Button variant="danger" size="sm" :disabled="removingMember" data-testid="settings-teams-remove-confirm" @click="removeMember(team.id, member)">
                           {{ removingMember ? $t('views.SettingsTeamsView.deleting') : $t('views.SettingsTeamsView.delete') }}
-                        </button>
-                        <button type="button" data-testid="settings-teams-remove-cancel" class="rounded-lg border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" @click="removeConfirmMemberId = null">
+                        </Button>
+                        <Button variant="secondary" size="sm" data-testid="settings-teams-remove-cancel" @click="removeConfirmMemberId = null">
                           {{ $t('views.SettingsTeamsView.cancel') }}
-                        </button>
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -215,15 +218,15 @@
               <Button :disabled="!addMemberUserId || addingMember" data-testid="settings-teams-add-member-submit" @click="addMember(team.id)">
                 {{ addingMember ? $t('views.SettingsTeamsView.adding') : $t('views.SettingsTeamsView.add') }}
               </Button>
-              <button type="button" class="rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent" data-testid="settings-teams-add-member-cancel" @click="addMemberTeamId = null">
+              <Button variant="secondary" data-testid="settings-teams-add-member-cancel" @click="addMemberTeamId = null">
                 {{ $t('views.SettingsTeamsView.cancel') }}
-              </button>
+              </Button>
             </div>
 
-            <button type="button" v-else class="mt-3 flex items-center gap-1 text-sm text-primary-text hover:underline" data-testid="settings-teams-add-member" @click="addMemberTeamId = team.id">
+            <Button v-else variant="link" class="mt-3 gap-1" data-testid="settings-teams-add-member" @click="addMemberTeamId = team.id">
               <Plus class="h-4 w-4" aria-hidden="true" />
               {{ $t('views.SettingsTeamsView.add_member') }}
-            </button>
+            </Button>
 
             <div v-if="memberActionError[team.id]" class="mt-2 text-sm text-destructive">
               {{ memberActionError[team.id] }}
@@ -252,7 +255,11 @@ import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import TeamNotificationEndpoints from '../components/TeamNotificationEndpoints.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import { ChevronRight, Plus } from '@lucide/vue'

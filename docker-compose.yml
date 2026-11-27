@@ -1,6 +1,15 @@
 services:
   db:
     image: postgres:16-alpine
+    # FAR-2808: without a restart policy a container that exits stays exited and
+    # `docker compose ps` presents a half-dead stack as "the stack". The app
+    # services below carry one for the cold-start race; the datastores carry it
+    # for the same class (a container that exited never comes back on its own).
+    # `unless-stopped`, never `always`: an operator's `docker compose stop`/`down`
+    # must stay stopped, including across a daemon restart - which is what
+    # scripts/compose-restore.sh relies on when it stops the writers and leaves
+    # the stack down.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: farna_control
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
@@ -10,7 +19,19 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U farna_control"]
+      # FAR-2808: probe the TCP interface, not the default unix socket. On a
+      # first run the image's entrypoint starts a SECOND, socket-only server
+      # (`listen_addresses=''`) to run initdb and create the app role/database,
+      # stops it, then execs the real server (which the image configures with
+      # `listen_addresses='*'`). A host-less `pg_isready` answers 0 against that
+      # temporary server, so the probe went green, the app services started, the
+      # temporary server stopped, and a connection in that window failed with
+      # ConnectionRefusedError. `-h` keeps the probe on TCP, which the temporary
+      # server never listens on, so it passes only once the real server serves
+      # the same `db:5432` path the app uses. `-U`/`-d` are documentation only:
+      # pg_isready reports "accepting connections" for a wrong user or database
+      # too, so naming them is not what closes the window.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U farna_control -d farna_control"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -24,6 +45,11 @@ services:
 
   redis:
     image: redis:8-alpine
+    # FAR-2808: same class as `db` - a Redis that exits leaves every enqueue
+    # failing while the rest of the stack looks up. Its dataset is rebuildable
+    # (see the eviction policy below), so a restart cannot poison state the way
+    # a half-initialised database could.
+    restart: unless-stopped
     # FAR-2002 — bound the queue store, and evict only what the reconciler can
     # repair. Without a maxmemory, Redis runs `noeviction`: a worker wedge grows
     # the SAQ queue until every enqueue fails with `OOM command not allowed`.
@@ -49,7 +75,26 @@ services:
       - "127.0.0.1:6379:6379"
 
   backend:
+    # FAR-2826: ONE image for all three Python services. `backend`,
+    # `saq-runner` and `saq-system` are the same Dockerfile and the same build
+    # context with different `command:`s, so a `build:` on each made Compose
+    # produce three ~2 GB images and repeat both per-image costs three times.
+    # Measured cold on this Windows/Docker Desktop host, per backend image:
+    # `chown -R appuser:appuser /app` 897 s and 1431 s, export/unpack 601 s and
+    # 649 s (docs/compose-cold-build-performance.md). The image is named here so
+    # the two workers below can reference it instead of building their own copy.
+    image: farna-control-backend:latest
     build: ./backend
+    # FAR-2808: this is the service the bug reported. On a cold first start the
+    # db probe could go green against Postgres's temporary, socket-only init
+    # server; when that server stopped, the backend's first connection failed
+    # with ConnectionRefusedError and the container exited - and nothing brought
+    # it back, so `docker compose ps` showed a dead API with everything else up.
+    # The db probe is fixed too; this policy is the backstop for every other
+    # transient exit (OOM-kill, a race in startup, a dependency arriving late),
+    # because a healthcheck gates START ORDER only and can never revive a
+    # process that has already exited.
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -87,7 +132,19 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./backend/src:/app/src
+      # NO `./backend/src:/app/src` by default (FAR-2785). The image already
+      # bakes the code AND the editable install (a `.pth` puts /app/src on
+      # sys.path), so a bind mount here made every import read from Docker
+      # Desktop's slow host filesystem and shadowed the image layer — ~12 min
+      # of the cold boot. Live-edit with `docker compose -f docker-compose.yml
+      # -f docker-compose.dev.yml up` (that override re-adds the mount).
+      #
+      # The manifest mount STAYS: the backend image cannot bake
+      # `frontend/src/manifest.yaml` (its build context is ./backend), and the
+      # runtime serves it (routes/manifest.py, the assistant primer and the
+      # documentation indexer). It is a single small file read once and cached
+      # in-process, so it costs nothing at boot. Removing it would serve an
+      # empty manifest, which changes product behaviour.
       - ./frontend/src/manifest.yaml:/app/manifest.yaml
       # Read-only: the monitor only statvfs()es it. If the container user
       # cannot traverse the mount the probe fails open (capacity "none", stop
@@ -97,7 +154,17 @@ services:
   # SAQ runs worker — executes run jobs (plan F8 local dev). Required for any
   # pipeline execution.
   saq-runner:
-    build: ./backend
+    # FAR-2826: NO `build:` here — this worker runs the SAME image as `backend`
+    # (see that service). Compose builds it once, for `backend`, and the image
+    # build is the dominant cost of a cold `docker compose build`, so a second
+    # `build:` block here is a second full build, not a cache hit (`--no-cache`
+    # disables BuildKit's cross-service cache reuse). Keep `command:` — without
+    # it this service would inherit the image's CMD and start a second API.
+    image: farna-control-backend:latest
+    # FAR-2808: same failure class as `backend` (see above). A dead runs worker
+    # accepts no pipeline work while /healthz/ready still serves, so nothing
+    # restarted it: the stack looked up and executed nothing.
+    restart: unless-stopped
     command: ["python", "-m", "saq", "farna.core.saq_worker.runs_settings"]
     depends_on:
       db:
@@ -122,7 +189,8 @@ services:
       # hard-stop is inert for them.
       DB_CAPACITY_PATH: /var/lib/farna/db-volume
     volumes:
-      - ./backend/src:/app/src
+      # No `./backend/src` bind mount by default — see the backend service's
+      # comment (FAR-2785). Add `-f docker-compose.dev.yml` for live editing.
       # Read-only: the monitor only statvfs()es it. If the container user
       # cannot traverse the mount the probe fails open (capacity "none", stop
       # inert) rather than erroring - set DB_CAPACITY_BYTES to override.
@@ -132,7 +200,15 @@ services:
   # system crons (plan F8). REQUIRED for local cron/triggers. Web UI bound to
   # 127.0.0.1:8081 via the custom runner.
   saq-system:
-    build: ./backend
+    # FAR-2826: NO `build:` here — same shared image as `backend` and
+    # `saq-runner` (see `backend`). Keep `command:` so this service runs the SAQ
+    # system worker rather than inheriting the image's uvicorn CMD.
+    image: farna-control-backend:latest
+    # FAR-2808: same failure class as `backend` (see above). A dead system
+    # worker stops fire_due_triggers, dispatcher_reconcile and the system crons
+    # with no scheduler to revive them - every cron/polling trigger is silently
+    # dead until a human notices.
+    restart: unless-stopped
     command: ["python", "-m", "farna.core.saq_worker"]
     depends_on:
       db:
@@ -159,7 +235,8 @@ services:
     ports:
       - "127.0.0.1:8081:8081"
     volumes:
-      - ./backend/src:/app/src
+      # No `./backend/src` bind mount by default — see the backend service's
+      # comment (FAR-2785). Add `-f docker-compose.dev.yml` for live editing.
       # Cron/polling triggers create their runs in THIS process
       # (cron_helpers.fire_cron_trigger / _run_poll_fire / _create_ongoing_runs
       # all call crud.run.create_run), which is where the 98% hard-stop is
@@ -170,6 +247,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+    # FAR-2808: same failure class as `backend` above. The nginx frontend is
+    # enabled by default and is how the operator reaches the app; a transient
+    # exit (OOM-kill, nginx reload race on first boot) left the UI permanently
+    # down while the API stayed up - a half-dead stack. `unless-stopped` revives
+    # it without defeating an explicit `docker compose stop`/`down`.
+    restart: unless-stopped
     depends_on:
       - backend
     ports:

@@ -1074,9 +1074,10 @@ async def _delete_quarantine_rows(session: AsyncSession, run_ids: list[Any]) -> 
     than the hard ``_delete_run_id_rows`` one: it runs in its OWN savepoint,
     and a missing-table / ungranted-env failure is logged and swallowed —
     the run purge must never abort because the evidence copy could not be
-    reclaimed. The run_ids come from the org-scoped terminal batch, so the
-    delete cannot leak across orgs regardless of the table's missing RLS
-    policy.
+    reclaimed. The run_ids come from the org-scoped terminal batch, and since
+    migration 0368 the table carries ``rls_org_isolation`` (the plain org
+    predicate), so ``farna_control_app``'s delete is org-bounded by the database
+    as well as by the caller's org context.
 
     NOTE (FAR-694): the quarantine table is KEPT - migration 0215 dropped
     the runs blob columns, so these rows are the ONLY surviving copy of the

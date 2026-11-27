@@ -119,3 +119,24 @@ own detection rules without scanning the repository.
 The check does not verify prose accuracy, markdown anchors, backticked paths that
 do not begin with one of those prefixes, or the docs in `Repos/modulo-website`;
 review those by hand.
+
+## Running the containerised stack, and live editing
+
+`docker compose up -d` runs the code and the virtualenv **baked into the image**.
+That is deliberate: a host bind mount over `/app/src` makes every import read
+Docker Desktop's slow bind-mount filesystem and adds minutes to a cold first
+boot (see [Compose first-boot latency](compose-first-boot-performance.md)).
+
+To live-edit backend code without rebuilding the image, opt into the dev
+override, which re-adds the `./backend/src` bind mount:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# after editing a host file, restart the service to pick it up:
+docker compose -f docker-compose.yml -f docker-compose.dev.yml restart backend
+```
+
+`docker-compose.dev.yml` is a separate file rather than
+`docker-compose.override.yml` on purpose: Compose auto-loads
+`docker-compose.override.yml`, which would restore the slow default for every
+install. An explicit `-f` keeps read-from-image the default.

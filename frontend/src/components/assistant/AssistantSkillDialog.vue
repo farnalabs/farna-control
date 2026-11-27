@@ -14,62 +14,65 @@
     @update:open="onFormOpenChange"
   >
     <form @submit.prevent="save" class="space-y-4">
-        <div>
-          <label for="assistantskilldialog-field-5" class="mb-1 block text-sm font-medium"
-            >{{ $t('components.assistant.AssistantSkillDialog.name') }} <span class="text-destructive">*</span></label
-          >
-          <input id="assistantskilldialog-field-5"
+        <Field
+          id="assistantskilldialog-field-5"
+          :label="$t('components.assistant.AssistantSkillDialog.name')"
+          required
+        >
+          <Input
             v-model="form.name"
             type="text"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             :placeholder="$t('components.assistant.AssistantSkillDialog.skill_name')"
-            required
             data-testid="assistant-skills-form-name"
           />
-        </div>
-        <div>
-          <label for="assistantskilldialog-field-4" class="mb-1 block text-sm font-medium">{{ $t('components.assistant.AssistantSkillDialog.description') }}</label>
-          <textarea id="assistantskilldialog-field-4"
+        </Field>
+        <Field
+          id="assistantskilldialog-field-4"
+          :label="$t('components.assistant.AssistantSkillDialog.description')"
+        >
+          <Textarea
             v-model="form.description"
             rows="2"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             :placeholder="$t('components.assistant.AssistantSkillDialog.what_this_skill_does')"
             data-testid="assistant-skills-form-description"
           />
-        </div>
-        <div>
-          <label for="assistantskilldialog-field-3" class="mb-1 block text-sm font-medium">{{ $t('components.assistant.AssistantSkillDialog.triggers') }}</label>
-          <input id="assistantskilldialog-field-3"
+        </Field>
+        <Field
+          id="assistantskilldialog-field-3"
+          :label="$t('components.assistant.AssistantSkillDialog.triggers')"
+          help="Comma-separated trigger keywords"
+        >
+          <Input
             v-model="form.triggersInput"
             type="text"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             :placeholder="$t('components.assistant.AssistantSkillDialog.trigger1_trigger2')"
             data-testid="assistant-skills-form-triggers"
           />
-          <p class="mt-1 text-xs text-muted-foreground">
-            Comma-separated trigger keywords
-          </p>
-        </div>
-        <div>
-          <label for="assistantskilldialog-field-2" class="mb-1 block text-sm font-medium">{{ $t('components.assistant.AssistantSkillDialog.body_markdown') }}</label>
-          <textarea id="assistantskilldialog-field-2"
+        </Field>
+        <Field
+          id="assistantskilldialog-field-2"
+          :label="$t('components.assistant.AssistantSkillDialog.body_markdown')"
+        >
+          <Textarea
             v-model="form.body"
             rows="6"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm"
             :placeholder="$t('components.assistant.AssistantSkillDialog.skill_instructions_heading') + '\n' + $t('components.assistant.AssistantSkillDialog.skill_instructions_body')"
             data-testid="assistant-skills-form-body"
           />
-        </div>
+        </Field>
         <div class="flex items-center gap-2">
-          <label for="assistantskilldialog-field-1" class="flex items-center gap-2 text-sm cursor-pointer">
-            <input id="assistantskilldialog-field-1"
-              v-model="form.active"
-              type="checkbox"
-              class="rounded border-input"
-              data-testid="assistant-skills-form-active"
-            />
-            Active
-          </label>
+          <Checkbox
+            id="assistantskilldialog-field-1"
+            v-model="form.active"
+            label="Active"
+            class="flex items-center gap-2 text-sm cursor-pointer"
+            control-class="rounded border-input"
+            data-testid="assistant-skills-form-active"
+          />
         </div>
         <div v-if="saveError" class="text-sm text-destructive">
           {{ saveError }}
@@ -102,6 +105,10 @@
 <script setup lang="ts">
 import { ref, reactive } from "vue";
 import FormDialog from "@/components/shared/FormDialog.vue";
+import Checkbox from "../ui/Checkbox.vue";
+import Field from "@/components/ui/Field.vue";
+import Input from "@/components/ui/Input.vue";
+import Textarea from "@/components/ui/Textarea.vue";
 import { api } from "@/lib/api/client";
 import { formatApiError } from "@/lib/api/formatError";
 

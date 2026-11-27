@@ -23,7 +23,7 @@ Verified properties:
 | Property | Evidence |
 |---|---|
 | The source builds with no Farnalabs-held secret. | The production all-in-one image builds from a clean checkout with no credential or build secret from Farnalabs. [Build the image from source](#build-the-image-from-source) below gives the command, which was run against this checkout for this page. |
-| The Community tier needs no license key. | A deployment with no `FARNA_CONTROL_LICENSE_KEY` boots and runs on Community (`backend/src/farna/core/license_bootstrap.py`: "Booting with no license at all stays valid"). |
+| The Community tier needs no license key. | A deployment with no `FARNA_CONTROL_LICENSE_KEY` boots and runs on Community (`backend/src/farna/core/license_bootstrap.py`: "Booting WITHOUT a licence key stays valid"). |
 | You may modify and patch the source. | The BUSL Additional Use Grant permits production use of Farna Control and of any modified version or derivative work you create, including personal, internal and commercial use, provided that you may not use Farna Control or any such modified version or derivative work to offer a paid hosted or managed service to third parties where that service provides substantially the same functionality as Farna Control. See `LICENSE`. |
 | Each released version converts to Apache-2.0. | `LICENSE`: the Change Date for the distributed version is 2029-07-12, and "For each version of the Licensed Work, the Change Date is three years after that version is first publicly released." |
 

@@ -97,10 +97,11 @@
       >
         {{ $t('views.PipelineEditorView.autonomy_panel_reason') }}
       </label>
-      <input
+      <Input
         id="progressive-autonomy-reason"
         v-model="reason"
         type="text"
+        size="small"
         maxlength="2000"
         class="h-7 w-full rounded-md border border-input bg-background px-1.5 text-xs"
         data-testid="progressive-autonomy-reason"
@@ -168,6 +169,7 @@ import { api } from '../../lib/api/client'
 import { formatApiError, isProblemDetail } from '../../lib/api/formatError'
 import { formatDateShortWithTime } from '../../lib/formatDate'
 import AppSelect from '../shared/AppSelect.vue'
+import Input from '../ui/Input.vue'
 
 /** The autonomy ladder, lowest first (same canonical values the API uses). */
 const LEVELS = ['manual_approval', 'notify_on_complete', 'fully_autonomous'] as const

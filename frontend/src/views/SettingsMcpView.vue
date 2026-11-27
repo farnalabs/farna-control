@@ -222,15 +222,16 @@
     >
       <div class="space-y-4 py-2">
         <div>
-          <label for="settingsmcpview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsMcpView.key_name') }}</label>
-          <input id="settingsmcpview-field-2"
-            v-model="createKeyName"
-            type="text"
-            data-testid="settings-mcp-create-key-name"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            :placeholder="$t('views.SettingsMcpView.key_placeholder_example')"
-            @blur="createKeyNameTouched = true"
-          />
+          <Field id="settingsmcpview-field-2" :label="$t('views.SettingsMcpView.key_name')">
+            <Input
+              v-model="createKeyName"
+              type="text"
+              data-testid="settings-mcp-create-key-name"
+              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :placeholder="$t('views.SettingsMcpView.key_placeholder_example')"
+              @blur="createKeyNameTouched = true"
+            />
+          </Field>
           <p
             v-if="createKeyNameTouched && !createKeyName.trim()"
             class="mt-1 text-sm text-destructive"
@@ -276,6 +277,9 @@
     <span :data-value="option.value">{{ option.label }}</span>
   </template>
 </Select>
+          <p class="mt-1 text-xs text-muted-foreground">
+            {{ $t('views.SettingsMcpView.role_ceiling_note') }}
+          </p>
         </div>
         <p v-if="grantsLoading" class="text-sm text-muted-foreground" data-testid="settings-mcp-grants-loading">
           {{ $t('views.SettingsMcpView.grants_loading') }}
@@ -315,9 +319,9 @@
           <div>
             <p class="mb-1 text-sm font-medium">{{ $t('views.SettingsMcpView.api_key') }}</p>
             <div class="relative">
-              <input :aria-label="$t('views.SettingsMcpView.api_key')"
+              <Input :aria-label="$t('views.SettingsMcpView.api_key')"
                 :type="keyMasked ? 'password' : 'text'"
-                :value="createdKeyValue"
+                :model-value="createdKeyValue"
                 readonly
                 class="w-full rounded-lg border border-input bg-muted px-3 py-2 font-mono text-sm"
               />
@@ -367,6 +371,8 @@ import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import Button from '../components/ui/Button.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import Badge from '../components/ui/Badge.vue'
 import Dialog from 'primevue/dialog'
 import FormDialog from '../components/shared/FormDialog.vue'

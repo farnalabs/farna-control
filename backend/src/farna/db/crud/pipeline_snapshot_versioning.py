@@ -514,6 +514,9 @@ async def rollback_to_snapshot(
         new_edge = PipelineEdge(
             organisation_id=pipeline.organisation_id,
             pipeline_id=pipeline_id,
+            # ADR 070 Phase 1A: a rollback rewrites the pipeline's LIVE graph, so
+            # the recreated edges take the pipeline's current owner.
+            owner_team_id=pipeline.owner_team_id,
             source_node_id=edge_data["source_node_id"],
             target_node_id=edge_data["target_node_id"],
             edge_type=edge_data["edge_type"],

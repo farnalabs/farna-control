@@ -4,6 +4,7 @@
     :severity="severity"
     :outlined="outlined"
     :text="text"
+    :link="link"
     :size="primeSize"
     :label="label"
     :icon="icon"
@@ -26,16 +27,34 @@
  * lives here and nowhere else.
  *
  * Variant map (PrimeVue flags):
- *   primary   -> default severity, solid
- *   secondary -> severity="secondary" + outlined
- *   ghost     -> text
- *   danger    -> severity="danger", solid
+ *   primary        -> default severity, solid
+ *   secondary      -> severity="secondary" + outlined
+ *   secondary-text -> severity="secondary" + text (the secondary severity's
+ *                     ink, see the token route below)
+ *   ghost          -> text
+ *   link           -> PrimeVue's `link` flag (transparent hover, underlined
+ *                     label on hover) - deliberately distinct from `text`
+ *   danger         -> severity="danger", solid
+ *   warning        -> severity="warn", solid (the warning token pair)
  *
- * Two legacy flag combinations the four variants do not express are reachable
+ * `secondary-text` is the text-button form of `secondary`: it keeps the
+ * secondary severity's resting colour instead of the primary one. The secondary
+ * severity's label ink is routed through `--muted-foreground` via the token
+ * bridge (`src/lib/primevue-theme.ts`), for BOTH the outlined (`secondary`) and
+ * text (`secondary-text`) variants: Aura's own surface-scale value measured
+ * 4.39:1 on the light `bg-muted/30` card, below the WCAG AA floor (FAR-2764).
+ * `link` is the underlined-on-hover action the `text` flag does not render.
+ *
+ * The `warning` variant is solid (PrimeVue `severity="warn"`), using the Aura
+ * warn background/colour token pair. An outlined warning action is reachable
+ * through the `outlined` override (`variant="warning" outlined`), the same way
+ * the legacy combinations below are.
+ *
+ * Two legacy flag combinations the variants do not express are reachable
  * through the `outlined` override: a solid secondary button
  * (`variant="secondary" :outlined="false"`) and an outlined danger button
  * (`variant="danger" :outlined="true"`). Pass it only to preserve an existing
- * site's exact rendering; new call sites use the four variants unchanged.
+ * site's exact rendering; new call sites use the variants unchanged.
  *
  * Accessible naming: the name comes from `label`, the default slot, or - for an
  * icon-only button - the explicit `ariaLabel` prop. The primitive never infers
@@ -56,7 +75,7 @@
 import { computed, onBeforeMount, useAttrs, useSlots } from 'vue'
 import PrimeButton from 'primevue/button'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonVariant = 'primary' | 'secondary' | 'secondary-text' | 'ghost' | 'link' | 'danger' | 'warning'
 type ButtonSize = 'sm' | 'md'
 
 const props = withDefaults(defineProps<{
@@ -73,7 +92,7 @@ const props = withDefaults(defineProps<{
   // Explicit accessible name for the icon-only form.
   ariaLabel?: string
   // Tri-state override for the two legacy severity/outlined combinations the
-  // four variants do not cover. `null` means "use the variant's default".
+  // variants do not cover. `null` means "use the variant's default".
   outlined?: boolean | null
 }>(), {
   variant: 'primary',
@@ -93,17 +112,21 @@ defineOptions({ inheritAttrs: false })
 const slots = useSlots()
 const attrs = useAttrs()
 
-const VARIANT_FLAGS: Record<ButtonVariant, { severity?: 'secondary' | 'danger'; outlined: boolean; text: boolean }> = {
-  primary: { severity: undefined, outlined: false, text: false },
-  secondary: { severity: 'secondary', outlined: true, text: false },
-  ghost: { severity: undefined, outlined: false, text: true },
-  danger: { severity: 'danger', outlined: false, text: false },
+const VARIANT_FLAGS: Record<ButtonVariant, { severity?: 'secondary' | 'danger' | 'warn'; outlined: boolean; text: boolean; link: boolean }> = {
+  primary: { severity: undefined, outlined: false, text: false, link: false },
+  secondary: { severity: 'secondary', outlined: true, text: false, link: false },
+  'secondary-text': { severity: 'secondary', outlined: false, text: true, link: false },
+  ghost: { severity: undefined, outlined: false, text: true, link: false },
+  link: { severity: undefined, outlined: false, text: false, link: true },
+  danger: { severity: 'danger', outlined: false, text: false, link: false },
+  warning: { severity: 'warn', outlined: false, text: false, link: false },
 }
 
 const variantFlags = computed(() => VARIANT_FLAGS[props.variant])
 const severity = computed(() => variantFlags.value.severity)
 const outlined = computed(() => props.outlined ?? variantFlags.value.outlined)
 const text = computed(() => variantFlags.value.text)
+const link = computed(() => variantFlags.value.link)
 const primeSize = computed(() => (props.size === 'sm' ? 'small' : undefined))
 
 const hasDefaultSlot = computed(() => !!slots.default)

@@ -5,10 +5,13 @@ SHA-256 hex of a ``secrets.token_urlsafe(32)`` plaintext is stored here; the
 plaintext is shown to the inviting admin exactly once (never persisted) and
 embedded in ``<origin>/accept-invite#token=...``.
 
-Deliberately NOT an :class:`OrgScoped` subclass — this table sits outside the
-``rls_org_isolation`` regime because consumption happens on the
-unauthenticated accept-invite route before any principal exists. Every access
-path scopes by organisation explicitly (see db/crud/invitations.py).
+Deliberately NOT an :class:`OrgScoped` subclass (the ORM tenant filter is a
+generic-backend fallback that would fight the pre-auth read). ``invitations``
+DOES carry ``rls_org_isolation`` on Postgres since migration 0368: the
+accept-by-token read happens before any principal exists, so it is authorised by
+the scoped ``app.bootstrap_context`` grant (``db.rls.bootstrap_read``) pinned to
+the unique ``token_hash``, while every admin path runs in the normal org context.
+See ``db/crud/invitations.py``.
 """
 
 import uuid

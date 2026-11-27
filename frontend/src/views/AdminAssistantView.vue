@@ -162,16 +162,17 @@
               <label
                   v-for="role in orgRoles"
                   :key="role"
-                  for="adminassistantview-field-13"
+                  :for="`adminassistantview-role-${role}`"
                   class="flex items-center gap-2 text-sm cursor-pointer"
                   v-tooltip.top="role === 'admin' ? $t('views.AdminAssistantView.full_access_to_all_settings_and_assistant_configuration') : role === 'operator' ? $t('views.AdminAssistantView.can_create_and_manage_pipelines_use_assistant') : role === 'runner' ? $t('views.AdminAssistantView.can_execute_pipeline_runs_use_assistant') : $t('views.AdminAssistantView.readonly_access_can_view_but_not_edit_use_assistant')"
                 >
-                    <input id="adminassistantview-field-13"
-                      type="checkbox"
+                    <Checkbox
+                      bare
+                      :id="`adminassistantview-role-${role}`"
+                      :model-value="accessList.selectedRoles.includes(role)"
                       :value="role"
-                      :checked="accessList.selectedRoles.includes(role)"
-                      class="rounded border-input"
-                      @change="toggleRole(role)"
+                      control-class="rounded border-input"
+                      @update:model-value="toggleRole(role)"
                     />
                     {{ role }}
                   </label>
@@ -209,19 +210,17 @@
                 :placeholder="$t('views.AdminAssistantView.select_provider')"
               />
           </div>
-          <div>
-            <label for="adminassistantview-field-11" class="mb-1 block text-sm font-medium">{{ $t('views.AdminAssistantView.default_model') }}</label>
-            <input id="adminassistantview-field-11"
+          <Field id="adminassistantview-field-11" :label="$t('views.AdminAssistantView.default_model')">
+            <Input
               v-model="modelConfig.defaultModel"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               :placeholder="$t('views.AdminAssistantView.model_name_placeholder')"
               data-testid="assistant-model-name"
             />
-          </div>
-          <div>
-            <label for="adminassistantview-field-10" class="mb-1 block text-sm font-medium">{{ $t('views.AdminAssistantView.default_context_window_size') }}</label>
-            <input id="adminassistantview-field-10"
+          </Field>
+          <Field id="adminassistantview-field-10" :label="$t('views.AdminAssistantView.default_context_window_size')">
+            <Input
               v-model.number="modelConfig.contextWindow"
               type="number"
               min="1024"
@@ -230,7 +229,7 @@
               :placeholder="$t('views.AdminAssistantView.context_window_placeholder')"
               data-testid="assistant-model-context"
             />
-          </div>
+          </Field>
           <div>
             <span class="mb-1 block text-sm font-medium">{{ $t('views.AdminAssistantView.allowed_providers') }}</span>
             <div class="flex flex-wrap gap-2" data-testid="assistant-allowed-providers">
@@ -248,16 +247,15 @@
               </button>
             </div>
           </div>
-          <div>
-            <label for="adminassistantview-field-9" class="mb-1 block text-sm font-medium">{{ $t('views.AdminAssistantView.allowed_models') }}</label>
-            <input id="adminassistantview-field-9"
+          <Field id="adminassistantview-field-9" :label="$t('views.AdminAssistantView.allowed_models')">
+            <Input
               v-model="modelConfig.allowedModels"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               :placeholder="$t('views.AdminAssistantView.claudesonnet420250514_gpt4o_gemini25pro')"
               data-testid="assistant-allowed-models"
             />
-          </div>
+          </Field>
             <ErrorAlert v-if="modelError" compact :message="modelError" :retryable="false" />
             <Button
                   :disabled="modelSaving"
@@ -277,7 +275,7 @@
       >
         <div class="space-y-4">
           <div>
-            <textarea
+            <Textarea
               v-model="systemPrompt"
               rows="8"
               :aria-label="$t('views.AdminAssistantView.system_prompt')"
@@ -305,7 +303,7 @@
       >
         <div class="space-y-4">
           <div>
-            <textarea
+            <Textarea
               v-model="guidance"
               rows="5"
               :aria-label="$t('views.AdminAssistantView.additional_guidance')"
@@ -522,6 +520,9 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import { ref, reactive, computed, watch } from 'vue'
 import { Check, X, Pencil, Trash2 } from '@lucide/vue'
@@ -532,6 +533,7 @@ import FeatureGate from '../components/FeatureGate.vue'
 import AssistantSkillDialog from '../components/assistant/AssistantSkillDialog.vue'
 import AccessEntitySelector from '../components/assistant/AccessEntitySelector.vue'
 import Button from '../components/ui/Button.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import Select from '../components/shared/AppSelect.vue'
 import type { SkillItem } from '../types/assistant'
 import { useI18n } from 'vue-i18n'

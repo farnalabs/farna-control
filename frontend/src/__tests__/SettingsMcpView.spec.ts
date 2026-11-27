@@ -898,6 +898,22 @@ describe('SettingsMcpView', () => {
     expect(roleSelect.exists()).toBe(true)
   })
 
+  it('explains the role ceiling beside the role selector', async () => {
+    const wrapper = mountView()
+    await nextTick()
+    await nextTick()
+    await nextTick()
+    await wrapper.find('[data-testid="settings-mcp-create-key"]').trigger('click')
+    await nextTick()
+    const text = wrapper.text()
+    expect(text).toContain('Admin is only available on a user-scoped key')
+    expect(text).toContain('org-scoped keys are limited to Operator or Runner')
+    expect(text).toContain('shared machine credential')
+    expect(text).toContain('user_scoped_mcp_keys')
+    expect(text).toContain('expire within 90 days')
+    expect(text).toContain('Operator is enough for pipelines, connectors and runs')
+  })
+
   // ─── Multiple API keys ────────────────────────────────────────────────
 
   it('renders multiple API keys in the table', async () => {

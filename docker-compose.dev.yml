@@ -1,0 +1,36 @@
+# Live-edit override — opt in explicitly, never auto-loaded.
+#
+# The default `docker compose up` runs the code baked into the image (FAR-2785):
+# imports read from the image layer instead of Docker Desktop's slow bind-mount
+# filesystem, which cuts minutes off a cold boot. This override re-adds the
+# `./backend/src` bind mount over `/app/src` so a host-side edit is picked up by
+# a container restart (no image rebuild).
+#
+# Usage (from the repository root):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml restart backend
+#
+# It is deliberately a separate file, NOT `docker-compose.override.yml`: Compose
+# auto-loads `docker-compose.override.yml` for everyone, which would silently
+# restore the slow default for every install. An explicit `-f` keeps the fast
+# path the default and makes live-edit a conscious choice.
+#
+# The mount is writable by design so Python can write `__pycache__` next to the
+# host sources; that bytecode stays on the host and is git-ignored. Because the
+# image installs the package editable (a `.pth` adds `/app/src` to sys.path),
+# the mount replaces the image's copy entirely — the container imports the host
+# tree, exactly as it did before FAR-2785.
+
+services:
+  backend:
+    volumes:
+      - ./backend/src:/app/src
+
+  saq-runner:
+    volumes:
+      - ./backend/src:/app/src
+
+  saq-system:
+    volumes:
+      - ./backend/src:/app/src

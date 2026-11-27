@@ -1345,6 +1345,12 @@ async def create_trigger(
             trigger = Trigger(
                 organisation_id=principal.organisation_id,
                 pipeline_id=pipeline_id,
+                # ADR 070 Phase 1A: the trigger is part of the pipeline's live
+                # definition, so it inherits the pipeline's owner as read under
+                # the team gate above. A team owner needs no second read; when
+                # this is NULL (org-level) the listener re-reads once, because it
+                # cannot tell an explicit NULL from unset.
+                owner_team_id=pipeline_row.owner_team_id,
                 name=req.name,
                 trigger_type=req.trigger_type,
                 active=req.active,

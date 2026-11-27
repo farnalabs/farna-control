@@ -280,20 +280,15 @@ const SYSTEM_ADMIN_ROUTES = [
 // DARK-scanned (they must be in AUTHENTICATED_ROUTES/SYSTEM_ADMIN_ROUTES — the
 // integrity test enforces that). Add an entry ONLY for a route with a measured
 // light-theme finding, never because it is awkward.
-const LIGHT_EXCLUDED_ROUTES: readonly string[] = [
-  // /settings/mcp — REAL light-theme WCAG AA failure, blocked on a shared
-  // PrimeVue token/design decision (not hacked around here):
-  //   rule: color-contrast, impact serious, 1 node
-  //   target: button[data-testid="settings-mcp-copy-url"]
-  //   fg #64748b (PrimeVue secondary-outlined label = colorScheme.light
-  //   .outlined.secondary.color, surface.500) on bg #f4f6f8 (the card's
-  //   `bg-muted/30` surface): measured 4.39:1, AA floor 4.5:1.
-  // LIGHT-ONLY by construction: the dark counterpart is a different pair
-  // (surface.400 on a dark surface), which the DARK scan covers and passes. The
-  // label colour is a shared PrimeVue secondary-button token, so a global
-  // change needs a design decision and a full-suite re-verification.
-  '/settings/mcp',
-]
+//
+// Currently EMPTY: FAR-2764 fixed the last light-theme AA failure, so every
+// route is light-scanned again. /settings/mcp's secondary-outlined "Copy" label
+// measured 4.39:1 on the bg-muted/30 card (PrimeVue
+// colorScheme.light.outlined.secondary.color, surface.500). The secondary
+// severity's label now routes through our text-safe --muted-foreground via the
+// token bridge (src/lib/primevue-theme.ts), for both the outlined and text
+// variants, restoring AA on the light card.
+const LIGHT_EXCLUDED_ROUTES: readonly string[] = []
 
 const LIGHT_AUTHENTICATED_ROUTES = AUTHENTICATED_ROUTES.filter((p) => !LIGHT_EXCLUDED_ROUTES.includes(p))
 
@@ -343,8 +338,15 @@ function collectRenderErrors(page: import('@playwright/test').Page) {
 // LIGHT exclusion must still be DARK-scanned (otherwise it is not a light-only
 // gap, it is an untested route). Cheap and env-independent.
 test('scanned route sets are unique and every light exclusion is dark-covered', { tag: "@local-mock" }, () => {
+  // The uniqueness check is the live assertion today.
   const darkScanned = [...AUTHENTICATED_ROUTES, ...SYSTEM_ADMIN_ROUTES]
   expect(new Set(darkScanned).size, 'a route must not be scanned twice').toBe(darkScanned.length)
+  // Forward guard: LIGHT_EXCLUDED_ROUTES is currently EMPTY (FAR-2764 fixed the
+  // last light-only failure, so this loop is a no-op today). It is kept so that
+  // any route re-added as a light-only exclusion must still be dark-scanned —
+  // the alternative, deleting the loop, would let a future exclusion silently
+  // become an untested route. The loop being vacuous while the list is empty is
+  // stated here rather than hidden.
   for (const path of LIGHT_EXCLUDED_ROUTES) {
     expect(darkScanned, `${path} is light-excluded but must still be dark-scanned`).toContain(path)
   }
@@ -696,35 +698,63 @@ test.describe('keyboard focus indicator on a formerly agent-themed page (FAR-276
     // Tab can catch the element's *initial* outline (none / 3px / currentColor)
     // even though the base rule lands on the next frame. That race made this
     // test flake on PR #3523 (run 45694368651: got an outline colour equal to
-    // the link's own `--muted-foreground`). Poll for the rule to land; deleting
-    // the base rule still times out and fails, so the guard keeps its teeth.
+    // the link's own `--muted-foreground`).
+    //
+    // The earlier fix polled `outlineStyle` alone and then took a SECOND read
+    // of the activeElement to build the indicator. The guard and the assertion
+    // therefore read at two different instants, and between them the focused
+    // element can still drop back to its initial outline (measured on run
+    // 45797202658 / PR #3559: the poll saw `solid`, the following read saw
+    // `none / 3px / rgb(141,151,165)`). Read ONE snapshot on the SAME element
+    // the Tab loop focused, and poll until that snapshot carries the base
+    // rule's signature, so the value asserted on is exactly the value that
+    // satisfied the guard. Deleting the base rule still times out and fails, so
+    // the guard keeps its teeth.
+    type FocusIndicator = {
+      isActive: boolean
+      tag: string
+      outlineStyle: string
+      outlineWidthPx: number
+      outlineColor: string
+      boxShadow: string
+    }
+    const readIndicator = (): Promise<FocusIndicator> =>
+      control.evaluate((el) => {
+        const cs = getComputedStyle(el)
+        return {
+          isActive: document.activeElement === el,
+          tag: el.tagName,
+          outlineStyle: cs.outlineStyle,
+          outlineWidthPx: Number.parseFloat(cs.outlineWidth) || 0,
+          outlineColor: cs.outlineColor,
+          boxShadow: cs.boxShadow,
+        }
+      })
+
+    // A holder object (not a bare `let`) so TypeScript keeps the declared
+    // `FocusIndicator | null` type across the closure assignment instead of
+    // narrowing the outer variable to `null` (which collapses `indicator!` to
+    // `never`).
+    const captured: { value: FocusIndicator | null } = { value: null }
     await expect
       .poll(
-        () =>
-          page.evaluate(() => {
-            const el = document.activeElement as HTMLElement | null
-            return el ? getComputedStyle(el).outlineStyle : 'none'
-          }),
-        { timeout: 5000, message: 'the base :focus-visible outline must apply to the focused control' },
+        async () => {
+          const snapshot = await readIndicator()
+          captured.value = snapshot
+          return snapshot.isActive && snapshot.outlineStyle === 'solid' && snapshot.outlineWidthPx >= 2
+        },
+        {
+          timeout: 5000,
+          message: 'the base :focus-visible outline must apply to the focused control (>=2px solid)',
+        },
       )
-      .toBe('solid')
+      .toBe(true)
 
-    const indicator = await page.evaluate(() => {
-      const el = document.activeElement as HTMLElement | null
-      if (!el) return null
-      const cs = getComputedStyle(el)
-      return {
-        tag: el.tagName,
-        outlineStyle: cs.outlineStyle,
-        outlineWidthPx: Number.parseFloat(cs.outlineWidth) || 0,
-        outlineColor: cs.outlineColor,
-        boxShadow: cs.boxShadow,
-      }
-    })
-    expect(indicator, 'an element must hold focus').not.toBeNull()
     // The base rule's signature: a >=2px solid outline. This is exactly what
     // disappears if style.css:10-13 is removed, so the test can fail for the
     // regression it documents (a 1px library outline would not satisfy it).
+    const indicator = captured.value
+    expect(indicator, 'the sidebar link must hold keyboard focus').not.toBeNull()
     expect(
       indicator!.outlineStyle,
       `keyboard-focused ${indicator?.tag} must use a solid outline; got ${JSON.stringify(indicator)}`,

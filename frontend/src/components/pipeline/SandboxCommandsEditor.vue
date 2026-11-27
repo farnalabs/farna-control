@@ -23,13 +23,14 @@
       <ol v-else class="mt-1 space-y-1">
         <li v-for="(row, idx) in rows" :key="idx" class="flex items-center gap-1">
           <span class="w-4 shrink-0 text-right text-[10px] text-muted-foreground">{{ idx + 1 }}</span>
-          <input
-            :value="row"
+          <Input
+            :model-value="row"
             type="text"
+            size="small"
             class="min-w-0 flex-1 rounded border border-input bg-background px-2 py-1 font-mono text-xs"
             :aria-label="$t('views.PipelineEditorView.commands_row_label', { n: idx + 1 })"
             :data-testid="`pipeline-editor-node-command-row-${idx}`"
-            @input="onRowInput(idx, $event)"
+            @update:model-value="onRowInput(idx, $event)"
           />
           <span class="flex shrink-0 items-center gap-0.5">
             <button
@@ -67,17 +68,24 @@
       <div v-if="listActive" class="mt-2 space-y-1">
         <div>
           <label for="pipeline-editor-node-command-joiner" class="block text-xs font-medium">{{ $t('views.PipelineEditorView.commands_join_operator') }}</label>
-          <input
+          <Field
             id="pipeline-editor-node-command-joiner"
-            :value="joinerModel"
-            type="text"
-            class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1 font-mono text-xs"
-            :placeholder="$t('views.PipelineEditorView.commands_join_operator_placeholder')"
-            :aria-label="$t('views.PipelineEditorView.commands_join_operator')"
-            data-testid="pipeline-editor-node-command-joiner"
-            @input="onJoinerInput"
-          />
-          <p class="mt-0.5 text-[11px] text-muted-foreground">{{ $t('views.PipelineEditorView.commands_join_operator_hint') }}</p>
+            :label="$t('views.PipelineEditorView.commands_join_operator')"
+            label-class="block text-xs font-medium"
+            :help="$t('views.PipelineEditorView.commands_join_operator_hint')"
+            help-class="mt-0.5 text-[11px] text-muted-foreground"
+          >
+            <Input
+              :model-value="joinerModel"
+              type="text"
+              size="small"
+              class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1 font-mono text-xs"
+              :placeholder="$t('views.PipelineEditorView.commands_join_operator_placeholder')"
+              :aria-label="$t('views.PipelineEditorView.commands_join_operator')"
+              data-testid="pipeline-editor-node-command-joiner"
+              @update:model-value="onJoinerInput"
+            />
+          </Field>
         </div>
         <div v-if="effectiveCommand" data-testid="pipeline-editor-node-command-preview">
           <span class="block text-xs font-medium">{{ $t('views.PipelineEditorView.commands_effective_preview') }}</span>
@@ -90,6 +98,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import Field from '../ui/Field.vue'
+import Input from '../ui/Input.vue'
 
 const DEFAULT_JOINER = ' && '
 
@@ -145,13 +155,13 @@ function moveRow(idx: number, direction: -1 | 1) {
   emitCommands()
 }
 
-function onRowInput(idx: number, event: Event) {
-  rows.value[idx] = (event.target as HTMLInputElement).value
+function onRowInput(idx: number, value: string | number | null) {
+  rows.value[idx] = value == null ? '' : String(value)
   emitCommands()
 }
 
-function onJoinerInput(event: Event) {
-  emit('update:joiner', (event.target as HTMLInputElement).value)
+function onJoinerInput(value: string | number | null) {
+  emit('update:joiner', value == null ? '' : String(value))
 }
 
 // Read-only preview of what the pipeline will actually run (the runtime joins

@@ -6,7 +6,7 @@
       >
         Skills
       </h3>
-      <Button v-if="!showForm" severity="secondary" text icon-only @click="openCreateForm" :title="$t('components.assistant.AssistantSkillManager.new_skill')" :aria-label="$t('components.assistant.new_skill')">
+      <Button v-if="!showForm" variant="secondary-text" icon-only @click="openCreateForm" :title="$t('components.assistant.AssistantSkillManager.new_skill')" :aria-label="$t('components.assistant.new_skill')">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="14"
@@ -42,8 +42,8 @@
         rows="4"
       />
       <div class="flex gap-2 justify-end">
-        <Button severity="secondary" text size="small" @click="cancelForm">{{ $t('common.cancel') }}</Button>
-        <Button size="small" :disabled="!form.name.trim() || saving" @click="saveSkill">{{
+        <Button variant="secondary-text" size="sm" @click="cancelForm">{{ $t('common.cancel') }}</Button>
+        <Button size="sm" :disabled="!form.name.trim() || saving" @click="saveSkill">{{
           editingId ? "Update" : "Create"
         }}</Button>
       </div>
@@ -147,7 +147,7 @@
 import { ref, onMounted } from "vue";
 import { api } from "@/lib/api/client";
 import { formatApiError } from "@/lib/api/formatError";
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 import EmptyState from "@/components/shared/EmptyState.vue";
 import { useAssistantStore } from "@/composables/useAssistantStore";
 import type { UserSkill } from "@/types/assistant";

@@ -670,23 +670,24 @@
                   {{ retryPolicyError }}
                 </div>
                 <div class="mt-3 flex justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
-                    class="rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     data-testid="pipeline-editor-retry-policy-close"
                     @click="closeRetryPolicy"
                   >
                     {{ $t('views.PipelineEditorView.cancel') }}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    class="rounded-md border border-input bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    size="sm"
                     :disabled="retryPolicySaving || retryPolicySaveBlocked"
                     @click="saveRetryPolicy"
                     data-testid="pipeline-editor-retry-policy-save"
                   >
                     {{ retryPolicySaving ? $t('views.PipelineEditorView.saving') : $t('views.PipelineEditorView.save') }}
-                  </button>
+                  </Button>
                 </div>
               </dialog>
             </div>
@@ -933,10 +934,10 @@
             </div>
           </div>
           <div class="flex flex-wrap items-center justify-center gap-2 pointer-events-auto">
-            <Button size="small" type="button" class="text-xs" @click="openRenameDialog">{{ $t('views.PipelineEditorView.rename') }}</Button>
-            <button v-if="!pipeline?.archived_at" type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</button>
-            <button v-else type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</button>
-            <button type="button" class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive-text hover:bg-destructive/20" data-testid="pipeline-editor-empty-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</button>
+            <Button size="sm" type="button" class="text-xs" @click="openRenameDialog">{{ $t('views.PipelineEditorView.rename') }}</Button>
+            <Button v-if="!pipeline?.archived_at" type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</Button>
+            <Button v-else type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</Button>
+            <Button type="button" variant="danger" :outlined="true" size="sm" data-testid="pipeline-editor-empty-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</Button>
             <Select
               v-model="newNodeType"
               :options="nodeTypeOptions"
@@ -947,9 +948,9 @@
               :aria-label="$t('views.PipelineEditorView.new_node_type')"
               data-testid="pipeline-editor-empty-node-type-select"
             />
-            <Button severity="secondary" outlined size="small" type="button" class="text-xs" data-testid="pipeline-editor-empty-add-node" @click="addNode()">{{ $t('views.PipelineEditorView.add_node') }}</Button>
-            <button type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-show-me" @click="startEmptyStateWalkthrough">{{ $t('views.PipelineEditorView.empty_state_show_me') }}</button>
-            <button type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-template" @click="openTemplateLibrary">{{ $t('views.PipelineEditorView.empty_state_start_from_template') }}</button>
+            <Button variant="secondary" size="sm" type="button" class="text-xs" data-testid="pipeline-editor-empty-add-node" @click="addNode()">{{ $t('views.PipelineEditorView.add_node') }}</Button>
+            <Button type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-show-me" @click="startEmptyStateWalkthrough">{{ $t('views.PipelineEditorView.empty_state_show_me') }}</Button>
+            <Button type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-template" @click="openTemplateLibrary">{{ $t('views.PipelineEditorView.empty_state_start_from_template') }}</Button>
           </div>
         </div>
         <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions --><!-- palette keyboard region: Escape works from any palette control, including the option buttons -->
@@ -1046,14 +1047,14 @@
               {{ emptyRunWarning }}
             </div>
             <div class="flex justify-end gap-2 pt-2">
-              <button
+              <Button
                 type="button"
-                class="px-4 py-2 border border-input bg-background text-foreground text-sm font-medium rounded-lg hover:bg-accent transition-colors"
+                variant="secondary"
                 data-testid="pipeline-editor-run-dialog-cancel"
                 @click="closeRunDialog"
               >
                 {{ $t('views.PipelineEditorView.cancel') }}
-              </button>
+              </Button>
               <Button v-if="!isWebhookTriggered" type="button" class="border-action-build-border bg-action-build text-white hover:bg-action-build-hover" :disabled="running" @click="triggerRun" data-testid="pipeline-editor-run-submit">
                 <LoaderCircleIcon
                   v-if="running"
@@ -1104,8 +1105,10 @@
               :id="nodeProps.id"
             />
           </template>
-          <template #edge-default="edgeProps">
-            <EdgeBadges :data="edgeProps.data" />
+          <!-- FAR-2810: Vue Flow picks the slot by the edge's `type`, and every
+               canvas edge is `smoothstep`; an `edge-default` slot never runs. -->
+          <template #edge-smoothstep="edgeProps">
+            <PipelineEdge v-bind="edgeProps" />
           </template>
         </VueFlow>
         </div>
@@ -1501,12 +1504,13 @@
                     @keydown.enter.prevent="addCapabilityEntry('allowed_tools')"
                     data-testid="pipeline-editor-scope-tool-input"
                   />
-                  <button
+                  <Button
                     type="button"
-                    class="shrink-0 rounded border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     @click="addCapabilityEntry('allowed_tools')"
                     data-testid="pipeline-editor-scope-tool-add"
-                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</button>
+                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</Button>
                 </div>
               </div>
               <!-- Context Scope (free-form list of run_context keys) -->
@@ -1534,12 +1538,13 @@
                     @keydown.enter.prevent="addCapabilityEntry('context_scope')"
                     data-testid="pipeline-editor-scope-context-input"
                   />
-                  <button
+                  <Button
                     type="button"
-                    class="shrink-0 rounded border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     @click="addCapabilityEntry('context_scope')"
                     data-testid="pipeline-editor-scope-context-add"
-                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</button>
+                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</Button>
                 </div>
               </div>
               <!-- Reset to unrestricted -->
@@ -1678,15 +1683,16 @@
           <Button v-if="selectedNodeData.node_type === 'manual'" type="button" class="w-full" data-testid="pipeline-editor-convert-to-agent" @click="openAgentPicker">
             {{ $t('views.PipelineEditorView.convert_to_agent') }}
           </Button>
-          <button
+          <Button
             v-if="selectedNodeData.node_type === 'agent'"
             type="button"
             data-testid="pipeline-editor-revert-to-manual"
-            class="inline-flex w-full items-center justify-center rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+            variant="secondary"
+            class="w-full"
             @click="openRevertDialog"
           >
             {{ $t('views.PipelineEditorView.revert_to_manual') }}
-          </button>
+          </Button>
         </div>
       </aside>
       <!-- Edge Properties Panel (with HITL gate config). Mobile (FAR-1841):
@@ -2175,7 +2181,7 @@
             {{ $t('views.PipelineEditorView.historic_restore_diff_failed') }}
           </p>
           <Button
-            size="small"
+            size="sm"
             class="text-xs"
             data-testid="pipeline-editor-restore-diff-retry"
             @click="loadRestoreDiff"
@@ -2195,7 +2201,7 @@
             {{ $t('views.PipelineEditorView.historic_restore_diff_no_baseline') }}
           </p>
           <Button
-            size="small"
+            size="sm"
             class="text-xs"
             data-testid="pipeline-editor-restore-diff-reload"
             @click="loadRestoreDiff"
@@ -2316,7 +2322,7 @@ import RouterNode from '../components/pipeline/nodes/RouterNode.vue'
 import HitlNode from '../components/pipeline/nodes/HitlNode.vue'
 import DispatchNode from '../components/pipeline/nodes/DispatchNode.vue'
 import ConnectorNode from '../components/pipeline/nodes/ConnectorNode.vue'
-import EdgeBadges from '../components/pipeline/nodes/EdgeBadges.vue'
+import PipelineEdge from '../components/pipeline/edges/PipelineEdge.vue'
 import { NODE_REGISTRY, PIPELINE_CONNECTORS_KEY, PIPELINE_TEAM_NAMES_KEY } from '../components/pipeline/nodes/NodeRegistry'
 import { projectCanvasEdge, projectGraphNode } from '../types/pipeline-graph-projection'
 import { shortId } from '../utils/format'
@@ -2337,6 +2343,7 @@ import { CANVAS_EDGE_STROKE, PIPELINE_EDITOR_VIRTUALIZATION_THRESHOLD } from '..
 import {
   layoutNodes,
   layoutNodesIncrementalWithBaseline,
+  type GraphNodeInput,
   type ProvenanceMap,
 } from '../utils/graph-layout'
 import { api } from '../lib/api/client'
@@ -2352,7 +2359,7 @@ import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
 import { useEnvironmentProfilesStore } from '../stores/environmentProfiles'
 import { runnerTierLabelKeyForProvider } from '../lib/runnerTiers'
 import { currentSubstantiveVersion, NON_VERSION_CREATED_KINDS, SNAPSHOT_PAGE_SIZE } from '../lib/pipelineVersion'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import { Pencil as PencilIcon, LoaderCircle as LoaderCircleIcon, Download as DownloadIcon, Play as PlayIcon, Plus as PlusIcon, Maximize2 as Maximize2Icon, X as XIcon } from '@lucide/vue'
 import PipelineGovernanceVisibility from '../components/pipeline/PipelineGovernanceVisibility.vue'
@@ -2467,7 +2474,7 @@ function nodeComponent(nodeType: string) {
   return NODE_COMPONENTS[nodeType] ?? AgentNode
 }
 
-const { fitView, onPaneReady, addEdges } = useVueFlow()
+const { fitView, onPaneReady, addEdges, findNode } = useVueFlow()
 
 // Vue Flow renders edge geometry from these presentation options; semantic
 // edge metadata lives on each edge's `data` and is never affected.
@@ -2481,6 +2488,13 @@ const defaultEdgeOptions = {
     height: 16,
     color: CANVAS_EDGE_STROKE,
   },
+  // FAR-2816: Vue Flow 1.48.2 writes the focusable edge's `tabIndex` attribute
+  // with a capital I. SVG attribute names are case-sensitive, so `tabindex`
+  // never exists on the rendered <g>, browsers do not put the edge in the tab
+  // order, and `.focus()` is a no-op. `domAttributes` is spread onto that same
+  // <g> AFTER Vue Flow's own attributes and is written verbatim, so this adds
+  // the correctly-cased attribute the browser needs.
+  domAttributes: { tabindex: '0' },
 }
 
 // Layout ownership is frontend provenance (FAR-2420), not inferred from
@@ -2585,8 +2599,31 @@ async function runInitialFitView() {
     console.warn('[PipelineEditorView] initial fitView failed; retry paths remain armed', error)
   }
 }
-onPaneReady(() => { void runInitialFitView() })
-watch(() => flowNodes.value.length, (len) => { if (len > 0) void runInitialFitView() })
+/**
+ * FAR-2815: keep edge badges visible over node cards.
+ *
+ * Vue Flow renders the edge-label layer BEFORE the nodes layer and gives
+ * neither a z-index, so a label that lands over a card (a loop edge's midpoint
+ * sits mid-graph) is painted underneath that card and disappears. The layer is
+ * `pointer-events: none`, so raising it only changes paint order. Node cards
+ * are elevated to z-index 1000 when selected (`elevateNodesOnSelect`), hence
+ * 1001. Re-applied on pane-ready because Vue Flow remounts on pipeline switch.
+ */
+function liftEdgeLabelsAboveNodes(): void {
+  const labels = canvasRef.value?.querySelector<HTMLElement>('.vue-flow__edge-labels')
+  if (labels) labels.style.zIndex = '1001'
+}
+
+onPaneReady(() => {
+  void runInitialFitView()
+  liftEdgeLabelsAboveNodes()
+})
+watch(() => flowNodes.value.length, (len) => {
+  if (len > 0) {
+    void runInitialFitView()
+    liftEdgeLabelsAboveNodes()
+  }
+})
 
 const agents = ref<any[]>([])
 const connectors = ref<any[]>([])
@@ -3964,7 +4001,7 @@ function convertBackendNode(n: any): any {
 
 // Backend edges map onto their Vue Flow edge entirely through the shared
 // projection adapter (FAR-2482): projectCanvasEdge owns the variant stroke
-// table and the `data` wrapper the canvas + EdgeBadges consume. Every canvas
+// table and the `data` wrapper the canvas edge (PipelineEdge) consumes. Every canvas
 // edge originates here - both loadGraph() and loadViewedSnapshot() map through
 // convertBackendEdge.
 function convertBackendEdge(e: any, i: number): any {
@@ -4048,6 +4085,44 @@ function hasPlacedPositions(nodes: any[]): boolean {
   })
 }
 
+/**
+ * The size Vue Flow measured for a rendered node, if it has measured it yet.
+ *
+ * FAR-2815: the backend graph carries no pixel dimensions and the cards size to
+ * their own content (bounded only by a maximum width), so a layout fed only the backend fields
+ * falls back to graph-layout's 200x100 defaults. A wider or taller real card
+ * then lands on top of its neighbour when the ranks are spaced for 200x100.
+ * Vue Flow stores the measured box on the live node, which is the only truthful
+ * source for the arrangement.
+ */
+function measuredNodeSize(id: string): { width?: number; height?: number } {
+  const dimensions = findNode(id)?.dimensions
+  const width = dimensions?.width
+  const height = dimensions?.height
+  return {
+    width: typeof width === 'number' && width > 0 ? width : undefined,
+    height: typeof height === 'number' && height > 0 ? height : undefined,
+  }
+}
+
+/**
+ * Layout input for every node: measured canvas size when known, otherwise the
+ * node's own (usually absent) dimensions so graph-layout applies its defaults.
+ */
+function layoutNodeInputs(nodes: any[]): GraphNodeInput[] {
+  return nodes.map((node) => {
+    const measured = measuredNodeSize(node.id)
+    return {
+      id: node.id,
+      node_type: node.node_type,
+      label: node.label,
+      width: measured.width ?? node.width,
+      height: measured.height ?? node.height,
+      position: node.position,
+    }
+  })
+}
+
 function computeGraphLayout(): Record<string, PositionSnapshot> {
   // Validate the source graph before layout so malformed/unknown fields cannot
   // be carried into a generated arrangement.
@@ -4056,13 +4131,7 @@ function computeGraphLayout(): Record<string, PositionSnapshot> {
     edges: rawEdges.value.map(buildEdgePayload),
   })
   const laidOut = layoutNodes(
-    rawNodes.value.map((node: any) => ({
-      id: node.id,
-      node_type: node.node_type,
-      label: node.label,
-      width: node.width,
-      height: node.height,
-    })),
+    layoutNodeInputs(rawNodes.value),
     rawEdges.value.map((edge: any) => ({
       source: edge.source_node_id,
       target: edge.target_node_id,
@@ -4136,15 +4205,10 @@ async function arrangeGraph(): Promise<void> {
     generatedLayout: preArrangeGeneratedLayout,
     provenance: preArrangeProvenance,
   }
-  // Build nodes input for layoutNodesIncremental
-  const nodesInput = rawNodes.value.map((node: any) => ({
-    id: node.id,
-    node_type: node.node_type,
-    label: node.label,
-    width: node.width,
-    height: node.height,
-    position: node.position,
-  }))
+  // Build nodes input for layoutNodesIncremental. Measured canvas sizes are
+  // included (FAR-2815): without them the layout spaces ranks and rows for its
+  // 200x100 defaults and a real, wider card overlaps its neighbour.
+  const nodesInput = layoutNodeInputs(rawNodes.value)
   const edgesInput = rawEdges.value.map((edge: any) => ({
     source: edge.source_node_id,
     target: edge.target_node_id,
@@ -4817,6 +4881,25 @@ function handleCanvasArrow(event: KeyboardEvent): void {
 }
 
 /**
+ * FAR-2816: Enter/Space on a focused canvas edge opens its properties.
+ *
+ * Vue Flow puts the edge in the tab order (see `defaultEdgeOptions`) but only a
+ * pointer click emits `edge-click`, so a keyboard user could focus an edge and
+ * get no further. The edge's <g> carries Vue Flow's `data-id`, which is enough
+ * to route the key press through the same click path.
+ */
+function activateFocusedCanvasEdge(event: KeyboardEvent): boolean {
+  if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return false
+  const target = event.target instanceof Element ? event.target : null
+  const edgeId = target?.closest('.vue-flow__edge')?.getAttribute('data-id')
+  if (!edgeId) return false
+  if (!inspectSourceEdges.value.some((edge: any) => edge.id === edgeId)) return false
+  event.preventDefault()
+  onEdgeClick({ edge: { id: edgeId } })
+  return true
+}
+
+/**
  * Canvas-scoped key handling. Deliberately ignores events originating in an
  * editable control (the palette input has its own handler) so typing a node
  * label can never trigger a shortcut.
@@ -4832,6 +4915,7 @@ function onCanvasKeydown(event: KeyboardEvent): void {
   // Modified key presses belong to the browser/OS (Ctrl+A, Cmd+E, ...), not the
   // canvas shortcuts below.
   if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (activateFocusedCanvasEdge(event)) return
   switch (event.key) {
     case 'Escape':
       handleCanvasEscape(event)

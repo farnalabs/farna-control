@@ -494,29 +494,162 @@ def test_merge_queue_ci_gates_are_pinned_to_the_pr_head_sha() -> None:
 
 
 def test_merge_queue_concurrency_is_scoped_to_the_queue_job() -> None:
-    """The ``merge-queue`` concurrency group must live on the ``queue`` job.
+    """Every job that merges to main must hold the ``merge-queue`` group.
 
-    At workflow level the group is held by the WHOLE run — including
-    ``event-gate``'s ~10-min ``CHAIN_READY_AT`` pacing sleep — so every chained
-    pass queued behind an incumbent's sleep and waited out the full ~10 min
-    before its own turn. Only the ``queue`` job merges to main, so only it needs
-    serialising; scoping the group there keeps merges strictly serialised while
-    freeing the pacing sleep. ``cancel-in-progress`` must stay ``false``, or a
-    later run would cancel a merge that is already in flight.
+    The group serialises merges: two runs that both reach ``gh pr merge`` would
+    otherwise race labels, branch cleanup and post-merge CI dispatch. It lives
+    on the JOB, not the workflow, so ``event-gate``'s ~10-min ``CHAIN_READY_AT``
+    pacing sleep does not hold it and delay every chained pass. Historically only
+    the ``queue`` job merged to main; the merge train's ``merge`` job (behind
+    ``MERGE_TRAIN_ENABLED``) is a second merge-to-main job, so it must hold the
+    same group too. ``cancel-in-progress`` must stay ``false``, or a later run
+    would cancel a merge that is already in flight.
     """
     workflow = _load_yaml(MERGE_QUEUE_YML)
-    job_concurrency = _queue_job(workflow).get("concurrency")
+    jobs = workflow.get("jobs") or {}
+
+    def _merges_to_main(job: object) -> bool:
+        if not isinstance(job, dict):
+            return False
+        return any(isinstance(step, dict) and "gh pr merge" in (step.get("run") or "") for step in (job.get("steps") or []))
+
+    merging_jobs = {name: job for name, job in jobs.items() if _merges_to_main(job)}
+    assert merging_jobs, "merge-queue.yml: no job runs `gh pr merge` — the merge jobs moved; update this test deliberately"
+
     violations: list[str] = []
     if "concurrency" in workflow:
-        violations.append("  merge-queue.yml: workflow-level `concurrency` is present — the group must be scoped to the `queue` job, or event-gate's pacing sleep holds it and delays every chained pass")
-    if not isinstance(job_concurrency, dict):
-        violations.append("  merge-queue.yml: jobs.queue has no `concurrency` mapping — merges to main are no longer serialised")
-    else:
+        violations.append("  merge-queue.yml: workflow-level `concurrency` is present — the group must be scoped to each merge job, or event-gate's pacing sleep holds it and delays every chained pass")
+    for name, job in merging_jobs.items():
+        job_concurrency = job.get("concurrency")
+        if not isinstance(job_concurrency, dict):
+            violations.append(f"  merge-queue.yml: jobs.{name} merges to main but has no `concurrency` mapping — merges to main are no longer serialised")
+            continue
         if job_concurrency.get("group") != "merge-queue":
-            violations.append(f"  merge-queue.yml: jobs.queue.concurrency.group must be 'merge-queue' (got {job_concurrency.get('group')!r})")
+            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.group must be 'merge-queue' (got {job_concurrency.get('group')!r})")
         if job_concurrency.get("cancel-in-progress") is not False:
-            violations.append(f"  merge-queue.yml: jobs.queue.concurrency.cancel-in-progress must be false (got {job_concurrency.get('cancel-in-progress')!r}) — a later run must never cancel an in-flight merge")
-    assert not violations, "merge-queue.yml no longer scopes the merge-queue concurrency group to the queue job:\n" + "\n".join(violations)
+            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.cancel-in-progress must be false (got {job_concurrency.get('cancel-in-progress')!r}) — a later run must never cancel an in-flight merge")
+    assert not violations, "merge-queue.yml no longer serialises every merge-to-main job on the merge-queue group:\n" + "\n".join(violations)
+
+
+# --- The queue's verdict is a required gate on every landing path -----------
+#
+# `merge-gate/verified` is a commit status the merge queue posts on a PR's head
+# SHA immediately before it runs `gh pr merge`, and it is a REQUIRED status
+# check on main. That is what makes the queue the ONLY path that can land a PR:
+# a direct `gh pr merge`, or a `gh pr merge --admin` bypass by a human or an
+# agent, fails the required check unless the queue posted the status. The queue
+# already refuses to merge unless every check run on the PR head is completed
+# and successful; this status turns that refusal into a repository-wide gate
+# instead of an honour system (2026-11-26: a direct merge landed a commit with
+# two failing Sonar checks while branch protection required only one review).
+#
+# The post is load-bearing, so three things hold structurally:
+#   1. every path that runs `gh pr merge` posts it (today the `queue` job and
+#      the merge train's `merge` job) - a new merge path without it reopens the
+#      bypass;
+#   2. it is pinned to the PR head SHA the guards approved, never to main or a
+#      merge commit - a status on the wrong SHA certifies nothing;
+#   3. it is posted immediately before the merge, after the review-decision,
+#      same-repo and SHA-pin guards, and it fails the job when the post fails -
+#      an early or swallowed post either certifies an unverified PR or lets the
+#      merge run without the gate.
+
+#: The status context name a repository required check will match.
+MERGE_GATE_STATUS_CONTEXT = "merge-gate/verified"
+
+#: The status must be pinned to the guarded PR head SHA (``$HEAD_OID``).
+MERGE_GATE_STATUS_URL_FRAGMENT = "/statuses/${HEAD_OID}"
+
+#: The two landing paths this workflow owns today: the flag-off `queue` job and
+#: the merge train's `merge` job (behind MERGE_TRAIN_ENABLED).
+REQUIRED_LANDING_JOBS = frozenset({"queue", "merge"})
+
+#: A real `gh pr merge` invocation, not a mention in a comment or an echo. The
+#: command is written as `if GH_TOKEN="$MERGE_TOKEN" gh pr merge --squash ...`.
+_MERGE_COMMAND_RE = re.compile(
+    r"^\s*(?:if\s+)?(?:GH_TOKEN=\"[^\"]*\"\s+)?gh\s+pr\s+merge\b",
+    re.MULTILINE,
+)
+
+
+def _landing_steps(workflow: dict) -> list[tuple[str, str, dict]]:
+    """``(job_id, step_name, step)`` for every step that runs ``gh pr merge``."""
+    found: list[tuple[str, str, dict]] = []
+    for job_id, job in (workflow.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps") or []:
+            if isinstance(step, dict) and _MERGE_COMMAND_RE.search(step.get("run") or ""):
+                found.append((job_id, step.get("name") or "<unnamed>", step))
+    return found
+
+
+def test_merge_queue_required_verdict_gates_every_landing_path() -> None:
+    """Every `gh pr merge` path must post `merge-gate/verified` before merging.
+
+    The status is what a repository required check on main will enforce. If any
+    landing path merges without posting it, that path silently reopens the
+    direct-merge bypass, and the required check no longer proves the queue ran.
+    """
+    workflow = _load_yaml(MERGE_QUEUE_YML)
+    landing = _landing_steps(workflow)
+    assert landing, "merge-queue.yml: no step runs `gh pr merge` - the landing paths moved; update this test deliberately"
+
+    landing_jobs = {job_id for job_id, _name, _step in landing}
+    missing_jobs = sorted(REQUIRED_LANDING_JOBS - landing_jobs)
+    assert not missing_jobs, f"merge-queue.yml: the expected landing job(s) no longer run `gh pr merge`: {missing_jobs}. The queue and the train merge job are the two merge-to-main paths; if they were renamed or removed, update this test deliberately."
+
+    jobs = workflow.get("jobs") or {}
+    violations: list[str] = []
+    for job_id, step_name, step in landing:
+        run = step.get("run") or ""
+        permissions = jobs[job_id].get("permissions")
+        if not isinstance(permissions, dict) or permissions.get("statuses") != "write":
+            violations.append(f"  jobs.{job_id}: runs `gh pr merge` but does not grant `statuses: write`, so it cannot create the merge-gate/verified status")
+
+        merge_match = _MERGE_COMMAND_RE.search(run)
+        assert merge_match is not None, "merge-queue.yml: landing step lost its `gh pr merge` command between detection and inspection; update this test deliberately"
+        merge_index = merge_match.start()
+        context_index = run.find(MERGE_GATE_STATUS_CONTEXT)
+        if context_index == -1:
+            violations.append(f"  jobs.{job_id} / {step_name!r}: runs `gh pr merge` without posting the merge-gate/verified status - a direct merge can bypass the queue on this path")
+            continue
+        if context_index > merge_index:
+            violations.append(f"  jobs.{job_id} / {step_name!r}: merge-gate/verified is posted AFTER `gh pr merge` - the status must gate the merge, not follow it")
+        if MERGE_GATE_STATUS_URL_FRAGMENT not in run:
+            violations.append(f"  jobs.{job_id} / {step_name!r}: merge-gate/verified is not posted to {MERGE_GATE_STATUS_URL_FRAGMENT!r} (the guarded PR head SHA)")
+        review_index = run.find("reviewDecision")
+        if review_index == -1 or review_index > context_index:
+            violations.append(f"  jobs.{job_id} / {step_name!r}: merge-gate/verified is posted before the review-decision re-check")
+        head_index = run.find("HEAD_OID=")
+        if head_index == -1 or head_index > context_index:
+            violations.append(f"  jobs.{job_id} / {step_name!r}: merge-gate/verified is posted before the head-SHA (HEAD_OID) resolution")
+        failure_arm = run[context_index:merge_index]
+        if "exit 1" not in failure_arm:
+            violations.append(f"  jobs.{job_id} / {step_name!r}: a failed merge-gate/verified post does not fail the job before merging - the status must fail closed")
+
+    assert not violations, "merge-queue.yml no longer makes its own verification a required gate on every landing path:\n" + "\n".join(violations)
+
+
+def test_merge_gate_status_is_never_posted_outside_a_landing_step() -> None:
+    """The status is posted only at the point of no return.
+
+    A post anywhere earlier than the landing step would certify a PR that has
+    not yet passed the merge-time guards (review decision, same-repo author,
+    SHA-pin, and - on the train path - a successful build+validate job).
+    """
+    workflow = _load_yaml(MERGE_QUEUE_YML)
+    strays: list[str] = []
+    for job_id, job in (workflow.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            run = step.get("run") or ""
+            if MERGE_GATE_STATUS_CONTEXT in run and not _MERGE_COMMAND_RE.search(run):
+                strays.append(f"{job_id} / {step.get('name') or '<unnamed>'}")
+    assert not strays, "merge-queue.yml references merge-gate/verified in a step that does not merge - it must be posted only immediately before `gh pr merge`:\n  " + "\n  ".join(strays)
 
 
 # --- The queue only collects PRs that target main ---------------------------

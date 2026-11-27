@@ -581,12 +581,28 @@ async def _resolve_scoped_team_ids(
     needs the org RLS context). ``fail closed``: a DB failure is a 503, never
     an unconstrained boundary — a missing boundary would silently broaden the
     query past the team ring the membership should enforce.
+
+    A **team-scoped credential** (``TenantPrincipal.team_id``: a team-scoped
+    ``mk_`` API key, or a token minted by a team-bound OAuth client, FAR-681)
+    is a narrower boundary than membership, so the resolved set is intersected
+    with it. Every analytics route is JWT-guarded today (a browser JWT carries
+    ``team_id=None``, so this is inert on the production path), and the clamp
+    is what makes the invariant hold regardless of WHICH dependency ends up
+    guarding a route: a credential bound to team A can never resolve team B's
+    rows, even when the account behind it belongs to both. An intersection
+    that empties the set is a genuine "no team" boundary (org-level rows
+    only), never an unconstrained one.
     """
     if principal.org_role == "admin":
         return None
     account_id = principal.account_id
     if account_id is None:
         return ()
+    # Read defensively, exactly as ``api.run_scope.run_visible_to_principal``
+    # does: the field exists on every production principal, and reading it this
+    # way keeps the resolver usable from the lightweight principal stand-ins in
+    # tests. An ABSENT field and an explicit ``None`` are both "unbound".
+    credential_team_id: uuid.UUID | None = getattr(principal, "team_id", None)
     try:
         async with factory() as session, session.begin():
             await set_rls_org(session, org_id)
@@ -596,7 +612,7 @@ async def _resolve_scoped_team_ids(
                     TeamMembership.organisation_id == org_id,
                 )
             )
-            return tuple(rows.scalars().all())
+            team_ids = tuple(rows.scalars().all())
     except SQLAlchemyError as exc:
         raise_session_contract_error(exc, "analytics._resolve_scoped_team_ids")
         _log.exception("analytics.route.team_boundary_db_error", extra={"org_id": str(org_id)})
@@ -604,6 +620,9 @@ async def _resolve_scoped_team_ids(
             status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=MSG_DATABASE_TEMPORARILY_UNAVAILABLE,
         ) from None
+    if credential_team_id is None:
+        return team_ids
+    return tuple(team_id for team_id in team_ids if team_id == credential_team_id)
 
 
 def _map_service_error(exc: Exception) -> HTTPException:

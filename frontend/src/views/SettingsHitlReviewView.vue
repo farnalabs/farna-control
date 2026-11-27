@@ -36,14 +36,14 @@
     <span :data-value="option.value">{{ option.label }}</span>
   </template>
 </Select>
-          <input :aria-label="$t('views.SettingsHitlReviewView.date_label')"
+          <Input :aria-label="$t('views.SettingsHitlReviewView.date_label')"
             v-model="dateFrom"
             type="date"
             data-testid="hitl-review-date-from"
             class="w-full sm:w-auto rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             @change="loadGates"
           />
-          <input :aria-label="$t('views.SettingsHitlReviewView.date_label')"
+          <Input :aria-label="$t('views.SettingsHitlReviewView.date_label')"
             v-model="dateTo"
             type="date"
             data-testid="hitl-review-date-to"
@@ -74,65 +74,67 @@
         <span class="text-sm font-medium">
           {{ $t('views.SettingsHitlReviewView.bulk_selected', { count: selectedCount }) }}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           :disabled="bulkClaiming || bulkRejecting"
           data-testid="hitl-review-bulk-claim"
-          class="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           @click="bulkClaim"
         >
           {{ bulkClaiming ? $t('views.SettingsHitlReviewView.bulk_claiming') : $t('views.SettingsHitlReviewView.bulk_claim') }}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
           :disabled="bulkClaiming || bulkRejecting || showBulkRejectInput"
           data-testid="hitl-review-bulk-reject"
-          class="rounded-lg bg-destructive-fill px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50"
           @click="openBulkReject"
         >
           {{ $t('views.SettingsHitlReviewView.bulk_reject') }}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           :disabled="bulkClaiming || bulkRejecting"
           data-testid="hitl-review-bulk-clear"
-          class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
           @click="clearSelection"
         >
           {{ $t('views.SettingsHitlReviewView.bulk_clear') }}
-        </button>
+        </Button>
       </span>
       <!-- Bulk reject shared reason input -->
       <div v-if="showBulkRejectInput" class="mt-3 flex flex-wrap items-end gap-3">
-        <label class="flex-1">
-          <span class="mb-1 block text-sm font-medium">{{ $t('views.SettingsHitlReviewView.bulk_reject_reason_label') }}</span>
-          <textarea
+        <Field
+          :label="$t('views.SettingsHitlReviewView.bulk_reject_reason_label')"
+          class="flex-1"
+        >
+          <Textarea
             v-model="bulkRejectReason"
             rows="2"
             data-testid="hitl-review-bulk-reject-reason"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             :placeholder="$t('views.SettingsHitlReviewView.bulk_reject_reason_placeholder')"
           />
-        </label>
+        </Field>
         <div class="flex gap-2">
-          <button
-            type="button"
+          <Button
+            variant="danger"
+            size="sm"
             :disabled="bulkRejecting"
             data-testid="hitl-review-bulk-reject-confirm"
-            class="rounded-lg bg-destructive-fill px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive-fill/90 disabled:opacity-50"
             @click="confirmBulkReject"
           >
             {{ bulkRejecting ? $t('views.SettingsHitlReviewView.bulk_rejecting') : $t('views.SettingsHitlReviewView.bulk_reject_confirm') }}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
             :disabled="bulkRejecting"
             data-testid="hitl-review-bulk-reject-cancel"
-            class="rounded-lg border border-input bg-background px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
             @click="cancelBulkReject"
           >
             {{ $t('views.SettingsHitlReviewView.bulk_reject_cancel') }}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -164,14 +166,15 @@
           <span v-if="outcome.error" class="text-destructive">{{ outcome.error }}</span>
         </span>
       </div>
-      <button
-        type="button"
-        class="mt-1 text-xs text-muted-foreground hover:text-foreground"
+      <Button
+        variant="secondary-text"
+        size="sm"
+        class="mt-1 text-xs"
         data-testid="hitl-review-bulk-outcomes-dismiss"
         @click="dismissBulkOutcomes"
       >
         {{ $t('views.SettingsHitlReviewView.bulk_outcomes_dismiss') }}
-      </button>
+      </Button>
     </div>
     <div class="flex items-center gap-1 text-xs text-muted-foreground">
       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -223,16 +226,14 @@
         data-testid="hitl-review-column-headers"
         class="hidden items-center gap-4 px-4 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground md:flex"
       >
-        <label class="h-4 w-4 flex-shrink-0">
-          <input
-            type="checkbox"
-            :checked="allSelected"
-            :aria-label="$t('views.SettingsHitlReviewView.bulk_select_all')"
-            data-testid="hitl-review-select-all"
-            class="h-4 w-4 rounded border-input accent-primary"
-            @change="toggleSelectAll"
-          />
-        </label>
+        <Checkbox
+          :model-value="allSelected"
+          :aria-label="$t('views.SettingsHitlReviewView.bulk_select_all')"
+          class="h-4 w-4 flex-shrink-0"
+          control-class="h-4 w-4 rounded border-input accent-primary"
+          data-testid="hitl-review-select-all"
+          @update:model-value="toggleSelectAll"
+        />
         <!-- FAR-2365: mirrors the body's expand chevron (h-4 w-4) so every
              header label aligns with the value column beneath it. The body
              chevron lives inside the row button, after the checkbox; this
@@ -263,64 +264,62 @@
           class="flex w-full items-start gap-3 p-4 text-left md:items-center md:gap-4"
           :class="{ 'border-b': expandedKey === expandKey(gate) }"
         >
-          <label class="h-4 w-4 flex-shrink-0">
-            <input
-              type="checkbox"
-              :checked="isSelected(gate)"
-              :aria-label="$t('views.SettingsHitlReviewView.bulk_select_gate', { id: shortId(gate.review_id) })"
-              data-testid="hitl-review-row-checkbox"
-              class="h-4 w-4 rounded border-input accent-primary"
-              @change="toggleSelect(gate)"
-            />
-          </label>
-          <button
-            type="button"
+          <Checkbox
+            :model-value="isSelected(gate)"
+            :aria-label="$t('views.SettingsHitlReviewView.bulk_select_gate', { id: shortId(gate.review_id) })"
+            class="h-4 w-4 flex-shrink-0"
+            control-class="h-4 w-4 rounded border-input accent-primary"
+            data-testid="hitl-review-row-checkbox"
+            @update:model-value="toggleSelect(gate)"
+          />
+          <Disclosure
+            :open="expandedKey === expandKey(gate)"
+            :controls="'hitl-review-panel-' + expandKey(gate)"
             data-testid="hitl-review-toggle-expand"
             class="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-2 text-left md:flex-nowrap md:items-center md:gap-4"
-            @click="toggleExpand(gate)"
+            @update:open="toggleExpand(gate)"
           >
-            <svg
-              class="h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform"
-              :class="{ 'rotate-90': expandedKey === expandKey(gate) }"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              aria-hidden="true"
-            >
-              <path d="m9 18 6-6-6-6" />
-            </svg>
-            <div class="w-full flex-shrink-0 md:w-24">
-              <span :class="statusBadgeClass(gateStatus(gate))">
-                {{ gateStatus(gate) }}
+            <template #trigger="{ open, chevronClass, rotationClass }">
+              <ChevronRight
+                :class="[chevronClass, open && rotationClass]"
+                class="flex-shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div class="w-full flex-shrink-0 md:w-24">
+                <span :class="statusBadgeClass(gateStatus(gate))">
+                  {{ gateStatus(gate) }}
+                </span>
+              </div>
+              <div class="min-w-0 flex-1 md:flex-[2]">
+                <p class="truncate text-sm font-medium" data-testid="hitl-review-pipeline-name">{{ pipelineDisplayName(gate) }}</p>
+              </div>
+              <div class="min-w-0 flex-1 md:flex-[2]">
+                <p class="truncate text-sm font-medium text-foreground" data-testid="hitl-review-node-name">
+
+
+                  {{ gate.label || shortId(gate.review_id) }}
+                </p>
+                <p v-if="gateDescriptionSnippet(gate)" class="mt-0.5 truncate text-xs text-muted-foreground" data-testid="hitl-review-snippet">
+                  {{ gateDescriptionSnippet(gate) }}
+                </p>
+              </div>
+               <div class="min-w-0 flex-1 md:flex-[1.25]">
+                 <p class="truncate text-xs text-muted-foreground">
+                   {{ gate.claimed_by ? (gate.claimed_by_name || gate.claimed_by) : $t('views.SettingsHitlReviewView.unassigned') }}
+                 </p>
+               </div>
+               <span class="w-full flex-shrink-0 text-left text-xs text-muted-foreground md:w-40 md:text-right">
+
+                {{ formatDate(gate.claimed_at || gate.created_at || '') }}
               </span>
-            </div>
-            <div class="min-w-0 flex-1 md:flex-[2]">
-              <p class="truncate text-sm font-medium" data-testid="hitl-review-pipeline-name">{{ pipelineDisplayName(gate) }}</p>
-            </div>
-            <div class="min-w-0 flex-1 md:flex-[2]">
-              <p class="truncate text-sm font-medium text-foreground" data-testid="hitl-review-node-name">
-
-
-                {{ gate.label || shortId(gate.review_id) }}
-              </p>
-              <p v-if="gateDescriptionSnippet(gate)" class="mt-0.5 truncate text-xs text-muted-foreground" data-testid="hitl-review-snippet">
-                {{ gateDescriptionSnippet(gate) }}
-              </p>
-            </div>
-             <div class="min-w-0 flex-1 md:flex-[1.25]">
-               <p class="truncate text-xs text-muted-foreground">
-                 {{ gate.claimed_by ? (gate.claimed_by_name || gate.claimed_by) : $t('views.SettingsHitlReviewView.unassigned') }}
-               </p>
-             </div>
-             <span class="w-full flex-shrink-0 text-left text-xs text-muted-foreground md:w-40 md:text-right">
-
-              {{ formatDate(gate.claimed_at || gate.created_at || '') }}
-            </span>
-          </button>
+            </template>
+          </Disclosure>
         </div>
-        <div v-if="expandedKey === expandKey(gate)" class="border-t p-4">
+        <div
+          v-if="expandedKey === expandKey(gate)"
+          :id="'hitl-review-panel-' + expandKey(gate)"
+          class="border-t p-4"
+        >
           <!-- No @claimed handler (FAR-686): a loadGates() refetch flips the
                page-level `loading` flag, unmounting this list branch and with
                it the card's in-session claim token. The card already shows
@@ -347,16 +346,16 @@
         class="flex items-center justify-center gap-3 py-2"
         :aria-label="$t('views.SettingsHitlReviewView.pagination_label')"
       >
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid="hitl-review-prev-page"
-          class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="page <= 1"
           :aria-label="$t('views.SettingsHitlReviewView.prev_page')"
           @click="goToPage(page - 1)"
         >
           {{ $t('views.SettingsHitlReviewView.prev_page') }}
-        </button>
+        </Button>
         <span
           data-testid="hitl-review-page-indicator"
           aria-live="polite"
@@ -364,16 +363,16 @@
         >
           {{ $t('views.SettingsHitlReviewView.page_indicator', { page, total: totalPages }) }}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid="hitl-review-next-page"
-          class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="page >= totalPages"
           :aria-label="$t('views.SettingsHitlReviewView.next_page')"
           @click="goToPage(page + 1)"
         >
           {{ $t('views.SettingsHitlReviewView.next_page') }}
-        </button>
+        </Button>
       </nav>
     </template>
   </div>
@@ -391,6 +390,13 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import HitlReviewCard from '../components/hitl/HitlReviewCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Button from '../components/ui/Button.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
+import { ChevronRight } from '@lucide/vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import { usePlanStore } from '../stores/planStore'
 import { useHitlReviewState } from '../composables/useHitlReviewState'
 import { formatApiError } from '../lib/api/formatError'
