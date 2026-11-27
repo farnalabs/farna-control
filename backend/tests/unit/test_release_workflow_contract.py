@@ -1833,6 +1833,7 @@ def _fake_gh(
     list_returncode: int = 0,
     create_returncode: int = 0,
     delete_returncode: int = 0,
+    delete_returncodes: list[int] | None = None,
     delete_stderr: str = "",
     existing_tags: list[str] | None = None,
 ) -> Any:
@@ -1840,9 +1841,10 @@ def _fake_gh(
 
     ``list_sequence`` (when supplied) is consumed one entry per ``gh run list``
     call, which is how a test models a run that changes state between polls.
-    ``delete_returncode`` / ``delete_stderr`` model the DELETE of the temporary
-    tag: the default succeeds, while a non-zero code models GitHub answering a
-    missing ref with 404/422 or a genuine failure.
+    ``delete_returncode`` / ``delete_returncodes`` / ``delete_stderr`` model the
+    DELETE of the temporary tag: the default succeeds, while a non-zero code
+    models GitHub answering a missing ref with 404/422 or a genuine failure. A
+    ``delete_returncodes`` list supplies one code per successive attempt.
     """
     dispatched = [False]
     sequence = list(list_sequence) if list_sequence is not None else None
@@ -1854,7 +1856,11 @@ def _fake_gh(
                 return SimpleNamespace(returncode=create_returncode, stdout="", stderr="gh: HTTP 502")
             return SimpleNamespace(returncode=0, stdout="{}", stderr="")
         if args[:3] == ("api", "-X", "DELETE"):
-            return SimpleNamespace(returncode=delete_returncode, stdout="", stderr=delete_stderr)
+            returncode = delete_returncode
+            if delete_returncodes is not None:
+                returncode = delete_returncodes.pop(0) if delete_returncodes else 0
+            stderr = delete_stderr if returncode != 0 else ""
+            return SimpleNamespace(returncode=returncode, stdout="", stderr=stderr)
         if args[:2] == ("api", "-X"):
             return SimpleNamespace(returncode=0, stdout="{}", stderr="")
         if args[0] == "api" and any("matching-refs" in arg for arg in args):
@@ -1899,6 +1905,8 @@ def _run_schema_proof(
     monkeypatch.setenv("GITHUB_RUN_ID", "4242")
     monkeypatch.setenv("SCHEMA_GATE_POLL_INTERVAL_SECONDS", "1")
     monkeypatch.setenv("SCHEMA_GATE_MAX_WAIT_SECONDS", str(max_wait_seconds))
+    # FAR-2720: no real backoff between DELETE retries in tests.
+    monkeypatch.setenv("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "0")
     stdout = io.StringIO()
     with redirect_stdout(stdout):
         try:
@@ -2187,6 +2195,83 @@ def test_release_schema_freshness_proof_fails_loudly_when_the_tag_survives(tmp_p
     assert "::error::Could not delete the temporary CI-verification tag " + tag in stdout
     deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
     assert len(deletes) >= 2, "the proof must retry the delete before failing loudly"
+
+
+def test_release_schema_freshness_proof_treats_a_missing_tag_delete_as_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: when an existing completed run already proves the gate, no tag
+    # is created, so the finally still attempts a DELETE. GitHub reports a
+    # missing ref as 422 "Reference does not exist"; that is a benign no-op,
+    # not a leak, and must not surface as a warning or an error.
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[_SCHEMA_GREEN_RUN],
+        jobs=_SCHEMA_GREEN_JOBS,
+        existing_tags=[],
+        delete_returncodes=[1],
+        delete_stderr="gh: Reference does not exist (HTTP 422)",
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 0, stdout
+    assert "Schema freshness passed on exact target " + _SCHEMA_PROOF_TARGET in stdout
+    assert "::warning::" not in stdout
+    assert "::error::" not in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 1, "an absent ref is not retried"
+
+
+def test_release_schema_freshness_proof_fails_loudly_when_a_created_tag_survives_deletion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: when the tag exists and both DELETE attempts fail with the tag
+    # still on origin, the proof must retry once and then fail the job loudly
+    # with ::error:: instead of warning and continuing with a leaked tag.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        runs_after_dispatch=[_SCHEMA_GREEN_RUN],
+        jobs_after_dispatch=_SCHEMA_GREEN_JOBS,
+        existing_tags=[tag],
+        delete_returncodes=[1, 1],
+        delete_stderr="gh: Forbidden (HTTP 403)",
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 1, stdout
+    assert "Schema freshness passed on exact target " + _SCHEMA_PROOF_TARGET in stdout
+    assert "::error::Could not delete the temporary CI-verification tag " + tag in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 2, "a still-present tag is retried exactly once"
+
+
+def test_release_schema_freshness_proof_keeps_the_original_diagnostic_when_cleanup_also_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: a cleanup failure stays loud WITHOUT replacing the proof's own
+    # error. Here the proof times out (its diagnostic) and the tag survives
+    # deletion, so both ::error:: lines must appear and the timeout must win.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        runs_after_dispatch=[],
+        jobs_after_dispatch={},
+        existing_tags=[tag],
+        delete_returncodes=[1, 1],
+        delete_stderr="gh: Forbidden (HTTP 403)",
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 1, stdout
+    assert "::error::Timed out after 2s waiting for a green Schema freshness job" in stdout
+    assert "::error::Could not delete the temporary CI-verification tag " + tag in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 2
 
 
 def test_release_schema_gate_cleanup_reclaims_this_runs_tags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
