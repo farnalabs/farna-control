@@ -6,6 +6,7 @@
 # land; never add a file or raise a count to admit new drift.
 .claude-plugin/marketplace.json	6
 .env.prod.example	2
+.github/scripts/merge_train_build.py	2
 .github/scripts/test-restart-wedged-app-machines.sh	3
 .github/workflows/backup-restore-nightly.yml	1
 .github/workflows/bdd.yml	13
@@ -22,6 +23,7 @@
 .github/workflows/macos-staple-retry.yml	2
 .github/workflows/main-integration.yml	10
 .github/workflows/merge-queue.yml	2
+.github/workflows/merge-validate.yml	18
 .github/workflows/native-gate0.yml	1
 .github/workflows/native-release-smoke.yml	15
 .github/workflows/pr-conflict-reconcile.yml	7

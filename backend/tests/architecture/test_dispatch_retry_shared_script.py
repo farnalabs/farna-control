@@ -33,7 +33,12 @@ EXPECTED_SCRIPT_CALLS = {
     "branch-fixer.yml": 1,
     "ci.yml": 2,
     "deploy.yml": 5,
-    "merge-queue.yml": 3,
+    # The merge train (`merge` job) duplicates the queue job's two dispatch
+    # sites, so merge-queue.yml carries 5 calls: 3 in the proven `queue` job and
+    # 2 in the `merge` job. This is TEMPORARY duplication - rollout step 3
+    # deletes the old `queue` job, at which point this drops back to 2. The
+    # per-site assertion for every other workflow is unchanged.
+    "merge-queue.yml": 5,
     "pr-review.yml": 1,
     "fast-lane-suspension.yml": 1,
     "fast-lane-post-merge.yml": 1,
