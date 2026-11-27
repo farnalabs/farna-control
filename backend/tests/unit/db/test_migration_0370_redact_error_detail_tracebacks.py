@@ -58,9 +58,10 @@ _PY_NEAR_MISS = "Config error in settings.py at line 12"
 #: The ONLY leak signal is an internal module reference - no traceback header, no
 #: container path, no frame marker, no ``.py`` suffix. Caught by ``farna.``.
 _INTERNAL_MODULE_ONLY = "ImportError: cannot import name 'PipelineState' from farna.core.pipeline_engine.executor"
-#: The ONLY leak signal is a compiled source path (``.pyc``) with no frame
-#: marker and no internal module reference. Caught by the ``.py`` source suffix.
-_SOURCE_PATH_NO_FRAME = "Failed to load service module at orchestrator.pyc"
+#: The ONLY leak signal is a compiled source PATH (``.pyc``, with a directory
+#: separator) and no frame marker / internal module reference / ``/app/src/``.
+#: Caught by the ``.py`` source suffix.
+_SOURCE_PATH_NO_FRAME = "Failed to load service module at /srv/app/core/orchestrator.pyc"
 #: A bare "Traceback" word WITHOUT the full marker phrase - must not match.
 _BARE_TRACEBACK_WORD = "See Traceback above for context"
 
