@@ -769,6 +769,9 @@ jobs:
               echo "::error::the running stack does not report FARNA_CONTROL_ACCESS_TOKEN_MINUTES (got '${token_minutes}'); a default 15-minute token expires mid-sweep and every later request becomes a false 401."
               exit 1
               ;;
+            *)
+              # A numeric value; the out-of-range check below decides acceptance.
+              ;;
           esac
           if [ "$token_minutes" -lt "$FUZZ_TOKEN_MINUTES" ]; then
             echo "::error::the running stack allows a ${token_minutes}-minute access token but the sweep needs ${FUZZ_TOKEN_MINUTES}; every request after expiry would be reported as an authorisation bug."
