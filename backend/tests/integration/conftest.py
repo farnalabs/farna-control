@@ -657,8 +657,8 @@ async def cron_helpers_rls_engine(non_superuser_role: str) -> Generator[None, No
 # carried from the worker to the controller on the item's teardown report
 # (``user_properties``, which xdist serialises), so the controller's terminal
 # summary can name the leaking test in every run mode.
-_LEAK_PROPERTY = "modulo.unclosed_asyncpg_connection"
-_LEAK_TRANSPORT_PROPERTY = "modulo.quarantined_unclosed_transport"
+_LEAK_PROPERTY = "farna_control.unclosed_asyncpg_connection"
+_LEAK_TRANSPORT_PROPERTY = "farna_control.quarantined_unclosed_transport"
 _leaked_asyncpg_connections: list[tuple[str, str]] = []
 _quarantined_transport_warnings: list[tuple[str, str]] = []
 # Leaks recorded during one item's teardown, moved onto that item's report by
