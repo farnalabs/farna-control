@@ -103,9 +103,9 @@ EXPECTED_STATUS_CODES: dict[tuple[str, bool], frozenset[int]] = {
     # probe that Schemathesis generated without a header. The workflow passes the
     # token to the runner; this row prevents the coverage phase from weakening
     # the stated invariant by stripping it on a deliberate probe.
-    # The authenticated pass carries the token on every request. If a request
-    # does not present it, that is itself a harness defect; 401 remains a finding
-    # rather than a policy escape hatch. 402 is the plan gate.
+    # The authenticated pass must carry the token on every request. A 401 is a
+    # finding even when Schemathesis' request record shows a stripped header: the
+    # invariant is "any 401 in this pass is a bug", with no coverage-probe escape.
     (AUTHENTICATED, False): frozenset({402, 404, 422}),
     # The seeded token was presented: the gates and the fuzzer's own malformed
     # input are expected answers; a 401 is NOT (it is the bug this leg hunts).
