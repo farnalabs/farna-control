@@ -51,6 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -65,7 +66,25 @@ from typing import Any
 #: workflow runs from a checkout of the default branch).
 DEFAULT_MANIFEST = Path(".github") / "pipeline-heartbeat.json"
 
-DEFAULT_API_URL = "https://api.github.com"
+#: Absolute path to the repository root, derived from this script's own
+#: location (``.github/scripts/check_pipeline_heartbeat.py`` sits two levels
+#: below it). Used to confine the manifest path: the CLI may name the manifest,
+#: but it must not be able to name a file outside this checkout.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+#: GitHub's REST API base. A module constant and never a CLI argument: this
+#: monitor only ever talks to the public API, so a caller-supplied base URL is a
+#: host-injection sink (Sonar S8703) with no legitimate use. Tests that need a
+#: different host monkeypatch this constant.
+BASE_URL = "https://api.github.com"
+
+#: A workflow name, interpolated into the API URL path. The manifest is
+#: repo-controlled, but validating it closes the path-injection taint cleanly.
+_WORKFLOW_PATTERN = re.compile(r"^[A-Za-z0-9._-]+\.yml$")
+
+#: An ``owner/name`` repository slug, interpolated into the same URL path. It
+#: arrives from ``--repo`` / ``$GITHUB_REPOSITORY``.
+_REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 #: Trigger events that count as evidence a pipeline is alive. See the module
 #: docstring: a push / pull_request / repository_dispatch run is NOT evidence
@@ -77,7 +96,10 @@ EVIDENCE_EVENTS: tuple[str, ...] = ("schedule", "workflow_dispatch")
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
 #: The only scheme this monitor will build a request for (GitHub's API, including
-#: enterprise installations, is https).
+#: enterprise installations, is https). The URL is assembled from the module
+#: constant :data:`BASE_URL` plus a manifest-validated workflow name and a
+#: slug-validated repo, so this is defence in depth: it keeps even a
+#: patched-in base URL from turning the read into a ``file://`` read.
 _ALLOWED_URL_SCHEMES = frozenset({"https"})
 
 #: Exit codes: 1 = a pipeline is silent or unreadable (the finding), 2 = the
@@ -172,16 +194,38 @@ class HeartbeatVerdict:
 # ---------------------------------------------------------------------------
 
 
+def resolve_manifest_path(raw_path: Path) -> Path:
+    """Resolve ``raw_path`` and require it to sit inside this repository checkout.
+
+    The manifest is a repo-owned artefact: the workflow runs from a checkout and
+    reads ``.github/pipeline-heartbeat.json``. Resolving the path and confining
+    the resolved form to :data:`_REPO_ROOT` means a caller-supplied value
+    (``--manifest ../escape.json``, or an absolute path elsewhere on the runner)
+    can never make the monitor read a file outside the repository. Raising here
+    - before the read - removes the tainted input rather than suppressing the
+    finding (Sonar S8707).
+    """
+    resolved = Path(raw_path).resolve()
+    if not resolved.is_relative_to(_REPO_ROOT):
+        raise ManifestError(f"heartbeat manifest {raw_path} resolves outside the repository root {_REPO_ROOT}: {resolved}")
+    return resolved
+
+
 def load_manifest(path: Path) -> tuple[Pipeline, ...]:
-    """Read and validate the manifest at ``path``."""
+    """Read and validate the manifest at ``path``.
+
+    ``path`` is confined to the repository checkout before it is opened (see
+    :func:`resolve_manifest_path`).
+    """
+    resolved = resolve_manifest_path(path)
     try:
-        raw = path.read_text(encoding="utf-8")
+        raw = resolved.read_text(encoding="utf-8")
     except OSError as exc:
-        raise ManifestError(f"cannot read heartbeat manifest {path}: {exc}") from exc
+        raise ManifestError(f"cannot read heartbeat manifest {resolved}: {exc}") from exc
     try:
         document = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ManifestError(f"heartbeat manifest {path} is not valid JSON: {exc}") from exc
+        raise ManifestError(f"heartbeat manifest {resolved} is not valid JSON: {exc}") from exc
     return parse_manifest(document)
 
 
@@ -229,10 +273,10 @@ def _parse_entry(index: int, entry: Any, seen: set[str]) -> Pipeline:
     if not isinstance(workflow, str) or not workflow.strip():
         raise ManifestError(f"{where}.workflow must be a non-empty string")
     workflow = workflow.strip()
-    if "/" in workflow or "\\" in workflow:
-        raise ManifestError(f"{where}.workflow must be a workflow filename, not a path: {workflow!r}")
-    if not workflow.endswith((".yml", ".yaml")):
-        raise ManifestError(f"{where}.workflow must name a .yml or .yaml file: {workflow!r}")
+    # The value is interpolated into a URL path segment, so accept only a plain
+    # workflow filename: no separators, no whitespace, .yml only.
+    if not _WORKFLOW_PATTERN.fullmatch(workflow):
+        raise ManifestError(f"{where}.workflow must be a workflow filename matching {_WORKFLOW_PATTERN.pattern}, got {workflow!r}")
     if workflow in seen:
         raise ManifestError(f"{where}.workflow is declared twice: {workflow!r}")
 
@@ -366,12 +410,29 @@ def parse_timestamp(raw: str | None) -> datetime | None:
 # ---------------------------------------------------------------------------
 
 
+def _validated_repo(repo: str) -> str:
+    """Return ``repo`` only if it is a safe ``owner/name`` slug.
+
+    ``repo`` arrives from ``--repo`` / ``$GITHUB_REPOSITORY`` and is
+    interpolated into the API URL path, so it is validated at the seam that
+    builds the request: no component reaching :data:`BASE_URL` may be able to
+    change the host or the path structure.
+    """
+    if not _REPO_PATTERN.fullmatch(repo):
+        raise GithubApiError(f"invalid repo {repo!r}: expected an 'owner/name' slug (letters, digits, '.', '_' or '-')")
+    # The slug shape alone permits a '.' or '..' segment ('../evil' has exactly
+    # one separator); those are path traversals, never repository names.
+    if any(segment in {".", ".."} for segment in repo.split("/")):
+        raise GithubApiError(f"invalid repo {repo!r}: '.' and '..' are not path segments")
+    return repo
+
+
 def _http_json(url: str, *, token: str, opener: Callable[..., Any], timeout: float) -> Any:
     """GET ``url`` and decode its JSON body. Every failure is a GithubApiError."""
     # S310: refuse anything but https before the request is built. The URL is
-    # assembled from the API base plus a workflow name the manifest validated
-    # (no separators), so a non-https scheme can only come from an --api-url
-    # override - which must not be able to turn this into a file:// read.
+    # assembled from the BASE_URL constant plus a slug-validated repo and a
+    # manifest-validated workflow name, so a non-https scheme can only come from
+    # a defect in this module - never from caller input.
     if urllib.parse.urlsplit(url).scheme not in _ALLOWED_URL_SCHEMES:
         raise GithubApiError(f"refusing a non-https API URL: {url}")
     request = urllib.request.Request(  # noqa: S310
@@ -401,7 +462,6 @@ def fetch_last_run(
     *,
     repo: str,
     token: str,
-    api_url: str = DEFAULT_API_URL,
     opener: Callable[..., Any] | None = None,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> datetime | None:
@@ -412,13 +472,16 @@ def fetch_last_run(
     burst of push-triggered runs of the same workflow can never bury the
     scheduled evidence we are looking for. Returns the newest of the answers, or
     ``None`` when neither event has ever produced a run.
+
+    Every URL is built from the module constant :data:`BASE_URL`: there is no
+    caller-supplied base URL (Sonar S8703).
     """
     http_opener = opener or urllib.request.urlopen
-    base = api_url.rstrip("/")
+    _validated_repo(repo)
     encoded = urllib.parse.quote(workflow, safe="")
     newest: datetime | None = None
     for event in EVIDENCE_EVENTS:
-        url = f"{base}/repos/{repo}/actions/workflows/{encoded}/runs?event={event}&per_page=1"
+        url = f"{BASE_URL}/repos/{repo}/actions/workflows/{encoded}/runs?event={event}&per_page=1"
         payload = _http_json(url, token=token, opener=http_opener, timeout=timeout)
         runs = payload.get("workflow_runs") if isinstance(payload, dict) else None
         if not isinstance(runs, list):
@@ -484,10 +547,9 @@ def _write_step_summary(markdown: str) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fail when a scheduled pipeline has stopped firing.")
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST, help="heartbeat manifest path")
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST, help="heartbeat manifest path (must be inside this checkout)")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""), help="owner/name (default: $GITHUB_REPOSITORY)")
     parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""), help="API token (default: $GITHUB_TOKEN)")
-    parser.add_argument("--api-url", default=DEFAULT_API_URL, help="GitHub API base URL")
     parser.add_argument("--now", default="", help="ISO-8601 clock override for a dry run (default: the real clock)")
     args = parser.parse_args(argv)
 
@@ -506,6 +568,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("::error::Pipeline heartbeat cannot run: GITHUB_REPOSITORY and GITHUB_TOKEN (or --repo/--token) are required. Without them the run history is unreadable, so no all-clear is possible.")
         return EXIT_USAGE
 
+    # A malformed repo slug is a usage error, not a finding about a pipeline:
+    # fail once, clearly, instead of reporting every pipeline unreadable.
+    try:
+        _validated_repo(args.repo)
+    except GithubApiError as exc:
+        print(f"::error::Pipeline heartbeat cannot run: {exc}")
+        return EXIT_USAGE
+
     last_runs: dict[str, datetime | None] = {}
     errors: dict[str, str] = {}
     for pipeline in pipelines:
@@ -514,7 +584,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 pipeline.workflow,
                 repo=args.repo,
                 token=args.token,
-                api_url=args.api_url,
             )
         except GithubApiError as exc:
             errors[pipeline.workflow] = str(exc)
