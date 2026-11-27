@@ -1,17 +1,21 @@
-"""0369 redacts raw Python tracebacks from persisted ``runs.error_detail`` (FAR-2823).
+"""0370 redacts raw Python tracebacks from persisted ``runs.error_detail`` (FAR-2823).
 
 Two layers of proof:
 
 * DB-free unit tests pin the *pure* parts deterministically on every machine - the
-  exact match markers, the replacement text derived from ``error_code``, the
-  500-character cap, and that the replacement is path-free / ``Traceback``-free
-  (which is what makes the rewrite idempotent). These run without PostgreSQL.
-* A PostgreSQL-execution test seeds one matching row (with a real traceback and a
-  code), one matching row with a NULL code (the generic branch) and three rows
-  that must NOT match (a clean summary, a ``.py at line`` near-miss that is not a
-  frame marker, and a bare "Traceback" without the full phrase). It then runs the
-  cleanup TWICE and asserts: the matching rows are redacted with no paths and no
-  "Traceback", ``error_code``/``status`` are untouched, the non-matching rows are
+  exact match markers (traceback header, container path, frame marker, internal
+  module reference, and the ``.py`` source suffix), the replacement text derived
+  from ``error_code``, the 500-character cap, and that the replacement is
+  path-free / module-free / ``Traceback``-free (which is what makes the rewrite
+  idempotent). These run without PostgreSQL.
+* A PostgreSQL-execution test seeds matching rows - a real traceback with a code,
+  a traceback with a NULL code (the generic branch), a row whose ONLY leak signal
+  is an internal module reference (``farna.core...``), a row with a source path
+  (``.pyc``) but NO frame marker, and a bare ``.py`` filename with no frame marker
+  - plus two rows that must NOT match (a clean summary, and a bare "Traceback"
+  without the full phrase). It then runs the cleanup TWICE and asserts: the
+  matching rows are redacted with no paths / module refs / "Traceback",
+  ``error_code``/``status`` are untouched, the non-matching rows are
   byte-identical, and the second run changes nothing.
 
 The PostgreSQL test is capability-gated exactly like
@@ -39,23 +43,30 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.engine import make_url
 
-_MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0369_redact_error_detail_tracebacks.py"
+_MIGRATION_PATH = Path(__file__).parents[3] / "src" / "farna" / "db" / "migrations" / "versions" / "0370_redact_error_detail_tracebacks.py"
 _PG_URL_ENV = "FARNA_2823_TEST_PG_URL"
 
-#: A real Python traceback: carries all three markers.
+#: A real Python traceback: carries the traceback header, app path and frame marker.
 _TRACEBACK_WITH_CODE = 'Traceback (most recent call last):\n  File "/app/src/farna/core/pipeline_engine/executor.py", line 3970, in _stream_graph\n    raise RuntimeError("state not serializable")\nRuntimeError: state not serializable'
 #: A partial traceback body: carries the frame + app-path markers, with no code.
 _TRACEBACK_NULL_CODE = '  File "/app/src/farna/core/pipeline_engine/executor.py", line 42, in run\nValueError: boom'
 #: A tidy summary that matches none of the markers - must stay byte-identical.
 _CLEAN_DETAIL = "Upstream connector returned HTTP 503; retry budget exhausted."
-#: A near-miss: mentions ".py" and "line" but NOT the '.py", line ' frame marker.
+#: A source filename with no frame marker; the broadened ``.py``/``.pyc``/``.pyo``
+#: source-suffix marker catches it even though the old narrow predicate did not.
 _PY_NEAR_MISS = "Config error in settings.py at line 12"
+#: The ONLY leak signal is an internal module reference - no traceback header, no
+#: container path, no frame marker, no ``.py`` suffix. Caught by ``farna.``.
+_INTERNAL_MODULE_ONLY = "ImportError: cannot import name 'PipelineState' from farna.core.pipeline_engine.executor"
+#: The ONLY leak signal is a compiled source path (``.pyc``) with no frame
+#: marker and no internal module reference. Caught by the ``.py`` source suffix.
+_SOURCE_PATH_NO_FRAME = "Failed to load service module at orchestrator.pyc"
 #: A bare "Traceback" word WITHOUT the full marker phrase - must not match.
 _BARE_TRACEBACK_WORD = "See Traceback above for context"
 
 
 def _load_migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("migration_0369_redact_error_detail_tracebacks", _MIGRATION_PATH)
+    spec = importlib.util.spec_from_file_location("migration_0370_redact_error_detail_tracebacks", _MIGRATION_PATH)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -71,24 +82,59 @@ def _load_migration() -> ModuleType:
 def test_revision_continues_the_current_single_head() -> None:
     module = _load_migration()
 
-    assert module.revision == "0369_redact_error_detail_tracebacks"
-    assert module.down_revision == "0368_invitations_quarantine_rls"
+    # Far-2823 was renumbered to follow main's 0369_pipeline_family_owner_team so
+    # the chain stays a single head (two migrations both claiming 0369 produced
+    # two heads and broke ``alembic upgrade heads``).
+    assert module.revision == "0370_redact_error_detail_tracebacks"
+    assert module.down_revision == "0369_pipeline_family_owner_team"
 
 
-def test_the_three_exact_match_markers_are_the_ticket_spec() -> None:
+def test_the_broadened_match_markers_are_the_ticket_spec() -> None:
     module = _load_migration()
 
+    # The three shapes the ticket names ...
     assert module._MARKER_TRACEBACK == "Traceback (most recent call last)"
     assert module._MARKER_APP_PATH == "/app/src/"
     assert module._MARKER_FRAME == '.py", line '
-    # The SQL predicate is strict containment of all three markers (bound to :m1/:m2/:m3), keyed and batched.
-    assert "position(:m1 IN error_detail) > 0" in module._BATCH_SQL
-    assert "position(:m2 IN error_detail) > 0" in module._BATCH_SQL
-    assert "position(:m3 IN error_detail) > 0" in module._BATCH_SQL
+    # ... plus the broader leak class the first predicate missed.
+    assert module._MARKER_INTERNAL_MODULE == "farna."
+    assert module._MARKER_INTERNAL_MODULE_LEGACY == "modulo."
+    assert module._MARKER_SOURCE_SUFFIX == ".py"
+    # One ordered marker tuple drives the bind params, so SQL and tests cannot drift.
+    assert module._MARKERS == (
+        module._MARKER_TRACEBACK,
+        module._MARKER_APP_PATH,
+        module._MARKER_FRAME,
+        module._MARKER_INTERNAL_MODULE,
+        module._MARKER_INTERNAL_MODULE_LEGACY,
+        module._MARKER_SOURCE_SUFFIX,
+    )
+    # The SQL predicate is strict containment of every marker (bound to :m1..:m6),
+    # keyed and batched.
+    for index in range(1, 7):
+        assert f"position(:m{index} IN error_detail) > 0" in module._BATCH_SQL
     assert "error_detail IS NOT NULL" in module._BATCH_SQL
     assert "LIMIT CAST(:batch AS integer)" in module._BATCH_SQL
     # Keyset cursor on the primary key so a re-run resumes forward and terminates.
     assert "id > CAST(:after_id AS uuid)" in module._BATCH_SQL
+
+
+def test_the_module_reference_and_source_path_markers_catch_the_historical_leak_class() -> None:
+    """The two historical shapes the first predicate missed are now matches."""
+    module = _load_migration()
+
+    def matches(detail: str) -> bool:
+        return any(marker in detail for marker in module._MARKERS)
+
+    # An internal module reference with no frame marker is caught.
+    assert matches(_INTERNAL_MODULE_ONLY)
+    assert not any(marker in _INTERNAL_MODULE_ONLY for marker in (module._MARKER_TRACEBACK, module._MARKER_APP_PATH, module._MARKER_FRAME))
+    # A source path (``.pyc``) with no frame marker is caught by the ``.py`` suffix.
+    assert matches(_SOURCE_PATH_NO_FRAME)
+    assert not any(marker in _SOURCE_PATH_NO_FRAME for marker in (module._MARKER_TRACEBACK, module._MARKER_APP_PATH, module._MARKER_FRAME, module._MARKER_INTERNAL_MODULE, module._MARKER_INTERNAL_MODULE_LEGACY))
+    assert module._MARKER_SOURCE_SUFFIX in _SOURCE_PATH_NO_FRAME
+    # A clean summary still matches nothing.
+    assert not matches(_CLEAN_DETAIL)
 
 
 def test_replacement_is_derived_from_error_code_and_capped() -> None:
@@ -112,7 +158,6 @@ def test_replacement_is_derived_from_error_code_and_capped() -> None:
 def test_replacement_text_is_path_free_and_traceback_free() -> None:
     module = _load_migration()
 
-    markers = (module._MARKER_TRACEBACK, module._MARKER_APP_PATH, module._MARKER_FRAME)
     reasons = (
         module._GENERIC_REASON,
         module._REASON_SUFFIX,
@@ -120,7 +165,9 @@ def test_replacement_text_is_path_free_and_traceback_free() -> None:
     )
     for reason in reasons:
         assert "Traceback" not in reason
-        for marker in markers:
+        # The replacement must contain NONE of the markers, or a second run would
+        # re-match the redacted row (idempotency depends on this).
+        for marker in module._MARKERS:
             assert marker not in reason
 
 
@@ -187,7 +234,7 @@ def engine(pg_url: str) -> Iterator[sa.Engine]:
     """A fresh database per test - the migration hard-codes the ``public`` schema."""
     base_url = make_url(pg_url)
     admin = sa.create_engine(base_url, isolation_level="AUTOCOMMIT")
-    database = f"m0369_{uuid.uuid4().hex[:12]}"
+    database = f"m0370_{uuid.uuid4().hex[:12]}"
     with admin.connect() as conn:
         conn.exec_driver_sql(f'CREATE DATABASE "{database}"')
     test_engine = sa.create_engine(base_url.set(database=database))
@@ -217,6 +264,8 @@ _ROW_TRACEBACK_NULL_CODE = "00000000-0000-0000-0000-0000000000b2"
 _ROW_CLEAN = "00000000-0000-0000-0000-0000000000c3"
 _ROW_PY_NEAR_MISS = "00000000-0000-0000-0000-0000000000d4"
 _ROW_BARE_TRACEBACK = "00000000-0000-0000-0000-0000000000e5"
+_ROW_INTERNAL_MODULE_ONLY = "00000000-0000-0000-0000-0000000000f6"
+_ROW_SOURCE_PATH_NO_FRAME = "00000000-0000-0000-0000-000000000107"
 
 
 def _exec(conn: sa.Connection, sql: str, params: dict[str, object] | None = None) -> sa.CursorResult[Any]:
@@ -233,6 +282,8 @@ def _seed(engine: sa.Engine) -> None:
             (_ROW_CLEAN, _CLEAN_DETAIL, "provider.unavailable", "failed"),
             (_ROW_PY_NEAR_MISS, _PY_NEAR_MISS, "config.invalid", "failed"),
             (_ROW_BARE_TRACEBACK, _BARE_TRACEBACK_WORD, "agent.failed", "failed"),
+            (_ROW_INTERNAL_MODULE_ONLY, _INTERNAL_MODULE_ONLY, "import.failed", "failed"),
+            (_ROW_SOURCE_PATH_NO_FRAME, _SOURCE_PATH_NO_FRAME, "module.load_failed", "failed"),
         )
         for row_id, detail, code, status in rows:
             _exec(
@@ -261,9 +312,8 @@ def _snapshot(conn: sa.Connection) -> dict[str, tuple[str | None, str | None, st
 
 def _matching_count(conn: sa.Connection, module: ModuleType) -> int:
     """Count rows whose ``error_detail`` still contains any of the markers."""
-    markers = (module._MARKER_TRACEBACK, module._MARKER_APP_PATH, module._MARKER_FRAME)
     rows = conn.exec_driver_sql("SELECT error_detail FROM public.runs WHERE error_detail IS NOT NULL").all()
-    return sum(1 for (detail,) in rows if any(marker in detail for marker in markers))
+    return sum(1 for (detail,) in rows if any(marker in detail for marker in module._MARKERS))
 
 
 def _detail(conn: sa.Connection, row_id: str) -> str | None:
@@ -282,20 +332,30 @@ def test_upgrade_redacts_matching_rows_and_leaves_everything_else_byte_identical
         clean = _detail(conn, _ROW_CLEAN)
         near_miss = _detail(conn, _ROW_PY_NEAR_MISS)
         bare = _detail(conn, _ROW_BARE_TRACEBACK)
+        module_only = _detail(conn, _ROW_INTERNAL_MODULE_ONLY)
+        source_path = _detail(conn, _ROW_SOURCE_PATH_NO_FRAME)
         before_second = _snapshot(conn)
         still_matching = _matching_count(conn, module)
 
-    # The two matching rows are redacted to a path-free, code-derived reason.
+    # The traceback rows are redacted to a path-free, code-derived reason.
     assert with_code == "harness.state_serialization: server-side failure; see server logs"
     assert null_code == "server-side failure; see server logs"
-    # No path, no frame, no "Traceback" survives in a redacted value.
-    assert "Traceback" not in with_code
-    assert "/app/src/" not in with_code
-    assert '.py", line ' not in with_code
-    assert "Traceback" not in null_code
-    # The non-matching rows are byte-identical (predicate is not broadened).
+    # The broadened class is caught: a module-reference-only row and a source-path
+    # row with no frame marker are both redacted.
+    assert module_only == "import.failed: server-side failure; see server logs"
+    assert source_path == "module.load_failed: server-side failure; see server logs"
+    # The bare ``.py`` filename with no frame marker is caught by the source suffix.
+    assert near_miss == "config.invalid: server-side failure; see server logs"
+    # No path, no frame, no module reference, no "Traceback" survives a redacted value.
+    for redacted in (with_code, null_code, module_only, source_path, near_miss):
+        assert "Traceback" not in redacted
+        assert "/app/src/" not in redacted
+        assert '.py", line ' not in redacted
+        assert "farna." not in redacted
+        assert "modulo." not in redacted
+        assert ".py" not in redacted
+    # The genuinely clean rows are byte-identical.
     assert clean == _CLEAN_DETAIL
-    assert near_miss == _PY_NEAR_MISS
     assert bare == _BARE_TRACEBACK_WORD
     # Nothing left matches after the pass.
     assert still_matching == 0
@@ -305,10 +365,12 @@ def test_upgrade_redacts_matching_rows_and_leaves_everything_else_byte_identical
     assert before_second[_ROW_TRACEBACK_WITH_CODE][2] == "failed"
     assert before_second[_ROW_TRACEBACK_NULL_CODE][1] is None
     assert before_second[_ROW_TRACEBACK_NULL_CODE][2] == "failed"
+    assert before_second[_ROW_INTERNAL_MODULE_ONLY][1] == "import.failed"
+    assert before_second[_ROW_SOURCE_PATH_NO_FRAME][1] == "module.load_failed"
 
-    # The number of changed rows is logged.
+    # The number of changed rows is logged (all five matching rows).
     captured = capsys.readouterr()
-    assert "redacted error_detail on 2 run row(s)" in captured.out
+    assert "redacted error_detail on 5 run row(s)" in captured.out
 
 
 def test_upgrade_is_idempotent(engine: sa.Engine) -> None:

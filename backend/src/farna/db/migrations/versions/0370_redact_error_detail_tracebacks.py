@@ -35,24 +35,38 @@ tenant-consistency triggers on ``runs`` (they fire on
 ``UPDATE OF organisation_id | owner_team_id | ...``) are **not** triggered by
 this statement.
 
-Exact match predicate
----------------------
+Broadened match predicate
+-------------------------
 A row matches when its ``error_detail`` is non-NULL and CONTAINS any of these
-three markers (substring containment, via ``position(marker IN error_detail) > 0``
+markers (substring containment, via ``position(marker IN error_detail) > 0``
 - not ``LIKE``, so there is no ``%``/``_`` wildcard ambiguity)::
 
     "Traceback (most recent call last)"   _MARKER_TRACEBACK
     "/app/src/"                          _MARKER_APP_PATH
     '.py", line '                        _MARKER_FRAME
+    "farna."                             _MARKER_INTERNAL_MODULE
+    "modulo."                            _MARKER_INTERNAL_MODULE_LEGACY
+    ".py"                                _MARKER_SOURCE_SUFFIX
 
-These are the three shapes the ticket names. They are deliberately NARROW: a
-tidy single-line summary (e.g. "Upstream connector returned HTTP 503") matches
-none of them and is left byte-identical. The predicate is not broadened here.
+The first three are the traceback-header, container-path and frame-marker
+shapes the ticket names. The last three are the broader leak class the ticket
+also calls out, and which the initial narrow predicate missed: a historical row
+can carry an internal module reference (``farna.core...`` / pre-rebrand
+``modulo....``) or a source path that ends ``.py`` / ``.pyc`` / ``.pyo`` WITHOUT
+a ``File ..., line`` frame marker. ``_MARKER_SOURCE_SUFFIX`` is the ``.py`` stem
+shared by all three suffixes, so one containment test catches them all (a
+``.pyc`` / ``.pyo`` reference contains ``.py``).
+
+A tidy single-line summary (e.g. "Upstream connector returned HTTP 503") matches
+none of them and is left byte-identical. The predicate is deliberately broad on
+the leak side: redacting a row that only touches a filename is safe (the operator
+loses a hint, not evidence - the full traceback is in the server logs), while
+under-redacting leaks internal source layout to every run reader.
 
 Idempotency and termination
 ---------------------------
-The rewrite is idempotent: the replacement text contains none of the three
-markers, so a redacted row no longer matches and a second run selects nothing
+The rewrite is idempotent: the replacement text contains none of the markers,
+so a redacted row no longer matches and a second run selects nothing
 (it is a genuine no-op, not an "update to the same value"). Improvement is
 monotonic - each batch removes rows from the matching set - so the loop
 terminates. Pagination is keyset on the primary key (``id > :after_id``), so
@@ -104,15 +118,16 @@ SQLite (test-only, ADR 068) never runs migrations, so ``upgrade`` no-ops on a
 non-PostgreSQL dialect.
 
 Proven against real PostgreSQL by
-``tests/unit/db/test_migration_0369_redact_error_detail_tracebacks.py`` (seeds a
-matching row, a NULL-code matching row and a clean row; runs the cleanup twice;
-asserts the matching rows are redacted with no paths / "Traceback", the clean row
-is byte-identical, and the second run changes nothing). The predicate,
-replacement text, cap and marker set are additionally unit-tested without a
-database.
+``tests/unit/db/test_migration_0370_redact_error_detail_tracebacks.py`` (seeds
+traceback rows, a NULL-code matching row, an internal-module-reference-only row,
+a source-path-without-frame row and clean rows; runs the cleanup twice; asserts
+the matching rows are redacted with no paths / module refs / "Traceback", the
+clean rows are byte-identical, and the second run changes nothing). The
+predicate, replacement text, cap and marker set are additionally unit-tested
+without a database.
 
-Revision ID: 0369_redact_error_detail_tracebacks
-Revises: 0368_invitations_quarantine_rls
+Revision ID: 0370_redact_error_detail_tracebacks
+Revises: 0369_pipeline_family_owner_team
 Create Date: 2026-11-26
 """
 
@@ -121,16 +136,37 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0369_redact_error_detail_tracebacks"
-down_revision: str | None = "0368_invitations_quarantine_rls"
+revision: str = "0370_redact_error_detail_tracebacks"
+down_revision: str | None = "0369_pipeline_family_owner_team"
 branch_labels = None
 depends_on = None
 
-#: The three exact traceback / internal-path markers the ticket names. A row is
-#: redacted when its ``error_detail`` contains any one of them (containment).
+#: The traceback / internal-path markers the ticket names. A row is redacted when
+#: its ``error_detail`` contains any one of them (containment).
 _MARKER_TRACEBACK = "Traceback (most recent call last)"
 _MARKER_APP_PATH = "/app/src/"
 _MARKER_FRAME = '.py", line '
+
+#: The broader leak class the ticket also calls out: an internal module reference
+#: (current ``farna.*`` package, or the pre-rebrand ``modulo.*`` one) or a source
+#: path that ends ``.py`` / ``.pyc`` / ``.pyo`` even with NO frame marker. The
+#: ``.py`` stem is shared by all three suffixes, so one containment test catches
+#: every source reference.
+_MARKER_INTERNAL_MODULE = "farna."
+_MARKER_INTERNAL_MODULE_LEGACY = "modulo."
+_MARKER_SOURCE_SUFFIX = ".py"
+
+#: Every leak marker, in bind order (``m1`` .. ``m6``). A row matches when its
+#: ``error_detail`` contains ANY one of them. Kept as one ordered tuple so the
+#: SQL predicate and the tests can never drift apart.
+_MARKERS: tuple[str, ...] = (
+    _MARKER_TRACEBACK,
+    _MARKER_APP_PATH,
+    _MARKER_FRAME,
+    _MARKER_INTERNAL_MODULE,
+    _MARKER_INTERNAL_MODULE_LEGACY,
+    _MARKER_SOURCE_SUFFIX,
+)
 
 #: The path-free generic reason, and the ``"<code>" + suffix`` shape used when a
 #: row carries a usable ``error_code``. ``_REASON_SUFFIX`` is derived from
@@ -169,6 +205,9 @@ WITH batch AS (
             position(:m1 IN error_detail) > 0
          OR position(:m2 IN error_detail) > 0
          OR position(:m3 IN error_detail) > 0
+         OR position(:m4 IN error_detail) > 0
+         OR position(:m5 IN error_detail) > 0
+         OR position(:m6 IN error_detail) > 0
       )
     ORDER BY id
     LIMIT CAST(:batch AS integer)
@@ -192,16 +231,17 @@ _BATCH_STATEMENT = sa.text(_BATCH_SQL)
 
 def _bind_params(after_id: str) -> dict[str, object]:
     """Bind values for one batch: the keyset cursor, markers, replacement and cap."""
-    return {
-        "after_id": after_id,
-        "m1": _MARKER_TRACEBACK,
-        "m2": _MARKER_APP_PATH,
-        "m3": _MARKER_FRAME,
-        "generic": _GENERIC_REASON,
-        "suffix": _REASON_SUFFIX,
-        "max_len": _MAX_DETAIL_LEN,
-        "batch": _BATCH_SIZE,
-    }
+    params: dict[str, object] = {f"m{index}": marker for index, marker in enumerate(_MARKERS, start=1)}
+    params.update(
+        {
+            "after_id": after_id,
+            "generic": _GENERIC_REASON,
+            "suffix": _REASON_SUFFIX,
+            "max_len": _MAX_DETAIL_LEN,
+            "batch": _BATCH_SIZE,
+        }
+    )
+    return params
 
 
 def _redact_runs(bind: sa.Connection) -> int:
@@ -236,7 +276,7 @@ def upgrade() -> None:
         return
     changed = _redact_runs(bind)
     print(  # noqa: T201 - migrations signal progress via stdout; the structured logger does not render in fly logs
-        f"0369_redact_error_detail_tracebacks: redacted error_detail on {changed} run row(s)"
+        f"0370_redact_error_detail_tracebacks: redacted error_detail on {changed} run row(s)"
     )
 
 
