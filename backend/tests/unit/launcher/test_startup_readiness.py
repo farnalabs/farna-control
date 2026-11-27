@@ -8,7 +8,7 @@ failed with 28P01.
 
 These tests pin the fixed contract:
 
-* the launcher defers ``ready`` to the serve phase (``_serve_api``), whose boot
+* the launcher defers ``ready`` to the API lifespan callback, after its boot
   work creates the role and migrates the schema;
 * ``_serve_api`` writes ``ready`` only when the API lifespan fires the one-shot
   startup-ready callback, and fails the handshake closed with a clear message
