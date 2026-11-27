@@ -24,9 +24,9 @@ from farna.api.db_error_handling import (
     raise_session_contract_error,
 )
 from farna.api.dependencies import get_db_session, require_entitlement, require_permission
-from farna.api.routes.dashboard import _facts_window
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
+from farna.core.analytics.facts_window import facts_window
 from farna.core.audit_coverage import audited
 from farna.core.audit_logger import append_audit_event
 from farna.core.cost_controller import (
@@ -246,6 +246,10 @@ class CostReportResponse(BaseModel):
     legacy_total: str | None = None
     org_total: str | None = None
     org_run_count: int | None = None
+    # FAR-2820: the ``status == 'complete'`` subset of ``org_run_count``,
+    # computed in the SAME facts query/window, so ``org_run_count >=
+    # org_successful_run_count`` always holds for the overview card.
+    org_successful_run_count: int | None = None
     has_more: bool = False
 
 
@@ -259,13 +263,13 @@ class SetSpendLimitRequest(BaseModel):
     daily_spend_limit: float | None = Field(None, ge=0)
 
 
-async def _load_period_run_total(
+async def _load_period_run_counts(
     session: AsyncSession,
     *,
     org_id: uuid.UUID,
     period: str,
-) -> int:
-    """Total terminal runs in the report window, from the ANALYTICS FACT table.
+) -> tuple[int, int]:
+    """Return ``(total_runs, successful_runs)`` over ONE facts window.
 
     FAR-2820: the spend ledger's ``run_count`` is NOT a total-run count. The
     live writer only enters a ledger row for a run with a POSITIVE persisted
@@ -275,25 +279,21 @@ async def _load_period_run_total(
     Costs overview's "Total Runs" tile from it produced the impossible
     "Total Runs 0 / 226 successful runs" pair whenever the window's runs were
     all free (a zero-cost model backend), because the "successful runs" figure
-    the SAME card renders is read from ``/analytics/query``, which counts
-    ``run_daily_facts`` - one row per terminal run.
+    the SAME card rendered was read from a DIFFERENT source over a DIFFERENT
+    window (a browser-local month start vs the UTC month).
 
-    Both figures now derive from ``run_daily_facts`` over the SAME organisation
-    and period window (``_facts_window`` is the dashboard's period-facts
-    definition, so the costs card and the dashboard summary agree), which makes
-    ``total_runs >= successful_runs`` hold by construction: a successful run is
-    a terminal fact whose status is ``complete``.
+    Both figures now come from the SAME ``run_daily_facts`` query over the SAME
+    window — the UTC month-to-date window the report's spend is also bucketed
+    over — so ``total_runs >= successful_runs`` holds by construction: a
+    successful run is a terminal fact whose status is ``complete``, a strict
+    subset of the window's terminal facts.
     """
     today = datetime.now(UTC).date()
-    # ``_facts_window`` bounds on ``[start_date, end_date)``. The exclusive end
-    # is two days ahead so this window is a strict SUPERSET of the browser-local
-    # month-to-date window the same card's "successful runs" figure is queried
-    # with (``/analytics/query`` sends bare local dates, and a browser up to
-    # +14h ahead of UTC can already be on "tomorrow" relative to UTC). Facts
-    # never carry a future ``run_date``, so the extra day can only ever be
-    # empty - it just guarantees the total can never undershoot the successes.
-    facts = await _facts_window(session, org_id, _report_since(today, period), today + timedelta(days=2))
-    return int(facts["total_runs"])
+    # ``facts_window`` bounds on ``[start_date, end_date)``. The exclusive end is
+    # "tomorrow" so the window includes TODAY's facts (run_date <= today) while
+    # never reaching into a future day.
+    facts = await facts_window(session, org_id, _report_since(today, period), today + timedelta(days=1))
+    return int(facts["total_runs"]), int(facts["successful_runs"])
 
 
 @router.get("")
@@ -327,10 +327,14 @@ async def get_costs(
                 )
                 # FAR-2820: override the spend ledger's billable-run count (it
                 # only counts runs with a positive cost) with the TRUE total
-                # run count for the window, from the same fact table the
-                # card's "successful runs" figure is read from - so the two
-                # tiles cannot disagree. See ``_load_period_run_total``.
-                buckets["org_run_count"] = await _load_period_run_total(
+                # run count for the window, and expose the successful count
+                # from the SAME query so the "Total Runs" tile and the
+                # "N successful runs" line on the same card can never disagree.
+                # See ``_load_period_run_counts``.
+                (
+                    buckets["org_run_count"],
+                    buckets["org_successful_run_count"],
+                ) = await _load_period_run_counts(
                     session,
                     org_id=current_user.organisation_id,
                     period=period,
@@ -389,6 +393,7 @@ async def get_costs(
         legacy_total=buckets.get("legacy_total"),
         org_total=buckets.get("org_total"),
         org_run_count=buckets.get("org_run_count"),
+        org_successful_run_count=buckets.get("org_successful_run_count"),
         has_more=bool(buckets.get("has_more", False)),
     )
 

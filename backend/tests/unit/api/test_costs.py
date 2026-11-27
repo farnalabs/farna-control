@@ -229,8 +229,10 @@ class TestGetCostsReport:
         """
         mock_session = _make_mock_session()
         # The facts-window aggregate is the only ``.one()`` read on this
-        # session - every other collaborator is patched below.
-        facts_row = MagicMock(total=226, active_pipelines=0, tokens=0, avg_duration_ms=None, complete=226)
+        # session - every other collaborator is patched below. ``total`` (226)
+        # and ``complete`` (200) come from the SAME row query, so the route's
+        # total and successful counts share one window by construction.
+        facts_row = MagicMock(total=226, active_pipelines=0, tokens=0, avg_duration_ms=None, complete=200)
         mock_session.execute.return_value.one.return_value = facts_row
 
         async def override_session() -> AsyncGenerator[AsyncMock, None]:
@@ -273,7 +275,12 @@ class TestGetCostsReport:
             app.dependency_overrides.clear()
 
         assert resp.status_code == 200
-        assert resp.json()["org_run_count"] == 226
+        body = resp.json()
+        assert body["org_run_count"] == 226
+        # The successful count is the SAME facts query's ``complete`` subset, so
+        # the card can never show more successes than runs.
+        assert body["org_successful_run_count"] == 200
+        assert body["org_run_count"] >= body["org_successful_run_count"]
 
     def test_unauthorized_returns_4xx(self, unauth_client: TestClient) -> None:
         resp = unauth_client.get("/api/v1/admin/costs")

@@ -125,7 +125,7 @@ describe('AdminCostBreakdownView', () => {
     // unpadded content area (FAR-2394).
     expect(Array.from(teamHeader!.classList)).not.toEqual(expect.arrayContaining(['px-6', 'pt-6']))
     const teamDescription = teamHeader!.querySelector('p')
-    expect(teamDescription?.textContent).toContain('Monthly spend, run count, and average cost per run')
+    expect(teamDescription?.textContent).toContain('Monthly spend, billable run count, and average cost per billable run')
     expect(teamDescription?.parentElement).toBe(teamHeading.element.parentElement)
     const anomalyHeader = page.findAll('.card-header')[1]
     expect(anomalyHeader.classes()).not.toEqual(expect.arrayContaining(['px-6', 'pt-6']))
@@ -250,6 +250,61 @@ describe('AdminCostBreakdownView', () => {
     const countEl = wrapper.find('[data-testid="cost-successful-runs-count"]')
     expect(countEl.exists()).toBe(true)
     expect(countEl.text()).toContain('13')
+  })
+
+  it('prefers the backend org_successful_run_count over the analytics fallback (FAR-2820)', async () => {
+    // The report now returns the successful count from the SAME facts window as
+    // Total Runs. It must win over the analytics fallback, whose window can
+    // differ (browser-local month start) and previously produced more successes
+    // than runs across a UTC month boundary.
+    ;(api.GET as any).mockImplementation((path: string) => {
+      if (path === '/api/v1/admin/costs') {
+        return Promise.resolve({
+          data: {
+            period: 'month',
+            group_by: 'team',
+            items: [{ entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 226.0, total_runs: 0 }],
+            org_total: '226.000000',
+            org_run_count: 226,
+            org_successful_run_count: 200,
+          },
+          error: undefined,
+        })
+      }
+      if (path === '/api/v1/analytics/query') {
+        // A stale, differently-windowed figure — must be ignored when the
+        // backend provides the count.
+        return Promise.resolve({
+          data: { buckets: [{ date: '2026-09-01', count: 99999, success_rate: 1.0 }] },
+          error: undefined,
+        })
+      }
+      if (path === '/api/v1/admin/costs/anomalies') {
+        return Promise.resolve({ data: [], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = usePlanStore()
+    store.$patch({ features: { admin_cost_breakdown: true } })
+
+    const wrapper = mount(AdminCostBreakdownView, {
+      global: { plugins: [pinia] },
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    const countEl = wrapper.find('[data-testid="cost-successful-runs-count"]')
+    expect(countEl.text()).toContain('200')
+
+    const totalRuns = wrapper.find('[data-testid="cost-total-runs"]')
+    expect(totalRuns.text()).toContain('226')
+
+    // 226 / 200 = 1.13 — the backend pair, not the 99999 analytics figure.
+    expect(wrapper.find('[data-testid="cost-per-successful-run"]').text()).toContain('1.13')
   })
 
   it('shows dash when zero successful runs (analytics returns all failures)', async () => {

@@ -14252,6 +14252,8 @@ export interface components {
             org_total?: string | null;
             /** Org Run Count */
             org_run_count?: number | null;
+            /** Org Successful Run Count */
+            org_successful_run_count?: number | null;
             /**
              * Has More
              * @default false
