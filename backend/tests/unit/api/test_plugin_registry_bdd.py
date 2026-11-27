@@ -30,6 +30,7 @@ from farna.auth.jwt import AuthenticatedPrincipal
 from farna.core.plugin_registry import PluginHealth
 from farna.settings import Settings, get_settings
 from tests.unit.api.mock_session import configure_mock_session
+from tests.unit.api.route_introspection import get_all_apiroutes, get_permission_tag
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -201,6 +202,18 @@ class TestDiscoverInstalledPlugins:
             assert "version" in plugin
             assert "capabilities" in plugin
 
+    def test_list_includes_per_plugin_health(self, client: TestClient) -> None:
+        """The list response carries each plugin's health, not just its manifest."""
+        mock_registry = _make_mock_registry([PLUGIN_SLACK])
+        with patch("farna.api.routes.plugins.get_plugin_registry", return_value=mock_registry):
+            resp = client.get("/api/v1/plugins")
+
+        assert resp.status_code == 200
+        (plugin,) = resp.json()
+        assert plugin["health_ok"] is True
+        assert plugin["health_detail"] == "Loaded"
+        assert plugin["health_checked_at"] is not None
+
     def test_empty_when_no_plugins(self, client: TestClient) -> None:
         mock_registry = _make_mock_registry([])
         with patch("farna.api.routes.plugins.get_plugin_registry", return_value=mock_registry):
@@ -234,6 +247,18 @@ class TestGetPluginDetail:
 
         assert resp.status_code == 200
         assert resp.json()["PLUGIN_ID"] == plugin_id
+
+    def test_detail_includes_health(self, client: TestClient) -> None:
+        """The detail payload carries the manifest *and* the plugin's health."""
+        mock_registry = _make_mock_registry([PLUGIN_SLACK])
+        with patch("farna.api.routes.plugins.get_plugin_registry", return_value=mock_registry):
+            resp = client.get("/api/v1/plugins/modulo-connector-slack")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["health_ok"] is True
+        assert body["health_detail"] == "Loaded"
+        assert body["health_checked_at"] is not None
 
     def test_unknown_plugin_returns_404(self, client: TestClient) -> None:
         mock_registry = _make_mock_registry([PLUGIN_SLACK])
@@ -538,3 +563,30 @@ class TestPluginCapabilitiesAdvertised:
         caps_by_id = {p["PLUGIN_ID"]: p["capabilities"] for p in body}
         assert "connector_type" in caps_by_id.get("modulo-connector-slack", set())
         assert "model_backend" in caps_by_id.get("modulo-backend-github", set())
+
+
+class TestPluginPermissionGate:
+    """Mirrors: the plugin routes carry the ``plugin.list`` permission gate.
+
+    ``require_permission("plugin.list")`` is JWT-tenant gated at the ``viewer``
+    floor, so no assignable org role can be used to observe a 403. The gate is
+    therefore proved structurally: every plugin route carries the tagged
+    permission dependency (read from the live router, not the source text).
+    """
+
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("GET", "/api/v1/plugins"),
+            ("GET", "/api/v1/plugins/{plugin_id}"),
+            ("GET", "/api/v1/plugins/{plugin_id}/health"),
+        ],
+    )
+    def test_route_declares_plugin_list_permission(self, method: str, path: str) -> None:
+        route = next(route for route in get_all_apiroutes(app) if route.path == path and method in (route.methods or set()))
+
+        tag = get_permission_tag(route)
+
+        assert tag is not None, f"{method} {path} has no permission tag"
+        assert tag["permission"] == "plugin.list"
+        assert tag["permission_kind"] == "tenant"

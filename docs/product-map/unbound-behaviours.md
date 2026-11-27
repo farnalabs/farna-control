@@ -10,8 +10,8 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 518 of 922 ticked behaviours (135 node, 140 feature, 243 module strength).
-Weak bindings (module-only): 243. This count is ratcheted shrink-only in the baseline.
+Bound today: 526 of 922 ticked behaviours (144 node, 140 feature, 242 module strength).
+Weak bindings (module-only): 242. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
 
@@ -19,27 +19,6 @@ Derived status: `partial`
 
 - `org-08` - Frontend renders org settings at `/admin/org` with export, product-analytics
   - why: behaviour text names no test; only code paths (or nothing) are cited
-
-## docs/product-map/admin/plugins.md
-
-Derived status: `partial`
-
-- `plugins-01` - Plugins are discovered at startup and available through the registry's
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `plugins-02` - `GET /api/v1/plugins` lists every discovered plugin with
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `plugins-03` - `GET /api/v1/plugins/{plugin_id}` returns the full manifest plus health
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `plugins-04` - `GET /api/v1/plugins/{plugin_id}/health` returns `{ok, detail, checked_at}`
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `plugins-05` - An entry point referencing a package with no installed metadata
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `plugins-06` - An entry point whose `load()` raises records `Failed to load entry point …`
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `plugins-10` - The routes are gated behind `require_feature("plugin_management")` and
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `plugins-12` - The `/admin/plugins` view is READ-ONLY: it lists plugins and their health
-  - why: behaviour text cites a test artefact that does not resolve to a proving test
 
 ## docs/product-map/admin/product-analytics.md
 
@@ -1109,7 +1088,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 135  Feature: 140  Module (weak): 243
+Node: 144  Feature: 140  Module (weak): 242
 
 ### Weak (module-only) bindings
 
@@ -1442,8 +1421,6 @@ test. The list is ratcheted shrink-only in the baseline: it may not grow.
   - refs: backend/tests/unit/graph_validator/test_edges_and_sandbox_validation.py
 - `pipelines-15` - Governed CI-runner dispatch (FAR-1141, ADR-042): the `dispatch` node
   - refs: backend/tests/unit/pipeline_engine/test_dispatch_guards.py, backend/tests/unit/pipeline_engine/test_dispatch_composed_e2e.py, backend/tests/unit/connectors/test_ci_runner.py, backend/tests/unit/graph_validator/test_graph_validator.py
-- `plugins-11` - The `plugin_management` feature gate FIRES: all three endpoints return 402
-  - refs: backend/tests/unit/api/test_plugin_registry_bdd.py
 - `product-analytics-01` - Usage metrics are collected and dumped per reporting window under explicit
   - refs: backend/tests/unit/product_analytics/test_consent.py, backend/tests/unit/product_analytics/test_metrics_dump.py
 - `product-analytics-03` - The outbound batch request carries its HMAC signature, timestamp and sequence in
