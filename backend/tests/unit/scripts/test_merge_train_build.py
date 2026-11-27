@@ -151,6 +151,21 @@ def test_prefix_collision_delete_frees_its_prefix_for_a_later_add() -> None:
     assert claim == {"0100": "0100_new.py"}
 
 
+def test_prefix_collision_add_before_delete_at_the_same_prefix_is_clean() -> None:
+    # git diff --name-status orders by path, so a same-prefix replace emits the
+    # add (0100_new.py) BEFORE the delete (0100_old.py). The PR frees 0100 with
+    # its own delete, so the add must be judged against the released state even
+    # though git lists it first - not reported as a collision.
+    diff = [
+        ("A", f"{build.MIG_DIR}/0100_new.py", ""),
+        ("D", f"{build.MIG_DIR}/0100_old.py", ""),
+    ]
+    collides, detail, claim, _release = build._prefix_collisions(9, diff, {"0100": "0100_old.py"})
+    assert collides is False
+    assert not detail
+    assert claim == {"0100": "0100_new.py"}
+
+
 def test_finish_writes_state_and_returns_success(tmp_path: Path) -> None:
     out = tmp_path / "state.json"
     rc = build._finish({"success": True, "excluded_prs": []}, out, ["a detail"], [1, 2])

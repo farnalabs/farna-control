@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -64,11 +65,17 @@ def run(argv: list[str], cwd: str, timeout: int = 1800) -> subprocess.CompletedP
 
 
 def commit_squash(message: str, cwd: str) -> None:
+    # Read the bot identity from the workflow-level env (MERGE_BOT_GIT_NAME /
+    # MERGE_BOT_GIT_EMAIL, defined once in merge-queue.yml) so the train commit
+    # author matches the queue job. The fallbacks keep local/test runs working
+    # when those variables are unset.
+    name = os.environ.get("MERGE_BOT_GIT_NAME", "modulo-merge-bot")
+    email = os.environ.get("MERGE_BOT_GIT_EMAIL", "bot@modulo.run")
     git(
         "-c",
-        "user.name=modulo-merge-bot",
+        f"user.name={name}",
         "-c",
-        "user.email=bot@modulo.run",
+        f"user.email={email}",
         "commit",
         "-q",
         "-m",
@@ -238,15 +245,29 @@ def _prefix_collisions(
 
     Returns (collides, detail_lines, staged_claim, staged_release); the caller
     applies the staged maps only when it accepts the PR.
+
+    Two passes: stage every release (a delete, or a rename's source) BEFORE any
+    claim. `git diff --name-status` orders by path, so a same-prefix replace
+    emits the add (``A 0100_new.py``) *before* the delete (``D 0100_old.py``);
+    a single pass would see main's old file still holding the prefix and
+    falsely report a collision. Releasing first makes an add-then-delete and a
+    delete-then-add see the same released state.
     """
     detail: list[str] = []
     staged_claim: dict[str, str] = {}
     staged_release: dict[str, str] = {}
+
+    # Pass 1: releases only, so a prefix this PR's own diff frees is free to
+    # claim in pass 2 regardless of git's path ordering.
+    for status, path, _extra in diff:
+        if status == "D" or status.startswith("R"):
+            _release_prefix(staged_release, Path(path).name)
+
+    # Pass 2: claims only.
     for status, path, extra in diff:
         if status.startswith("R"):
             message = _rename_collision(num, path, extra, prefix_holder, staged_claim, staged_release)
         elif status == "D":
-            _release_prefix(staged_release, Path(path).name)
             message = None
         else:
             message = _add_collision(num, path, prefix_holder, staged_claim, staged_release)

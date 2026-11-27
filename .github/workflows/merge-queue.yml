@@ -3297,6 +3297,16 @@ jobs:
       && needs.admit.outputs.admitted != '0'
     runs-on: ubicloud-standard-2
     timeout-minutes: 60
+    # This job merges to main via `gh pr merge`, exactly like `queue`, so it must
+    # hold the SAME concurrency group. With MERGE_TRAIN_ENABLED=true the `queue`
+    # job is skipped, so without this the group is unheld and two overlapping
+    # cron / workflow_dispatch / repository_dispatch train runs could merge in
+    # parallel - racing labels, branch cleanup and post-merge CI dispatch.
+    # cancel-in-progress must stay false: a later run must never cancel an
+    # in-flight merge.
+    concurrency:
+      group: merge-queue
+      cancel-in-progress: false
     permissions:
       contents: write
       pull-requests: write
@@ -3418,8 +3428,14 @@ jobs:
       # those, and merge the innocent remainder on a re-run. Until then, the
       # whole train is held and labelled, which is safe but conservative.
       - name: Triage build/validation failure
+        # Any non-success/non-skipped upstream outcome (failure, cancelled,
+        # timed_out) is a failed train: without this a cancelled/timed-out build
+        # or validation would leave the admitted PRs unlabelled (red run, no PR
+        # signal). A skipped build/validate is the legitimate no-work case.
         if: >-
-          always() && (needs.build.result == 'failure' || needs.validate.result == 'failure')
+          always()
+          && (contains(fromJSON('["failure","cancelled","timed_out"]'), needs.build.result)
+              || contains(fromJSON('["failure","cancelled","timed_out"]'), needs.validate.result))
         env:
           GH_TOKEN: ${{ github.token }}
           FAILED_JOBS: ${{ needs.validate.outputs.failed_jobs }}
@@ -3537,7 +3553,19 @@ jobs:
           WORKFLOW_PAT: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN }}
         shell: bash
         run: |
+          # Build+validate succeeded, so a non-empty train-state is expected. If
+          # it is missing (a failed artifact download) or records no merged PRs,
+          # merging nothing and staying green would be a silent no-op: fail the
+          # run instead.
+          if [ ! -f /tmp/train_state.json ]; then
+            echo "::error::train-state artifact is missing but build+validate succeeded - cannot merge the trained PRs (fail CLOSED)."
+            exit 1
+          fi
           PR_NUMS=$(jq -r '(.merged_prs // []) | join(" ")' /tmp/train_state.json 2>/dev/null || echo "")
+          if [ -z "$PR_NUMS" ]; then
+            echo "::error::train-state records no merged PRs but build+validate succeeded - nothing to merge (fail CLOSED)."
+            exit 1
+          fi
           echo "Merging train PRs (oldest first):"
           echo "$PR_NUMS"
           GH_MERGED=""
