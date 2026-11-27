@@ -4089,7 +4089,7 @@ function hasPlacedPositions(nodes: any[]): boolean {
  * The size Vue Flow measured for a rendered node, if it has measured it yet.
  *
  * FAR-2815: the backend graph carries no pixel dimensions and the cards size to
- * their own content (no fixed width), so a layout fed only the backend fields
+ * their own content (bounded only by a maximum width), so a layout fed only the backend fields
  * falls back to graph-layout's 200x100 defaults. A wider or taller real card
  * then lands on top of its neighbour when the ranks are spaced for 200x100.
  * Vue Flow stores the measured box on the live node, which is the only truthful

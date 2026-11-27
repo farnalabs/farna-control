@@ -68,7 +68,7 @@
             >
               <Background :gap="20" :size="1" />
               <template #node-agent="nodeProps">
-                <div class="rounded-lg border-2 border-library-wizard/60 bg-library-wizard/10 px-4 py-3 shadow-sm">
+                <div :class="['break-words rounded-lg border-2 border-library-wizard/60 bg-library-wizard/10 px-4 py-3 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
                   <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-library-wizard-soft">{{ $t('views.LibraryPipelineWizard.agent') }}</div>
                   <div class="text-sm font-semibold text-foreground">{{ nodeProps.data.label }}</div>
                 </div>
@@ -203,6 +203,7 @@ import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { layoutNodes } from '../utils/graph-layout'
+import { PIPELINE_NODE_MAX_WIDTH_CLASS } from '../components/pipeline/nodes/NodeRegistry'
 import { CANVAS_EDGE_STROKE } from '../constants/canvas'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
