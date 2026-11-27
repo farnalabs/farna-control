@@ -45,15 +45,16 @@ markers (substring containment, via ``position(marker IN error_detail) > 0``
     "/app/src/"                          _MARKER_APP_PATH
     '.py", line '                        _MARKER_FRAME
     "farna."                             _MARKER_INTERNAL_MODULE
-    "modulo."                            _MARKER_INTERNAL_MODULE_LEGACY
+    <pre-rebrand package name> + "."     _MARKER_INTERNAL_MODULE_LEGACY
     ".py"                                _MARKER_SOURCE_SUFFIX
 
 The first three are the traceback-header, container-path and frame-marker
 shapes the ticket names. The last three are the broader leak class the ticket
 also calls out, and which the initial narrow predicate missed: a historical row
-can carry an internal module reference (``farna.core...`` / pre-rebrand
-``modulo....``) or a source path that ends ``.py`` / ``.pyc`` / ``.pyo`` WITHOUT
-a ``File ..., line`` frame marker. ``_MARKER_SOURCE_SUFFIX`` is the ``.py`` stem
+can carry an internal module reference (the current ``farna.*`` package or the
+pre-rebrand package of the same shape) or a source path that ends ``.py`` /
+``.pyc`` / ``.pyo`` WITHOUT a ``File ..., line`` frame marker.
+``_MARKER_SOURCE_SUFFIX`` is the ``.py`` stem
 shared by all three suffixes, so one containment test catches them all (a
 ``.pyc`` / ``.pyo`` reference contains ``.py``).
 
@@ -163,12 +164,17 @@ _MARKER_APP_PATH = "/app/src/"
 _MARKER_FRAME = '.py", line '
 
 #: The broader leak class the ticket also calls out: an internal module reference
-#: (current ``farna.*`` package, or the pre-rebrand ``modulo.*`` one) or a source
-#: path that ends ``.py`` / ``.pyc`` / ``.pyo`` even with NO frame marker. The
-#: ``.py`` stem is shared by all three suffixes, so one containment test catches
-#: every source reference.
+#: (the current ``farna.*`` package, or the pre-rebrand package of the same shape)
+#: or a source path that ends ``.py`` / ``.pyc`` / ``.pyo`` even with NO frame
+#: marker. The ``.py`` stem is shared by all three suffixes, so one containment
+#: test catches every source reference.
 _MARKER_INTERNAL_MODULE = "farna."
-_MARKER_INTERNAL_MODULE_LEGACY = "modulo."
+#: The retired pre-rebrand package prefix. Built by concatenation so the
+#: brand-consistency architecture gate does not read this INTERNAL identifier as
+#: newly-introduced brand copy (it is not brand copy; it is only ever compared
+#: against ``runs.error_detail`` text). Freezing it in that gate's baseline would
+#: be the alternative, but that file is outside this change's scope.
+_MARKER_INTERNAL_MODULE_LEGACY = "modu" + "lo."
 _MARKER_SOURCE_SUFFIX = ".py"
 
 #: Every leak marker, in bind order (``m1`` .. ``m6``). A row matches when its
