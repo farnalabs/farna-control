@@ -252,7 +252,7 @@ class TestGetPluginDetail:
         """The detail payload carries the manifest *and* the plugin's health."""
         mock_registry = _make_mock_registry([PLUGIN_SLACK])
         with patch("farna.api.routes.plugins.get_plugin_registry", return_value=mock_registry):
-            resp = client.get("/api/v1/plugins/modulo-connector-slack")
+            resp = client.get(f"/api/v1/plugins/{PLUGIN_SLACK['PLUGIN_ID']}")
 
         assert resp.status_code == 200
         body = resp.json()
