@@ -209,6 +209,16 @@ Proves: frontend/src/__tests__/design-system-components.spec.ts::stacks on mobil
   holds it must be part of the PR's changed-file list – a proving test is added
   or updated by the same change, never an untouched test that happened to pass
   before.
+- A frontend test title declared with a template literal may be named either
+  verbatim (the `${...}` placeholders as written) or with the placeholders filled
+  in, exactly as a CI run prints it. A `${...}` placeholder in the *declared* title
+  is a wildcard, so both
+  `frontend/tests/e2e/wcag-contrast.spec.ts::authenticated ${path} has no unexpected WCAG AA violations (light theme)`
+  and
+  `frontend/tests/e2e/wcag-contrast.spec.ts::authenticated /settings/mcp has no unexpected WCAG AA violations (light theme)`
+  resolve the same `test(...)` call. Only the declared side is a wildcard – a
+  pattern written in the reference itself matches nothing – and a skipped test is
+  still refused in both forms.
 - A test that is skipped or expected to fail cannot prove anything, at any
   pytest scope: a `@pytest.mark.skip` / `skipif` / `xfail` decorator on the test
   or on its enclosing class, a module-level `pytestmark = pytest.mark.skip(...)`

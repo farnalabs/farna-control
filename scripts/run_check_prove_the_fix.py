@@ -25,6 +25,13 @@ Fenced code blocks and HTML comments are stripped before the ``Proves:`` lines
 are read, so *documenting* the convention inside a PR body (the README example is
 itself a fenced block) can never satisfy it.
 
+A frontend title declared with a template literal (``test(`authenticated ${path}
+has ...`)``) is captured by the extractor verbatim, placeholders and all, but a
+CI run shows the substituted title. The gate accepts both forms: a ``${...}``
+placeholder in the DECLARED title is a wildcard, so the verbatim template and the
+filled-in title both resolve. Nothing else is a wildcard, and the submitted ref is
+always matched literally.
+
 Usage
 -----
     # CI (the changed-file list and the PR body are handed in by the workflow)
@@ -44,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import difflib
 import re
 import sys
 import tempfile
@@ -520,22 +528,72 @@ def runnable_spec_titles(source: str) -> set[str]:
     return {title for title, reason in iter_spec_test_calls(source) if reason is None}
 
 
+#: A template-literal placeholder in a DECLARED spec test title, e.g.
+#: ``authenticated ${path} has no unexpected WCAG AA violations``. Only
+#: placeholders on the declared side are wildcards; the submitted ref is matched
+#: literally everywhere else.
+_SPEC_TITLE_PLACEHOLDER_RE = re.compile(r"\$\{[^}]*\}")
+
+
+def _declared_title_pattern(title: str) -> re.Pattern[str]:
+    """Compile a declared spec title to a regex, its ``${...}`` placeholders as ``.*``.
+
+    Every other character is escaped, so a declared title holding parentheses, a
+    slash or a dot still matches only itself. The wildcard lives on the declared
+    side only: the submitted ref never turns into a pattern.
+    """
+    parts: list[str] = []
+    cursor = 0
+    for placeholder in _SPEC_TITLE_PLACEHOLDER_RE.finditer(title):
+        parts.append(re.escape(title[cursor : placeholder.start()]))
+        parts.append(".*")
+        cursor = placeholder.end()
+    parts.append(re.escape(title[cursor:]))
+    return re.compile("".join(parts))
+
+
+def _title_matches(declared: str, ref_title: str) -> bool:
+    """True when *ref_title* names the declared *title* under either accepted form.
+
+    A declared title with no ``${...}`` placeholder matches only verbatim. A
+    parameterised one also matches with its placeholders filled in - the title an
+    author copies from a CI run.
+    """
+    if declared == ref_title:
+        return True
+    if "${" not in declared:
+        return False
+    return _declared_title_pattern(declared).fullmatch(ref_title) is not None
+
+
+def _nearest_declared_titles(ref_title: str, declared_titles: list[str], limit: int = 3) -> list[str]:
+    """Up to *limit* declared titles close to *ref_title* (stdlib ``difflib``)."""
+    return difflib.get_close_matches(ref_title, declared_titles, n=limit)
+
+
+def _undefined_spec_title_message(ref: str, ref_title: str, calls: list[tuple[str, str | None]], rel: str) -> str:
+    """The "not defined" error, plus up to three near matches to copy from."""
+    message = f"{ref!r} names a test title that is not defined in {rel}"
+    declared_titles = list(dict.fromkeys(title for title, _reason in calls))
+    nearest = _nearest_declared_titles(ref_title, declared_titles)
+    if not nearest:
+        return message
+    return f"{message}. Did you mean: {'; '.join(f'{title!r}' for title in nearest)}"
+
+
 def _verify_spec_ref(ref: str, match: re.Match[str], module: Path) -> str | None:
     try:
         source = module.read_text(encoding="utf-8")
     except OSError as exc:
         return f"{ref!r} names a spec that cannot be read: {exc}"
     name = match.group("name").strip()
-    found = False
-    for title, reason in iter_spec_test_calls(source):
-        if title != name:
-            continue
-        found = True
-        if reason is not None:
-            return f"{ref!r} names a spec test that cannot prove anything: {reason}"
-    if not found:
-        return f"{ref!r} names a test title that is not defined in {match.group('file')}"
-    return None
+    calls = list(iter_spec_test_calls(source))
+    matched = [(title, reason) for title, reason in calls if _title_matches(title, name)]
+    if not matched:
+        return _undefined_spec_title_message(ref, name, calls, match.group("file"))
+    if any(reason is None for _title, reason in matched):
+        return None
+    return f"{ref!r} names a spec test that cannot prove anything: {matched[0][1]}"
 
 
 def verify_ref(ref: str, repo_root: Path, changed_files: list[str]) -> str | None:
