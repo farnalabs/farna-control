@@ -1,0 +1,26 @@
+{
+  "frontend/src/router/index.ts": {
+    "lines": 1460,
+    "maxFunctionComplexity": 29
+  },
+  "frontend/src/views/EvalEditorView.vue": {
+    "lines": 2228,
+    "maxFunctionComplexity": 11
+  },
+  "frontend/src/views/ParameterSchemasView.vue": {
+    "lines": 1225,
+    "maxFunctionComplexity": 10
+  },
+  "frontend/src/views/PipelineEditorView.vue": {
+    "lines": 6887,
+    "maxFunctionComplexity": 21
+  },
+  "frontend/src/views/RunDetailView.vue": {
+    "lines": 2877,
+    "maxFunctionComplexity": 30
+  },
+  "frontend/src/views/SettingsTriggersView.vue": {
+    "lines": 1325,
+    "maxFunctionComplexity": 18
+  }
+}
