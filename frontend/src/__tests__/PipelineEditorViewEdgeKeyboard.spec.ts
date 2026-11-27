@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
 
 const useApiFns = vi.hoisted(() => ({
   get: vi.fn(async () => ({ items: [] })),
@@ -186,5 +187,45 @@ describe('PipelineEditorView - keyboard reachable edges (FAR-2816)', () => {
     edge.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
 
     await vi.waitFor(() => expect(edgePropsOpen(root)).not.toBeNull(), { timeout: 5000 })
+  })
+
+  // Coverage of the activation guard's early returns (FAR-2816 follow-up): the
+  // first two tests only walk the happy path, so the two `return false` arms
+  // were the branch-coverage gap on this branch's changed lines.
+
+  it('ignores a key event whose target is not an element', async () => {
+    const { root } = await mountCanvas()
+    const canvas = root.querySelector<HTMLElement>('[data-testid="pipeline-editor-canvas"]')!
+    // `event.target` is an EventTarget, not necessarily an Element (a text node
+    // is the reachable case). The guard must fall through quietly instead of
+    // dereferencing it.
+    const textTarget = document.createTextNode('edge badge')
+    canvas.appendChild(textTarget)
+    try {
+      textTarget.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await nextTick()
+      expect(edgePropsOpen(root)).toBeNull()
+    } finally {
+      textTarget.remove()
+    }
+  })
+
+  it('ignores Enter on a canvas edge with no backend counterpart', async () => {
+    const { wrapper, root } = await mountCanvas()
+    const vm = wrapper.vm as any
+    // A freshly drawn connection exists only on the canvas until it is saved, so
+    // it has no backend edge to open.
+    vm.flowEdges = [...vm.flowEdges, { id: 'flow-only', source: 'a', target: 'b', type: 'smoothstep' }]
+    await vi.waitFor(() => expect(edgeElement(root, 'flow-only')).toBeTruthy(), { timeout: 5000 })
+
+    const edge = edgeElement(root, 'flow-only')
+    edge.focus()
+    expect(document.activeElement).toBe(edge)
+    edge.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await nextTick()
+
+    expect(edgePropsOpen(root)).toBeNull()
+    // The interaction is inert, not destructive: the edge is still selectable.
+    expect(vm.selectedEdgeData).toBeNull()
   })
 })
