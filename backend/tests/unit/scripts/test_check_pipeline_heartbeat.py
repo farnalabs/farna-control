@@ -381,6 +381,10 @@ def _minimum_interval_minutes(cron: str) -> int:
     if hour == "*":
         return 60
     if day_of_month == "*" and day_of_week != "*":
+        # A day-of-week LIST ("1,4") fires more often than weekly, so treating it
+        # as weekly would silently over-state the interval. Refuse it instead.
+        if not day_of_week.isdigit():
+            raise AssertionError(f"unsupported cron expression: {cron!r}")
         return 7 * 24 * 60
     if day_of_month == "*" and day_of_week == "*":
         return 24 * 60
