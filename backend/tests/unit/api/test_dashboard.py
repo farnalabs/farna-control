@@ -1054,8 +1054,13 @@ class TestFactsWindowRunDate:
         literal makes this test fail the moment the projection widens).
         """
         from farna.api.routes import dashboard as dashboard_module
+        from farna.core.analytics import facts_window as facts_window_module
 
+        # ONE projection: both consumers import the same lifecycle set. Widening
+        # it in both module namespaces must move both numbers.
+        assert facts_window_module.SUCCESS_STATUSES is dashboard_module.SUCCESS_STATUSES is SUCCESS_STATUSES
         widened = frozenset({*SUCCESS_STATUSES, "rejected"})
+        monkeypatch.setattr(facts_window_module, "SUCCESS_STATUSES", widened)
         monkeypatch.setattr(dashboard_module, "SUCCESS_STATUSES", widened)
         start, end = date(2026, 1, 1), date(2026, 1, 8)
 

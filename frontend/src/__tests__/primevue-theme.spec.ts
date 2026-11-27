@@ -117,11 +117,17 @@ describe('PrimeVue token bridge guard', () => {
 
   it('applies the bridge as hsl(var(--source)) values on the document root', () => {
     // Guard that the mapping entries are non-trivial (real work exists) and
-    // that the source names are unique (no duplicate mappings that would make
-    // one source silently override another).
+    // that no (source, target) pair is duplicated. The apply loop below writes
+    // TARGETS, so only a repeated target could make one entry silently
+    // overwrite another — and repeated targets are intentional and mirrored in
+    // the DOM check (several sources feeding one token, e.g. card/popover →
+    // surface-900). A repeated PAIR is a plain redundant duplicate, so that is
+    // the real invariant to assert. Note one source may legitimately feed
+    // several targets (muted-foreground → the secondary button's outlined and
+    // text variants), which is why uniqueness is over pairs, not sources.
     expect(PRIMEVUE_TOKEN_BRIDGE.length).toBeGreaterThan(10)
-    const sources = PRIMEVUE_TOKEN_BRIDGE.map((e) => e.source)
-    expect(new Set(sources).size).toBe(sources.length)
+    const pairs = PRIMEVUE_TOKEN_BRIDGE.map((e) => `${e.source}->${e.target}`)
+    expect(new Set(pairs).size).toBe(pairs.length)
 
     // Actually invoke the bridge on a real element and assert the DOM mapping,
     // so the central deliverable of ADR 024 Decision 4 is proven to do what it

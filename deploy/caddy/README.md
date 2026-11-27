@@ -26,6 +26,8 @@ caddy start --config Caddyfile
 
 | Path                     | Upstream      | Purpose                        |
 |--------------------------|---------------|--------------------------------|
+| `/install.sh`            | Redirect (302)| Native installer entry point (default branch) |
+| `/install.sh?version=X.Y.Z` | Redirect (302) | Native installer at release tag `bundle-vX.Y.Z` |
 | `/healthz*`              | Backend:8000  | Liveness + readiness probes    |
 | `/metrics`               | Backend:8000  | Prometheus metrics             |
 | `/api/*`                 | Backend:8000  | REST API                       |
@@ -35,6 +37,33 @@ caddy start --config Caddyfile
 | Everything else (`/`)    | Frontend:5173 | Vue.js SPA                     |
 
 Caddy v2 handles WebSocket upgrades transparently — no extra config needed.
+
+## Native installer entry point
+
+`/install.sh` is served by this config as a redirect to the installer checked
+into the Farna Control repository, so the download URL never depends on a raw
+GitHub path in your docs:
+
+```bash
+# Stable: the installer on the default branch (main)
+curl -fsSL https://<your-domain>/install.sh -o farna-control-install.sh
+bash farna-control-install.sh
+
+# Pinned: the installer as it shipped in release 0.3.329 (tag bundle-v0.3.329)
+curl -fsSL 'https://<your-domain>/install.sh?version=0.3.329' -o farna-control-install.sh
+bash farna-control-install.sh
+```
+
+The pinned form maps `version=X.Y.Z` to the release tag `bundle-v<X.Y.Z>`, the
+same convention the release pipeline creates and `scripts/install.sh` consumes.
+A `version` that is not `X.Y.Z` is refused with `400` rather than silently
+falling back to the default branch. Download to a file and run it: the
+installer verifies every download's sha256 before executing anything, and a
+`curl ... | bash` pipe skips that check.
+
+The rule is an exact-path match placed after the backend routes and before the
+SPA catch-all, so it cannot shadow `/healthz`, `/api`, `/.well-known`, `/mcp`,
+`/ws`, or the SPA.
 
 ## With Docker Compose
 

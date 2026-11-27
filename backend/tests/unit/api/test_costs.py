@@ -218,6 +218,70 @@ class TestGetCostsReport:
         resp = client.get("/api/v1/admin/costs?period=decade")
         assert resp.status_code == 422
 
+    def test_org_run_count_comes_from_the_facts_total_not_the_ledger(self) -> None:
+        """FAR-2820: "Total Runs" must count EVERY terminal run, including free ones.
+
+        The spend ledger's ``run_count`` only covers runs with a positive cost,
+        so it can report 0 while the same card's "successful runs" figure (read
+        from ``run_daily_facts``) reports hundreds. The route must therefore
+        ignore the ledger bucket ``build_cost_report_buckets`` returns and take
+        ``org_run_count`` from the facts-window total.
+        """
+        mock_session = _make_mock_session()
+        # The facts-window aggregate is the only ``.one()`` read on this
+        # session - every other collaborator is patched below. ``total`` (226)
+        # and ``complete`` (200) come from the SAME row query, so the route's
+        # total and successful counts share one window by construction.
+        facts_row = MagicMock(total=226, active_pipelines=0, tokens=0, avg_duration_ms=None, complete=200)
+        mock_session.execute.return_value.one.return_value = facts_row
+
+        async def override_session() -> AsyncGenerator[AsyncMock, None]:
+            yield mock_session
+
+        app.dependency_overrides[get_settings] = _make_settings
+        app.dependency_overrides[get_db_session] = override_session
+        app.dependency_overrides[_get_engine] = lambda: MagicMock()
+        app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(
+            username="admin",
+            organisation_id=_ORG_ID,
+            account_id=_USER_ID,
+            org_role="admin",
+        )
+        app.dependency_overrides[get_plan_context] = lambda: _TeamPlan()
+        try:
+            with (
+                patch(
+                    "farna.api.routes.costs.get_cost_report",
+                    return_value=self.ROWS,
+                ),
+                patch("farna.api.routes.costs.set_rls_org"),
+                patch(
+                    "farna.api.routes.costs.build_cost_report_buckets",
+                    new=AsyncMock(
+                        return_value={
+                            "org_run_count": 0,  # the ledger: zero-cost runs never enter it
+                            "org_total": "0.000000",
+                            "org_unassigned_components": "0.000000",
+                            "legacy_total": "0.000000",
+                            "components_by_team": {},
+                            "annotations_by_team": {},
+                            "has_more": False,
+                        }
+                    ),
+                ),
+            ):
+                resp = TestClient(app).get("/api/v1/admin/costs?group_by=team&period=month")
+        finally:
+            app.dependency_overrides.clear()
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["org_run_count"] == 226
+        # The successful count is the SAME facts query's ``complete`` subset, so
+        # the card can never show more successes than runs.
+        assert body["org_successful_run_count"] == 200
+        assert body["org_run_count"] >= body["org_successful_run_count"]
+
     def test_unauthorized_returns_4xx(self, unauth_client: TestClient) -> None:
         resp = unauth_client.get("/api/v1/admin/costs")
         assert resp.status_code in (401, 403)

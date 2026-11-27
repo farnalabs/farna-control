@@ -173,8 +173,13 @@ conscious choice.
 
 ## Not measured / not acted on
 
-- **Cold-build time** is reported (Metric C) but not optimised: it is a separate
-  axis (image export/unpack on this host), and this change needs no rebuild.
+- **Cold-build time** is reported (Metric C) but not optimised here: it is a
+  separate axis (image export/unpack on this host), and this change needs no
+  rebuild. Followed up separately in
+  [`compose-cold-build-performance.md`](compose-cold-build-performance.md)
+  (FAR-2826), which found that Metric C's cost was paid three times for one
+  image and that `chown -R appuser /app` — not the export — is the largest
+  single step.
 - **Cold-start DB race.** One boot during measurement had the backend exit `1`
   with `ConnectionRefusedError` to `db:5432`: `pg_isready` reported the DB
   healthy while Postgres was still cycling through its initdb restart, so

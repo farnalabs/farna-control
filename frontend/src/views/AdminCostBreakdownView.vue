@@ -232,19 +232,36 @@ const totalRuns = computed(() => {
 })
 const avgCostPerRun = computed(() => totalRuns.value > 0 ? totalSpend.value / totalRuns.value : 0)
 
-// Cost per successful run — derived from the existing analytics buckets endpoint.
-// Each bucket carries `count` (total runs) and `success_rate` (complete / count).
-// Summing count * success_rate across all day-buckets for the period gives the
-// total successful-run count. No new backend endpoint needed.
+// Cost per successful run.
+//
+// FAR-2820: prefer the server-computed count. The costs report now returns
+// `org_successful_run_count` from the SAME run_daily_facts query (and the SAME
+// UTC month-to-date window) as `org_run_count`, so "Total Runs" and "N
+// successful runs" on the same card can never disagree - previously the
+// success count came from /analytics/query over a BROWSER-LOCAL month start
+// while the total came from the UTC month, so the two windows could straddle a
+// month boundary and report more successes than runs.
+//
+// The analytics fallback preserves the figure for an older backend that does
+// not send the field yet. Each bucket carries `count` (total runs) and
+// `success_rate` (complete / count); summing count * success_rate across the
+// day-buckets gives an approximate successful-run count.
 type AnalyticsBucket = components['schemas']['AnalyticsBucket']
 type AnalyticsResponse = components['schemas']['AnalyticsResponse']
 
-const successfulRuns = ref(0)
+const analyticsSuccessfulRuns = ref(0)
+
+const successfulRuns = computed<number>(() => {
+  const backendCount = (data.value as CostReportResponse | undefined)?.org_successful_run_count
+  return backendCount ?? analyticsSuccessfulRuns.value
+})
 
 async function loadSuccessCount() {
   try {
     const now = new Date()
-    const dateFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    // UTC month-to-date, matching the report's UTC period window so the
+    // fallback figure is scoped the same way as `org_run_count`.
+    const dateFrom = `${now.toISOString().slice(0, 7)}-01`
     const dateTo = now.toISOString().slice(0, 10)
 
     const { data: analyticsData, error: analyticsErr } = await api.GET('/api/v1/analytics/query', {
@@ -252,7 +269,7 @@ async function loadSuccessCount() {
     })
     if (!analyticsErr && analyticsData) {
       const resp = analyticsData as AnalyticsResponse
-      successfulRuns.value = (resp.buckets ?? []).reduce((sum: number, b: AnalyticsBucket) => {
+      analyticsSuccessfulRuns.value = (resp.buckets ?? []).reduce((sum: number, b: AnalyticsBucket) => {
         if (b.success_rate != null) {
           return sum + Math.round(b.count * b.success_rate)
         }
@@ -261,7 +278,7 @@ async function loadSuccessCount() {
     }
   } catch {
     // Analytics endpoint may lack permission — degrade gracefully to 0.
-    successfulRuns.value = 0
+    analyticsSuccessfulRuns.value = 0
   }
 }
 

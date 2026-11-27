@@ -8178,6 +8178,11 @@ async def search_library(
                 page=1,
                 page_size=limit,
                 cursor=cursor,
+                # ADR 070 §5: the DB policy on ``library_primitives`` keys on
+                # the KEY OWNER's team memberships, not the key's team, so a
+                # team-A key must be clamped here explicitly or it lists
+                # team-B's team-private primitives.
+                team_id=_ctx_team_id_val(),
             )
         return {
             "items": [
@@ -14557,6 +14562,10 @@ async def resource_library() -> str:
                 primitive_types=visible_primitive_types,
                 page=1,
                 page_size=50,
+                # Same team boundary as ``search_library``: the resource
+                # duplicates the tool's read (FAR-1976 shares its node-scope
+                # gate too), so it must share its team clamp.
+                team_id=_ctx_team_id_val(),
             )
         if not result.items:
             return "Library is empty."
@@ -14610,6 +14619,17 @@ async def resource_library_detail(primitive_type: str, slug: str) -> str:
             p = await get_primitive_by_slug(s, org_id, primitive_type, slug)
 
         if p is None:
+            return f"Library primitive '{slug}' of type '{primitive_type}' not found."
+
+        # ADR 070 §5: a team-scoped credential must not read another team's
+        # team-private primitive. ``get_primitive_by_slug`` filters only
+        # ``primitive_type`` + ``slug``, and ``library_primitives`` RLS keys the
+        # team policy on the key OWNER's memberships (not the key's own team),
+        # so only this explicit boundary holds. Return not-found on mismatch so
+        # the response never reveals the foreign row exists — the same
+        # indistinguishability the by-id REST read (FAR-2682
+        # ``_primitive_visible_to``) and the list resource already apply.
+        if team_boundary_blocked(_ctx_team_id_val(), p.owner_team_id):
             return f"Library primitive '{slug}' of type '{primitive_type}' not found."
 
         tags_str = ", ".join(p.tags) if p.tags else ""

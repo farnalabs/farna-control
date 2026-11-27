@@ -28,6 +28,10 @@ code:
   - deploy/windows/modulo.iss
   - deploy/windows/INSTALLER-INFO.txt
   - deploy/windows/BUNDLE-BUILD.md
+  - deploy/caddy/Caddyfile
+  - deploy/caddy/README.md
+  - deploy/fly/nginx.conf
+  - deploy/nginx/all-in-one.conf
   - .github/workflows/bundle-release.yml
   - .github/workflows/macos-installer.yml
   - .github/workflows/macos-staple-retry.yml
@@ -43,6 +47,7 @@ unit-tests:
   - backend/tests/unit/scripts/test_install_activation_file.py
   - backend/tests/unit/scripts/test_install_support_block.py
   - backend/tests/unit/scripts/test_install_unreadable_cwd.py
+  - backend/tests/unit/scripts/test_caddy_installer_url.py
   - backend/tests/unit/scripts/test_bundle_release_security.py
   - backend/tests/unit/scripts/test_windows_artifact_provenance.py
   - backend/tests/unit/scripts/test_windows_installer_service.py
@@ -74,6 +79,71 @@ platform matrix live in `docs/system-requirements.md` and
 `docs/upgrade-process.md`. This is an infra-only surface: the native install has
 no manifest route and no in-product UI, so it is tracked here rather than in the
 manifest `features:` registry.
+
+## Installer entry point
+
+A stable `/install.sh` entry point is published by the reverse proxies that
+serve Farna Control, so operators are not pointed at a `raw.githubusercontent.com`
+path:
+
+- the bundled Caddy config (`deploy/caddy/Caddyfile`),
+- the Fly nginx ingress (`deploy/fly/nginx.conf`), which fronts `control.farna.dev`
+  and staging, and
+- the all-in-one self-hosted image (`deploy/nginx/all-in-one.conf`).
+
+All three expose the same two forms: the installer at a stable URL, and the
+installer as it shipped in a specific release.
+
+```bash
+# Stable: the installer on the default branch (main)
+curl -fsSL https://<your-domain>/install.sh -o farna-control-install.sh
+bash farna-control-install.sh
+
+# Pinned: install release 0.3.329 (tag bundle-v0.3.329)
+curl -fsSL 'https://<your-domain>/install.sh?version=0.3.329' -o farna-control-install.sh
+VERSION=bundle-v0.3.329 bash farna-control-install.sh
+```
+
+`version=X.Y.Z` maps to the release tag `bundle-v<X.Y.Z>` — the convention the
+release pipeline creates and `scripts/install.sh` consumes — and any other
+version shape (including a present-but-empty `?version=`) is refused with `400`
+rather than silently served from the default branch.
+
+A pinned install needs **both** steps, because the two pin different things:
+
+- the `?version=X.Y.Z` URL selects the installer **script as it shipped in that
+  release** (fetched from the `bundle-v<X.Y.Z>` tag), and
+- `VERSION=bundle-v<X.Y.Z>` selects the **bundle the script downloads**. The
+  installer resolves the latest release at run time unless `VERSION` is set —
+  its usage text reads `VERSION=<tag>  Install a specific bundle tag (default:
+  latest release)` — so the tagged URL on its own still installs the latest
+  bundle. The URL alone does not pin the install; the two together do.
+
+The rule is an exact-path (`location =` / Caddy `path /install.sh`) match, so it
+can only ever match the single URI `/install.sh`. It cannot shadow `/healthz`,
+`/health`, `/api`, `/.well-known`, `/mcp`, `/ws`, `/robots.txt`,
+`/runtime-config.js` or the SPA catch-all, and the static-asset extension regex
+cannot capture it (`.sh` is not one of its extensions, and an exact match
+outranks a regex anyway). In the nginx configs the version validation uses an
+`if` in the documented safe form (the body only issues `return`); a `map` is not
+an option there because a map must live in the `http` context and those files
+are server-block includes.
+
+The live URL is observable only after a deploy; these are the post-deploy checks:
+
+```bash
+curl -sI https://<your-domain>/install.sh | grep -i '^location:.*/main/scripts/install.sh'
+curl -sI 'https://<your-domain>/install.sh?version=0.3.329' | grep -i '^location:.*/bundle-v0.3.329/scripts/install.sh'
+curl -s -o /dev/null -w '%{http_code}\n' 'https://<your-domain>/install.sh?version=nope'   # 400
+```
+
+**Deployment scope:** the entry point now ships in the Fly nginx ingress
+(`deploy/fly/nginx.conf`, the surface behind `control.farna.dev`) and the
+all-in-one nginx image (`deploy/nginx/all-in-one.conf`), in addition to the
+bundled Caddy config. Two nginx surfaces still do **not** carry it and are
+tracked as known residuals: the Helm frontend configmap
+(`deploy/helm/farna-control/templates/frontend-nginx-configmap.yaml`) and
+`deploy/nginx/default.conf`.
 
 ## Behaviors
 

@@ -10,7 +10,7 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 502 of 922 ticked behaviours (120 node, 139 feature, 243 module strength).
+Bound today: 518 of 922 ticked behaviours (135 node, 140 feature, 243 module strength).
 Weak bindings (module-only): 243. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
@@ -737,41 +737,9 @@ Derived status: `partial`
 
 Derived status: `partial`
 
-- `health-checks-01` - `GET /healthz` returns `{"status": "ok"}` and is advisory only (never flips readiness)
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-02` - `GET /healthz/ready` checks database connectivity (SELECT 1)
-  - why: behaviour text names no test; only code paths (or nothing) are cited
 - `health-checks-03` - Redis connectivity check (degraded when not configured)
   - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-04` - Checkpointer schema accessibility check (degraded on failure)
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-05` - Alembic migration status check (degraded when migrations are pending)
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-06` - Database-hygiene sub-check (FAR-1445) – worst-table dead-tuple ratio
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-07` - A database-hygiene probe that does NOT complete within its budget (timeout, or the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-08` - SAQ worker liveness check – a stopped worker pool for 4+ consecutive probe ticks 503s readiness (Plan F7)
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-09` - System-cron liveness watchdog – fire_due_triggers missing 2x cadence 503s readiness (Plan F8)
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-10` - Stale-run recovery sweep outcome – ADVISORY, never gates readiness: a missing or
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-11` - Dispatcher reconcile staleness – two tiers: `degraded` after 180s (3x the 60s
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-12` - Dispatcher reconcile detail counters (FAR-1621) – `_format_reconcile_detail`
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-13` - Fleet worker / fleet system-cron aggregation (worker process-group health, ADR 021)
-  - why: behaviour text names no test; only code paths (or nothing) are cited
 - `health-checks-14` - Break-glass watchdog exposure is advisory and never contributes to readiness
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-15` - Per-check timeout limits, configurable via `modulo_health_*_timeout_seconds` settings
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-16` - Overall status: `unavailable` if any gate is `unavailable`, `degraded` if any gate
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-17` - 503 status code when overall unavailable
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `health-checks-18` - Latency tracked per check
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `health-checks-19` - Fly.io deployment wiring – `fly.toml` `[[http_service.checks]]` probes `/healthz/ready`
   - why: behaviour text names no test; only code paths (or nothing) are cited
@@ -1141,7 +1109,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 120  Feature: 139  Module (weak): 243
+Node: 135  Feature: 140  Module (weak): 243
 
 ### Weak (module-only) bindings
 

@@ -539,12 +539,35 @@ self-contained bundle (own Python runtime, PostgreSQL, Redis) for a workstation
 or single machine without Docker; it does not bootstrap this Compose stack.
 Download it to a file and run it rather than streaming it into a shell:
 `install.sh` verifies every download's sha256 before executing anything, and a
-`curl ... | bash` pipe skips that verification entirely.
+`curl ... | bash` pipe skips that verification entirely. A deployment whose
+reverse proxy publishes the installer entry point serves it at a stable URL; the
+GitHub raw URL always works as a fallback. The stable URL ships in the bundled
+Caddy config (`deploy/caddy/Caddyfile`), the Fly nginx ingress
+(`deploy/fly/nginx.conf`, which fronts `control.farna.dev`) and the all-in-one
+nginx image (`deploy/nginx/all-in-one.conf`).
 
 ```bash
+# Stable: the stable installer entry point (Caddy, Fly nginx or all-in-one nginx)
+curl -fsSL https://<your-domain>/install.sh -o farna-control-install.sh
+
+# Pinned: install release 0.3.329 (tag bundle-v0.3.329)
+curl -fsSL 'https://<your-domain>/install.sh?version=0.3.329' -o farna-control-install.sh
+VERSION=bundle-v0.3.329 bash farna-control-install.sh
+
+# Always-available fallback: the script on the default branch
 curl -fsSL https://raw.githubusercontent.com/farnalabs/farna-control/main/scripts/install.sh -o farna-control-install.sh
+
 bash farna-control-install.sh
 ```
+
+A pinned install needs both the `?version=X.Y.Z` URL *and* `VERSION=bundle-v<X.Y.Z>`:
+the URL fetches the installer script as it shipped in that release, but the
+installer downloads the latest bundle unless `VERSION` is set (its usage text:
+`VERSION=<tag>  Install a specific bundle tag (default: latest release)`). The
+`version=X.Y.Z` maps to the release tag `bundle-v<X.Y.Z>`; any other version
+shape is refused with `400` rather than silently falling back to the default
+branch. The Helm frontend configmap and `deploy/nginx/default.conf` do not yet
+carry the entry point.
 
 | Component | How it runs |
 |---|---|
