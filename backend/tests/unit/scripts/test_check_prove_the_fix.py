@@ -222,13 +222,29 @@ test.fixme(`parameterised ${path} is a known fixme`, async () => {
   expect(true).toBe(true)
 })
 
-// The same declared title twice: one runnable, one skipped. A ref that matches
-// both must still resolve, because at least one of them runs.
+// The same declared title twice. The SKIPPED one comes FIRST on purpose: a
+// first-match implementation would reject the ref, so this pins the "any
+// runnable match wins" relaxation rather than passing under first-match too.
+test.skip(`shared ${token} case`, async () => {
+  expect(true).toBe(true)
+})
+
 test(`shared ${token} case`, async () => {
   expect(true).toBe(true)
 })
 
-test.skip(`shared ${token} case`, async () => {
+// Commas in a title: `marker_refs` reads a comma as "one test per Proves: line",
+// so these can never be pasted as a ref and must never be suggested.
+test('renders audit events with timestamp, badge, actor, target and summary', async () => {
+  expect(true).toBe(true)
+})
+
+test('validates the payload schema, version and checksum', async () => {
+  expect(true).toBe(true)
+})
+
+// The comma-free near neighbour of the first comma title above.
+test('renders audit events with timestamp badges and actors', async () => {
   expect(true).toBe(true)
 })
 
@@ -590,6 +606,31 @@ def test_an_unrelated_absent_title_keeps_the_plain_not_defined_message(tmp_path:
     assert "Did you mean:" not in problem, f"an unrelated title must not offer a misleading suggestion, got {problem!r}"
 
 
+def test_a_suggestion_never_quotes_a_title_a_ref_cannot_express(tmp_path: Path):
+    """A comma title can never be a Proves: ref, so it is never suggested.
+
+    ``marker_refs`` reads a comma as "one test per Proves: line", so pasting a
+    comma-containing title would fail with a DIFFERENT error. The nearest title
+    here contains a comma and has no comma-free neighbour, so the gate must offer
+    no suggestion rather than an unusable one.
+    """
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::validates the payload schema", root, _changed(_PARAM_SPEC_MODULE))
+    assert problem is not None
+    assert "not defined" in problem
+    assert "Did you mean:" not in problem, f"a comma title is not pasteable and must not be suggested, got {problem!r}"
+
+
+def test_a_suggestion_falls_back_to_a_pasteable_title_when_a_comma_one_is_closer(tmp_path: Path):
+    """A close comma-free title is suggested; the comma neighbour never is."""
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::renders audit events with timestamp", root, _changed(_PARAM_SPEC_MODULE))
+    assert problem is not None
+    assert "Did you mean:" in problem
+    assert "'renders audit events with timestamp badges and actors'" in problem, f"the pasteable near title must be suggested, got {problem!r}"
+    assert "badge, actor, target and summary" not in problem, f"a comma title must never be suggested, got {problem!r}"
+
+
 def test_a_skipped_parameterised_title_is_rejected(tmp_path: Path):
     """A skipped title cannot prove anything, however it is spelled."""
     root = _make_repo(tmp_path)
@@ -609,7 +650,12 @@ def test_the_suggestion_never_offers_a_skipped_title_as_a_bare_trap(tmp_path: Pa
 
 
 def test_one_runnable_match_among_several_resolves(tmp_path: Path):
-    """The same title declared twice, once skipped: the runnable one is proof."""
+    """The skipped declaration comes first; the runnable one still wins.
+
+    Ordering is load-bearing: the fixture declares ``test.skip(...)`` BEFORE the
+    runnable ``test(...)`` of the same title, so a first-match implementation
+    rejects the ref and only an any-runnable rule passes.
+    """
     root = _make_repo(tmp_path)
     problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::shared ${{token}} case", root, _changed(_PARAM_SPEC_MODULE))
     assert problem is None, f"a runnable match among several must resolve, got {problem!r}"

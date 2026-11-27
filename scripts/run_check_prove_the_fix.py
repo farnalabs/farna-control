@@ -543,12 +543,17 @@ def _suggest_spec_titles(ref_title: str, calls: list[tuple[str, str | None]]) ->
     to the whole declared set, annotating each candidate that cannot prove
     anything - a bare copy of a skipped title would be a trap.
 
+    A comma makes a title unexpressible as a ref: ``marker_refs`` reads a comma as
+    "one test per Proves: line", so a comma-containing title can never be pasted.
+    Such titles are dropped from BOTH pools, so every suggestion is pasteable; if
+    that leaves nothing close, there is no suggestion rather than a useless one.
+
     A title declared with a template literal, or with an ``each``/``for`` printf
     (``%s``) or ``$var`` placeholder, is quoted exactly as declared, placeholders
     and all: that is the only string the gate matches, and it is what the author
     must paste.
     """
-    runnable = list(dict.fromkeys(title for title, reason in calls if reason is None))
+    runnable = list(dict.fromkeys(title for title, reason in calls if reason is None and "," not in title))
     nearest = _nearest_declared_titles(ref_title, runnable)
     if nearest:
         return f"Did you mean: {'; '.join(f'{title!r}' for title in nearest)}"
@@ -556,7 +561,7 @@ def _suggest_spec_titles(ref_title: str, calls: list[tuple[str, str | None]]) ->
     for title, reason in calls:
         if reason is not None:
             skip_reasons.setdefault(title, reason)
-    declared = list(dict.fromkeys(title for title, _reason in calls))
+    declared = list(dict.fromkeys(title for title, _reason in calls if "," not in title))
     nearest = _nearest_declared_titles(ref_title, declared)
     if not nearest:
         return ""

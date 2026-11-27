@@ -219,9 +219,11 @@ Proves: frontend/src/__tests__/design-system-components.spec.ts::stacks on mobil
   route), so the marker is
   `Proves: frontend/tests/e2e/wcag-contrast.spec.ts::authenticated ${path} has no unexpected WCAG AA violations (light theme)`
   – not the substituted title a single run prints. When a reference does not
-  match, the gate quotes the nearest declared title(s) to copy (annotating any
-  that cannot prove anything because they are skipped), so the first failure tells
-  you the exact text to paste.
+  match, the gate quotes the nearest declared title(s) that CAN be named as a
+  `Proves:` ref (annotating any that cannot prove anything because they are
+  skipped). A title containing a comma cannot be named as a ref – one ref names
+  one test per line – so it is never suggested; if only such titles are close,
+  there is no suggestion.
 - A test that is skipped or expected to fail cannot prove anything, at any
   pytest scope: a `@pytest.mark.skip` / `skipif` / `xfail` decorator on the test
   or on its enclosing class, a module-level `pytestmark = pytest.mark.skip(...)`
