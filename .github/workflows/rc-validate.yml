@@ -529,7 +529,8 @@ jobs:
   #
   #   * unauthenticated - no credential is presented anywhere;
   #   * authenticated   - the seeded account's Bearer token is presented on every
-  #                       request, so any 401 is an authorisation bug.
+  #                       request, so a 401 WITH the token is an authorisation bug
+  #                       (a 401 for a coverage probe with no header is expected).
   #
   # The status policy those passes are judged by lives in
   # `scripts/rc_fuzz_policy.py` (one table, one function, unit-tested) and is

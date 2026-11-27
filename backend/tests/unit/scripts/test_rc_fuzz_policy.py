@@ -81,10 +81,12 @@ def test_2xx_is_never_a_finding(pass_name: str, status_code: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_authenticated_401_without_the_credential_is_a_finding() -> None:
-    # The authenticated pass must carry the token on every request. A missing
-    # token is therefore a harness failure, not an excuse to allow a 401 through.
-    assert classify(AUTHENTICATED, 401, credential_sent=False) is Verdict.FINDING
+def test_authenticated_401_without_the_credential_is_expected() -> None:
+    # The coverage phase deliberately emits a MISSING_PARAMETER probe for the
+    # required Authorization header and strips the header for it. Such a request
+    # was not authenticated, so a 401 is the CORRECT answer - not a finding. A 401
+    # WITH the token presented stays a finding (see test_authenticated_401_is_a_finding).
+    assert classify(AUTHENTICATED, 401, credential_sent=False) is Verdict.EXPECTED
 
 
 def test_authenticated_404_is_expected() -> None:
@@ -137,7 +139,7 @@ def test_the_expected_table_is_pinned() -> None:
     # green is then a visible test change, reviewed as a policy change.
     assert {
         (UNAUTHENTICATED, False): frozenset({401, 402}),
-        (AUTHENTICATED, False): frozenset({402, 404, 422}),
+        (AUTHENTICATED, False): frozenset({401, 402, 404, 422}),
         (AUTHENTICATED, True): frozenset({402, 404, 422}),
     } == EXPECTED_STATUS_CODES
 
