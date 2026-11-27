@@ -321,8 +321,15 @@ repos:
       # PYTEST_DEBUG_TEMPROOT (a stale global `pytest-current` symlink makes
       # pytest exit 1 with every test green) and refuses any scope wider than
       # tests/architecture.
+      # Per-test timeout policy (FAR-2836): `run_architecture_suite.py` runs the
+      # CI flags but with `--timeout=600`, NOT CI's 120s. One architecture test
+      # (`test_eval_engine_unit_suite_passes_unchanged`) subprocess-runs the whole
+      # eval_engine unit suite (18.6s idle, 163-178s under load); at 120s
+      # pytest-timeout kills the xdist worker and a frontend-only push fails on a
+      # loaded box though every test passes. The 600s floor is pinned by
+      # tests/unit/scripts/test_run_architecture_suite.py — do not lower it.
       - id: prepush-architecture
-        name: prepush architecture suite (exact CI invocation)
+        name: prepush architecture suite (CI invocation, load-tolerant per-test timeout)
         entry: uv run --project backend --no-sync --frozen python scripts/run_prepush_gated_check.py --pattern "backend/src/**/*.py" --pattern "frontend/src/**" --rerun-hint "uv run --project backend --no-sync --frozen python scripts/run_architecture_suite.py" -- uv run --project backend --no-sync --frozen python scripts/run_architecture_suite.py
         language: system
         files: ^(backend/src/|frontend/src/)

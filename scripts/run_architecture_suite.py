@@ -67,12 +67,25 @@ _DEFAULT_TIMEOUT_SECONDS = 1800
 
 # Byte-for-byte the CI invocation (ci.yml "Run architecture tests"), plus the
 # FAR-2308 ``--frozen`` lock-safety flag that never changes what is analysed.
+#
+# Per-test timeout: DELIBERATE divergence from CI's ``--timeout=120`` (FAR-2836).
+# CI runs this suite on a dedicated runner, so 120s per test is ample there. The
+# pre-push hook runs on a shared, often-loaded developer machine, and one
+# architecture test -- ``test_eval_engine_unit_suite_passes_unchanged`` -- shells
+# out to the WHOLE ``tests/unit/core/eval_engine`` suite: 18.6s idle but
+# 163-178s under load. At 120s pytest-timeout SIGKILLs the xdist worker running
+# that test, and the run then looks like a real architecture failure though every
+# test would have passed (observed twice: a frontend-only branch could not be
+# pushed). Policy: the per-test timeout for this hook MUST stay >= 600s so the
+# nested-suite test survives a loaded box while still running -- never lower it
+# back toward CI's 120s (the hang bound that stops a stuck run is the separate
+# wall-clock ``--timeout-seconds`` below, default 1800s).
 _PYTEST_ARGS: tuple[str, ...] = (
     "pytest",
     "{scope}",
     "-q",
     "--tb=short",
-    "--timeout=120",
+    "--timeout=600",
     "-W",
     "error::pytest.PytestUnraisableExceptionWarning",
     "--disable-warnings",

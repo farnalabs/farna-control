@@ -4,8 +4,13 @@ The architecture suite is the single largest class of red-CI push (27 of the
 30 ``Test (Backend) non-unit suites`` job failures in the last 80 failed
 runs), so this gate has to be right in two directions:
 
-1. It must run the EXACT CI invocation — same flags, same working directory,
-   same warning gate — or it will pass locally and fail in CI.
+1. It must run the CI invocation — same working directory, same warning gate,
+   same parallel runner — or it will pass locally and fail in CI. The ONE
+   deliberate divergence is the per-test ``--timeout`` (FAR-2836): the hook
+   raises it above CI's 120s because one architecture test shells out to the
+   whole ``eval_engine`` unit suite (163-178s under load), and a 120s cap there
+   makes pytest-timeout kill the xdist worker on a loaded machine. That policy
+   is pinned below so it cannot be silently reduced again.
 2. Its scope guard must refuse anything wider than ``tests/architecture``: a
    gate that can be widened to ``tests/`` is a 40-minute suite behind every
    push, and it stops being a pre-push gate at all.
@@ -31,6 +36,14 @@ _spec = spec_from_loader("run_architecture_suite", _loader)
 assert _spec is not None
 mod = module_from_spec(_spec)
 _loader.exec_module(mod)
+
+
+def _per_test_timeout(command: list[str]) -> int:
+    """Return the ``N`` in the pytest-timeout ``--timeout=N`` flag of *command*."""
+    for arg in command:
+        if arg.startswith("--timeout="):
+            return int(arg.split("=", 1)[1])
+    raise AssertionError(f"no --timeout flag in command: {command}")
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +112,20 @@ def test_command_uses_the_ci_parallel_runner():
     command = mod.build_command("tests/architecture")
     runner = command.index("-n")
     assert command[runner + 1] == "auto"
+
+
+def test_command_carries_a_load_tolerant_per_test_timeout():
+    """FAR-2836: the per-test timeout must be sized for the nested eval_engine suite.
+
+    ``test_eval_engine_unit_suite_passes_unchanged`` subprocess-runs the whole
+    ``tests/unit/core/eval_engine`` suite (18.6s idle, 163-178s under load). At
+    CI's 120s cap pytest-timeout kills the xdist worker running it, and the push
+    fails while every test would have passed. The hook therefore pins its
+    per-test timeout at >= 600s. This guard fails if a future edit lowers it back
+    toward 120s.
+    """
+    timeout = _per_test_timeout(mod.build_command("tests/architecture"))
+    assert timeout >= 600, f"pre-push per-test timeout {timeout}s is below the 600s floor set by FAR-2836"
 
 
 def test_rerun_command_reproduces_the_same_pytest_invocation():
