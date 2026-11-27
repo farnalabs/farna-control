@@ -348,6 +348,16 @@ jobs:
               if not repo:
                   fail("GITHUB_REPOSITORY is unset; refusing to look for CI runs in an unknown repository.")
               max_attempts = max(1, -(-max_wait_seconds // poll_seconds))
+              raw_backoff = os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2")
+              try:
+                  delete_retry_backoff_seconds = int(raw_backoff)
+              except ValueError:
+                  fail(
+                      "SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: "
+                      + repr(raw_backoff) + "."
+                  )
+              if delete_retry_backoff_seconds < 0:
+                  fail("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative.")
 
               def list_tags(prefix):
                   listing = gh("api", "--paginate", "--slurp", "repos/" + repo + "/git/matching-refs/tags/" + prefix)
@@ -367,24 +377,27 @@ jobs:
                   # Delete-and-verify. A non-zero DELETE is benign only when the
                   # ref is genuinely absent; otherwise the tag may still be on
                   # origin, and a leaked ci-verify-* tag is not inert: an
-                  # unfiltered `git describe --tags` could pick it as the
-                  # changelog base. Re-read the remote after a failed attempt,
-                  # retry once, then fail loudly if it survives.
-                  for _ in (1, 2):
+                  # unfiltered tag lookup could pick it as the changelog base.
+                  # Re-read the remote after a failed attempt, back off briefly,
+                  # retry once, and RETURN a loud diagnostic if it survives (the
+                  # caller decides whether that replaces an original error).
+                  for attempt in (1, 2):
                       result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
                       if result.returncode == 0:
-                          return
+                          return None
                       detail = (result.stderr or "") + (result.stdout or "")
                       if tag_is_absent(detail):
-                          return
+                          return None
                       remaining = list_tags(tag_prefix)
                       if remaining is not None and name not in remaining:
-                          return
-                  fail(
+                          return None
+                      if attempt == 1 and delete_retry_backoff_seconds > 0:
+                          time.sleep(delete_retry_backoff_seconds)
+                  return (
                       "Could not delete the temporary CI-verification tag " + name
                       + " from origin after a retry; it is still present. A leaked "
-                      + "ci-verify-* tag can be chosen as the changelog base, "
-                      + "so refusing to continue. Remove it with: "
+                      + "ci-verify-* tag can be mistaken for the changelog base by an "
+                      + "unfiltered tag lookup, so refusing to continue. Remove it with: "
                       + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
                   )
 
@@ -400,14 +413,17 @@ jobs:
                       return
                   for name in names:
                       if name != tag:
-                          delete_tag(name)
+                          problem = delete_tag(name)
+                          if problem:
+                              fail(problem)
 
               def delete_temporary_tag():
                   # Always attempt deletion, even when no create response was
                   # observed: a POST whose response was lost still creates the
-                  # tag server-side.
-                  delete_tag(tag)
+                  # tag server-side. Returns a diagnostic when it survives.
+                  return delete_tag(tag)
 
+              proof_succeeded = False
               try:
                   sweep_stale_tags()
                   deadline = time.monotonic() + max_wait_seconds
@@ -573,8 +589,21 @@ jobs:
                           + str(max_wait_seconds) + "s): " + last_state + "."
                       )
                       time.sleep(min(poll_seconds, remaining))
+              except SystemExit as exc:
+                  # A clean proof exit is remembered so a cleanup failure below
+                  # can fail the job; a failing exit keeps its own diagnostic.
+                  if exc.code in (0, None):
+                      proof_succeeded = True
+                  raise
               finally:
-                  delete_temporary_tag()
+                  cleanup_problem = delete_temporary_tag()
+                  if cleanup_problem:
+                      # Always loud, but never replace a diagnostic that is
+                      # already propagating: print the cleanup error and only
+                      # raise when the proof itself had succeeded.
+                      print("::error::" + cleanup_problem)
+                      if proof_succeeded:
+                          raise SystemExit(1)
 
 
           if __name__ == "__main__":
@@ -1332,6 +1361,16 @@ jobs:
               if not repo:
                   fail("GITHUB_REPOSITORY is unset; refusing to look for CI runs in an unknown repository.")
               max_attempts = max(1, -(-max_wait_seconds // poll_seconds))
+              raw_backoff = os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2")
+              try:
+                  delete_retry_backoff_seconds = int(raw_backoff)
+              except ValueError:
+                  fail(
+                      "SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: "
+                      + repr(raw_backoff) + "."
+                  )
+              if delete_retry_backoff_seconds < 0:
+                  fail("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative.")
 
               def list_tags(prefix):
                   listing = gh("api", "--paginate", "--slurp", "repos/" + repo + "/git/matching-refs/tags/" + prefix)
@@ -1351,24 +1390,27 @@ jobs:
                   # Delete-and-verify. A non-zero DELETE is benign only when the
                   # ref is genuinely absent; otherwise the tag may still be on
                   # origin, and a leaked ci-verify-* tag is not inert: an
-                  # unfiltered `git describe --tags` could pick it as the
-                  # changelog base. Re-read the remote after a failed attempt,
-                  # retry once, then fail loudly if it survives.
-                  for _ in (1, 2):
+                  # unfiltered tag lookup could pick it as the changelog base.
+                  # Re-read the remote after a failed attempt, back off briefly,
+                  # retry once, and RETURN a loud diagnostic if it survives (the
+                  # caller decides whether that replaces an original error).
+                  for attempt in (1, 2):
                       result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
                       if result.returncode == 0:
-                          return
+                          return None
                       detail = (result.stderr or "") + (result.stdout or "")
                       if tag_is_absent(detail):
-                          return
+                          return None
                       remaining = list_tags(tag_prefix)
                       if remaining is not None and name not in remaining:
-                          return
-                  fail(
+                          return None
+                      if attempt == 1 and delete_retry_backoff_seconds > 0:
+                          time.sleep(delete_retry_backoff_seconds)
+                  return (
                       "Could not delete the temporary CI-verification tag " + name
                       + " from origin after a retry; it is still present. A leaked "
-                      + "ci-verify-* tag can be chosen as the changelog base, "
-                      + "so refusing to continue. Remove it with: "
+                      + "ci-verify-* tag can be mistaken for the changelog base by an "
+                      + "unfiltered tag lookup, so refusing to continue. Remove it with: "
                       + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
                   )
 
@@ -1384,14 +1426,17 @@ jobs:
                       return
                   for name in names:
                       if name != tag:
-                          delete_tag(name)
+                          problem = delete_tag(name)
+                          if problem:
+                              fail(problem)
 
               def delete_temporary_tag():
                   # Always attempt deletion, even when no create response was
                   # observed: a POST whose response was lost still creates the
-                  # tag server-side.
-                  delete_tag(tag)
+                  # tag server-side. Returns a diagnostic when it survives.
+                  return delete_tag(tag)
 
+              proof_succeeded = False
               try:
                   sweep_stale_tags()
                   deadline = time.monotonic() + max_wait_seconds
@@ -1557,8 +1602,21 @@ jobs:
                           + str(max_wait_seconds) + "s): " + last_state + "."
                       )
                       time.sleep(min(poll_seconds, remaining))
+              except SystemExit as exc:
+                  # A clean proof exit is remembered so a cleanup failure below
+                  # can fail the job; a failing exit keeps its own diagnostic.
+                  if exc.code in (0, None):
+                      proof_succeeded = True
+                  raise
               finally:
-                  delete_temporary_tag()
+                  cleanup_problem = delete_temporary_tag()
+                  if cleanup_problem:
+                      # Always loud, but never replace a diagnostic that is
+                      # already propagating: print the cleanup error and only
+                      # raise when the proof itself had succeeded.
+                      print("::error::" + cleanup_problem)
+                      if proof_succeeded:
+                          raise SystemExit(1)
 
 
           if __name__ == "__main__":
