@@ -355,11 +355,38 @@ jobs:
                       return None
                   return tag_names(listing.stdout)
 
+              def tag_is_absent(detail):
+                  # GitHub reports a missing ref as 404 "Not Found" or 422
+                  # "Reference does not exist" (observed via the git/refs DELETE
+                  # endpoint). Both mean there is nothing to delete - never a
+                  # leaked tag and never a reason to warn an operator.
+                  return "Not Found" in detail or "404" in detail or "Reference does not exist" in detail
+
+
               def delete_tag(name):
-                  result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
-                  detail = (result.stderr or "") + (result.stdout or "")
-                  if result.returncode != 0 and "Not Found" not in detail and "404" not in detail:
-                      print("::warning::Could not delete the temporary CI-verification tag " + name + "; delete it manually.")
+                  # Delete-and-verify. A non-zero DELETE is benign only when the
+                  # ref is genuinely absent; otherwise the tag may still be on
+                  # origin, and a leaked ci-verify-* tag is not inert: an
+                  # unfiltered `git describe --tags` could pick it as the
+                  # changelog base. Re-read the remote after a failed attempt,
+                  # retry once, then fail loudly if it survives.
+                  for _ in (1, 2):
+                      result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
+                      if result.returncode == 0:
+                          return
+                      detail = (result.stderr or "") + (result.stdout or "")
+                      if tag_is_absent(detail):
+                          return
+                      remaining = list_tags(tag_prefix)
+                      if remaining is not None and name not in remaining:
+                          return
+                  fail(
+                      "Could not delete the temporary CI-verification tag " + name
+                      + " from origin after a retry; it is still present. A leaked "
+                      + "ci-verify-* tag can be chosen as the changelog base, "
+                      + "so refusing to continue. Remove it with: "
+                      + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
+                  )
 
               def sweep_stale_tags():
                   # A tag leaked by an earlier attempt for this exact commit (a
@@ -1312,11 +1339,38 @@ jobs:
                       return None
                   return tag_names(listing.stdout)
 
+              def tag_is_absent(detail):
+                  # GitHub reports a missing ref as 404 "Not Found" or 422
+                  # "Reference does not exist" (observed via the git/refs DELETE
+                  # endpoint). Both mean there is nothing to delete - never a
+                  # leaked tag and never a reason to warn an operator.
+                  return "Not Found" in detail or "404" in detail or "Reference does not exist" in detail
+
+
               def delete_tag(name):
-                  result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
-                  detail = (result.stderr or "") + (result.stdout or "")
-                  if result.returncode != 0 and "Not Found" not in detail and "404" not in detail:
-                      print("::warning::Could not delete the temporary CI-verification tag " + name + "; delete it manually.")
+                  # Delete-and-verify. A non-zero DELETE is benign only when the
+                  # ref is genuinely absent; otherwise the tag may still be on
+                  # origin, and a leaked ci-verify-* tag is not inert: an
+                  # unfiltered `git describe --tags` could pick it as the
+                  # changelog base. Re-read the remote after a failed attempt,
+                  # retry once, then fail loudly if it survives.
+                  for _ in (1, 2):
+                      result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
+                      if result.returncode == 0:
+                          return
+                      detail = (result.stderr or "") + (result.stdout or "")
+                      if tag_is_absent(detail):
+                          return
+                      remaining = list_tags(tag_prefix)
+                      if remaining is not None and name not in remaining:
+                          return
+                  fail(
+                      "Could not delete the temporary CI-verification tag " + name
+                      + " from origin after a retry; it is still present. A leaked "
+                      + "ci-verify-* tag can be chosen as the changelog base, "
+                      + "so refusing to continue. Remove it with: "
+                      + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
+                  )
 
               def sweep_stale_tags():
                   # A tag leaked by an earlier attempt for this exact commit (a
