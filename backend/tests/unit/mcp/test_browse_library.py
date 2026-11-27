@@ -45,10 +45,14 @@ class TestSearchLibrary:
         from farna.api.mcp_server import _ctx_node_allowed_tools as _node_tools
         from farna.api.mcp_server import _ctx_org_id as _org
         from farna.api.mcp_server import _ctx_role as _role
+        from farna.api.mcp_server import _ctx_team_id as _team
 
         _org.set(org_id)
         _role.set(role)
         _node_tools.set(node_allowed_tools)
+        # These cases are org-wide callers (no team-scoped credential), so the
+        # listing must carry no team boundary.
+        _team.set(None)
 
     async def test_returns_formatted_items(self) -> None:
         from farna.api.mcp_server import search_library
@@ -182,6 +186,10 @@ class TestSearchLibrary:
             page=1,
             page_size=10,
             cursor="abc123",
+            # ADR 070 §5: the caller's team boundary rides into the listing, so
+            # a team-scoped key cannot list another team's private primitives.
+            # This caller has no team boundary (org-wide key / user JWT).
+            team_id=None,
         )
 
     async def test_uses_default_limit_of_20(self) -> None:

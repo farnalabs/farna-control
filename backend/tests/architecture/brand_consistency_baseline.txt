@@ -545,6 +545,7 @@ backend/tests/unit/library/test_dogfood_input_schemas.py	3
 backend/tests/unit/library_service/test_library_seed_pr_review_decision.py	1
 backend/tests/unit/mcp/test_library_detail_resource.py	5
 backend/tests/unit/mcp/test_library_list_resource.py	1
+backend/tests/unit/mcp/test_library_search_team_scope.py	1
 backend/tests/unit/mcp/test_mcp_buildtime_entity_read_tools.py	3
 backend/tests/unit/mcp/test_mcp_config_tools.py	2
 backend/tests/unit/mcp/test_mcp_connector_tools.py	2

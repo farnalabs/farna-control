@@ -955,6 +955,15 @@ async def _fetch_primitives(
                 source=query.source,
                 cursor=query.cursor,
                 excluded_tiers=[] if query.include_in_dev else None,
+                # ADR 070 §5: the DB policy on ``library_primitives`` keys its
+                # team arm on the KEY OWNER's memberships, not on the
+                # credential's own team. This route is gated on
+                # ``require_permission`` (JWT-only), so ``principal.team_id`` is
+                # None today and the clamp is a no-op — but it is the same
+                # boundary the by-id read applies via ``_primitive_visible_to``
+                # (FAR-2682), and it keeps the listing correct if the route ever
+                # admits a team-scoped credential.
+                team_id=getattr(principal, "team_id", None),
             )
     except ProgrammingError:
         _log.exception("library.list_library_primitives_endpoint")

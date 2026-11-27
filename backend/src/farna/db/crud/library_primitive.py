@@ -43,6 +43,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from farna.db.crud.base import PageResult, apply_updates
 from farna.db.crud.pagination import CursorPaginator
+from farna.db.crud.team_scope import team_scope_clause
 from farna.db.models.library_primitive import LibraryPrimitive
 from farna.db.soft_delete import include_soft_deleted
 
@@ -135,6 +136,7 @@ def _build_list_conditions(
     search: str | None,
     source: str | None,
     excluded_tiers: list[str] | None,
+    team_id: uuid.UUID | None = None,
 ) -> list[ColumnElement[bool]]:
     """Build the WHERE predicates shared by the cursor and offset list paths.
 
@@ -153,6 +155,14 @@ def _build_list_conditions(
     rows in the caller's slice, and the ``library_primitives`` RLS policy
     already restricts rows to ``organisation_id = current_setting(...)`` — so
     the clamp reproduces the visibility RLS already enforces.
+
+    ``team_id`` (optional) adds the ADR 070 §5 team boundary for a
+    team-scoped credential: the DB policy on ``library_primitives`` keys
+    ``rls_team_isolation`` on the KEY OWNER's team memberships, not on the
+    key's own team, so a team-A key owned by an account that is also in team B
+    reads team B's team-private rows unless the caller's team is applied here
+    explicitly. ``None`` (JWT / org-wide key) adds nothing, so org-wide callers
+    see every live row exactly as before.
     """
     tiers = ["in_dev"] if excluded_tiers is None else excluded_tiers
 
@@ -160,6 +170,14 @@ def _build_list_conditions(
         LibraryPrimitive.deleted_at.is_(None),
         LibraryPrimitive.organisation_id == org_id,
     ]
+
+    if team_id is not None:
+        # ADR 070 §5: the resource's effective owner, not the credential's.
+        # ``team_scope_clause`` keeps org-level rows (``owner_team_id IS NULL``)
+        # visible to every team and hides another team's team-private row —
+        # the same predicate the other list filters (pipelines, runs,
+        # triggers, model backends, environment profiles) apply.
+        conditions.append(team_scope_clause(LibraryPrimitive.owner_team_id, team_id))
 
     if primitive_types:
         conditions.append(LibraryPrimitive.primitive_type.in_(primitive_types))
@@ -262,6 +280,7 @@ async def list_library_primitives(
     source: str | None = None,
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
+    team_id: uuid.UUID | None = None,
 ) -> PageResult[LibraryPrimitive]:
     """List the caller's library primitives.
 
@@ -270,6 +289,12 @@ async def list_library_primitives(
     COUNT, the offset page and the cursor page are all clamped. A caller can no
     longer fall back to the RLS-only read that a ``BYPASSRLS`` connection
     exposes. Built-ins are unaffected — see ``_build_list_conditions``.
+
+    ``team_id`` (optional) applies the team boundary of a team-scoped
+    credential. It rides on the same shared condition list, so the COUNT, the
+    offset page and the cursor page all narrow to the same universe — a search
+    term matching another team's private row cannot surface it on any page and
+    cannot inflate ``total``.
     """
 
     conditions = _build_list_conditions(
@@ -279,6 +304,7 @@ async def list_library_primitives(
         search=search,
         source=source,
         excluded_tiers=excluded_tiers,
+        team_id=team_id,
     )
 
     if cursor is not None:
