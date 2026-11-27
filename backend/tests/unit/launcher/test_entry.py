@@ -2215,7 +2215,7 @@ def test_serve_until_shutdown_writes_readiness_handshake(tmp_path: Path) -> None
 def test_serve_until_shutdown_uses_serve_api_when_no_serve_callable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls: list[tuple[str, int]] = []
 
-    def _fake_serve_api(host: str, port: int, stop_event: threading.Event, force_exit: threading.Event) -> None:
+    def _fake_serve_api(host: str, port: int, stop_event: threading.Event, force_exit: threading.Event, *, ready_fd: int | None = None) -> None:
         calls.append((host, port))
 
     monkeypatch.setattr(entry_module, "_serve_api", _fake_serve_api)
