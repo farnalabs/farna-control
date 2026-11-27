@@ -1,9 +1,36 @@
 """ModuloPostgresSaver — AsyncPostgresSaver with org_id column isolation.
 
-Adds ``organisation_id`` to all ``langgraph.*`` checkpoint tables, enforces
-``SET LOCAL`` on every read/write, and encrypts checkpoint JSON at rest via
-Fernet. Resolves the alpha limitation where DB-privileged admins could read
-any tenant's checkpoints.
+Adds ``organisation_id`` to the checkpoint tables (``checkpoints``,
+``checkpoint_blobs``, ``checkpoint_writes``; created unqualified so they resolve
+through the session ``search_path``), scopes every read and write with an
+explicit ``organisation_id`` predicate bound from the saver's own org, and
+encrypts checkpoint JSON at rest via Fernet. Resolves the alpha limitation where
+DB-privileged admins could read any tenant's checkpoints.
+
+Two deliberate, documented properties of these tables — do not change either
+without reading this:
+
+* **Their privileges come from DEFAULT PRIVILEGES, not from a migration.**
+  Alembic never creates them (``setup()`` does, inside the backend lifespan), so
+  on a fresh install no migration can name them and ``farna_control_app`` owns
+  them. ``farna.db.bootstrap_role`` therefore scopes its ``ALTER DEFAULT
+  PRIVILEGES`` to the app role as the CREATOR, which is what lets the cross-org
+  system role touch them: the stale-run-recovery sweep's zero-progress arm is a
+  ``NOT EXISTS (SELECT 1 FROM checkpoints ...)`` leg, Fernet rotation rewrites
+  all three, and run retention / org deletion purge them. A new
+  runtime-created table inherits that template automatically; a table created
+  by any OTHER role does not.
+* **They carry no RLS policy, deliberately.** ADR 070's org-first invariant
+  covers the tables Alembic owns; these are runtime-managed and outside it, and
+  ``tests/integration/test_rls_policy_gate.py`` pins the census of RLS-carrying
+  tenant tables (so enabling RLS here is a reviewed act that must update that
+  count and the comment naming these tables). The content is genuinely
+  tenant-identifiable (``organisation_id``, ``thread_id``, the payload), so
+  isolation is enforced in SQL by the explicit predicate every statement binds,
+  and the payload is encrypted at rest under the startup-required Fernet key.
+  Enabling RLS would require every saver connection — ``setup()`` included — to
+  set ``app.organisation_id`` first, or every read would silently return zero
+  rows.
 """
 
 from __future__ import annotations

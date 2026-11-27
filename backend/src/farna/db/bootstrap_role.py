@@ -2,14 +2,17 @@
 
 Connects as the migration/owner user (DATABASE_ADMIN_URL, superuser) to
 (re)create the roles, then grants DML on existing and future tables/sequences,
-plus USAGE on the public schema. Safe to run multiple times — checks pg_roles
-before creating. Passwords are reconciled from each role's URL when that URL is
-configured (ALTER ... PASSWORD with the URL's password — the same value every
-run, so re-running never changes a working credential); when the URL is NOT
-configured the existing role's password is left untouched (FAR-1519: a
-warm-boot re-run must never reset a working password), and a role that does
-not exist yet is created with a random placeholder that a later
-URL-configured boot reconciles.
+plus USAGE on the public schema. "Future" covers both creators: objects the
+owner (the migration role) creates, and objects the APP role creates at runtime
+(the LangGraph checkpointer tables are created inside the backend lifespan) —
+see the ``ALTER DEFAULT PRIVILEGES ... FOR ROLE`` block in ``_apply_role_ddl``.
+Safe to run multiple times — checks pg_roles before creating. Passwords are
+reconciled from each role's URL when that URL is configured (ALTER ... PASSWORD
+with the URL's password — the same value every run, so re-running never changes
+a working credential); when the URL is NOT configured the existing role's
+password is left untouched (FAR-1519: a warm-boot re-run must never reset a
+working password), and a role that does not exist yet is created with a random
+placeholder that a later URL-configured boot reconciles.
 
 Deliverable (A) of the break-glass admin recovery plan adds:
   * ``farna_control_breakglass`` (LOGIN, BYPASSRLS) — the dedicated operator role used
@@ -552,6 +555,54 @@ async def _apply_role_ddl(
     await conn.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{sys_user}"')
     # nosemgrep: raw-sql-fstring (role names validated via _validate_identifier / module constants)
     await conn.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO "{sys_user}"')
+
+    # ── FAR-2828: the same defaults, scoped to the APP ROLE as the CREATOR ──
+    #
+    # ``ALTER DEFAULT PRIVILEGES`` without ``FOR ROLE`` applies only to objects
+    # created by the role that ISSUES it — here the ``DATABASE_ADMIN_URL``
+    # owner/admin connection. Every Alembic-created table is created by that
+    # role, so the four statements above cover the whole migrated schema. They
+    # do NOT cover a table the APPLICATION creates at runtime, because those are
+    # created by the app role holding ``DATABASE_URL``.
+    #
+    # The LangGraph checkpointer tables are the live example: ``checkpoints``,
+    # ``checkpoint_blobs``, ``checkpoint_writes`` and ``checkpoint_migrations``
+    # are created by ``ModuloPostgresSaver.setup()`` inside the backend lifespan
+    # (``core.pipeline_engine.modulo_saver``, called from ``api.main``), i.e.
+    # AFTER this bootstrap ran on a fresh install. So on a brand-new database
+    # nothing granted them: the app role owned them (and therefore worked),
+    # every other role was denied, and ``saq-system`` logged ``permission denied
+    # for table checkpoints`` every 5 minutes from the stale-run-recovery sweep
+    # — whose zero-progress arm reads ``checkpoints`` — until the next restart
+    # (and never at all on a container that never restarts).
+    #
+    # Scoping the defaults to the app role is the place that cannot rot:
+    #   * a fresh install is covered on the boot that CREATES the table, with no
+    #     restart needed (the default is applied at CREATE TABLE time);
+    #   * any FUTURE runtime-created table inherits the same grants, so this
+    #     class of bug cannot reappear under another table name;
+    #   * an install whose runtime tables already exist is repaired by the
+    #     ``GRANT ... ON ALL TABLES`` above on its next boot.
+    # Both paths land on exactly the same privilege set — the one every other
+    # table in the schema already carries for the cross-org system role.
+    #
+    # The verb set is that existing house template, not a narrower checkpoint-
+    # specific one: the system role's actual consumers here are SELECT (the
+    # recovery sweep), SELECT+UPDATE (Fernet rotation re-encrypts all three
+    # tables) and SELECT+DELETE (run retention / org deletion purge them), so a
+    # narrower "SELECT only" default would silently break rotation and
+    # retention for the next runtime table too. Nothing is granted to PUBLIC and
+    # nothing is granted to ``farna_control_breakglass`` (it never reads a
+    # checkpoint table).
+    #
+    # Issuing ``FOR ROLE`` requires the bootstrap connection to be a member of
+    # the app role or a superuser — which is the documented ``DATABASE_ADMIN_URL``
+    # contract ("the migration/owner user, superuser"); the role DDL earlier in
+    # this body already requires the same class of privilege.
+    # nosemgrep: raw-sql-fstring (role names validated via _validate_identifier / module constants)
+    await conn.execute(f'ALTER DEFAULT PRIVILEGES FOR ROLE "{app_user}" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{sys_user}"')
+    # nosemgrep: raw-sql-fstring (role names validated via _validate_identifier / module constants)
+    await conn.execute(f'ALTER DEFAULT PRIVILEGES FOR ROLE "{app_user}" IN SCHEMA public GRANT USAGE ON SEQUENCES TO "{sys_user}"')
 
     # Re-apply the accounts UPDATE allow-list (active from deliverable A).
     await _apply_accounts_allow_list(conn, app_user)

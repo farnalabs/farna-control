@@ -333,6 +333,7 @@ backend/tests/integration/test_analytics_endpoint.py	1
 backend/tests/integration/test_break_glass_login.py	2
 backend/tests/integration/test_cap_mcp_container_validated.py	1
 backend/tests/integration/test_checkpoint_isolation.py	7
+backend/tests/integration/test_checkpoint_runtime_grants.py	4
 backend/tests/integration/test_concurrent_runs.py	3
 backend/tests/integration/test_demo_seed_rls_isolation.py	1
 backend/tests/integration/test_far1128_cap_infra_health.py	1
