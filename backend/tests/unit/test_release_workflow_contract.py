@@ -1831,6 +1831,7 @@ def _fake_gh(
     jobs_after_dispatch: dict[str, list[dict[str, Any]]] | None = None,
     list_sequence: list[list[dict[str, Any]]] | None = None,
     list_returncode: int = 0,
+    list_exception: Exception | None = None,
     create_returncode: int = 0,
     delete_returncode: int = 0,
     delete_returncodes: list[int] | None = None,
@@ -1845,6 +1846,8 @@ def _fake_gh(
     DELETE of the temporary tag: the default succeeds, while a non-zero code
     models GitHub answering a missing ref with 404/422 or a genuine failure. A
     ``delete_returncodes`` list supplies one code per successive attempt.
+    ``list_exception`` makes a ``gh run list`` call raise, modelling an
+    unexpected (non-``SystemExit``) failure inside the proof loop.
     """
     dispatched = [False]
     sequence = list(list_sequence) if list_sequence is not None else None
@@ -1870,6 +1873,8 @@ def _fake_gh(
             dispatched[0] = True
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if args[:3] == ("run", "list", "--workflow"):
+            if list_exception is not None:
+                raise list_exception
             if list_returncode != 0:
                 return SimpleNamespace(returncode=list_returncode, stdout="", stderr="gh: API unavailable")
             if sequence is not None:
@@ -1892,21 +1897,31 @@ def _fake_gh(
     return gh
 
 
+def _configure_proof_env(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    max_wait_seconds: int = 2,
+    backoff_seconds: str = "0",
+) -> None:
+    monkeypatch.setenv("GITHUB_REPOSITORY", "farnalabs/modulo")
+    monkeypatch.setenv("GITHUB_RUN_ID", "4242")
+    monkeypatch.setenv("SCHEMA_GATE_POLL_INTERVAL_SECONDS", "1")
+    monkeypatch.setenv("SCHEMA_GATE_MAX_WAIT_SECONDS", str(max_wait_seconds))
+    # FAR-2720: no real backoff between DELETE retries unless a test asks for it.
+    monkeypatch.setenv("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", backoff_seconds)
+
+
 def _run_schema_proof(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     gh: Any,
     *,
     max_wait_seconds: int = 2,
+    backoff_seconds: str = "0",
 ) -> tuple[int, str]:
     module = _schema_proof_module(tmp_path)
     monkeypatch.setattr(module, "gh", gh)
-    monkeypatch.setenv("GITHUB_REPOSITORY", "farnalabs/modulo")
-    monkeypatch.setenv("GITHUB_RUN_ID", "4242")
-    monkeypatch.setenv("SCHEMA_GATE_POLL_INTERVAL_SECONDS", "1")
-    monkeypatch.setenv("SCHEMA_GATE_MAX_WAIT_SECONDS", str(max_wait_seconds))
-    # FAR-2720: no real backoff between DELETE retries in tests.
-    monkeypatch.setenv("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "0")
+    _configure_proof_env(monkeypatch, max_wait_seconds=max_wait_seconds, backoff_seconds=backoff_seconds)
     stdout = io.StringIO()
     with redirect_stdout(stdout):
         try:
@@ -2272,6 +2287,102 @@ def test_release_schema_freshness_proof_keeps_the_original_diagnostic_when_clean
     assert "::error::Could not delete the temporary CI-verification tag " + tag in stdout
     deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
     assert len(deletes) == 2
+
+
+def test_release_schema_freshness_proof_does_not_mask_an_unexpected_error_with_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720 (prove-the-fix): a non-SystemExit failure from the proof must
+    # propagate as itself and must NOT be replaced by the cleanup's SystemExit.
+    # The old code called fail() (SystemExit) inside the finally, which masked
+    # the RuntimeError; the new code prints the cleanup ::error:: and re-raises
+    # the original exception. The tag also survives deletion, so cleanup fails.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        existing_tags=[tag],
+        delete_returncodes=[1, 1],
+        delete_stderr="gh: Forbidden (HTTP 403)",
+        list_exception=RuntimeError("gh run list exploded"),
+    )
+    module = _schema_proof_module(tmp_path)
+    monkeypatch.setattr(module, "gh", gh)
+    _configure_proof_env(monkeypatch)
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout), pytest.raises(RuntimeError, match="gh run list exploded"):
+        module.main([_SCHEMA_PROOF_TARGET])
+
+    out = stdout.getvalue()
+    assert "::error::Could not delete the temporary CI-verification tag " + tag in out
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 2, "cleanup still retries the DELETE before letting the error through"
+
+
+def test_release_schema_freshness_proof_backs_off_between_delete_retries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: when SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS is positive, the
+    # proof must sleep for exactly that many seconds between the two DELETE
+    # attempts. The proof succeeds immediately, so the only sleep is the backoff.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    sleeps: list[float] = []
+    gh = _fake_gh(
+        calls,
+        runs=[_SCHEMA_GREEN_RUN],
+        jobs=_SCHEMA_GREEN_JOBS,
+        existing_tags=[tag],
+        delete_returncodes=[1, 1],
+        delete_stderr="gh: Forbidden (HTTP 403)",
+    )
+    module = _schema_proof_module(tmp_path)
+    monkeypatch.setattr(module, "gh", gh)
+    monkeypatch.setattr(module.time, "sleep", lambda seconds: sleeps.append(seconds))
+    _configure_proof_env(monkeypatch, backoff_seconds="3")
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout), pytest.raises(SystemExit) as excinfo:
+        module.main([_SCHEMA_PROOF_TARGET])
+
+    assert int(excinfo.value.code or 0) == 1
+    assert sleeps == [3], "the configured backoff must be slept once between DELETE attempts"
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 2
+
+
+def test_release_schema_freshness_proof_rejects_a_negative_delete_backoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: a negative backoff is a loud, clean failure, not a silent clamp.
+    calls: list[list[str]] = []
+    gh = _fake_gh(calls, runs=[], jobs={})
+    module = _schema_proof_module(tmp_path)
+    monkeypatch.setattr(module, "gh", gh)
+    _configure_proof_env(monkeypatch, backoff_seconds="-1")
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout), pytest.raises(SystemExit) as excinfo:
+        module.main([_SCHEMA_PROOF_TARGET])
+
+    assert int(excinfo.value.code or 0) == 1
+    assert "::error::SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative." in stdout.getvalue()
+    assert calls == []
+
+
+def test_release_schema_freshness_proof_rejects_a_non_integer_delete_backoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: a non-integer backoff must use the clean ::error:: + SystemExit
+    # style of the adjacent negative check, not an uncaught ValueError traceback.
+    calls: list[list[str]] = []
+    gh = _fake_gh(calls, runs=[], jobs={})
+    module = _schema_proof_module(tmp_path)
+    monkeypatch.setattr(module, "gh", gh)
+    _configure_proof_env(monkeypatch, backoff_seconds="abc")
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout), pytest.raises(SystemExit) as excinfo:
+        module.main([_SCHEMA_PROOF_TARGET])
+
+    assert int(excinfo.value.code or 0) == 1
+    assert "::error::SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: 'abc'." in stdout.getvalue()
+    assert calls == []
 
 
 def test_release_schema_gate_cleanup_reclaims_this_runs_tags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

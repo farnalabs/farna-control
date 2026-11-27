@@ -348,7 +348,14 @@ jobs:
               if not repo:
                   fail("GITHUB_REPOSITORY is unset; refusing to look for CI runs in an unknown repository.")
               max_attempts = max(1, -(-max_wait_seconds // poll_seconds))
-              delete_retry_backoff_seconds = int(os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2"))
+              raw_backoff = os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2")
+              try:
+                  delete_retry_backoff_seconds = int(raw_backoff)
+              except ValueError:
+                  fail(
+                      "SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: "
+                      + repr(raw_backoff) + "."
+                  )
               if delete_retry_backoff_seconds < 0:
                   fail("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative.")
 
@@ -1354,7 +1361,14 @@ jobs:
               if not repo:
                   fail("GITHUB_REPOSITORY is unset; refusing to look for CI runs in an unknown repository.")
               max_attempts = max(1, -(-max_wait_seconds // poll_seconds))
-              delete_retry_backoff_seconds = int(os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2"))
+              raw_backoff = os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2")
+              try:
+                  delete_retry_backoff_seconds = int(raw_backoff)
+              except ValueError:
+                  fail(
+                      "SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: "
+                      + repr(raw_backoff) + "."
+                  )
               if delete_retry_backoff_seconds < 0:
                   fail("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative.")
 
