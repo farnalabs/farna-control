@@ -296,11 +296,13 @@ def _seed(engine: sa.Engine) -> None:
 def _run_upgrade(engine: sa.Engine, module: ModuleType) -> None:
     """Execute ``module.upgrade`` against the real database.
 
-    The migration reads ``op.get_bind()`` and opens its own AUTOCOMMIT connection
-    from ``bind.engine``; patching ``get_bind`` to return a live connection on the
-    test engine makes that path run for real.
+    The migration reads ``op.get_bind()`` and runs its bounded keyset batches on
+    that connection; patching ``get_bind`` to return a live connection on the test
+    engine makes that path run for real. ``engine.begin()`` commits on exit so the
+    rewritten rows are visible to the assertions (the migration runs in the
+    alembic transaction, exactly as it does in a real ``upgrade``).
     """
-    with engine.connect() as bind, patch.object(op, "get_bind", return_value=bind):
+    with engine.begin() as bind, patch.object(op, "get_bind", return_value=bind):
         module.upgrade()
 
 

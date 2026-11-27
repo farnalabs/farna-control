@@ -75,15 +75,30 @@ visited at most once and could not loop forever; in practice ``error_code`` is a
 short taxonomy code (``harness.state_serialization``, ``provider.timeout`` ...)
 that cannot contain any marker.
 
-Bounded batches, no long lock, no destructive DDL
--------------------------------------------------
+Bounded batches, no destructive DDL
+-----------------------------------
 ``runs`` is a large, hot, append-only table. The rewrite therefore runs as a
-sequence of bounded ``UPDATE ... LIMIT`` batches (``_BATCH_SIZE`` rows each) on
-a DEDICATED AUTOCOMMIT connection opened from the migration bind's engine - NOT
-the alembic transaction connection. Each batch commits and releases its row
-locks before the next begins, so no single long-lived transaction accumulates
-locks or WAL on the table. There is no ``ALTER COLUMN`` (no type change, no
-ACCESS EXCLUSIVE rewrite) and no row is ever deleted.
+sequence of bounded ``UPDATE ... LIMIT`` batches (``_BATCH_SIZE`` rows each),
+keyset-paginated on the primary key, so each statement touches only its batch
+and the loop's parameters/memory stay bounded.
+
+The batches run ON THE ALEMBIC MIGRATION CONNECTION (``bind``), NOT a separate
+autocommit connection. A side connection cannot be used here for two reasons:
+
+* A fresh install applies the WHOLE ``upgrade heads`` chain in one transaction
+  (``env.do_run_migrations`` wraps ``context.run_migrations()`` in a single
+  ``begin_transaction``), so ``public.runs`` created earlier in that same
+  transaction is not yet committed and a second connection fails with
+  ``relation "public.runs" does not exist``.
+* Rehearsal mode (FAR-717, ``ALEMBIC_REHEARSAL=1``) runs the chain in one
+  always-rolled-back transaction and REFUSES any side connection a migration
+  opens (the connection's effects would persist outside the rehearsal).
+
+The trade-off is that the rewritten rows' locks are held until the migration
+transaction commits at the end of ``upgrade``. That is acceptable for a one-time
+data repair: the statement count is bounded and the alternative does not deploy
+at all. There is no ``ALTER COLUMN`` (no type change, no ACCESS EXCLUSIVE
+rewrite) and no row is ever deleted.
 
 RLS / organisation scope
 ------------------------
@@ -247,24 +262,20 @@ def _bind_params(after_id: str) -> dict[str, object]:
 def _redact_runs(bind: sa.Connection) -> int:
     """Redact every matching ``runs`` row in bounded batches; return rows changed.
 
-    A dedicated AUTOCOMMIT connection (NOT the alembic transaction connection) is
-    used so each batch commits and releases its locks before the next. The keyset
-    cursor advances on the returned ids so the loop is forward-only and
-    terminates; a batch that returns no rows ends the loop.
+    Runs on the alembic migration connection itself (``bind``) - never a side
+    autocommit connection (see the module docstring: a fresh install's single
+    transaction cannot be seen from a second connection, and rehearsal mode
+    refuses one). The keyset cursor advances on the returned ids so the loop is
+    forward-only and terminates; a batch that returns no rows ends it.
     """
-    engine = bind.engine
-    connection = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
     total = 0
     after_id = _MIN_UUID
-    try:
-        while True:
-            rows = connection.execute(_BATCH_STATEMENT, _bind_params(after_id)).all()
-            if not rows:
-                break
-            total += len(rows)
-            after_id = str(max(row[0] for row in rows))
-    finally:
-        connection.close()
+    while True:
+        rows = bind.execute(_BATCH_STATEMENT, _bind_params(after_id)).all()
+        if not rows:
+            break
+        total += len(rows)
+        after_id = str(max(row[0] for row in rows))
     return total
 
 
