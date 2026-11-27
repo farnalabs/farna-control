@@ -423,3 +423,140 @@ class TestRouteWiring:
         corpus = "\n".join(p.read_text(encoding="utf-8") for p in versions.glob("*.py"))
         missing = [t for t in sorted(_DB_RLS_ONLY_UNWIRED) if not re.search(rf"CREATE POLICY rls_team_isolation[^\n]*{t}", corpus)]
         assert not missing, f"Tables enforced by DB RLS alone have no CREATE POLICY rls_team_isolation anywhere in the migration tree: {missing}"
+
+
+# ---------------------------------------------------------------------------
+# 4. FAR-2781: owner-membership validation must never stand in for the
+#    credential's own team boundary
+# ---------------------------------------------------------------------------
+# ``validate_owner_team_for_create`` / ``validate_team_transition_for_update``
+# answer "is the key OWNER a member of this team?". They do NOT answer "is the
+# CREDENTIAL confined to this team?" — a team-A-scoped API key whose owner also
+# belongs to team B would otherwise create or re-scope a team-B resource.
+#
+# The control is a single chokepoint: both validators (and the sibling pipeline
+# transition helper) call ``enforce_principal_team_scope`` BEFORE their
+# org-role admin bypass. Because the gate lives in the validator, no write path
+# can use owner-membership validation without it; these tests pin the
+# chokepoint (ordering + shared predicate) and the complete call-site inventory,
+# so a future path that bypasses the chokepoint by re-implementing the check
+# fails here rather than shipping.
+
+#: Every function that calls an owner-membership validator, discovered by AST
+#: (string/docstring mentions excluded). A new entry must be added deliberately
+#: — and, because the gate is inside the validators, is then automatically
+#: gated; the inventory keeps that inheritance visible to review.
+_EXPECTED_OWNER_MEMBERSHIP_CALL_SITES: frozenset[str] = frozenset(
+    {
+        "evals.create_eval_dataset",
+        "evals.create_eval_suite",
+        "pipelines.create_pipeline_endpoint",
+        "system_maps.create_system_map_endpoint",
+        "system_maps.update_system_map_endpoint",
+        "mcp_servers.create_mcp_server_endpoint",
+        "mcp_servers.update_mcp_server_endpoint",
+        "lifecycle_maps.create_lifecycle_map_endpoint",
+        "lifecycle_maps.update_lifecycle_map_endpoint",
+        "connectors._create_connector_tx",
+        "connectors._validate_team_scope_update",
+        "external_agents.create_external_agent_endpoint",
+        "external_agents.update_external_agent_endpoint",
+        "library.create_library_primitive_endpoint",
+        "library.copy_to_adapt_endpoint",
+        "library.confirm_import_endpoint",
+        "library.create_collection_endpoint",
+        "mcp_server._apply_owner_team_pipeline",
+        "mcp_server._apply_owner_team_simple",
+    }
+)
+
+
+def _owner_membership_call_sites() -> set[str]:
+    """Discover ``<module>.<function>`` that call an owner-membership validator."""
+    import ast
+    from pathlib import Path
+
+    api_dir = Path(__file__).resolve().parents[2] / "src" / "farna" / "api"
+    targets = {"validate_owner_team_for_create", "validate_team_transition_for_update"}
+    found: set[str] = set()
+    sources = [(p, p.stem) for p in sorted((api_dir / "routes").glob("*.py"))]
+    sources.append((api_dir / "mcp_server.py", "mcp_server"))
+    for path, module_name in sources:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            referenced: set[str] = set()
+            for child in ast.walk(node):
+                if isinstance(child, ast.Name):
+                    referenced.add(child.id)
+                elif isinstance(child, ast.Attribute):
+                    referenced.add(child.attr)
+            if referenced & targets:
+                found.add(f"{module_name}.{node.name}")
+    return found
+
+
+def _assert_call_precedes(source: str, earlier: str, later: str, subject: str) -> None:
+    """Assert *earlier* is called before *later* in *source*."""
+    earlier_at = source.find(earlier)
+    later_at = source.find(later)
+    assert earlier_at != -1, f"{subject}: expected a call to {earlier!r}"
+    assert later_at != -1, f"{subject}: expected the guard {later!r}"
+    assert earlier_at < later_at, f"{subject}: {earlier!r} must run BEFORE {later!r} — a team-scoped credential held by an org admin must still be refused for another team (FAR-2781)"
+
+
+class TestPrincipalTeamScopeEnforcement:
+    """FAR-2781: the credential's own team boundary precedes the admin bypass."""
+
+    def test_create_validator_enforces_principal_scope_before_admin(self) -> None:
+        import inspect
+
+        from farna.api.team_scope import validate_owner_team_for_create
+
+        source = inspect.getsource(validate_owner_team_for_create)
+        _assert_call_precedes(source, "enforce_principal_team_scope(", 'if org_role == "admin"', "validate_owner_team_for_create")
+        assert "team_membership_exists(" in source, "validate_owner_team_for_create must keep the owner-eligibility check"
+
+    def test_update_validator_enforces_principal_scope_before_admin(self) -> None:
+        import inspect
+
+        from farna.api.team_scope import validate_team_transition_for_update
+
+        source = inspect.getsource(validate_team_transition_for_update)
+        _assert_call_precedes(source, "enforce_principal_team_scope(", 'getattr(principal, "org_role"', "validate_team_transition_for_update")
+        assert "team_membership_exists(" in source, "validate_team_transition_for_update must keep the owner-eligibility check"
+
+    def test_pipeline_transition_helper_enforces_principal_scope_before_admin(self) -> None:
+        import inspect
+
+        from farna.api.routes.pipelines import _assert_team_transition_allowed
+
+        source = inspect.getsource(_assert_team_transition_allowed)
+        _assert_call_precedes(source, "enforce_principal_team_scope(", "_is_admin(principal)", "_assert_team_transition_allowed")
+
+    def test_principal_scope_gate_reuses_the_shared_boundary_predicate(self) -> None:
+        """The gate delegates to ``team_boundary_blocked`` — no second predicate."""
+        import inspect
+
+        from farna.api import run_scope
+        from farna.api.team_scope import enforce_principal_team_scope
+
+        source = inspect.getsource(enforce_principal_team_scope)
+        assert "team_boundary_blocked(" in source, "enforce_principal_team_scope must reuse api.run_scope.team_boundary_blocked (the predicate behind evaluate_team_gate and the MCP guards), not re-implement it"
+        assert callable(run_scope.team_boundary_blocked)
+
+    def test_owner_membership_call_sites_are_complete(self) -> None:
+        """Every owner-membership usage is in the reviewed inventory.
+
+        The gate is inside the validators, so any path that uses them inherits
+        the principal-scope gate. This test keeps the set of such paths
+        explicit: a new resource whose write path uses owner-membership
+        validation must be added here (and therefore reviewed), rather than
+        silently inheriting a validator whose gate a future refactor could drop.
+        """
+        discovered = _owner_membership_call_sites()
+        unexpected = discovered - _EXPECTED_OWNER_MEMBERSHIP_CALL_SITES
+        missing = _EXPECTED_OWNER_MEMBERSHIP_CALL_SITES - discovered
+        assert not unexpected, f"New owner-membership call site(s) not in the FAR-2781 inventory: {sorted(unexpected)}. Add them to _EXPECTED_OWNER_MEMBERSHIP_CALL_SITES after confirming the write path runs the principal-scope gate."
+        assert not missing, f"FAR-2781 inventory lists call sites that no longer exist: {sorted(missing)}"

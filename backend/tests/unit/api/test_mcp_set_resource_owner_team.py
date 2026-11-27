@@ -139,6 +139,16 @@ class TestPipeline(_ToolBase):
             ms._ctx_team_id.set(None)
         assert result["error"] == "team_boundary_violation"
 
+    async def test_team_scoped_key_cannot_move_own_pipeline_to_other_team(self) -> None:
+        """FAR-2781: a team-A key cannot re-scope its own pipeline INTO team B."""
+        ms._ctx_team_id.set(_TEAM_A)
+        try:
+            with patch.object(ms, "_pipeline_owner_team_id", new=AsyncMock(return_value=_TEAM_A)):
+                result = await ms.set_resource_owner_team("pipeline", str(_RESOURCE_ID), str(_TEAM_B))
+        finally:
+            ms._ctx_team_id.set(None)
+        assert result["error"] == "team_boundary_violation"
+
     async def test_active_runs_block_the_move(self) -> None:
         with (
             patch.object(ms, "_pipeline_owner_team_id", new=AsyncMock(return_value=None)),
@@ -237,6 +247,20 @@ class TestPipeline(_ToolBase):
     [("model_backend", _MB_GET, _MB_UPDATE), ("connector", _CI_GET, _CI_UPDATE)],
 )
 class TestSimpleResources(_ToolBase):
+    async def test_team_scoped_key_cannot_move_resource_into_other_team(
+        self,
+        resource_type: str,
+        get_target: str,
+        update_target: str,
+    ) -> None:
+        """FAR-2781: a team-A key cannot re-scope a resource INTO team B."""
+        ms._ctx_team_id.set(_TEAM_A)
+        try:
+            result = await ms.set_resource_owner_team(resource_type, str(_RESOURCE_ID), str(_TEAM_B))
+        finally:
+            ms._ctx_team_id.set(None)
+        assert result["error"] == "team_boundary_violation"
+
     async def test_admin_assigns_team(self, resource_type: str, get_target: str, update_target: str) -> None:
         ms._ctx_role.set("admin")
         self._use_session()

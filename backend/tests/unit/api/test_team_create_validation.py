@@ -27,6 +27,7 @@ from sqlalchemy.sql import Select
 from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
 from farna.api.main import app
 from farna.api.team_scope import (
+    TEAM_BOUNDARY_VIOLATION_CODE,
     validate_owner_team_for_create,
     validate_team_transition_for_update,
 )
@@ -112,6 +113,158 @@ async def _principal(org_role: str = "operator") -> AuthenticatedPrincipal:
         account_id=_USER_ID,
         org_role=org_role,
     )
+
+
+async def _team_principal(team_id: uuid.UUID, org_role: str = "operator") -> AuthenticatedPrincipal:
+    """A team-scoped API-key principal (``team_id`` set), optionally admin-role.
+
+    Production mints never give a team-scoped key the admin role
+    (``api_key_role_violation``), but FAR-2781 requires the boundary to be
+    decided BEFORE the admin bypass, so the admin variant is exercised
+    defensively: if the mint guard ever regresses, the ordering still refuses.
+    """
+    return AuthenticatedPrincipal(
+        username="apply-key",
+        organisation_id=_ORG_ID,
+        account_id=_USER_ID,
+        org_role=org_role,
+        via_api_key=True,
+        team_id=team_id,
+    )
+
+
+_TEAM_B = uuid.UUID("00000000-0000-0000-0000-000000000004")
+
+
+class TestPrincipalTeamScopeOnOwnerEligibility:
+    """FAR-2781: the credential's own team boundary on the CREATE validator."""
+
+    async def test_foreign_team_is_refused_with_typed_code(self) -> None:
+        session = configure_mock_session(AsyncMock())
+        with (
+            patch.object(session, "execute", new=AsyncMock()) as execute,
+            patch("farna.api.team_scope.team_membership_exists", new=AsyncMock()) as membership,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await validate_owner_team_for_create(session, await _team_principal(_TEAM_ID), _TEAM_B)
+        assert exc_info.value.status_code == 403
+        assert isinstance(exc_info.value.detail, dict)
+        assert exc_info.value.detail["error"] == TEAM_BOUNDARY_VIOLATION_CODE
+        # The boundary is decided before any team read or owner-membership read.
+        execute.assert_not_awaited()
+        membership.assert_not_awaited()
+
+    async def test_foreign_team_is_refused_even_for_admin_role(self) -> None:
+        """The scope check runs BEFORE the admin bypass."""
+        session = configure_mock_session(AsyncMock())
+        with (
+            patch.object(session, "execute", new=AsyncMock()) as execute,
+            patch("farna.api.team_scope.team_membership_exists", new=AsyncMock()) as membership,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await validate_owner_team_for_create(session, await _team_principal(_TEAM_ID, "admin"), _TEAM_B)
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail["error"] == TEAM_BOUNDARY_VIOLATION_CODE
+        execute.assert_not_awaited()
+        membership.assert_not_awaited()
+
+    async def test_own_team_passes_without_owner_membership(self) -> None:
+        """A team-scoped key on its OWN team needs no owner-membership row."""
+        session = configure_mock_session(AsyncMock())
+        result = MagicMock()
+        result.first.return_value = (_TEAM_ID,)
+        membership = AsyncMock(return_value=False)
+        with (
+            patch.object(session, "execute", new=AsyncMock(return_value=result)),
+            patch("farna.api.team_scope.team_membership_exists", new=membership),
+        ):
+            await validate_owner_team_for_create(session, await _team_principal(_TEAM_ID), _TEAM_ID)
+        membership.assert_not_awaited()
+
+    async def test_unbound_principal_keeps_membership_check(self) -> None:
+        """An org-wide credential (team_id=None) still uses owner membership."""
+        session = configure_mock_session(AsyncMock())
+        result = MagicMock()
+        result.first.return_value = (_TEAM_ID,)
+        membership = AsyncMock(return_value=False)
+        with (
+            patch.object(session, "execute", new=AsyncMock(return_value=result)),
+            patch("farna.api.team_scope.team_membership_exists", new=membership),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await validate_owner_team_for_create(session, await _principal(), _TEAM_ID)
+        assert exc_info.value.status_code == 403
+        assert not isinstance(exc_info.value.detail, dict)
+        membership.assert_awaited_once()
+
+
+class TestPrincipalTeamScopeOnTransition:
+    """FAR-2781: the credential's own team boundary on the UPDATE validator."""
+
+    async def test_reassign_to_foreign_team_is_refused_with_typed_code(self) -> None:
+        session = configure_mock_session(AsyncMock())
+        with (
+            patch("farna.api.team_scope.team_membership_exists", new=AsyncMock()) as membership,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await validate_team_transition_for_update(
+                session,
+                await _team_principal(_TEAM_ID),
+                current_owner_team_id=_TEAM_ID,
+                current_visibility="team",
+                new_owner_team_id=_TEAM_B,
+                new_visibility="team",
+            )
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail["error"] == TEAM_BOUNDARY_VIOLATION_CODE
+        membership.assert_not_awaited()
+
+    async def test_reassign_to_foreign_team_is_refused_even_for_admin_role(self) -> None:
+        session = configure_mock_session(AsyncMock())
+        with (
+            patch("farna.api.team_scope.team_membership_exists", new=AsyncMock()) as membership,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await validate_team_transition_for_update(
+                session,
+                await _team_principal(_TEAM_ID, "admin"),
+                current_owner_team_id=_TEAM_ID,
+                current_visibility="team",
+                new_owner_team_id=_TEAM_B,
+                new_visibility="team",
+            )
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail["error"] == TEAM_BOUNDARY_VIOLATION_CODE
+        membership.assert_not_awaited()
+
+    async def test_current_team_outside_credential_is_refused(self) -> None:
+        """A team-A credential cannot update a resource the DB says belongs to team B."""
+        session = configure_mock_session(AsyncMock())
+        with pytest.raises(HTTPException) as exc_info:
+            await validate_team_transition_for_update(
+                session,
+                await _team_principal(_TEAM_ID),
+                current_owner_team_id=_TEAM_B,
+                current_visibility="team",
+                new_owner_team_id=_TEAM_B,
+                new_visibility="team",
+            )
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail["error"] == TEAM_BOUNDARY_VIOLATION_CODE
+
+    async def test_own_team_reassignment_passes_without_membership(self) -> None:
+        session = configure_mock_session(AsyncMock())
+        membership = AsyncMock(return_value=False)
+        with patch("farna.api.team_scope.team_membership_exists", new=membership):
+            await validate_team_transition_for_update(
+                session,
+                await _team_principal(_TEAM_ID),
+                current_owner_team_id=_TEAM_ID,
+                current_visibility="team",
+                new_owner_team_id=_TEAM_ID,
+                new_visibility="team",
+            )
+        membership.assert_not_awaited()
 
 
 class TestPipelineCreateTeamGateEndpoint:
