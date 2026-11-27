@@ -54,7 +54,12 @@ if (typeof localStorage !== 'undefined' && localStorage.getItem(LEGACY_REFRESH_T
 }
 
 let _authListeners: Array<(token: string | null) => void> = []
-let _refreshingPromise: Promise<boolean> | null = null
+let _refreshingPromise: Promise<RefreshOutcome> | null = null
+
+// 'rejected' means the server (or the demo-session rule) says this session
+// cannot be refreshed. 'unavailable' means no verdict was reached (network
+// error, rate limit, server error), so the session may well still be good.
+export type RefreshOutcome = 'refreshed' | 'rejected' | 'unavailable'
 
 // Stable per-tab identifier so other tabs can tell refresh hints apart when
 // adopting rotated tokens across tabs.
@@ -234,7 +239,7 @@ function hasWebLocks(): boolean {
 // automatically by the browser; we only need to echo the CSRF cookie in the
 // header. Sibling tabs share the cookie jar, so a rotation by one tab is
 // instantly visible to the others — no cross-tab retry loop is needed.
-async function doRefresh(): Promise<boolean> {
+async function doRefresh(): Promise<RefreshOutcome> {
   try {
     const csrfToken = readCookie('XSRF-TOKEN')
     const resp = await fetch('/api/v1/auth/refresh', {
@@ -246,21 +251,28 @@ async function doRefresh(): Promise<boolean> {
       const data = await resp.json()
       setAccessToken(data.access_token)
       broadcastRefreshAdopted()
-      return true
+      return 'refreshed'
     }
-    // 401 (dead session / stolen family) and any other failure fall through to
-    // the fatal-session path.
-    return false
+    // 401 is a dead session / stolen family; 403 is a failed CSRF double-submit
+    // (the cookies are gone or no longer match).
+    return resp.status === 401 || resp.status === 403 ? 'rejected' : 'unavailable'
   } catch (err) {
     console.warn('[auth] Token refresh failed:', err)
-    return false
+    return 'unavailable'
   }
 }
+
 export async function attemptTokenRefresh(): Promise<boolean> {
+  return (await refreshSession()) === 'refreshed'
+}
+
+// attemptTokenRefresh for callers that must tell a dead session apart from a
+// refresh that could not be completed. Both share one in-flight request.
+export async function refreshSession(): Promise<RefreshOutcome> {
   // Demo access tokens intentionally have no refresh token. Keep this guard in
   // the shared refresh path so API retries and event streams both avoid the
   // refresh endpoint when a demo session expires.
-  if (isDemoSession()) return false
+  if (isDemoSession()) return 'rejected'
   if (_refreshingPromise) return _refreshingPromise
 
   _refreshingPromise = (async () => {

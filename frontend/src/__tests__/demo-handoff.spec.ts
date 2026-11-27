@@ -45,6 +45,12 @@ function stubDemoHandOffFetch(outcome: 'ok' | 'fail'): ReturnType<typeof vi.fn> 
   return fetchMock
 }
 
+// A stored session is verified with a single read; it must never be re-minted
+// or refreshed while the server accepts it.
+function expectOnlySessionProbe(fetchMock: ReturnType<typeof vi.fn>): void {
+  expect(fetchMock.mock.calls.map((call) => call[0])).toStrictEqual(['/api/v1/me/settings'])
+}
+
 beforeEach(() => {
   localStorage.clear()
   setActivePinia(createPinia())
@@ -85,7 +91,7 @@ describe('/demo route hand-off', () => {
 
     await router.push('/demo')
 
-    expect(fetchMock).not.toHaveBeenCalled()
+    expectOnlySessionProbe(fetchMock)
     expect(router.currentRoute.value.name).toBe('dashboard')
     expect(getAccessToken()).toBe('demo-jwt-token')
     expect(isDemoSession()).toBe(true)
@@ -98,7 +104,7 @@ describe('/demo route hand-off', () => {
 
     await router.push('/demo')
 
-    expect(fetchMock).not.toHaveBeenCalled()
+    expectOnlySessionProbe(fetchMock)
     expect(router.currentRoute.value.name).toBe('dashboard')
     expect(getAccessToken()).toBe('real-jwt-token')
     expect(isDemoSession()).toBe(false)
@@ -242,11 +248,11 @@ describe('resolveDemoEntry (qa iter 2 shared demo-entry resolver)', () => {
   it("returns 'dashboard' for a live demo session without running the hand-off", async () => {
     setAccessToken('demo-jwt-token')
     setDemoSession(true)
-    const fetchMock = vi.fn()
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     try {
       expect(await resolveDemoEntry()).toBe('dashboard')
-      expect(fetchMock).not.toHaveBeenCalled()
+      expectOnlySessionProbe(fetchMock)
     } finally {
       vi.unstubAllGlobals()
     }
@@ -254,11 +260,11 @@ describe('resolveDemoEntry (qa iter 2 shared demo-entry resolver)', () => {
 
   it("returns 'dashboard' for a real session with no POST to the demo endpoint", async () => {
     setAccessToken('real-jwt-token')
-    const fetchMock = vi.fn()
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     try {
       expect(await resolveDemoEntry()).toBe('dashboard')
-      expect(fetchMock).not.toHaveBeenCalled()
+      expectOnlySessionProbe(fetchMock)
     } finally {
       vi.unstubAllGlobals()
     }
