@@ -881,7 +881,7 @@ def test_macos_staple_retry_records_and_honours_a_completion_marker() -> None:
     resolve_script = resolve["run"]
 
     # The marker is honoured in the LINUX resolve job, so a completed release
-    # never spawns a paid macOS runner on the 30-minute schedule.
+    # never spawns a paid macOS runner on the 3-hourly schedule.
     assert workflow["jobs"]["resolve-target"]["runs-on"] == "ubuntu-latest"
     assert "MACOS_STAPLED.json" in resolve_script
     assert 'completed="true"' in resolve_script
@@ -892,7 +892,7 @@ def test_macos_staple_retry_records_and_honours_a_completion_marker() -> None:
     # Regression pin for the short-circuit. `architectures="` alone is vacuous:
     # it also matches the initialiser at the top of the script, so it kept
     # passing after the completion-path reset was deleted - which silently
-    # restored the paid-macos-job-every-30-minutes behaviour. Pin the reset
+    # restored the paid-macos-job-every-3-hours behaviour. Pin the reset
     # INSIDE the completion branch, and pin the job guard that consumes it.
     completion_branch = _completion_branch(resolve_script)
     for reset in ('version=""', 'release_tag=""', 'architectures=""', 'run_id=""'):

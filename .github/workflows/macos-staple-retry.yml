@@ -24,7 +24,7 @@ name: "macOS: Retry notarization stapling"
 # partially published release to repair.
 #
 # It is idempotent: an already-stapled DMG validates offline and the run is a
-# no-op success, so the schedule can run every 30 minutes safely.
+# no-op success, so the schedule can run every 3 hours safely.
 #
 # Republishing is CONSISTENCY-DRIVEN, not staple-state-driven. The publish job
 # hashes the release's actual asset bytes and compares them with the published
@@ -43,7 +43,7 @@ name: "macOS: Retry notarization stapling"
 # single-architecture dispatch records just the DMG it verified and leaves the
 # other explicitly unverified, so the next tick still completes it - the marker
 # never claims an artefact this job did not staple. That keeps a normal,
-# already-stapled release from spawning a paid macOS runner every 30 minutes,
+# already-stapled release from spawning a paid macOS runner every 3 hours,
 # while a genuinely deferred staple (no marker, or one artefact still unverified)
 # is still retried - bounded by the existing 24-hour propagation window.
 #
@@ -105,12 +105,13 @@ on:
         required: false
         default: false
   schedule:
-    # Backstop for a release whose in-run staple was deferred. The ticket
-    # propagation window is minutes-to-hours, so poll every 30 minutes. Once a
-    # run staples and verifies the release it records a MACOS_STAPLED.json
-    # marker, and resolve-target short-circuits on it - so a post-success tick
-    # is a no-op on a Linux runner, not another paid macOS job.
-    - cron: "*/30 * * * *"
+    # Fallback poller (not a primary trigger): every 3 hours on the hour - up to
+    # ~3h extra latency for a deferred staple, which the minutes-to-hours ticket
+    # propagation window absorbs. Once a run staples and verifies the release it
+    # records a MACOS_STAPLED.json marker and resolve-target short-circuits on it,
+    # so a post-success tick is a cheap no-op on a Linux runner, not another paid
+    # macOS job.
+    - cron: "0 */3 * * *"
 
 # One retry at a time: a second run must never clobber a release asset while the
 # first is regenerating the checksums and signed manifest.
@@ -1223,7 +1224,7 @@ jobs:
           print(f"Verified SHA256SUMS and the signed RELEASE_MANIFEST for {tag} against the published asset digests.")
           PY
 
-      # Records which DMGs are staple-verified, per artefact, so the 30-minute
+      # Records which DMGs are staple-verified, per artefact, so the 3-hourly
       # backstop short-circuits only when there is genuinely nothing left to do.
       # Written last: the marker's presence is a claim that the post-upload
       # verification above passed (or that the metadata was already consistent).
@@ -1369,7 +1370,7 @@ jobs:
   #
   # release-unified.yml dispatches the held publisher ONCE. If the ticket is
   # still not fetchable that run's `staple` job fails and no release is created;
-  # the 30-minute scheduled backstop only scans EXISTING bundle-v* releases, so
+  # the 3-hourly scheduled backstop only scans EXISTING bundle-v* releases, so
   # without this job the held release would be stranded while release-unified
   # is green. This job re-dispatches the held publisher until it publishes,
   # bounded by `retry_deadline` so a ticket that never arrives fails loudly for
