@@ -79,7 +79,7 @@
           <!-- Group: identity -->
           <div class="flex min-w-0 items-center gap-1.5" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_identity')" data-testid="pipeline-editor-toolbar-group-identity">
             <h2 class="truncate text-sm font-semibold">{{ pipeline?.name || $t('views.PipelineEditorView.pipeline_editor') }}</h2>
-            <button v-if="!isViewing" type="button" :class="btnToolbarIcon" :aria-label="$t('views.PipelineEditorView.rename_pipeline')" :title="$t('views.PipelineEditorView.rename_pipeline')" data-testid="pipeline-editor-rename" @click="openRenameDialog">
+            <button v-if="!isViewing && canUpdatePipeline" type="button" :class="btnToolbarIcon" :aria-label="$t('views.PipelineEditorView.rename_pipeline')" :title="$t('views.PipelineEditorView.rename_pipeline')" data-testid="pipeline-editor-rename" @click="openRenameDialog">
               <PencilIcon class="h-3 w-3" aria-hidden="true" />
             </button>
             <span v-if="pipeline?.archived_at" class="shrink-0 rounded bg-warning/20 px-1.5 py-0.5 text-[10px] font-medium text-warning-text">{{ $t('views.PipelineEditorView.archived') }}</span>
@@ -126,14 +126,14 @@
           <span :class="groupDividerClass" />
           <!-- Group: graph file actions -->
           <div class="flex items-center gap-1.5" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_primary_actions')" data-testid="pipeline-editor-toolbar-group-file">
-            <button v-if="!isViewing" type="button" :class="btnToolbarSecondary" :disabled="savingGraph" data-testid="pipeline-editor-save" @click="saveGraph">
+            <button v-if="!graphReadOnly" type="button" :class="btnToolbarSecondary" :disabled="savingGraph" data-testid="pipeline-editor-save" @click="saveGraph">
               <LoaderCircleIcon v-if="savingGraph" class="h-3 w-3 animate-spin" aria-hidden="true" />
               {{ savingGraph ? $t('views.PipelineEditorView.saving_graph') : $t('views.PipelineEditorView.save') }}
             </button>
             <button type="button" :class="btnToolbarSecondary" data-testid="pipeline-editor-version-timeline" @click="showVersionTimeline = !showVersionTimeline">
               {{ $t('views.PipelineEditorView.versions') }}
             </button>
-            <div v-if="!isViewing" class="relative" @click.stop @keydown.enter.stop @keydown.space.prevent.stop>
+            <div v-if="!isViewing && canCreatePipeline" class="relative" @click.stop @keydown.enter.stop @keydown.space.prevent.stop>
               <button
                 ref="saveAsDropdownTriggerRef"
                 type="button"
@@ -175,7 +175,9 @@
                whole pipeline-settings group and the node palette are absent,
                because a disabled button is one state change away from a
                data-loss path. Only read/inspect controls stay mounted. -->
-          <template v-if="!isViewing">
+          <!-- FAR-2855: each write group also needs the role its endpoint
+               requires (see usePipelineEditorPermissions). -->
+          <template v-if="!isViewing && canRunPipeline">
             <span :class="groupDividerClass" />
             <!-- Group: run -->
             <div class="flex items-center gap-1.5" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_run_actions')" data-testid="pipeline-editor-toolbar-group-run">
@@ -187,7 +189,7 @@
               <span v-if="saveGraphError" class="max-w-40 truncate text-xs text-destructive" :title="saveGraphError" data-testid="pipeline-editor-save-error">{{ saveGraphError }}</span>
             </div>
           </template>
-          <template v-if="!isViewing">
+          <template v-if="!isViewing && canUpdatePipeline">
           <span :class="groupDividerClass" />
           <!-- Group: pipeline settings -->
           <div class="flex w-full flex-wrap items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 p-1.5 md:w-auto" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_settings')" data-testid="pipeline-editor-toolbar-group-settings">
@@ -237,7 +239,7 @@
               data-testid="pipeline-editor-resume"
               @click="handleResume"
             >{{ $t('views.PipelineEditorView.resume') }}</button>
-            <button type="button" :class="btnToolbarDestructive" data-testid="pipeline-editor-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</button>
+            <button v-if="canDeletePipeline" type="button" :class="btnToolbarDestructive" data-testid="pipeline-editor-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</button>
             <div class="flex items-center gap-1">
               <label for="pipeline-max-duration" class="whitespace-nowrap text-[10px] text-muted-foreground">{{ $t('views.PipelineEditorView.max_duration_s') }}:</label>
               <input id="pipeline-max-duration"
@@ -697,7 +699,7 @@
           <span :class="groupDividerClass" />
           <!-- Group: canvas tools -->
           <div class="flex items-center gap-1.5" role="group" :aria-label="$t('views.PipelineEditorView.toolbar_canvas_actions')" data-testid="pipeline-editor-toolbar-group-canvas">
-            <template v-if="!isViewing">
+            <template v-if="!graphReadOnly">
               <Select
                 v-model="newNodeType"
                 :options="nodeTypeOptions"
@@ -799,6 +801,7 @@
           <p class="mt-0.5">{{ $t('views.PipelineEditorView.historic_banner_body') }}</p>
           <div class="mt-1.5 flex flex-wrap items-center gap-2">
             <button
+              v-if="canEditGraph"
               type="button"
               :class="btnToolbarSecondary"
               data-testid="pipeline-editor-historic-restore"
@@ -934,10 +937,13 @@
             </div>
           </div>
           <div class="flex flex-wrap items-center justify-center gap-2 pointer-events-auto">
-            <Button size="sm" type="button" class="text-xs" @click="openRenameDialog">{{ $t('views.PipelineEditorView.rename') }}</Button>
+            <Button v-if="canUpdatePipeline" size="sm" type="button" class="text-xs" data-testid="pipeline-editor-empty-rename" @click="openRenameDialog">{{ $t('views.PipelineEditorView.rename') }}</Button>
+            <template v-if="canUpdatePipeline">
             <Button v-if="!pipeline?.archived_at" type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</Button>
             <Button v-else type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</Button>
-            <Button type="button" variant="danger" :outlined="true" size="sm" data-testid="pipeline-editor-empty-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</Button>
+            </template>
+            <Button v-if="canDeletePipeline" type="button" variant="danger" :outlined="true" size="sm" data-testid="pipeline-editor-empty-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</Button>
+            <template v-if="canEditGraph">
             <Select
               v-model="newNodeType"
               :options="nodeTypeOptions"
@@ -951,6 +957,7 @@
             <Button variant="secondary" size="sm" type="button" class="text-xs" data-testid="pipeline-editor-empty-add-node" @click="addNode()">{{ $t('views.PipelineEditorView.add_node') }}</Button>
             <Button type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-show-me" @click="startEmptyStateWalkthrough">{{ $t('views.PipelineEditorView.empty_state_show_me') }}</Button>
             <Button type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-template" @click="openTemplateLibrary">{{ $t('views.PipelineEditorView.empty_state_start_from_template') }}</Button>
+            </template>
           </div>
         </div>
         <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions --><!-- palette keyboard region: Escape works from any palette control, including the option buttons -->
@@ -1066,10 +1073,11 @@
             </div>
           </dialog>
         </div>
-        <!-- FAR-1812: in the historic view the canvas is pan/zoom/select only
-             — node drag, edge creation/updating and keyboard delete are
-             switched OFF (undefined keeps each control's default in the
-             latest editor). The v-model binds displayNodes/displayEdges,
+        <!-- FAR-1812 / FAR-2855: in the historic view, and for a role that
+             cannot update the graph, the canvas is pan/zoom/select only —
+             node drag, edge creation and keyboard delete are switched OFF
+             (undefined keeps the delete key's default for an editor).
+             Dragging an existing edge onto another node is not supported. The v-model binds displayNodes/displayEdges,
              which resolve to the FROZEN snapshot graph while viewing and to
              the editable live graph otherwise. -->
         <VueFlow
@@ -1080,14 +1088,13 @@
           :default-edge-options="defaultEdgeOptions"
            :fit-view-on-init="false"
            :only-render-visible-elements="displayNodes.length >= PIPELINE_EDITOR_VIRTUALIZATION_THRESHOLD"
-           :source-position="Position.Right"
-          :target-position="Position.Left"
-          :nodes-draggable="!isViewing"
-          :nodes-connectable="!isViewing"
+          :nodes-draggable="!graphReadOnly"
+          :nodes-connectable="!graphReadOnly"
           :nodes-focusable="true"
           :edges-focusable="true"
-          :edges-updatable="!isViewing"
-          :delete-key-code="isViewing ? null : undefined"
+          :edges-updatable="false"
+          :delete-key-code="graphReadOnly ? null : undefined"
+          @connect="onConnect"
           @node-click="onNodeClick"
           @edge-click="onEdgeClick"
           @pane-click="onPaneClick"
@@ -1174,7 +1181,7 @@
             <label for="pipeline-editor-node-label" class="text-muted-foreground text-xs uppercase tracking-wider">{{ $t('views.PipelineEditorView.label') }}</label>
             <input id="pipeline-editor-node-label"
               v-model="selectedNodeData.label"
-              :readonly="isViewing"
+              :readonly="graphReadOnly"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium mt-1"
               :placeholder="$t('views.PipelineEditorView.enter_node_label')"
               @input="syncNodeToFlow"
@@ -1185,7 +1192,7 @@
             <label for="pipeline-editor-node-desc" class="text-muted-foreground text-xs uppercase tracking-wider">{{ $t('views.PipelineEditorView.description') }}</label>
             <textarea id="pipeline-editor-node-desc"
               v-model="selectedNodeData.description"
-              :readonly="isViewing"
+              :readonly="graphReadOnly"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm mt-1"
               :placeholder="$t('views.PipelineEditorView.optional_description')"
               rows="2"
@@ -1216,7 +1223,7 @@
               <AppSelect
                 id="pipeline-editor-connector-node-instance"
                 class="mt-1 w-full"
-                :disabled="isViewing"
+                :disabled="graphReadOnly"
                 :model-value="selectedNodeData.connector_binding?.instance_id || ''"
                 :options="connectorNodeInstanceOptions"
                 option-label="label"
@@ -1235,7 +1242,7 @@
               <AppSelect
                 id="pipeline-editor-connector-node-operation"
                 class="mt-1 w-full"
-                :disabled="isViewing"
+                :disabled="graphReadOnly"
                 :model-value="selectedNodeData.connector_binding?.operation || 'query'"
                 :options="connectorNodeOperationOptions"
                 option-label="label"
@@ -1254,7 +1261,7 @@
               <input
                 id="pipeline-editor-connector-node-resource"
                 class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm"
-                :readonly="isViewing"
+                :readonly="graphReadOnly"
                 :value="selectedNodeData.connector_binding?.resource || ''"
                 :placeholder="$t('views.PipelineEditorView.connector_node_resource_placeholder')"
                 data-testid="pipeline-editor-connector-node-resource"
@@ -1268,7 +1275,7 @@
                 id="pipeline-editor-connector-node-filters"
                 class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 font-mono text-xs"
                 rows="3"
-                :readonly="isViewing"
+                :readonly="graphReadOnly"
                 :value="connectorNodeFiltersText"
                 data-testid="pipeline-editor-connector-node-filters"
                 @input="onConnectorNodeJsonInput('filters', $event)"
@@ -1280,7 +1287,7 @@
                 id="pipeline-editor-connector-node-data"
                 class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 font-mono text-xs"
                 rows="3"
-                :readonly="isViewing"
+                :readonly="graphReadOnly"
                 :value="connectorNodeDataText"
                 data-testid="pipeline-editor-connector-node-data"
                 @input="onConnectorNodeJsonInput('data', $event)"
@@ -1326,7 +1333,7 @@
                 <AppSelect
                   :model-value="selectedNodeParamSetId ?? null"
                   :label="$t('views.PipelineEditorView.param_set')"
-                  :disabled="isViewing"
+                  :disabled="graphReadOnly"
                   class="w-full"
                   :options="paramSetOptions"
                   option-label="label"
@@ -1349,7 +1356,7 @@
                     v-if="paramDefByKey(pkey)?.type === 'string' && paramDefByKey(pkey)?.multiline"
                     :id="'pipelineeditorview-override-' + pkey"
                     v-model="selectedNodeOverrides[pkey]"
-                    :readonly="isViewing"
+                    :readonly="graphReadOnly"
                     class="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs"
                     rows="2"
                   />
@@ -1358,7 +1365,7 @@
                     :id="'pipelineeditorview-override-' + pkey"
                     v-model="selectedNodeOverrides[pkey]"
                     type="text"
-                    :readonly="isViewing"
+                    :readonly="graphReadOnly"
                     class="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs"
                   />
                   <input
@@ -1366,14 +1373,14 @@
                     :id="'pipelineeditorview-override-' + pkey"
                     v-model.number="selectedNodeOverrides[pkey]"
                     type="number"
-                    :disabled="isViewing"
+                    :disabled="graphReadOnly"
                     class="w-full rounded-lg border border-input bg-background px-2 py-1 text-xs"
                   />
                   <AppSelect
                     v-else-if="paramDefByKey(pkey)?.type === 'boolean'"
                     :id="'pipelineeditorview-override-' + pkey"
                     :model-value="selectedNodeOverrides[pkey] ?? null"
-                    :disabled="isViewing"
+                    :disabled="graphReadOnly"
                     class="w-full"
                     size="small"
                     :options="BOOLEAN_OVERRIDE_OPTIONS"
@@ -1390,7 +1397,7 @@
                     v-else-if="paramDefByKey(pkey)?.type === 'select'"
                     :id="'pipelineeditorview-override-' + pkey"
                     :model-value="selectedNodeOverrides[pkey] ?? null"
-                    :disabled="isViewing"
+                    :disabled="graphReadOnly"
                     class="w-full"
                     size="small"
                     :options="selectOverrideOptions(pkey)"
@@ -1407,7 +1414,7 @@
                     v-else-if="paramDefByKey(pkey)?.type === 'model_backend_ref'"
                     :id="'pipelineeditorview-override-' + pkey"
                     :model-value="selectedNodeOverrides[pkey] ?? null"
-                    :disabled="isViewing"
+                    :disabled="graphReadOnly"
                     class="w-full"
                     size="small"
                     :options="modelBackendOverrideOptions"
@@ -1424,7 +1431,7 @@
                     v-else-if="paramDefByKey(pkey)?.type === 'schema_ref'"
                     :id="'pipelineeditorview-override-' + pkey"
                     :model-value="selectedNodeOverrides[pkey] ?? null"
-                    :disabled="isViewing"
+                    :disabled="graphReadOnly"
                     class="w-full"
                     size="small"
                     :options="schemaOverrideOptions"
@@ -1440,7 +1447,7 @@
                   <span v-else class="text-xs text-muted-foreground">—</span>
                 </div>
                 <button
-                  v-if="!isViewing"
+                  v-if="!graphReadOnly && canCreateParamSet"
                   type="button"
                   class="mt-1 text-xs text-action-link hover:text-action-link-hover"
                   data-testid="pipeline-save-param-set"
@@ -1468,7 +1475,7 @@
                       type="checkbox"
                       :value="c.id"
                       v-model="nodeCapabilityScope.allowed_connectors"
-                      :disabled="isViewing"
+                      :disabled="graphReadOnly"
                       class="h-4 w-4"
                       :data-testid="`pipeline-editor-scope-connector-${c.id}`"
                     />
@@ -1486,7 +1493,7 @@
                   <span v-for="t in nodeCapabilityScope.allowed_tools" :key="t" class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px]">
                     {{ t }}
                     <button
-                      v-if="!isViewing"
+                      v-if="!graphReadOnly"
                       type="button"
                       class="text-muted-foreground hover:text-foreground"
                       :aria-label="$t('views.PipelineEditorView.capability_scope_remove_tool', { name: t })"
@@ -1495,7 +1502,7 @@
                     >&times;</button>
                   </span>
                 </div>
-                <div v-if="!isViewing" class="mt-1 flex gap-1">
+                <div v-if="!graphReadOnly" class="mt-1 flex gap-1">
                   <input
                     v-model="capabilityToolInput"
                     :placeholder="$t('views.PipelineEditorView.capability_scope_tool_placeholder')"
@@ -1520,7 +1527,7 @@
                   <span v-for="k in nodeCapabilityScope.context_scope" :key="k" class="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px]">
                     {{ k }}
                     <button
-                      v-if="!isViewing"
+                      v-if="!graphReadOnly"
                       type="button"
                       class="text-muted-foreground hover:text-foreground"
                       :aria-label="$t('views.PipelineEditorView.capability_scope_remove_context', { name: k })"
@@ -1529,7 +1536,7 @@
                     >&times;</button>
                   </span>
                 </div>
-                <div v-if="!isViewing" class="mt-1 flex gap-1">
+                <div v-if="!graphReadOnly" class="mt-1 flex gap-1">
                   <input
                     v-model="capabilityContextInput"
                     :placeholder="$t('views.PipelineEditorView.capability_scope_context_placeholder')"
@@ -1548,7 +1555,7 @@
                 </div>
               </div>
               <!-- Reset to unrestricted -->
-              <div v-if="!isViewing" class="flex items-center justify-between gap-2">
+              <div v-if="!graphReadOnly" class="flex items-center justify-between gap-2">
                 <span v-if="!doesNodeHaveCapabilityScope(selectedNodeData)" class="text-[11px] text-muted-foreground">{{ $t('views.PipelineEditorView.capability_scope_unrestricted') }}</span>
                 <button
                   type="button"
@@ -1571,7 +1578,7 @@
                    while viewing a historic version the frozen commands render
                    as a plain read-only list (same shape the non-sandbox nodes
                    use below). -->
-              <dd v-if="!isViewing" class="mt-1">
+              <dd v-if="!graphReadOnly" class="mt-1">
                 <SandboxCommandsEditor
                   v-model:commands="selectedNodeData.agent_commands"
                   v-model:joiner="selectedNodeData.commands_concatenation_string"
@@ -1614,7 +1621,7 @@
                   <input
                     v-model="singlePrPerRun"
                     type="checkbox"
-                    :disabled="isViewing"
+                    :disabled="graphReadOnly"
                     class="mt-0.5 size-3.5 shrink-0 accent-node-port"
                     :aria-label="$t('views.PipelineEditorView.single_pr_per_run')"
                     aria-describedby="single-pr-per-run-help"
@@ -1647,7 +1654,7 @@
                  no Save, no add/remove rows, and no live-state read either
                  (the frozen view must not present live agent config as if it
                  were frozen). -->
-            <AgentRunnerBindings v-if="!isViewing" :agent-id="selectedNodeData.agent_id" />
+            <AgentRunnerBindings v-if="!isViewing && canManageRunnerBindings" :agent-id="selectedNodeData.agent_id" />
             <div v-if="selectedNodeData.context_files && Object.keys(selectedNodeData.context_files).length > 0">
               <dt class="text-muted-foreground text-xs uppercase tracking-wider">{{ $t('views.PipelineEditorView.context_files') }}</dt>
               <dd><ul class="list-inside list-disc text-xs text-muted-foreground"><li v-for="(content, fpath) in selectedNodeData.context_files" :key="fpath">{{ fpath }} <span class="text-[10px] opacity-60">({{ content.length }} bytes)</span></li></ul></dd>
@@ -1679,7 +1686,7 @@
           </div>
 
         </dl>
-        <div v-if="!isViewing" class="mt-6 space-y-2">
+        <div v-if="!graphReadOnly" class="mt-6 space-y-2">
           <Button v-if="selectedNodeData.node_type === 'manual'" type="button" class="w-full" data-testid="pipeline-editor-convert-to-agent" @click="openAgentPicker">
             {{ $t('views.PipelineEditorView.convert_to_agent') }}
           </Button>
@@ -1738,7 +1745,7 @@
               <Select
   :aria-label="$t('views.PipelineEditorView.edge_type')"
   v-model="edgeForm.edge_type"
-  :disabled="isViewing"
+  :disabled="graphReadOnly"
   append-to="body"
   :placeholder="$t('views.PipelineEditorView.normal')"
   class="w-full"
@@ -1758,7 +1765,7 @@
               <input
                 id="pipelineeditorview-field-16"
                 v-model="edgeForm.condition_expression"
-                :readonly="isViewing"
+                :readonly="graphReadOnly"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono"
                 :placeholder="$t('views.PipelineEditorView.jmespath_expression_placeholder')"
                 :disabled="edgeForm.edge_type !== 'conditional' && edgeForm.edge_type !== 'loop'"
@@ -1772,7 +1779,7 @@
                 v-model.number="edgeForm.max_iterations"
                 type="number"
                 min="0"
-                :disabled="isViewing"
+                :disabled="graphReadOnly"
                 :aria-label="$t('views.PipelineEditorView.max_iterations')"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                 :placeholder="$t('views.PipelineEditorView.max_iterations_placeholder')"
@@ -1786,7 +1793,7 @@
               <input
                 id="pipelineeditorview-field-17"
                 v-model="edgeForm.routing_label"
-                :readonly="isViewing"
+                :readonly="graphReadOnly"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono"
                 :placeholder="$t('views.PipelineEditorView.routing_label_placeholder')"
               />
@@ -1801,7 +1808,7 @@
             <input id="pipelineeditorview-field-15"
               v-model="edgeForm.hitl_enabled"
               type="checkbox"
-              :disabled="isViewing"
+              :disabled="graphReadOnly"
               class="h-4 w-4 rounded border-gray-300 text-primary-text focus:ring-primary"
             />
             <span class="ml-2 text-xs text-muted-foreground">{{ $t('views.PipelineEditorView.enabled') }}</span>
@@ -1812,7 +1819,7 @@
             <label for="pipelineeditorview-field-14" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.PipelineEditorView.label') }}</label>
             <input id="pipelineeditorview-field-14"
               v-model="edgeForm.label"
-              :readonly="isViewing"
+              :readonly="graphReadOnly"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               :placeholder="$t('views.PipelineEditorView.hitl_label_placeholder')"
             />
@@ -1823,7 +1830,7 @@
             </label>
             <textarea id="pipelineeditorview-field-13"
               v-model="edgeForm.description"
-              :readonly="isViewing"
+              :readonly="graphReadOnly"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               :placeholder="$t('views.PipelineEditorView.hitl_description_placeholder')"
               :aria-invalid="hitlDescriptionTooShort ? 'true' : undefined"
@@ -1838,7 +1845,7 @@
               type="number"
               min="1"
               max="1440"
-              :disabled="isViewing"
+              :disabled="graphReadOnly"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             />
           </div>
@@ -1846,7 +1853,7 @@
             <input :aria-label="$t('views.PipelineEditorView.aria_checkbox')"
               v-model="edgeForm.human_only"
               type="checkbox"
-              :disabled="isViewing"
+              :disabled="graphReadOnly"
               class="h-4 w-4 rounded border-gray-300 text-primary-text focus:ring-primary"
             />
             <span class="text-xs text-muted-foreground">{{ $t('views.PipelineEditorView.human_only_block_llm_auto_approval') }}</span>
@@ -1877,7 +1884,7 @@
   id="pipelineeditorview-field-11"
   :aria-label="$t('views.PipelineEditorView.condition_type')"
   v-model="edgeForm.condition_type"
-  :disabled="isViewing"
+  :disabled="graphReadOnly"
   append-to="body"
   :placeholder="$t('views.PipelineEditorView.none_always_gate')"
   class="w-full"
@@ -1894,7 +1901,7 @@
             <label for="pipelineeditorview-field-10" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.PipelineEditorView.jmespath_condition') }}</label>
             <input id="pipelineeditorview-field-10"
               v-model="edgeForm.condition"
-              :readonly="isViewing"
+              :readonly="graphReadOnly"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono"
               :placeholder="$t('views.PipelineEditorView.jmespath_condition_placeholder')"
             />
@@ -1907,7 +1914,7 @@
               <label for="pipelineeditorview-field-9" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.PipelineEditorView.eval_name') }}</label>
               <input id="pipelineeditorview-field-9"
                 v-model="edgeForm.eval_name"
-                :readonly="isViewing"
+                :readonly="graphReadOnly"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono"
                 :placeholder="$t('views.PipelineEditorView.eval_name_placeholder')"
               />
@@ -1921,7 +1928,7 @@
                   min="0"
                   max="1"
                   step="0.01"
-                  :disabled="isViewing"
+                  :disabled="graphReadOnly"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                 />
               </div>
@@ -1931,7 +1938,7 @@
   id="pipelineeditorview-field-7"
   :aria-label="$t('views.PipelineEditorView.operator')"
   v-model="edgeForm.eval_operator"
-  :disabled="isViewing"
+  :disabled="graphReadOnly"
   append-to="body"
   :placeholder="$t('views.PipelineEditorView.eval_operator_placeholder')"
   class="w-full"
@@ -1950,7 +1957,7 @@
             </p>
           </div>
           <div class="flex gap-2 pt-2">
-            <Button v-if="!isViewing" type="button" data-testid="pipeline-editor-save-edge" class="flex-1" :disabled="savingEdge" @click="saveEdgeConfig">
+            <Button v-if="!graphReadOnly" type="button" data-testid="pipeline-editor-save-edge" class="flex-1" :disabled="savingEdge" @click="saveEdgeConfig">
               {{ savingEdge ? $t('views.PipelineEditorView.saving') : $t('views.PipelineEditorView.save_edge') }}
             </Button>
           </div>
@@ -2283,6 +2290,7 @@
       ref="timelineRef"
       :pipeline-id="pipelineId"
       :current-version="currentVersionSnapshot"
+      :can-restore="canEditGraph"
       @close="showVersionTimeline = false"
       @view="requestViewSnapshot"
       @restore="openRestoreConfirm"
@@ -2294,7 +2302,7 @@ import { ref, computed, reactive, watch, nextTick, onMounted, onBeforeUnmount, m
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { VueFlow, useVueFlow, MarkerType, Position } from '@vue-flow/core'
+import { VueFlow, useVueFlow, MarkerType, type Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -2353,6 +2361,7 @@ import { invalidFolderListMessage, isFolderList, type FolderItem } from '../lib/
 import type { LocationQueryRaw } from 'vue-router'
 import { useApi } from '../composables/useApi'
 import { useCurrentUser } from '../composables/useCurrentUser'
+import { usePipelineEditorPermissions } from '../composables/usePipelineEditorPermissions'
 import { useProductAnalytics } from '../composables/useProductAnalytics'
 import { spotlight } from '../composables/useSpotlight'
 import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
@@ -2422,8 +2431,8 @@ const canvasPaletteQuery = ref('')
 const canvasPaletteIndex = ref(0)
 const canvasPaletteInputRef = ref<HTMLInputElement | null>(null)
 const keyboardConnectSourceId = ref<string | null>(null)
-// Only read actions survive in the historic (read-only) view: every write
-// command is a mutation of the live graph, which that view must never offer.
+// Only read actions survive when the graph is read-only (historic view, or a
+// role that cannot update it): every write command mutates the live graph.
 const canvasCommands = computed(() => {
   const writeCommands = [
     { id: 'add-node', label: t('views.PipelineEditorView.canvas_command_add_node'), shortcut: 'A' },
@@ -2435,7 +2444,7 @@ const canvasCommands = computed(() => {
     { id: 'fit', label: t('views.PipelineEditorView.canvas_command_fit'), shortcut: '' },
     { id: 'timeline', label: t('views.PipelineEditorView.canvas_command_timeline'), shortcut: '' },
   ]
-  return isViewing.value ? readCommands : [...writeCommands, ...readCommands]
+  return graphReadOnly.value ? readCommands : [...writeCommands, ...readCommands]
 })
 const filteredCanvasCommands = computed(() => {
   const query = canvasPaletteQuery.value.trim().toLowerCase()
@@ -2474,7 +2483,7 @@ function nodeComponent(nodeType: string) {
   return NODE_COMPONENTS[nodeType] ?? AgentNode
 }
 
-const { fitView, onPaneReady, addEdges, findNode } = useVueFlow()
+const { fitView, onPaneReady, findNode } = useVueFlow()
 
 // Vue Flow renders edge geometry from these presentation options; semantic
 // edge metadata lives on each edge's `data` and is never affected.
@@ -2750,6 +2759,19 @@ const { orgRole, isSystemAdmin } = useCurrentUser()
 // Mirrors the backend reset gate: POST /admin/costs/circuit-breaker/{id}/reset
 // requires the org-admin `cost.manage` permission (no plan gate).
 const canResetCircuitBreaker = computed(() => orgRole.value === 'admin')
+// FAR-2855: which write controls this role may use. `graphReadOnly` is the one
+// switch for everything that changes the graph: the historic view is read-only
+// for everyone, the latest view for a role without `pipeline.graph.update`.
+const {
+  canRunPipeline,
+  canEditGraph,
+  canUpdatePipeline,
+  canDeletePipeline,
+  canCreatePipeline,
+  canCreateParamSet,
+  canManageRunnerBindings,
+} = usePipelineEditorPermissions()
+const graphReadOnly = computed(() => isViewing.value || !canEditGraph.value)
 
 // FAR-1257: per-pipeline HITL review window override (seconds; 60..604800).
 // '' = no override (inherit the org default). Empty on save sends an explicit
@@ -3714,7 +3736,7 @@ const connectorNodeOperationOptions = computed(() => [
 ])
 
 function onConnectorNodeInstanceChange(value: unknown): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const id = String(value)
   const binding = ensureConnectorNodeBinding()
   if (!binding) return
@@ -3725,14 +3747,14 @@ function onConnectorNodeInstanceChange(value: unknown): void {
 }
 
 function onConnectorNodeOperationChange(selected: unknown): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const binding = ensureConnectorNodeBinding()
   if (!binding) return
   binding.operation = selected === 'write' ? 'write' : 'query'
 }
 
 function onConnectorNodeResourceInput(event: Event): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const value = (event.target as HTMLInputElement).value
   const binding = ensureConnectorNodeBinding()
   if (!binding) return
@@ -3741,7 +3763,7 @@ function onConnectorNodeResourceInput(event: Event): void {
 }
 
 function onConnectorNodeJsonInput(field: 'filters' | 'data', event: Event): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const text = (event.target as HTMLTextAreaElement).value
   if (field === 'filters') connectorNodeFiltersText.value = text
   else connectorNodeDataText.value = text
@@ -3793,7 +3815,7 @@ const outOfScopeConnectors = computed(() => {
 })
 
 function syncCapabilityScopeToNode() {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   if (!selectedNodeData.value) return
   const cs = nodeCapabilityScope
   const hasAny = cs.allowed_connectors.length > 0 || cs.allowed_tools.length > 0 || cs.context_scope.length > 0
@@ -3836,7 +3858,7 @@ function resetCapabilityScope() {
 }
 
 function syncNodeToFlow() {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   if (!selectedNodeData.value) return
   const fn = flowNodes.value.find((n: any) => n.id === selectedNodeData.value.id)
   if (fn) {
@@ -4193,7 +4215,7 @@ function applyGeneratedLayoutIfUnplaced(): void {
 
 /** Explicit Arrange graph: replace the arrangement and restore generated ownership. */
 async function arrangeGraph(): Promise<void> {
-  if (isViewing.value || rawNodes.value.length === 0) return
+  if (graphReadOnly.value || rawNodes.value.length === 0) return
   // Capture the pre-Arrange generated layout and provenance for incremental undo
   const preArrangeGeneratedLayout = { ...lastGeneratedLayout.value }
   const preArrangeProvenance = { ...nodeProvenance.value }
@@ -4242,7 +4264,7 @@ async function arrangeGraph(): Promise<void> {
 
 /** One-step local undo for the last Arrange graph action. */
 function undoArrangeGraph(): void {
-  if (isViewing.value || !arrangeUndo.value) return
+  if (graphReadOnly.value || !arrangeUndo.value) return
   const undo = arrangeUndo.value
   rawNodes.value = restorePositions(rawNodes.value, undo.raw)
   flowNodes.value = restorePositions(flowNodes.value, undo.flow)
@@ -4256,7 +4278,7 @@ function undoArrangeGraph(): void {
 
 /** Copy Vue Flow's live drag positions into the graph payload. */
 function syncNodePositionsFromFlow(): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const flowById = new Map(flowNodes.value.map((node: any) => [node.id, node]))
   rawNodes.value = rawNodes.value.map((node: any) => {
     const flowNode = flowById.get(node.id)
@@ -4267,7 +4289,7 @@ function syncNodePositionsFromFlow(): void {
 }
 
 function onNodeDragStop(): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const beforeDrag = snapshotPositions(rawNodes.value)
   syncNodePositionsFromFlow()
   // Mark dragged nodes as user provenance
@@ -4439,7 +4461,7 @@ function onNodeClick(event: any) {
   connectionAnnouncement.value = ''
   const node = event.node
   if (!node) return
-  if (keyboardConnectSourceId.value && keyboardConnectSourceId.value !== node.id && !isViewing.value) {
+  if (keyboardConnectSourceId.value && keyboardConnectSourceId.value !== node.id && !graphReadOnly.value) {
     connectNodes(keyboardConnectSourceId.value, node.id)
     keyboardConnectSourceId.value = null
   }
@@ -4554,7 +4576,7 @@ function buildHitlReviewConfig(): any {
 }
 
 async function saveEdgeConfig() {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   if (!selectedEdgeData.value) return
   // FAR-613: a HITL gate must explain WHY it exists — the backend rejects
   // saves whose gate config carries no usable description (min 20 trimmed
@@ -4686,7 +4708,7 @@ function announceCanvas(message: string): void {
 }
 
 function startKeyboardConnect(): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const sourceId = focusedGraphNodeId() ?? selectedNodeData.value?.id ?? null
   if (!sourceId) {
     announceCanvas(t('views.PipelineEditorView.canvas_connect_no_source'))
@@ -4696,9 +4718,14 @@ function startKeyboardConnect(): void {
   announceCanvas(t('views.PipelineEditorView.canvas_connect_started'))
 }
 
+/** A drag from one node's source handle to another node's target handle. */
+function onConnect(connection: Connection): void {
+  connectNodes(connection.source, connection.target)
+}
+
 /** Create the edge through the same raw/flow model a mouse connection uses. */
 function connectNodes(sourceId: string, targetId: string): void {
-  if (isViewing.value || sourceId === targetId) return
+  if (graphReadOnly.value || sourceId === targetId) return
   const duplicate = rawEdges.value.some(
     (edge: any) => edge.source_node_id === sourceId && edge.target_node_id === targetId,
   )
@@ -4720,9 +4747,9 @@ function connectNodes(sourceId: string, targetId: string): void {
     target_port: 'in',
   }
   rawEdges.value = [...rawEdges.value, edge]
-  addEdges({ source: sourceId, target: targetId })
-  // The flow store owns the canonical visual edge after addEdges; retain the
-  // backend metadata on the raw graph for the existing save path.
+  // The canvas edge is projected from the backend edge so it carries the same
+  // id and data; one created by Vue Flow's `addEdges` has neither, and its
+  // properties panel then never opens (FAR-2855).
   flowEdges.value = flowEdges.value.some((flowEdge: any) => flowEdge.source === sourceId && flowEdge.target === targetId)
     ? flowEdges.value
     : [...flowEdges.value, convertBackendEdge(edge, flowEdges.value.length)]
@@ -4731,7 +4758,7 @@ function connectNodes(sourceId: string, targetId: string): void {
 
 /** Shift+Arrow keyboard nudge; a normal arrow moves focus between nodes. */
 function nudgeFocusedNode(key: string): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const id = focusedGraphNodeId() ?? selectedNodeData.value?.id ?? null
   if (!id) return
   const dx = key === 'ArrowRight' ? 1 : key === 'ArrowLeft' ? -1 : 0
@@ -4759,7 +4786,7 @@ function nudgeFocusedNode(key: string): void {
 }
 
 function toggleSelectedEdgeHitl(): void {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   if (!selectedEdgeData.value) {
     announceCanvas(t('views.PipelineEditorView.canvas_toggle_hitl_no_edge'))
     return
@@ -5187,7 +5214,7 @@ function openTemplateLibrary() {
 }
 
 function addNode(nodeType: 'agent' | 'router' | 'hitl' | 'connector' = newNodeType.value) {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   const id = `node-${Date.now()}`
   const newNode = {
     id,
@@ -5236,7 +5263,7 @@ function openSaveAsComposite() {
 }
 
 async function handleSaveAsComposite() {
-  if (isViewing.value) return
+  if (isViewing.value || !canCreatePipeline.value) return
   if (!saveAsName.value || saveAsSelectedNodeIds.value.length === 0) return
   saving.value = true
   saveAsError.value = null
@@ -5264,7 +5291,7 @@ function onAgentChange() {
 }
 
 async function convertToAgent() {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   if (!canConvert.value || !selectedNodeData.value) return
   convertError.value = null
   try {
@@ -5297,6 +5324,7 @@ async function convertToAgent() {
 }
 
 async function revertToManual() {
+  if (graphReadOnly.value) return
   if (revertSnapshotId.value === '__all__' || !selectedNodeData.value) return
   revertError.value = null
   revertLoading.value = true
@@ -5887,7 +5915,7 @@ function buildEdgePayload(e: any): any {
 }
 
 async function saveGraph() {
-  if (isViewing.value) return
+  if (graphReadOnly.value) return
   savingGraph.value = true
   saveGraphError.value = null
   const ownershipToCommit = draftLayoutOwnership.value
@@ -5926,7 +5954,7 @@ async function saveGraph() {
 }
 
 async function triggerRun() {
-  if (isViewing.value) return
+  if (isViewing.value || !canRunPipeline.value) return
   if (!pipeline.value) return
   const trimmedPrompt = runPrompt.value.trim()
   if (!trimmedPrompt) {
@@ -5940,7 +5968,9 @@ async function triggerRun() {
   running.value = true
   runError.value = null
   try {
-    await saveGraph()
+    // FAR-2855: a runner may start a run but not update the graph, so only a
+    // graph editor's run saves the canvas first.
+    if (canEditGraph.value) await saveGraph()
     if (saveGraphError.value) {
       runError.value = t('views.PipelineEditorView.failed_to_save_graph', { error: saveGraphError.value })
       return
@@ -6725,7 +6755,7 @@ async function openRestoreConfirm(snapshotId?: string, snapshotVersion?: number)
 
 async function confirmRestore(): Promise<void> {
   const snapshotId = restoreTargetId.value ?? resolvedSnapshotId.value
-  if (!snapshotId) return
+  if (!snapshotId || !canEditGraph.value) return
   const restoredVersion = restoreTargetVersion.value ?? viewSnapshot.value?.snapshot_version ?? null
   restoreLoading.value = true
   restoreError.value = null

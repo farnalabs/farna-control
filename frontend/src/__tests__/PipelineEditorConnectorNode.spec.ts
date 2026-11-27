@@ -55,7 +55,7 @@ vi.mock('../lib/api/client', () => {
       PUT: vi.fn().mockResolvedValue({ data: {}, error: undefined }),
       DELETE: vi.fn().mockResolvedValue({ data: {}, error: undefined }),
     },
-    getAccessToken: vi.fn().mockReturnValue('mock-token'),
+    getAccessToken: vi.fn().mockReturnValue(`h.${btoa(JSON.stringify({ org_role: 'operator' }))}.s`),
   }
 })
 

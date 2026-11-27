@@ -290,7 +290,7 @@
         <p v-else class="text-[11px] text-muted-foreground">{{ $t('components.PipelineSnapshotTimeline.no_breaking_port_changes') }}</p>
       </div>
 
-      <div class="mt-3 flex justify-end border-t pt-2">
+      <div v-if="canRestore" class="mt-3 flex justify-end border-t pt-2">
         <!-- FAR-1816: "Restore this version" replaces the old "Rollback to
              selected" label. The action no longer POSTs the rollback itself —
              it asks the host editor to open the SHARED restore dialog (backed
@@ -358,7 +358,7 @@ interface VersionGroup {
   runs: TimelineSnapshot[]
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   pipelineId: string
   /**
    * FAR-1895: the pipeline's resolved CURRENT version (the same value the
@@ -369,7 +369,9 @@ const props = defineProps<{
    * "no version in the loaded history" state instead of inventing one.
    */
   currentVersion?: TimelineSnapshot | null
-}>()
+  /** FAR-2855: false for a role that cannot restore (rollback) a version. */
+  canRestore?: boolean
+}>(), { currentVersion: null, canRestore: true })
 // FAR-1812: `view` asks the host editor to open this snapshot as a read-only
 // historical version (deep link).
 // FAR-1816: `restore` hands the selected version to the host editor's shared

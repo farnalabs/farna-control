@@ -79,7 +79,7 @@ vi.mock('../lib/api/client', () => {
   const ok = () => Promise.resolve({ data: {}, error: undefined })
   return {
     api: { GET: vi.fn(get), POST: vi.fn(ok), PATCH: vi.fn(ok), PUT: vi.fn(ok), DELETE: vi.fn(ok) },
-    getAccessToken: vi.fn().mockReturnValue('mock-token'),
+    getAccessToken: vi.fn().mockReturnValue(`h.${btoa(JSON.stringify({ org_role: 'operator' }))}.s`),
   }
 })
 
