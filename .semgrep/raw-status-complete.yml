@@ -77,6 +77,11 @@ rules:
         # `RunDailyFact.status == _COMPLETE_STATUS` where
         # `_COMPLETE_STATUS = "complete"`) also matches the rule.
         - "**/backend/src/farna/api/routes/dashboard.py"
+        # Same pre-existing consumer site as dashboard.py above, relocated
+        # verbatim into the shared facts-window helper (FAR-2820) so the
+        # dashboard and Costs overviews read one run_daily_facts aggregate -
+        # remove together with the dashboard.py entry when FAR-146 rewrites it.
+        - "**/backend/src/farna/core/analytics/facts_window.py"
         - "**/backend/src/farna/db/crud/run.py"
         - "**/backend/src/farna/core/pipeline_execution.py"
         - "**/backend/src/farna/core/pipeline_engine/executor.py"
