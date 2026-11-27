@@ -27,7 +27,7 @@ from farna.db.models.base import Base
 from farna.db.models.pipeline import Pipeline
 from farna.db.models.pipeline_edge import PipelineEdge
 from farna.db.models.trigger import Trigger
-from farna.db.pipeline_ownership import resolve_pipeline_owner_team_id
+from farna.db.pipeline_ownership import resolve_pipeline_owner_team_id, stamp_owner_from_pipeline
 
 _TABLE_NAMES = {
     "organisations",
@@ -140,3 +140,26 @@ async def test_resolve_pipeline_owner_team_id_reads_the_current_owner(session: A
     assert await resolve_pipeline_owner_team_id(session, team_pipeline.id) == team
     assert await resolve_pipeline_owner_team_id(session, org_pipeline.id) is None
     assert await resolve_pipeline_owner_team_id(session, uuid.uuid4()) is None
+
+
+class _ListenerTarget:
+    """Stand-in for an ORM row seen by the ``before_insert`` listener."""
+
+    def __init__(self, owner_team_id: uuid.UUID | None, pipeline_id: uuid.UUID | None) -> None:
+        self.owner_team_id = owner_team_id
+        self.pipeline_id = pipeline_id
+
+
+def test_listener_skips_a_row_with_no_pipeline_reference() -> None:
+    """A row that carries no ``pipeline_id`` has no parent to inherit from.
+
+    The guard returns before touching the connection, so the INSERT proceeds with
+    ``owner_team_id`` NULL - the same behaviour the pipeline_id foreign key then
+    rejects, exactly as today. Exercised directly because both ``triggers`` and
+    ``pipeline_edges`` declare ``pipeline_id`` NOT NULL, so there is no ORM row
+    that can reach this arm through a real insert.
+    """
+    listener = stamp_owner_from_pipeline()
+    target = _ListenerTarget(owner_team_id=None, pipeline_id=None)
+    listener(None, None, target)
+    assert target.owner_team_id is None
