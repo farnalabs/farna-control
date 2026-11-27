@@ -6,11 +6,12 @@
  * boolean/select/fallback dash), onParamTypeChange clearing fields,
  * addParameter/removeParameter, set save create vs edit paths, validate
  * 2xx with valid:true vs valid:false vs error vs thrown, references with
- * data vs empty, picker preload.
+ * data vs empty, and the thrown-error catch blocks.
+ *
+ * Setup comes from ./helpers/parameterSchemasViewHarness (shared with
+ * ParameterSchemasView.spec.ts, which owns the rendering/tab-flow half).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
 import type { Mock } from 'vitest'
 
 vi.mock('../lib/api/client', () => ({
@@ -23,81 +24,20 @@ vi.mock('../lib/api/client', () => ({
   getAccessToken: vi.fn().mockReturnValue('mock-token'),
 }))
 
-import ParameterSchemasView from '../views/ParameterSchemasView.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import { api } from '../lib/api/client'
-
-async function flush() {
-  await flushPromises()
-  await nextTick()
-  await flushPromises()
-}
-
-const param = (over: Record<string, unknown> = {}) => ({
-  name: 'region',
-  label: 'Region',
-  description: 'AWS region',
-  type: 'string',
-  required: true,
-  default_value: 'us-east-1',
-  multiline: false,
-  options: undefined,
-  minimum: undefined,
-  maximum: undefined,
-  placeholder: undefined,
-  ...over,
-})
-
-const schemaItem = (over: Record<string, unknown> = {}) => ({
-  id: 'ps-1',
-  organisation_id: 'org-1',
-  name: 'Deployment Schema',
-  description: 'Deployment parameters',
-  version: 3,
-  parameters: [param()],
-  created_at: '2026-08-01T00:00:00Z',
-  updated_at: '2026-08-02T00:00:00Z',
-  ...over,
-})
-
-const listPayload = (items: unknown[] = [schemaItem()]) => ({
-  data: { items, total: items.length, page: 1, page_size: 100 },
-  error: undefined,
-})
-
-function mockGet(impl?: (url: string, opts?: unknown) => unknown) {
-  ;(api.GET as Mock).mockImplementation(async (url: string, opts?: unknown) => {
-    if (impl) return impl(url, opts)
-    if (url === '/api/v1/parameter-schemas') return listPayload()
-    if (url === '/api/v1/model-backends') return { data: { items: [{ id: 'mb-1', name: 'Stub Backend' }] }, error: undefined }
-    if (url === '/api/v1/schemas') return listPayload()
-    if (url === '/api/v1/parameter-schemas/{schema_id}/sets') return { data: [], error: undefined }
-    if (url === '/api/v1/parameter-schemas/{schema_id}/references') return { data: { agents: [], sets: [] }, error: undefined }
-    return { data: undefined, error: { detail: 'not found' } }
-  })
-}
-
-async function mountWithSchemas(items: unknown[] = [schemaItem()]) {
-  mockGet(() => listPayload(items))
-  const wrapper = mount(ParameterSchemasView)
-  await flush()
-  return wrapper
-}
-
-async function openEditor() {
-  const wrapper = await mountWithSchemas()
-  await wrapper.find('tbody tr').trigger('click')
-  await flush()
-  return wrapper
-}
-
-async function switchTab(wrapper: Awaited<ReturnType<typeof openEditor>>, label: string) {
-  const tab = wrapper.findAll('[role="tab"]').find((t) => t.text() === label)
-  expect(tab, `tab ${label} not found`).toBeDefined()
-  await tab!.trigger('click')
-  await flush()
-  return wrapper
-}
+import {
+  flush,
+  listPayload,
+  mockGet,
+  mountView,
+  mountWithSchemas,
+  openEditor,
+  openEditorAtSetsTab,
+  schemaItem,
+  setItem,
+  switchTab,
+} from './helpers/parameterSchemasViewHarness'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -126,8 +66,7 @@ describe('ParameterSchemasView branches — undefined parameters', () => {
 // ── description fallback to '—' when null ──────────────────────────────
 describe('ParameterSchemasView branches — description null fallback', () => {
   it('shows dash for null description', async () => {
-    const schemaNullDesc = schemaItem({ description: null })
-    const wrapper = await mountWithSchemas([schemaNullDesc])
+    const wrapper = await mountWithSchemas([schemaItem({ description: null })])
     expect(wrapper.text()).toContain('—')
     wrapper.unmount()
   })
@@ -318,35 +257,6 @@ describe('ParameterSchemasView branches — add/remove parameter', () => {
 
 // ── set save: create vs edit paths ──────────────────────────────────────
 describe('ParameterSchemasView branches — set save paths', () => {
-  const setItem = (over: Record<string, unknown> = {}) => ({
-    id: 'set-1',
-    parameter_schema_id: 'ps-1',
-    name: 'Prod Values',
-    description: 'prod',
-    version: 2,
-    schema_version: 3,
-    values: { region: 'eu-west-1' },
-    created_at: '2026-08-01T00:00:00Z',
-    updated_at: '2026-08-01T00:00:00Z',
-    ...over,
-  })
-
-  async function openEditorAtSetsTab(sets: unknown[] = [setItem()]) {
-    mockGet((url) => {
-      if (url === '/api/v1/parameter-schemas/{schema_id}/sets') return { data: sets, error: undefined }
-      if (url === '/api/v1/parameter-schemas') return listPayload()
-      if (url === '/api/v1/schemas') return listPayload()
-      if (url === '/api/v1/model-backends') return { data: { items: [{ id: 'mb-1', name: 'Stub Backend' }] }, error: undefined }
-      return { data: undefined, error: { detail: 'not found' } }
-    })
-    const wrapper = mount(ParameterSchemasView)
-    await flush()
-    await wrapper.find('tbody tr').trigger('click')
-    await flush()
-    await switchTab(wrapper, 'Parameter Sets')
-    return wrapper
-  }
-
   it('creates a new set via POST', async () => {
     ;(api.POST as Mock).mockResolvedValue({ data: setItem(), error: undefined })
     const wrapper = await openEditorAtSetsTab()
@@ -458,7 +368,7 @@ describe('ParameterSchemasView branches — references', () => {
       if (url === '/api/v1/model-backends') return { data: { items: [] }, error: undefined }
       return { data: undefined, error: { detail: 'x' } }
     })
-    const wrapper = mount(ParameterSchemasView)
+    const wrapper = mountView()
     await flush()
     await wrapper.find('tbody tr').trigger('click')
     await flush()
@@ -490,7 +400,7 @@ describe('ParameterSchemasView branches — references', () => {
       if (url === '/api/v1/model-backends') return { data: { items: [] }, error: undefined }
       return { data: undefined, error: { detail: 'x' } }
     })
-    const wrapper = mount(ParameterSchemasView)
+    const wrapper = mountView()
     await flush()
     await wrapper.find('tbody tr').trigger('click')
     await flush()
@@ -503,39 +413,21 @@ describe('ParameterSchemasView branches — references', () => {
   })
 })
 
-// ── picker preload ──────────────────────────────────────────────────────
-describe('ParameterSchemasView branches — picker preload', () => {
-  it('loads model backends and schemas on mount', async () => {
-    const wrapper = await mountWithSchemas()
-    const urls = (api.GET as Mock).mock.calls.map((c: unknown[]) => c[0])
-    expect(urls).toContain('/api/v1/model-backends')
-    expect(urls).toContain('/api/v1/schemas')
-    wrapper.unmount()
-  })
-})
+// ── picker preload is covered in ParameterSchemasView.spec.ts ───────────
+// "loads model backends and schemas on mount for the ref pickers" asserted the
+// same two GET urls as this file's former copy; it now lives only there.
 
 // ── set form cancel ─────────────────────────────────────────────────────
 describe('ParameterSchemasView branches — cancel set edit', () => {
   it('cancelSetEdit clears editing state', async () => {
-    const setItem = {
-      id: 'set-1',
-      parameter_schema_id: 'ps-1',
-      name: 'Prod',
-      description: 'prod',
-      version: 2,
-      schema_version: 3,
-      values: { region: 'eu-west-1' },
-      created_at: '2026-08-01T00:00:00Z',
-      updated_at: '2026-08-01T00:00:00Z',
-    }
     mockGet((url) => {
-      if (url === '/api/v1/parameter-schemas/{schema_id}/sets') return { data: [setItem], error: undefined }
+      if (url === '/api/v1/parameter-schemas/{schema_id}/sets') return { data: [setItem()], error: undefined }
       if (url === '/api/v1/parameter-schemas') return listPayload()
       if (url === '/api/v1/schemas') return listPayload()
       if (url === '/api/v1/model-backends') return { data: { items: [] }, error: undefined }
       return { data: undefined, error: { detail: 'x' } }
     })
-    const wrapper = mount(ParameterSchemasView)
+    const wrapper = mountView()
     await flush()
     await wrapper.find('tbody tr').trigger('click')
     await flush()
@@ -573,25 +465,14 @@ describe('ParameterSchemasView branches — delete catch', () => {
 // ── set delete catch block ──────────────────────────────────────────────
 describe('ParameterSchemasView branches — set delete catch', () => {
   it('catches thrown set delete error', async () => {
-    const setItem = {
-      id: 'set-1',
-      parameter_schema_id: 'ps-1',
-      name: 'Prod',
-      description: 'prod',
-      version: 2,
-      schema_version: 3,
-      values: {},
-      created_at: '2026-08-01T00:00:00Z',
-      updated_at: '2026-08-01T00:00:00Z',
-    }
     mockGet((url) => {
-      if (url === '/api/v1/parameter-schemas/{schema_id}/sets') return { data: [setItem], error: undefined }
+      if (url === '/api/v1/parameter-schemas/{schema_id}/sets') return { data: [setItem({ values: {} })], error: undefined }
       if (url === '/api/v1/parameter-schemas') return listPayload()
       if (url === '/api/v1/schemas') return listPayload()
       if (url === '/api/v1/model-backends') return { data: { items: [] }, error: undefined }
       return { data: undefined, error: { detail: 'x' } }
     })
-    const wrapper = mount(ParameterSchemasView)
+    const wrapper = mountView()
     await flush()
     await wrapper.find('tbody tr').trigger('click')
     await flush()
@@ -620,7 +501,7 @@ describe('ParameterSchemasView branches — set save catch', () => {
       if (url === '/api/v1/model-backends') return { data: { items: [] }, error: undefined }
       return { data: undefined, error: { detail: 'x' } }
     })
-    const wrapper = mount(ParameterSchemasView)
+    const wrapper = mountView()
     await flush()
     await wrapper.find('tbody tr').trigger('click')
     await flush()

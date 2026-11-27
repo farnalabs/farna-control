@@ -7,14 +7,18 @@
  * onVersionChange guards, closeJourneyDetail, retryJourneyDetail guards,
  * journey detail empty runs/loading, mapData null, journeys pagination,
  * unattributedJourneys, journeys error.
+ *
+ * Setup comes from ./helpers/lifecycleMapViewHarness (shared with
+ * LifecycleMapViewCoverage.spec.ts, which covers the template/handler half).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
-import { createI18n } from 'vue-i18n'
 
 const routerPushMock = vi.fn()
 
+// `vi.mock` factories are hoisted above the imports, so the route/router double
+// stays in-file; everything else comes from the shared harness.
 function defaultRoute() {
   return { params: { id: 'map-1' }, query: {}, meta: {}, name: 'lifecycle-map-detail' }
 }
@@ -39,98 +43,25 @@ vi.mock('../lib/api/formatError', () => ({
   },
 }))
 
+// Imported after the mocks so the view resolves the doubles registered above.
 import LifecycleMapView from '../views/lifecycle-map/LifecycleMapView.vue'
-
-// Message-rendering stub: the default `ErrorAlert: true` stub drops the
-// message prop, which hides converted error boxes from text assertions.
-const ErrorAlertStub = {
-  name: 'ErrorAlert',
-  template: '<div data-testid="error-alert-stub">{{ message }}</div>',
-  props: ['message', 'onRetry', 'retryable'],
-}
-import { usePlanStore } from '../stores/planStore'
 import { useLifecycleMapsStore } from '../stores/lifecycleMaps'
-
-function okJson(data: unknown) {
-  return {
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: async () => data,
-  } as unknown as Response
-}
-
-const mapDetail = {
-  id: 'map-1',
-  name: 'Launch Flow',
-  description: 'A test lifecycle map',
-  owner: 'alice',
-  owner_team_id: 'team-1',
-  stages: [
-    { id: 'stage-1', name: 'Build', description: null, type: 'farna_control', owner_badge: null, graduated: false, pipeline_id: 'pipe-1', external_url: null },
-    { id: 'stage-2', name: 'Deploy', description: 'Deploy stage', type: 'external', owner_badge: null, graduated: true, pipeline_id: null, external_url: 'https://deploy.example.com' },
-  ],
-  transitions: [
-    { id: 'e1', source_stage_id: 'stage-1', target_stage_id: 'stage-2', trigger_type: 'auto', description: null },
-  ],
-  versions: [
-    { id: 'v-uuid-1', version: 1, created_at: '2026-01-01T00:00:00Z', created_by: 'alice' },
-    { id: 'v-uuid-2', version: 2, created_at: '2026-02-01T00:00:00Z', created_by: 'bob' },
-  ],
-  current_version: 2,
-  created_at: '2026-01-01T00:00:00Z',
-  updated_at: '2026-02-01T00:00:00Z',
-}
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en-US',
-  messages: {
-    'en-US': {
-      views: {
-        LifecycleMapView: {
-          edit: 'Edit', delete: 'Delete', delete_confirm_title: 'Delete Lifecycle Map',
-          delete_confirm_body: 'Delete {name}?', version_label: 'Version:', version_placeholder: 'Select a version',
-          export_map: 'Export', exporting: 'Exporting...', import_map: 'Import',
-          import_dialog_title: 'Import Lifecycle Map', import_paste_hint: 'Paste JSON.',
-          import_placeholder: 'Paste JSON', import_payload_label: 'JSON',
-          import_invalid_json: 'Not valid JSON.', importing: 'Importing...', cancel: 'Cancel',
-          show_work_items: 'Show work items', save_status_saving: 'Saving...',
-          save_status_saved: 'Saved', save_status_failed: 'Failed',
-          journey: {
-            detail_title: 'Journey: {journey}', close: 'Close', loading: 'Loading...',
-            loading_more: 'Loading more...', load_more: 'Load more', no_runs: 'No runs yet',
-            run_count: '{count} run | {count} runs', open: 'Open {label}', unattributed: 'Unattributed',
-            unattributed_hint: '{count} unattributed run | {count} unattributed runs',
-            unattributed_desc: 'Desc', filter_period_label: 'Period', filter_status_label: 'Status',
-            filter_period_24h: '24h', filter_period_3d: '3d', filter_period_7d: '7d',
-            filter_period_30d: '30d', filter_period_all: 'All', filter_status_all: 'All',
-            provenance: { derived: 'Derived', reported: 'Reported' },
-            status: {
-              complete: 'Completed', failed: 'Failed', stalled: 'Stalled', running: 'Running',
-              pending: 'Pending', awaiting_human: 'Awaiting Human', cancelled: 'Cancelled',
-              eval_failed: 'Eval Failed', claimed: 'Claimed',
-            },
-          },
-        },
-      },
-    },
-  },
-})
+import {
+  installLocalStorageStub,
+  lifecycleMapMountOptions,
+  mapDetail,
+  okJson,
+  seedPlan,
+} from './helpers/lifecycleMapViewHarness'
 
 let fetchMock: ReturnType<typeof vi.fn>
 let journeysResponse: { items: unknown[]; next_cursor?: string | null }
 
-function seedPlan(flags: Record<string, boolean> = {}, devMode = false) {
-  const planStore = usePlanStore()
-  planStore.features = flags
-  planStore.devMode = devMode
-  planStore.loaded = true
-}
-
 beforeEach(async () => {
   setActivePinia(createPinia())
   const { useRoute } = await import('vue-router')
+  // Reset the route on every test: guard tests below install a no-`id` route,
+  // and `clearAllMocks()` does not undo a `mockReturnValue`.
   vi.mocked(useRoute).mockReturnValue(defaultRoute() as never)
   routerPushMock.mockClear()
   seedPlan()
@@ -155,32 +86,13 @@ afterEach(() => {
 })
 
 function mountView() {
-  return mount(LifecycleMapView, {
-    global: {
-      plugins: [i18n],
-      mocks: { $router: { push: routerPushMock } },
-      stubs: {
-        RouterLink: { template: '<a><slot /></a>' },
-        ErrorAlert: ErrorAlertStub,
-        LifecycleMapRenderer: true,
-        JourneyCard: true,
-        ProvenanceBadge: true,
-      },
-    },
-  })
+  return mount(LifecycleMapView, lifecycleMapMountOptions(routerPushMock))
 }
 
 // ── saveStatus rendering ────────────────────────────────────────────────
 describe('LifecycleMapView branches — saveStatus', () => {
-  let localStorageStore: Record<string, string>
-
   beforeEach(() => {
-    localStorageStore = {}
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => localStorageStore[key] ?? null),
-      setItem: vi.fn((key: string, value: string) => { localStorageStore[key] = value }),
-      removeItem: vi.fn((key: string) => { delete localStorageStore[key] }),
-    })
+    installLocalStorageStub()
   })
 
   it('shows saving status during position save', async () => {
@@ -317,12 +229,7 @@ describe('LifecycleMapView branches — loadSavedPositions', () => {
   let localStorageStore: Record<string, string>
 
   beforeEach(() => {
-    localStorageStore = {}
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => localStorageStore[key] ?? null),
-      setItem: vi.fn((key: string, value: string) => { localStorageStore[key] = value }),
-      removeItem: vi.fn((key: string) => { delete localStorageStore[key] }),
-    })
+    localStorageStore = installLocalStorageStub()
   })
 
   it('loads positions from server stages with x/y', async () => {
@@ -544,6 +451,9 @@ describe('LifecycleMapView branches — retryJourneyDetail', () => {
     vi.mocked(useRoute).mockReturnValue({ params: { id: '' }, query: {}, meta: {}, name: 'lifecycle-map-detail' } as never)
     const wrapper = mountView()
     await flushPromises()
+    // A key is set so the mapId guard is what stops the call, not the key guard.
+    const store = useLifecycleMapsStore()
+    store.selectedJourneyKey = 'run:run-1'
     fetchMock.mockClear()
     const vm = wrapper.vm as unknown as { retryJourneyDetail: () => Promise<void> }
     await vm.retryJourneyDetail()
@@ -617,7 +527,7 @@ describe('LifecycleMapView branches — journey detail empty runs', () => {
 
 // ── mapData null ────────────────────────────────────────────────────────
 describe('LifecycleMapView branches — mapData null', () => {
-  it('shows loading spinner while fetching, then error when 404', async () => {
+  it('shows error alert when the detail fetch 404s', async () => {
     fetchMock.mockImplementation((url: string) => {
       if (url.includes('/journeys')) return Promise.resolve(okJson({ items: [] }))
       return Promise.resolve({ ok: false, status: 404, statusText: 'Not Found', json: async () => ({ detail: 'not found' }) })
@@ -727,21 +637,6 @@ describe('LifecycleMapView branches — statusLabel', () => {
   })
 })
 
-// ── onVersionChange guard ──────────────────────────────────────────────
-describe('LifecycleMapView branches — onVersionChange guard', () => {
-  it('returns early when no mapId', async () => {
-    const { useRoute } = await import('vue-router')
-    vi.mocked(useRoute).mockReturnValue({ params: { id: '' }, query: {}, meta: {}, name: 'lifecycle-map-detail' } as never)
-    const wrapper = mountView()
-    await flushPromises()
-    fetchMock.mockClear()
-    const vm = wrapper.vm as unknown as { onVersionChange: () => Promise<void> }
-    await vm.onVersionChange()
-    expect(fetchMock).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-})
-
 // ── loadMap guard ───────────────────────────────────────────────────────
 describe('LifecycleMapView branches — loadMap guard', () => {
   it('returns early when no mapId', async () => {
@@ -781,6 +676,31 @@ describe('LifecycleMapView branches — editMap guard', () => {
     routerPushMock.mockClear()
     ;(wrapper.vm as unknown as { editMap: () => void }).editMap()
     expect(routerPushMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
+// ── loadJourneys / loadMoreJourneys guards ──────────────────────────────
+describe('LifecycleMapView branches — journeys loading guards', () => {
+  it('loadJourneys returns early when no mapId', async () => {
+    const { useRoute } = await import('vue-router')
+    vi.mocked(useRoute).mockReturnValue({ params: { id: '' }, query: {}, meta: {}, name: 'lifecycle-map-detail' } as never)
+    const wrapper = mountView()
+    await flushPromises()
+    fetchMock.mockClear()
+    await (wrapper.vm as unknown as { loadJourneys: () => Promise<void> }).loadJourneys()
+    expect(fetchMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('loadMoreJourneys returns early when no mapId', async () => {
+    const { useRoute } = await import('vue-router')
+    vi.mocked(useRoute).mockReturnValue({ params: { id: '' }, query: {}, meta: {}, name: 'lifecycle-map-detail' } as never)
+    const wrapper = mountView()
+    await flushPromises()
+    fetchMock.mockClear()
+    await (wrapper.vm as unknown as { loadMoreJourneys: () => Promise<void> }).loadMoreJourneys()
+    expect(fetchMock).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })
