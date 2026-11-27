@@ -9,9 +9,11 @@ name: "RC Validation (clean-host compose + upgrade matrix + own-stack fuzz)"
 #      `docker compose up -d` and a `/healthz/ready` poll.
 #   2. docker-upgrade-rollback (FAR-2195) - the operator-visible upgrade /
 #      failure / rollback matrix on a disposable compose project.
-#   3. pen-test (FAR-2800) - the immutable RC image booted in its OWN disposable
+#   3. rc-fuzz (FAR-2800) - the immutable RC image booted in its OWN disposable
 #      compose stack (its own Postgres and Redis, its own generated secrets, its
-#      own seeded account) and fuzzed with Schemathesis.
+#      own seeded account) and fuzzed with Schemathesis TWICE: an unauthenticated
+#      sweep and an authenticated sweep, each on its own stack, both judged by the
+#      status policy in scripts/rc_fuzz_policy.py.
 #
 # Why the fuzz leg targets the RC's own stack and never a deployed host: the
 # soak deployment tracks main, so an RC tag - an ancestor of main - is a
@@ -522,39 +524,78 @@ jobs:
   # bundle plus the shipped `init-env.sh`), so this leg exercises the artefact an
   # evaluator downloads rather than a hand-made equivalent.
   #
+  # TWO PASSES, one job each (a matrix entry = its own runner and its own
+  # disposable stack, so neither pass can see the other's state):
+  #
+  #   * unauthenticated - no credential is presented anywhere;
+  #   * authenticated   - the seeded account's Bearer token is presented on every
+  #                       request, so any 401 is an authorisation bug.
+  #
+  # The status policy those passes are judged by lives in
+  # `scripts/rc_fuzz_policy.py` (one table, one function, unit-tested) and is
+  # applied to every response by the Schemathesis extension
+  # `scripts/rc_fuzz_checks.py`, loaded through the documented
+  # `SCHEMATHESIS_HOOKS` hook. It replaces the built-in `status_code_conformance`
+  # check, which counts a correct 401/402 refusal as a defect - the reason the
+  # first real run reported 434 "failures".
+  #
+  # Two jobs rather than two steps in one job, for three measured reasons:
+  #
+  #   1. budget - a step may run 45 minutes and the job 75; a single pass takes
+  #      ~21 minutes on an unauthenticated sweep alone, so two passes in one job
+  #      either exceed the job cap or need a smaller per-pass example budget;
+  #   2. isolation - the authenticated pass mutates state on its stack, and two
+  #      matrix entries cannot share a jar, a compose project or a port;
+  #   3. evidence - each pass gets its own junit, policy report and stack logs.
+  #
+  # The cost is a second image pull and boot (~3 minutes of hosted runner time,
+  # in parallel with the first pass, so no extra wall clock).
+  #
   # The working directory and evidence directory are derived from RUNNER_TEMP
   # inside each step: the `runner` context is not available in a job-level
   # `env:` block.
   # ---------------------------------------------------------------------------
-  pen-test:
-    name: Schemathesis fuzz vs the RC's own stack
-    # FAR-2195 / FAR-2345: the validation marker is pushed by this job, so
-    # gating it on both acceptance legs means a release is marked validated only
-    # when the downloadable artefacts come up for a self-hoster AND the Docker
-    # upgrade/failure/rollback matrix passes.
+  rc-fuzz:
+    name: Schemathesis fuzz vs the RC's own stack (${{ matrix.pass }})
     needs: [clean-host-compose, docker-upgrade-rollback]
     runs-on: ubicloud-standard-2
-    # No deploy wait is involved any more: the budget covers the image pull and
-    # first boot (up to 10 minutes of readiness polling), the smoke bootstrap,
-    # the Schemathesis run (capped at 45 by its own step timeout) and teardown.
+    # No deploy wait is involved: the budget covers the image pull and first boot
+    # (up to 10 minutes of readiness polling), the smoke bootstrap, the
+    # Schemathesis run (capped at 45 by its own step timeout), the credential
+    # scrub and teardown.
     timeout-minutes: 75
-    permissions:
-      # This job owns the validated/<rc_tag> marker tag.
-      contents: write
+    strategy:
+      # Both passes must report, even when the first one fails: the point of the
+      # pair is the 401 invariant, and half the evidence is worse than none.
+      fail-fast: false
+      matrix:
+        include:
+          - pass: unauthenticated
+            port: "18082"
+          - pass: authenticated
+            port: "18083"
     env:
       RC_TAG: ${{ inputs.rc_tag }}
+      # Which policy row applies. Read by the extension; an unknown value aborts
+      # the rollout instead of defaulting to something plausible.
+      RC_FUZZ_PASS: ${{ matrix.pass }}
       # Loopback port this stack publishes the app on (the bundle publishes
-      # ${PORT}:80). 18082 keeps it clear of the matrix leg's 18081.
-      PORT: "18082"
-      # One compose project per run, so every `docker compose` invocation in
+      # ${PORT}:80). Distinct per matrix entry, and clear of the matrix leg's
+      # 18081, so two passes can never talk to each other's stack.
+      PORT: ${{ matrix.port }}
+      # One compose project per pass, so every `docker compose` invocation in
       # this job - including the ones inside scripts/smoke-compose.sh - targets
       # this stack and nothing else on the host.
-      COMPOSE_PROJECT_NAME: rc-fuzz-${{ github.run_id }}
+      COMPOSE_PROJECT_NAME: rc-fuzz-${{ matrix.pass }}-${{ github.run_id }}
       # Throwaway account seeded into THIS stack only. The boot seeder grants it
       # the admin role and creates the default organisation, so the fuzz run
       # covers the whole documented surface. The password is generated per run
       # in the boot step below; no repository secret is used or required.
       FUZZ_EMAIL: admin
+      # Access-token lifetime for this disposable stack, in minutes. The product
+      # default is 15 and the longest pass is bounded at 45, so a default token
+      # would expire mid-sweep; 180 leaves the widest possible margin.
+      FUZZ_TOKEN_MINUTES: "180"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -562,6 +603,18 @@ jobs:
           # script are the ones this release ships.
           ref: ${{ inputs.rc_tag }}
           fetch-depth: 0
+
+      - name: Check out the fuzz harness (the policy, not the artefact)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The status policy belongs to the validator, not to the artefact under
+          # test: it has to be the policy of THIS run's definition, otherwise the
+          # fix could never apply to an RC that was cut before it. The artefact
+          # itself (packager, compose file, smoke script) still comes from the RC
+          # tag, above.
+          ref: ${{ github.sha }}
+          path: rc-harness
+          persist-credentials: false
 
       - name: Set up Python for the release harness
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
@@ -624,6 +677,15 @@ jobs:
           echo "::add-mask::${fuzz_password}"
           echo "FUZZ_PASSWORD=${fuzz_password}" >> "$GITHUB_ENV"
           printf 'FARNA_CONTROL_USERS=%s:%s\n' "$FUZZ_EMAIL" "$fuzz_password" >> .env
+          # The sweep outlives the product's default 15-minute access token, and a
+          # token that expires mid-run turns every later request into a 401 -
+          # which the authenticated pass would then report as an authorisation
+          # bug (measured: a 5-hour local run was 417 such 401s). Give THIS
+          # disposable stack a lifetime that outlives the longest pass; the
+          # accepted value is asserted against the running container in the
+          # bootstrap step below. The leg sweeps the answer surface, it does not
+          # validate token expiry, so this is not a weakened check.
+          printf 'FARNA_CONTROL_ACCESS_TOKEN_MINUTES=%s\n' "$FUZZ_TOKEN_MINUTES" >> .env
           # TAG only labels the release inside the app (FARNA_CONTROL_VERSION);
           # the image itself is pinned by the packager.
           export TAG="$RC_TAG"
@@ -697,6 +759,22 @@ jobs:
           echo "Stack coordinates from the packaged compose: db_service=${db_service} db_user=${db_user} database=${db_name} app_service=${app_service}"
           echo "APP_SERVICE=${app_service}" >> "$GITHUB_ENV"
 
+          # The credential must outlive the sweep. Read the value from the RUNNING
+          # container rather than from the .env file, so a name the application
+          # does not read cannot pass unnoticed.
+          token_minutes="$(docker compose -f docker-compose.prod.yml exec -T "$app_service" printenv FARNA_CONTROL_ACCESS_TOKEN_MINUTES | tr -d '\r')"
+          case "$token_minutes" in
+            '' | *[!0-9]*)
+              echo "::error::the running stack does not report FARNA_CONTROL_ACCESS_TOKEN_MINUTES (got '${token_minutes}'); a default 15-minute token expires mid-sweep and every later request becomes a false 401."
+              exit 1
+              ;;
+          esac
+          if [ "$token_minutes" -lt "$FUZZ_TOKEN_MINUTES" ]; then
+            echo "::error::the running stack allows a ${token_minutes}-minute access token but the sweep needs ${FUZZ_TOKEN_MINUTES}; every request after expiry would be reported as an authorisation bug."
+            exit 1
+          fi
+          echo "Access-token lifetime on this stack: ${token_minutes} minutes (sweep budget: ${FUZZ_TOKEN_MINUTES})."
+
           # The shipped smoke path proves the stack actually works - login, the
           # checkpointer, the checkpoint tables, and a real credential
           # round-trip through this stack's own FERNET_KEY - rather than only
@@ -769,6 +847,21 @@ jobs:
           # arbitrary setup scripts during installation. schemathesis publishes
           # wheels, so this is a no-op for availability.
           uv tool install --no-build "schemathesis==4.25.2"
+          # The status policy is applied by this extension (loaded through
+          # Schemathesis' documented SCHEMATHESIS_HOOKS hook), and it replaces the
+          # built-in `status_code_conformance` check: that check counts a status
+          # the OpenAPI document does not enumerate as a defect, which is why the
+          # first real run reported 434 correct 401/402 refusals as failures.
+          export SCHEMATHESIS_HOOKS="$GITHUB_WORKSPACE/rc-harness/scripts/rc_fuzz_checks.py"
+          export RC_FUZZ_REPORT_PATH="$evidence_dir/schemathesis/policy-report.txt"
+          export RC_FUZZ_FINDINGS_JSON="$evidence_dir/schemathesis/findings.json"
+          # The authenticated pass presents the seeded token on EVERY request;
+          # the unauthenticated pass presents none. The policy - not this
+          # conditional - is what decides what each answer means.
+          auth_args=()
+          if [ "$RC_FUZZ_PASS" = "authenticated" ]; then
+            auth_args+=(--header "Authorization: Bearer ${FUZZ_JWT}")
+          fi
           # v1 severity policy: every check, GET operations only, blocking on any
           # finding. The example budget is bounded by MEASUREMENT, not taste: a
           # full GET sweep of this API runs ~3358 cases in ~16 minutes on
@@ -776,15 +869,34 @@ jobs:
           # the 50 that the never-executed previous invocation carried would need
           # hours and blow this step's timeout. Raise both together if a deeper
           # budget is wanted.
+          #
+          # --workers 2 pins the load to one worker per runner vCPU (which is what
+          # `auto` resolves to on ubicloud-standard-2) so a local run reproduces
+          # CI's load profile instead of saturating the single app container.
+          # --request-retries 0 keeps a slow answer visible as an error instead of
+          # spending 4 x the timeout retrying it. --exclude-path drops the SSE
+          # endpoint: its body never completes, so a request/response sweep hangs
+          # on it (measured: one such scenario blocked for 4.5 hours locally).
           schemathesis run "$evidence_dir/schemathesis/openapi.json" \
             --url "http://127.0.0.1:${PORT}" \
-            --header "Authorization: Bearer ${FUZZ_JWT}" \
+            "${auth_args[@]}" \
             --include-method GET \
+            --exclude-path "/api/v1/events" \
             --checks all \
+            --exclude-checks status_code_conformance \
             --max-examples 5 \
+            --workers 2 \
+            --request-retries 0 \
+            --request-timeout 15 \
             --report junit,ndjson \
             --report-junit-path "$evidence_dir/schemathesis/junit.xml" \
-            --report-ndjson-path "$evidence_dir/schemathesis/events.ndjson"
+            --report-ndjson-path "$evidence_dir/schemathesis/events.ndjson" \
+            2>&1 | tee "$evidence_dir/schemathesis/console.log"
+          # The extension writes these at interpreter exit; a run that died before
+          # it could write them has not produced a verdict, so it must not pass.
+          test -s "$evidence_dir/schemathesis/policy-report.txt"
+          test -s "$evidence_dir/schemathesis/findings.json"
+          cat "$evidence_dir/schemathesis/policy-report.txt"
 
       - name: Capture stack diagnostics
         if: always()
@@ -804,29 +916,30 @@ jobs:
             > "$evidence_dir/stack/containers.log" 2>&1 || echo "::warning::could not capture container logs"
           ls -l "$evidence_dir/stack"
 
+      - name: Scrub the credential out of the evidence
+        id: scrub
+        # Before the upload, and unconditionally: Schemathesis' NDJSON recorder
+        # writes the request headers into its artefact, so the Bearer token IS in
+        # there (observed). This rewrites every occurrence and then proves none
+        # remains - a leak fails the job instead of shipping.
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/rc-harness/scripts/rc_fuzz_policy.py" scrub \
+            --evidence-dir "${RUNNER_TEMP}/rc-fuzz-evidence"
+
       - name: Upload the fuzz report and stack logs
         # Always, not only on failure: a cancelled or failed run must still ship
-        # the evidence that explains it.
-        if: always()
+        # the evidence that explains it - but never with the credential in it, so
+        # a failed scrub withholds the upload.
+        if: always() && steps.scrub.outcome != 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: alpha-rc-fuzz-${{ github.run_id }}
+          name: alpha-rc-fuzz-${{ matrix.pass }}-${{ github.run_id }}
           path: ${{ runner.temp }}/rc-fuzz-evidence
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Configure git
-        run: |
-          git config user.name "modulo-release-bot"
-          git config user.email "bot@modulo.run"
-
-      - name: Record validation success (validated/<rc_tag> marker)
-        if: success()
-        run: |
-          VALIDATED_TAG="validated/${RC_TAG}"
-          git tag -f -a "$VALIDATED_TAG" -m "rc-validate SUCCESS for ${RC_TAG}" "${RC_TAG}^{commit}"
-          git push origin "$VALIDATED_TAG" --force
-          echo "Validation marker pushed: $VALIDATED_TAG"
 
       - name: Tear down the disposable stack
         if: always()
@@ -845,3 +958,39 @@ jobs:
           if ! docker compose -f docker-compose.prod.yml down --volumes --remove-orphans; then
             echo "::warning::could not fully tear down the fuzz stack; the runner is ephemeral."
           fi
+
+  # ---------------------------------------------------------------------------
+  # The release-validation marker (FAR-2195 / FAR-2345)
+  #
+  # A separate job because the marker is a property of the WHOLE validation, not
+  # of one pass: `needs: rc-fuzz` means it is skipped unless both passes (and,
+  # transitively, both acceptance legs) succeeded, and it is the only job that
+  # writes, so a matrix entry can never race the other one to the tag.
+  # ---------------------------------------------------------------------------
+  rc-validated:
+    name: Record RC validation success
+    needs: [rc-fuzz]
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 10
+    permissions:
+      # This job owns the validated/<rc_tag> marker tag.
+      contents: write
+    env:
+      RC_TAG: ${{ inputs.rc_tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Tags, so the RC's own commit can be tagged by reference.
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "modulo-release-bot"
+          git config user.email "bot@modulo.run"
+
+      - name: Record validation success (validated/<rc_tag> marker)
+        run: |
+          VALIDATED_TAG="validated/${RC_TAG}"
+          git tag -f -a "$VALIDATED_TAG" -m "rc-validate SUCCESS for ${RC_TAG}" "${RC_TAG}^{commit}"
+          git push origin "$VALIDATED_TAG" --force
+          echo "Validation marker pushed: $VALIDATED_TAG"
