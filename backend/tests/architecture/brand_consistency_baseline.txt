@@ -923,3 +923,9 @@ zizmor.yml	1
 # alias or the kept trust-header provenance literal.
 backend/tests/architecture/test_persisted_identifier_contract.py	4
 backend/tests/unit/core/test_persisted_value_migration.py	1
+
+# Added by the FAR-2823 error-detail redaction migration: files that must spell
+# the retired pre-rebrand package prefix (an internal identifier, not brand copy)
+# to match historical rows.
+backend/src/farna/db/migrations/versions/0370_redact_error_detail_tracebacks.py	1
+backend/tests/unit/db/test_migration_0370_redact_error_detail_tracebacks.py	2

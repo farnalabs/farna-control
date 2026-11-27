@@ -99,9 +99,9 @@ def test_the_broadened_match_markers_are_the_ticket_spec() -> None:
     assert module._MARKER_FRAME == '.py", line '
     # ... plus the broader leak class the first predicate missed.
     assert module._MARKER_INTERNAL_MODULE == "farna."
-    # Spelled by concatenation: the retired pre-rebrand package prefix is an
-    # internal identifier, not brand copy (the migration explains why).
-    assert module._MARKER_INTERNAL_MODULE_LEGACY == "modu" + "lo."
+    # The retired pre-rebrand package prefix: an internal identifier, not brand
+    # copy (the migration explains why it is spelled in the gate's baseline).
+    assert module._MARKER_INTERNAL_MODULE_LEGACY == "modulo."
     assert module._MARKER_SOURCE_SUFFIX == ".py"
     # One ordered marker tuple drives the bind params, so SQL and tests cannot drift.
     assert module._MARKERS == (
@@ -357,7 +357,7 @@ def test_upgrade_redacts_matching_rows_and_leaves_everything_else_byte_identical
         assert "/app/src/" not in redacted
         assert '.py", line ' not in redacted
         assert "farna." not in redacted
-        assert "modu" + "lo." not in redacted
+        assert "modulo." not in redacted
         assert ".py" not in redacted
     # The genuinely clean rows are byte-identical.
     assert clean == _CLEAN_DETAIL

@@ -169,12 +169,12 @@ _MARKER_FRAME = '.py", line '
 #: marker. The ``.py`` stem is shared by all three suffixes, so one containment
 #: test catches every source reference.
 _MARKER_INTERNAL_MODULE = "farna."
-#: The retired pre-rebrand package prefix. Built by concatenation so the
-#: brand-consistency architecture gate does not read this INTERNAL identifier as
-#: newly-introduced brand copy (it is not brand copy; it is only ever compared
-#: against ``runs.error_detail`` text). Freezing it in that gate's baseline would
-#: be the alternative, but that file is outside this change's scope.
-_MARKER_INTERNAL_MODULE_LEGACY = "modu" + "lo."
+#: The retired pre-rebrand package prefix, for historical rows that still carry
+#: it. This is an INTERNAL identifier, not brand copy - it is only ever compared
+#: against ``runs.error_detail`` text - so the brand-consistency gate's baseline
+#: records this file (the gate's documented mechanism for a genuinely new file)
+#: rather than the literal being split to evade the gate.
+_MARKER_INTERNAL_MODULE_LEGACY = "modulo."
 _MARKER_SOURCE_SUFFIX = ".py"
 
 #: Every leak marker, in bind order (``m1`` .. ``m6``). A row matches when its
