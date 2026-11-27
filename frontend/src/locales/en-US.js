@@ -3569,6 +3569,7 @@ export default {
       "scope_user_label": "Personal (acts as me)",
       "scope_org_hint": "An org-scoped key is an unattributed machine identity, capped at operator or runner.",
       "scope_user_hint": "A user-scoped key acts as your account and carries your live role, including admin. It expires within 90 days.",
+      "role_ceiling_note": "Admin is only available on a user-scoped key; org-scoped keys are limited to Operator or Runner. An org key is a shared machine credential, so org-wide admin is reserved for keys tied to a person. User-scoped keys need the user_scoped_mcp_keys organisation flag and expire within 90 days. Operator is enough for pipelines, connectors and runs, so most keys do not need admin.",
       "admin": "Admin",
       "name": "Name",
       "key_prefix": "Key Prefix",
