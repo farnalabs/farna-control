@@ -10,7 +10,7 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 526 of 922 ticked behaviours (144 node, 140 feature, 242 module strength).
+Bound today: 530 of 922 ticked behaviours (144 node, 144 feature, 242 module strength).
 Weak bindings (module-only): 242. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
@@ -29,19 +29,6 @@ Derived status: `partial`
 - `product-analytics-09` - Identity and transparency endpoints disclose collection state and allow opt-out
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `product-analytics-14` - The frontend event-capture composable is initialized in the app root
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-
-## docs/product-map/analytics/analytics.md
-
-Derived status: `partial`
-
-- `analytics-07` - The route maps the service's typed errors to HTTP: an inverted/over-wide range
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `analytics-08` - A repeated `pipeline_id` composes an A/B comparison (both ids reach the
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `analytics-09` - Export (`/export`) returns paginated JSON rows (`items`/`total`/`offset`
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `analytics-13` - Concurrency (`/concurrency`) reports the pooled slot-utilization series
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
 ## docs/product-map/audit/audit-trail.md
@@ -1088,7 +1075,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 144  Feature: 140  Module (weak): 242
+Node: 144  Feature: 144  Module (weak): 242
 
 ### Weak (module-only) bindings
 
