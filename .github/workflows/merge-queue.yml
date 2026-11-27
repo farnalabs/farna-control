@@ -291,6 +291,15 @@ jobs:
       contents: write
       pull-requests: write
       actions: write
+      # The "Merge source PRs via gh pr merge" step posts the
+      # `merge-gate/verified` commit status on each PR's head via
+      # POST /repos/{owner}/{repo}/statuses/{sha}. Creating a commit status
+      # needs statuses:write on GITHUB_TOKEN; without it the post 403s and the
+      # step fail-closes before merging. This job is one of only two that post
+      # the status (the train `merge` job is the other), so the permission lives
+      # here rather than at workflow level, where it would also be granted to
+      # the non-merging freeze-gate / event-gate / admit / build / validate jobs.
+      statuses: write
       # The "Close GitHub issues referenced by merged PRs" step runs
       # `gh issue comment` / `gh issue close`, which need issues:write on
       # GITHUB_TOKEN; without it every call 403s and the step silently
@@ -2360,6 +2369,30 @@ jobs:
                 MERGE_TOKEN="$WORKFLOW_PAT"
                 echo "  PR #$NUM modifies .github/workflows/* - merging with the workflow-scoped PAT" ;;
             esac
+
+            # --- Landing gate: post the queue's verdict on the PR head --------
+            # `merge-gate/verified` is the merge queue's verdict as a commit
+            # status. It is a REQUIRED status check on main, so the queue becomes
+            # the only path that can land a PR: a direct `gh pr merge` (or a
+            # `--admin` bypass attempt by a human or agent) fails the required
+            # check unless this queue posted it.
+            #
+            # Posted ONLY here - after the review-decision re-check, the
+            # same-repo author gate and the SHA-pin guard above, and immediately
+            # before the merge - so it can never certify a PR that failed a gate.
+            # Pinned to $HEAD_OID (the head those guards just approved), never to
+            # main or to a merge commit. Fail CLOSED: if the status cannot be
+            # posted, do not merge and fail the job - the status IS the gate.
+            if ! GH_TOKEN="${{ github.token }}" gh api \
+              --method POST "repos/${{ github.repository }}/statuses/${HEAD_OID}" \
+              -f state=success \
+              -f context=merge-gate/verified \
+              -f description="Merge queue verified PR #${NUM}" > /dev/null; then
+              echo "::error::PR #${NUM}: failed to post the required merge-gate/verified status on head ${HEAD_OID} - refusing to merge (the status is the gate; fail closed)."
+              exit 1
+            fi
+            echo "  PR #${NUM}: posted merge-gate/verified on ${HEAD_OID}"
+
             if GH_TOKEN="$MERGE_TOKEN" gh pr merge --squash "$NUM" 2>&1; then
               echo "    PR #$NUM merged --"
               GH_MERGED="$GH_MERGED $NUM"
@@ -3312,6 +3345,12 @@ jobs:
       pull-requests: write
       actions: write
       issues: write
+      # Posts the `merge-gate/verified` commit status on each merged PR's head
+      # (POST /repos/{owner}/{repo}/statuses/{sha}). Needed on this train merge
+      # job exactly as on the `queue` job - it is the other merge-to-main path.
+      # Kept job-scoped so the non-merging train jobs (admit/build/validate) do
+      # not inherit it.
+      statuses: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -3625,6 +3664,26 @@ jobs:
                 MERGE_TOKEN="$WORKFLOW_PAT"
                 echo "  PR #$NUM modifies .github/workflows/* - merging with the workflow-scoped PAT" ;;
             esac
+
+            # --- Landing gate: post the train's verdict on the PR head --------
+            # Identical contract to the `queue` job's post: `merge-gate/verified`
+            # is a REQUIRED status check on main, so the merge train is a landing
+            # path only when it certifies the PR here. Posted ONLY after this
+            # step's `if:` has proven build+validate succeeded, after the
+            # review-decision re-check, the same-repo author gate and the SHA-pin
+            # guard, and immediately before the merge. Pinned to $HEAD_OID (the
+            # head the guards approved), never to main or a merge commit. Fail
+            # CLOSED: if the status cannot be posted, do not merge.
+            if ! GH_TOKEN="${{ github.token }}" gh api \
+              --method POST "repos/${{ github.repository }}/statuses/${HEAD_OID}" \
+              -f state=success \
+              -f context=merge-gate/verified \
+              -f description="Merge queue verified PR #${NUM}" > /dev/null; then
+              echo "::error::PR #${NUM}: failed to post the required merge-gate/verified status on head ${HEAD_OID} - refusing to merge (the status is the gate; fail closed)."
+              exit 1
+            fi
+            echo "  PR #${NUM}: posted merge-gate/verified on ${HEAD_OID}"
+
             if GH_TOKEN="$MERGE_TOKEN" gh pr merge --squash "$NUM" 2>&1; then
               echo "    PR #$NUM merged --"
               GH_MERGED="$GH_MERGED $NUM"
