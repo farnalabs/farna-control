@@ -2267,6 +2267,9 @@ def _add_pipeline_edges(
                 id=uuid.uuid4(),
                 organisation_id=org_id,
                 pipeline_id=pipeline.id,
+                # ADR 070 Phase 1A: the installed edges become the new pipeline's
+                # live graph, so they take its owner (migration 0369).
+                owner_team_id=pipeline.owner_team_id,
                 source_node_id=uuid.UUID(edge_data["source_node_id"]),
                 target_node_id=uuid.UUID(edge_data["target_node_id"]),
                 edge_type=edge_data["edge_type"],

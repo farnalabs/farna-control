@@ -979,6 +979,7 @@ async def clone_pipeline(
         cloned_id=cloned.id,
         org_id=org_id,
         account_id=account_id,
+        owner_team_id=cloned.owner_team_id,
     )
     node_count = len(snapshot.graph_nodes_json)
     snap_count = await _clone_snapshots(
@@ -1083,12 +1084,17 @@ async def _clone_edges(
     cloned_id: uuid.UUID,
     org_id: uuid.UUID,
     account_id: uuid.UUID,
+    owner_team_id: uuid.UUID | None = None,
 ) -> int:
     """Copy the source's first-class edges onto the clone.
 
     Returns the number of edges copied. Any gated edge (non-None
     ``hitl_review_config``) is collected and, if at least one exists, emitted as a
     single batched ``edge_created_with_gate`` audit event after the flush.
+
+    ``owner_team_id`` is the CLONE's owner (ADR 070 Phase 1A), stamped on every
+    copied edge so the graph inherits the new pipeline's team rather than the
+    source's.
     """
     _log.info("Copying edges for pipeline %s -> %s", source_id, cloned_id)
     gated_cloned_edges: list[PipelineEdge] = []
@@ -1096,6 +1102,7 @@ async def _clone_edges(
         cloned_edge = PipelineEdge(
             organisation_id=org_id,
             pipeline_id=cloned_id,
+            owner_team_id=owner_team_id,
             source_node_id=edge["source_node_id"],
             target_node_id=edge["target_node_id"],
             edge_type=edge["edge_type"],
@@ -2355,6 +2362,10 @@ async def replace_pipeline_graph(
             id=uuid.UUID(str(edge["id"])),
             organisation_id=org_id,
             pipeline_id=pipeline_id,
+            # ADR 070 Phase 1A: an edge is part of the pipeline's live graph, so it
+            # inherits the locked pipeline's owner (migration 0369). The pipeline
+            # row is already in memory, so this costs no extra round trip.
+            owner_team_id=pipeline.owner_team_id,
             source_node_id=uuid.UUID(str(edge["source_node_id"])),
             target_node_id=uuid.UUID(str(edge["target_node_id"])),
             edge_type=edge["edge_type"],

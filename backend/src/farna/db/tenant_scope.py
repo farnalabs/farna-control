@@ -278,13 +278,15 @@ _ENTRIES: tuple[TableScope, ...] = (
     TableScope("variant_groups", TenantScope.ORG_GLOBAL, justification="Variant group definitions are org-level experiment configuration attached to a pipeline, read by the experiment surfaces for the whole organisation."),
     TableScope("variant_batch_state", TenantScope.ORG_GLOBAL, justification="Persistence row for an A/B variant batch: batches are org-level experiment bookkeeping, and batches predating FAR-775 have no stored row at all."),
     # ── org_global: pipeline graph children of a team-owned parent ──────────
-    # These carry no team column, so they stay on the org gate until ADR 070
-    # Phase 1B denormalises (or joins) the parent's owner.
-    TableScope("pipeline_edges", TenantScope.ORG_GLOBAL, justification="Pipeline graph edges are children of a team-owned pipeline; the child has no team column, so it stays org-gated until Phase 1B denormalises the parent's owner."),
-    TableScope("pipeline_snapshots", TenantScope.ORG_GLOBAL, justification="Immutable graphs captured at trigger time and read by the executor team-blind; the row has no team column, so it follows the org gate until Phase 1B."),
-    TableScope("snapshot_schema_pins", TenantScope.ORG_GLOBAL, justification="Schema pins recorded on a pipeline snapshot; they follow the snapshot's org gate until ADR 070 Phase 1B gives the runs family a team predicate."),
+    # These stay on the org gate until ADR 070 Phase 1B flips the pipeline
+    # family. Some already carry owner_team_id (0365 for ``nodes``, 0369 for
+    # ``pipeline_edges``/``triggers``); the rest need the denormalisation or a
+    # parent-scope decision first.
+    TableScope("pipeline_edges", TenantScope.ORG_GLOBAL, justification="Pipeline graph edges carry owner_team_id from migration 0369 (Phase 1A), but their POLICY is still the org gate; they flip to the team predicate with the rest of the pipeline family in Phase 1B."),
+    TableScope("pipeline_snapshots", TenantScope.ORG_GLOBAL, justification="Immutable graph versions read by the executor team-blind: a run-kind snapshot is historical evidence and an edit-kind one live version history, so one live-owner column cannot serve both - defer to Phase 2."),
+    TableScope("snapshot_schema_pins", TenantScope.ORG_GLOBAL, justification="Schema pins recorded on a pipeline snapshot; they own no pipeline reference of their own and follow whatever scope pipeline_snapshots gets, which Phase 2 decides."),
     TableScope("pipeline_folders", TenantScope.ORG_GLOBAL, justification="Pipeline folders are org-level navigation for the pipeline list; account_id records the creator, and every team browses the same folder tree."),
-    TableScope("nodes", TenantScope.ORG_GLOBAL, justification="Legacy pipeline-node table, deprecated outside composite templates; it has no team column and is org-gated until the composite-template migration removes it."),
+    TableScope("nodes", TenantScope.ORG_GLOBAL, justification="Legacy pipeline-node table, deprecated outside composite templates; it carries owner_team_id from 0365 but is org-gated until the composite-template migration removes it."),
     TableScope("eval_cases", TenantScope.ORG_GLOBAL, justification="Eval dataset cases: the parent eval_datasets row is team-scoped, and the child carries no team column, so it stays org-gated until the parent's scope is denormalised."),
     TableScope("eval_results", TenantScope.ORG_GLOBAL, justification="Per-case eval results attached to a run; they follow the run's scope, and the runs family stays org-scoped until ADR 070 Phase 1B."),
     TableScope("evals", TenantScope.ORG_GLOBAL, justification="Eval definitions are org-wide library resources: they carry no visibility or owner column yet, so ADR 070 defers their narrowing to Phase 2."),
@@ -304,7 +306,7 @@ _ENTRIES: tuple[TableScope, ...] = (
     TableScope("run_node_outputs_quarantine", TenantScope.ORG_GLOBAL, justification="Ops-only quarantine of oversized or unparseable node outputs, copied aside for remediation; RLS is enabled (0368) with the plain org predicate, and every reader and the retention purge run under an org context."),
     TableScope("run_number_counters", TenantScope.ORG_GLOBAL, justification="Per-organisation run-number allocator (ADR 070 §6): a team predicate would break the org-wide monotonic counter that every run insert consumes."),
     TableScope("journeys", TenantScope.ORG_GLOBAL, justification="One journey row per (organisation, kind, ref) work item, minted by a unique constraint on the org key; it carries owner_team_id for attribution but stays org-level so history survives a team change."),
-    TableScope("triggers", TenantScope.ORG_GLOBAL, justification="Triggers are org-gated children of pipelines today; a team predicate needs the pipeline's owner denormalised, which has not landed (Phase 2)."),
+    TableScope("triggers", TenantScope.ORG_GLOBAL, justification="Triggers carry owner_team_id from migration 0369 (Phase 1A), but their POLICY is still the org gate; they flip to the team predicate with the rest of the pipeline family in Phase 1B."),
     TableScope("trigger_events", TenantScope.ORG_GLOBAL, justification="Trigger ingress ledger: every delivery is recorded for the organisation so operators can audit webhook and cron traffic; account_id records the actor."),
     TableScope("trigger_event_findings", TenantScope.ORG_GLOBAL, justification="Guardrail findings attached to a trigger event: child of the org-level trigger-event ledger with no team column."),
     TableScope("webhook_dedup_hashes", TenantScope.ORG_GLOBAL, justification="Webhook dedupe hashes named in ADR 070 §6; the dedupe window is per trigger across the whole organisation, so a team predicate would re-admit a duplicate."),
