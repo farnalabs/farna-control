@@ -714,12 +714,14 @@ jobs:
           # credential that outlives the smoke check so the GET surface is fuzzed
           # against real rows.
           base="http://127.0.0.1:${PORT}"
-          token="$(
-            python3 -c 'import json, os; print(json.dumps({"email": os.environ["FUZZ_EMAIL"], "password": os.environ["FUZZ_PASSWORD"]}))' \
-              | curl -sS -m 30 -X POST "${base}/api/v1/auth/login" \
-                  -H 'Content-Type: application/json' --data-binary @- \
-              | python3 -c 'import json, sys; print((json.load(sys.stdin) or {}).get("access_token") or "")'
-          )"
+          # The login response is written to a file and parsed as data - a
+          # network response is never piped straight into an interpreter.
+          python3 -c 'import json, os; print(json.dumps({"email": os.environ["FUZZ_EMAIL"], "password": os.environ["FUZZ_PASSWORD"]}))' \
+            | curl -sS -m 30 -X POST "${base}/api/v1/auth/login" \
+                -H 'Content-Type: application/json' --data-binary @- \
+                -o "$RUNNER_TEMP/login.json"
+          token="$(python3 -c 'import json, sys, pathlib; print((json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")) or {}).get("access_token") or "")' "$RUNNER_TEMP/login.json")"
+          rm -f "$RUNNER_TEMP/login.json"
           if [ -z "$token" ]; then
             echo "::error::the RC's own stack did not return a Bearer token for the seeded fuzz account."
             exit 1
