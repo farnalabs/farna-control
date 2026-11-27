@@ -569,75 +569,11 @@
       "entry": "docs/product-map/configure/guardrails.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
-    "health-checks-01": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-02": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "health-checks-03": {
       "entry": "docs/product-map/infra/health-checks.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
-    "health-checks-04": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-05": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-06": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-07": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-08": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-09": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-10": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-11": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-12": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-13": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "health-checks-14": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-15": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-16": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-17": {
-      "entry": "docs/product-map/infra/health-checks.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "health-checks-18": {
       "entry": "docs/product-map/infra/health-checks.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
     },
@@ -1000,38 +936,6 @@
     "pipelines-03": {
       "entry": "docs/product-map/pipelines/pipelines.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-01": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-02": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-03": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-04": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-05": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-06": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-10": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "plugins-12": {
-      "entry": "docs/product-map/admin/plugins.md",
-      "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
     },
     "product-analytics-06": {
       "entry": "docs/product-map/admin/product-analytics.md",
@@ -1850,7 +1754,6 @@
     "pipelines-12",
     "pipelines-13",
     "pipelines-15",
-    "plugins-11",
     "product-analytics-01",
     "product-analytics-03",
     "product-analytics-04",

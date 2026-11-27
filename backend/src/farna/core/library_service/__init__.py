@@ -827,6 +827,7 @@ async def _load_org_page(
     source: str | None,
     cursor: str | None,
     excluded_tiers: list[str] | None,
+    team_id: uuid.UUID | None = None,
 ) -> PageResult[LibraryPrimitive]:
     """Fetch the org page, degrading gracefully to an empty page on DB failure."""
     org_page: PageResult[LibraryPrimitive] = PageResult(items=[], total=0, page=page, page_size=page_size)
@@ -844,6 +845,7 @@ async def _load_org_page(
             source=source,
             cursor=cursor,
             excluded_tiers=excluded_tiers,
+            team_id=team_id,
         )
 
     try:
@@ -871,6 +873,7 @@ async def list_primitives(
     source: str | None = None,
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
+    team_id: uuid.UUID | None = None,
 ) -> PageResult[LibraryPrimitive]:
     """Return org-scoped and Native library primitives merged into a single page.
 
@@ -893,6 +896,13 @@ async def list_primitives(
 
     A failing org query degrades to an empty org page (logged) rather than
     failing the whole listing, so the Native built-ins are still served.
+
+    ``team_id`` (optional) is the team boundary of a team-scoped credential.
+    It narrows the ORG page only: the Native built-ins merged below come from
+    the in-code registry (``source="farna_control"``) and are not team-owned,
+    so they stay visible to every credential — exactly like a DB row with
+    ``owner_team_id IS NULL``. ``None`` (JWT / org-wide key) applies no team
+    predicate and the listing is unchanged.
     """
     if excluded_tiers is None:
         excluded_tiers = ["in_dev"]
@@ -907,6 +917,7 @@ async def list_primitives(
         source=source,
         cursor=cursor,
         excluded_tiers=excluded_tiers,
+        team_id=team_id,
     )
 
     # ``source`` and ``excluded_tiers`` are applied inside

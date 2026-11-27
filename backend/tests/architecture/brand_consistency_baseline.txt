@@ -6,6 +6,7 @@
 # land; never add a file or raise a count to admit new drift.
 .claude-plugin/marketplace.json	6
 .env.prod.example	2
+.github/scripts/merge_train_build.py	2
 .github/scripts/test-restart-wedged-app-machines.sh	3
 .github/workflows/backup-restore-nightly.yml	1
 .github/workflows/bdd.yml	13
@@ -22,6 +23,7 @@
 .github/workflows/macos-staple-retry.yml	2
 .github/workflows/main-integration.yml	10
 .github/workflows/merge-queue.yml	2
+.github/workflows/merge-validate.yml	18
 .github/workflows/native-gate0.yml	1
 .github/workflows/native-release-smoke.yml	15
 .github/workflows/pr-conflict-reconcile.yml	7
@@ -545,6 +547,7 @@ backend/tests/unit/library/test_dogfood_input_schemas.py	3
 backend/tests/unit/library_service/test_library_seed_pr_review_decision.py	1
 backend/tests/unit/mcp/test_library_detail_resource.py	5
 backend/tests/unit/mcp/test_library_list_resource.py	1
+backend/tests/unit/mcp/test_library_search_team_scope.py	1
 backend/tests/unit/mcp/test_mcp_buildtime_entity_read_tools.py	3
 backend/tests/unit/mcp/test_mcp_config_tools.py	2
 backend/tests/unit/mcp/test_mcp_connector_tools.py	2
@@ -920,3 +923,9 @@ zizmor.yml	1
 # alias or the kept trust-header provenance literal.
 backend/tests/architecture/test_persisted_identifier_contract.py	4
 backend/tests/unit/core/test_persisted_value_migration.py	1
+
+# Added by the FAR-2823 error-detail redaction migration: files that must spell
+# the retired pre-rebrand package prefix (an internal identifier, not brand copy)
+# to match historical rows.
+backend/src/farna/db/migrations/versions/0370_redact_error_detail_tracebacks.py	1
+backend/tests/unit/db/test_migration_0370_redact_error_detail_tracebacks.py	2

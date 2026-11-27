@@ -277,6 +277,9 @@
     <span :data-value="option.value">{{ option.label }}</span>
   </template>
 </Select>
+          <p class="mt-1 text-xs text-muted-foreground">
+            {{ $t('views.SettingsMcpView.role_ceiling_note') }}
+          </p>
         </div>
         <p v-if="grantsLoading" class="text-sm text-muted-foreground" data-testid="settings-mcp-grants-loading">
           {{ $t('views.SettingsMcpView.grants_loading') }}

@@ -8,9 +8,12 @@ import { nextTick } from 'vue'
 // fit the view before first render), latch its guard only on a SUCCESSFUL
 // fit, and keep re-attempting on pane-ready / node changes while fitView
 // keeps resolving false — these mocks prove it.
-const { fitViewSpy, paneReadyHandlers } = vi.hoisted(() => ({
+const { fitViewSpy, paneReadyHandlers, findNodeSpy } = vi.hoisted(() => ({
   fitViewSpy: vi.fn(),
   paneReadyHandlers: [] as Array<() => void>,
+  // The stubbed VueFlow never measures a node, so Arrange sees no canvas size
+  // and falls back to the layout's default dimensions (FAR-2815).
+  findNodeSpy: vi.fn(() => undefined),
 }))
 
 vi.mock('@vue-flow/core', async (importOriginal) => {
@@ -19,6 +22,7 @@ vi.mock('@vue-flow/core', async (importOriginal) => {
     ...actual,
     useVueFlow: () => ({
       fitView: fitViewSpy,
+      findNode: findNodeSpy,
       onPaneReady: (cb: () => void) => {
         paneReadyHandlers.push(cb)
       },

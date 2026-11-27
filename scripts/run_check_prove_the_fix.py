@@ -25,6 +25,15 @@ Fenced code blocks and HTML comments are stripped before the ``Proves:`` lines
 are read, so *documenting* the convention inside a PR body (the README example is
 itself a fenced block) can never satisfy it.
 
+A frontend title declared with a template literal (``test(`authenticated ${path}
+has ...`)``) - or with an ``each``/``for`` printf (``%s``) or ``$var`` placeholder
+- is captured exactly as declared and matched exactly as declared, placeholders
+and all. A ref must therefore be written VERBATIM. That is a governance gate, not
+a naming inconvenience: the named test must EXIST, and a substituted title is a
+string no test declares. When a ref matches nothing the failure quotes the nearest
+declared titles to copy, so the first round trip tells the author the exact text
+to paste.
+
 Usage
 -----
     # CI (the changed-file list and the PR body are handed in by the workflow)
@@ -44,6 +53,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import difflib
 import re
 import sys
 import tempfile
@@ -520,22 +530,67 @@ def runnable_spec_titles(source: str) -> set[str]:
     return {title for title, reason in iter_spec_test_calls(source) if reason is None}
 
 
+def _nearest_declared_titles(ref_title: str, declared_titles: list[str], limit: int = 3) -> list[str]:
+    """Up to *limit* declared titles close to *ref_title* (stdlib ``difflib``)."""
+    return difflib.get_close_matches(ref_title, declared_titles, n=limit)
+
+
+def _suggest_spec_titles(ref_title: str, calls: list[tuple[str, str | None]]) -> str:
+    """A ``Did you mean: ...`` clause naming titles the author can copy, or ``""``.
+
+    Suggestions are drawn from RUNNABLE titles first, so copying one can never
+    produce a second failure. Only when no runnable title is close do we fall back
+    to the whole declared set, annotating each candidate that cannot prove
+    anything - a bare copy of a skipped title would be a trap.
+
+    A comma makes a title unexpressible as a ref: ``marker_refs`` reads a comma as
+    "one test per Proves: line", so a comma-containing title can never be pasted.
+    Such titles are dropped from BOTH pools, so every suggestion is pasteable; if
+    that leaves nothing close, there is no suggestion rather than a useless one.
+
+    A title declared with a template literal, or with an ``each``/``for`` printf
+    (``%s``) or ``$var`` placeholder, is quoted exactly as declared, placeholders
+    and all: that is the only string the gate matches, and it is what the author
+    must paste.
+    """
+    runnable = list(dict.fromkeys(title for title, reason in calls if reason is None and "," not in title))
+    nearest = _nearest_declared_titles(ref_title, runnable)
+    if nearest:
+        return f"Did you mean: {'; '.join(f'{title!r}' for title in nearest)}"
+    skip_reasons: dict[str, str] = {}
+    for title, reason in calls:
+        if reason is not None:
+            skip_reasons.setdefault(title, reason)
+    declared = list(dict.fromkeys(title for title, _reason in calls if "," not in title))
+    nearest = _nearest_declared_titles(ref_title, declared)
+    if not nearest:
+        return ""
+    annotated = "; ".join(f"{title!r} (skipped: {skip_reasons[title]})" if title in skip_reasons else f"{title!r}" for title in nearest)
+    return f"Did you mean: {annotated}"
+
+
+def _undefined_spec_title_message(ref: str, ref_title: str, calls: list[tuple[str, str | None]], rel: str) -> str:
+    """The "not defined" error, plus up to three near matches to copy from."""
+    message = f"{ref!r} names a test title that is not defined in {rel}"
+    suggestion = _suggest_spec_titles(ref_title, calls)
+    if not suggestion:
+        return message
+    return f"{message}. {suggestion}"
+
+
 def _verify_spec_ref(ref: str, match: re.Match[str], module: Path) -> str | None:
     try:
         source = module.read_text(encoding="utf-8")
     except OSError as exc:
         return f"{ref!r} names a spec that cannot be read: {exc}"
     name = match.group("name").strip()
-    found = False
-    for title, reason in iter_spec_test_calls(source):
-        if title != name:
-            continue
-        found = True
-        if reason is not None:
-            return f"{ref!r} names a spec test that cannot prove anything: {reason}"
-    if not found:
-        return f"{ref!r} names a test title that is not defined in {match.group('file')}"
-    return None
+    calls = list(iter_spec_test_calls(source))
+    reasons = [reason for title, reason in calls if title == name]
+    if not reasons:
+        return _undefined_spec_title_message(ref, name, calls, match.group("file"))
+    if any(reason is None for reason in reasons):
+        return None
+    return f"{ref!r} names a spec test that cannot prove anything: {reasons[0]}"
 
 
 def verify_ref(ref: str, repo_root: Path, changed_files: list[str]) -> str | None:

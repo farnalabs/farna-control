@@ -35,12 +35,14 @@ from farna.db.models import (
     Journey,
     Node,
     NodeObservation,
+    PipelineEdge,
     Run,
     RunAttempt,
     RunEvidence,
     RunNodeOutput,
     SuiteRun,
     SystemMapNode,
+    Trigger,
 )
 
 # ---------------------------------------------------------------------------
@@ -96,6 +98,13 @@ MODELS_WITH_OWNER_TEAM_ID_NO_VISIBILITY: list[tuple[type[Any], str]] = [
         Node,
         "Node access derives from its parent pipeline (ADR 070 §4); deprecated composite-template store, no own visibility column",
     ),
+    # ADR 070 Phase 1A - the pipeline family markers. These two are the pipeline
+    # children whose ownership follows exactly one pipeline (live definition, not
+    # history), so they carry the parent's team for the Phase 1B predicate. A
+    # trigger/edge is exactly as visible as its pipeline, and ``pipelines`` keeps
+    # the visibility column - the child must not grow a second one.
+    (Trigger, "Trigger access derives from its parent pipeline (ADR 070 Phase 1A); no own visibility column"),
+    (PipelineEdge, "PipelineEdge access derives from its parent pipeline (ADR 070 Phase 1A); no own visibility column"),
 ]
 
 # ---------------------------------------------------------------------------

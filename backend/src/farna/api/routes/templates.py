@@ -229,6 +229,7 @@ async def _persist_template_edges(
     resolved_nodes: list[dict[str, Any]],
     pipeline_id: uuid.UUID,
     organisation_id: uuid.UUID,
+    owner_team_id: uuid.UUID | None = None,
 ) -> list[Any]:
     """Create PipelineEdge rows for the template's edges; flush and return them.
 
@@ -248,6 +249,9 @@ async def _persist_template_edges(
             id=uuid.uuid4(),
             organisation_id=organisation_id,
             pipeline_id=pipeline_id,
+            # ADR 070 Phase 1A: the template's edges become the new pipeline's
+            # live graph, so they take its owner (migration 0369).
+            owner_team_id=owner_team_id,
             source_node_id=uuid.UUID(source_id),
             target_node_id=uuid.UUID(target_id),
             edge_type=edge.get("edge_type", "normal"),
@@ -323,6 +327,7 @@ async def create_pipeline_from_template_endpoint(
                 resolved_nodes,
                 pipeline.id,
                 principal.organisation_id,
+                pipeline.owner_team_id,
             )
 
         return FromTemplateResponse(

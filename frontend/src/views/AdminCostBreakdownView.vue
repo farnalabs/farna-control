@@ -232,38 +232,21 @@ const totalRuns = computed(() => {
 })
 const avgCostPerRun = computed(() => totalRuns.value > 0 ? totalSpend.value / totalRuns.value : 0)
 
-// Cost per successful run — derived from the existing analytics buckets endpoint.
-// Each bucket carries `count` (total runs) and `success_rate` (complete / count).
-// Summing count * success_rate across all day-buckets for the period gives the
-// total successful-run count. No new backend endpoint needed.
-type AnalyticsBucket = components['schemas']['AnalyticsBucket']
-type AnalyticsResponse = components['schemas']['AnalyticsResponse']
-
-const successfulRuns = ref(0)
-
-async function loadSuccessCount() {
-  try {
-    const now = new Date()
-    const dateFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-    const dateTo = now.toISOString().slice(0, 10)
-
-    const { data: analyticsData, error: analyticsErr } = await api.GET('/api/v1/analytics/query', {
-      params: { query: { group_by: 'day', date_from: dateFrom, date_to: dateTo } },
-    })
-    if (!analyticsErr && analyticsData) {
-      const resp = analyticsData as AnalyticsResponse
-      successfulRuns.value = (resp.buckets ?? []).reduce((sum: number, b: AnalyticsBucket) => {
-        if (b.success_rate != null) {
-          return sum + Math.round(b.count * b.success_rate)
-        }
-        return sum
-      }, 0)
-    }
-  } catch {
-    // Analytics endpoint may lack permission — degrade gracefully to 0.
-    successfulRuns.value = 0
-  }
-}
+// Cost per successful run.
+//
+// FAR-2820: the costs report returns `org_successful_run_count` from the SAME
+// run_daily_facts query (and the SAME UTC month-to-date window) as
+// `org_run_count`, so "Total Runs" and "N successful runs" on the same card can
+// never disagree.
+//
+// FAR-2824: this is the ONLY source for the figure. The removed fallback read a
+// BROWSER-LOCAL month start while the total came from the UTC month, so the two
+// windows could straddle a month boundary and report more successes than runs.
+// Reading a single response removes that divergence.
+const successfulRuns = computed<number>(() => {
+  const backendCount = (data.value as CostReportResponse | undefined)?.org_successful_run_count
+  return backendCount ?? 0
+})
 
 const costPerSuccessfulRun = computed(() => successfulRuns.value > 0 ? totalSpend.value / successfulRuns.value : 0)
 
@@ -318,7 +301,6 @@ async function dismissAnomaly(id: string) {
 onMounted(() => {
   planStore.fetchPlan()
   void loadData()
-  void loadSuccessCount()
   void loadAnomalies()
   void loadCurrency()
 })

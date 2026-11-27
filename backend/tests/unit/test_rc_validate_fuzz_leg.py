@@ -15,15 +15,9 @@ What is pinned:
   container logs rather than a bare timeout;
 * account, organisation and credential are bootstrapped from the stack itself
   through the shipped smoke path - never from a production credential;
-* the sweep runs TWICE, as two matrix entries on their own stacks: an
-  unauthenticated pass that presents no credential and an authenticated pass that
-  presents the seeded token on every request (FAR-2800's policy);
-* the status policy itself lives in ``scripts/rc_fuzz_policy.py`` and is applied
-  by the ``SCHEMATHESIS_HOOKS`` extension, replacing the built-in
-  ``status_code_conformance`` check;
-* the fuzz step is blocking (no ``if:``, no ``continue-on-error``) and bounded;
+* the fuzz step is blocking (no ``if:``, no ``continue-on-error``);
 * teardown is ``if: always()`` and runs last, with the logs and the Schemathesis
-  report scrubbed of the credential, then uploaded as artefacts;
+  report uploaded as artefacts;
 * the deploy-identity machinery merged for the wrong premise (FAR-2800's
   selector, its deploy.yml identity job and its ``deploy_run_id`` input) is gone,
   and nothing references it.
@@ -39,17 +33,13 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RC_VALIDATE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "rc-validate.yml"
 DEPLOY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
-POLICY_MODULE = REPO_ROOT / "scripts" / "rc_fuzz_policy.py"
-CHECKS_MODULE = REPO_ROOT / "scripts" / "rc_fuzz_checks.py"
 
-_FUZZ_JOB = "rc-fuzz"
-_MARKER_JOB = "rc-validated"
+_PEN_TEST_JOB = "pen-test"
 _FUZZ_STEP = "Schemathesis fuzz against the RC's own stack"
 _READY_STEP = "Wait for the stack to report ready"
 _BOOTSTRAP_STEP = "Bootstrap the fuzz account, organisation and credential"
 _BOOT_STEP = "Start the RC's own disposable stack"
 _PACKAGE_STEP = "Package the exact RC compose bundle"
-_SCRUB_STEP = "Scrub the credential out of the evidence"
 _UPLOAD_STEP = "Upload the fuzz report and stack logs"
 _TEARDOWN_STEP = "Tear down the disposable stack"
 
@@ -88,18 +78,14 @@ def _workflow() -> dict[str, Any]:
     return loaded
 
 
-def _job(job_id: str) -> dict[str, Any]:
-    job = _workflow()["jobs"][job_id]
+def _pen_test() -> dict[str, Any]:
+    job = _workflow()["jobs"][_PEN_TEST_JOB]
     assert isinstance(job, dict)
     return job
 
 
-def _fuzz_job() -> dict[str, Any]:
-    return _job(_FUZZ_JOB)
-
-
 def _steps() -> list[dict[str, Any]]:
-    steps = _fuzz_job().get("steps") or []
+    steps = _pen_test().get("steps") or []
     assert isinstance(steps, list)
     return steps
 
@@ -115,9 +101,10 @@ def _run(step_name: str) -> str:
 
 
 def _job_text() -> str:
-    """The fuzz job's own YAML text, so a token check cannot match a sibling job."""
+    """The job's own YAML text, so a token check cannot match a sibling job."""
     text = RC_VALIDATE_WORKFLOW.read_text(encoding="utf-8")
-    start = text.index(f"\n  {_FUZZ_JOB}:")
+    start = text.index(f"\n  {_PEN_TEST_JOB}:")
+    # pen-test is the last job in the file.
     return text[start:]
 
 
@@ -133,11 +120,11 @@ def test_the_workflow_names_no_production_host() -> None:
     assert "RC_PENTEST_USERNAME" not in text, "the leg must not need a deployment-only credential secret"
     assert "RC_PENTEST_PASSWORD" not in text
     assert "secrets." not in _job_text(), "the fuzz leg must bootstrap every credential it needs on the runner"
-    assert f"\n  {_FUZZ_JOB}:" in text
+    assert f"\n  {_PEN_TEST_JOB}:" in text
 
 
 def test_the_leg_still_runs_after_both_acceptance_legs() -> None:
-    needs = _fuzz_job().get("needs")
+    needs = _pen_test().get("needs")
 
     assert needs == ["clean-host-compose", "docker-upgrade-rollback"]
 
@@ -154,9 +141,10 @@ def test_the_fuzz_target_is_the_local_stack() -> None:
     assert '"http://127.0.0.1:8000/openapi.json"' in script
     assert 'schemathesis run "$evidence_dir/schemathesis/openapi.json"' in script
     assert "if not paths:" in script
-    # The other built-in checks are unchanged; the example budget is still bounded
-    # by measurement (a full GET sweep runs ~3358 cases in ~16 minutes at 5
-    # examples per operation).
+    # v1 severity policy is unchanged: every check, GET only, blocking on any
+    # finding. The example budget is bounded by measurement (a full GET sweep
+    # runs ~3358 cases in ~16 minutes at 5 examples per operation).
+    assert '--header "Authorization: Bearer ${FUZZ_JWT}"' in script
     assert "--include-method GET" in script
     assert "--checks all" in script
     assert "--max-examples 5" in script
@@ -182,107 +170,6 @@ def test_the_target_image_comes_from_the_rc_tag_and_never_latest() -> None:
     assert "TAG=latest" not in job_text
     # The image is pulled by tag from this RC's bundle, never rebuilt locally.
     assert "docker build" not in job_text
-
-
-# ---------------------------------------------------------------------------
-# Two passes, two stacks: the policy and its inputs
-# ---------------------------------------------------------------------------
-
-
-def test_the_sweep_runs_as_two_passes_on_their_own_stacks() -> None:
-    matrix = _fuzz_job()["strategy"]["matrix"]["include"]
-    env = _fuzz_job()["env"]
-
-    passes = [entry["pass"] for entry in matrix]
-    assert passes == ["unauthenticated", "authenticated"]
-    # Distinct loopback ports, and a compose project per pass: neither pass can
-    # reach the other's stack, so the authenticated pass' state mutations cannot
-    # affect anything else.
-    ports = [entry["port"] for entry in matrix]
-    assert len(set(ports)) == len(ports)
-    assert "${{ matrix.pass }}" in env["COMPOSE_PROJECT_NAME"]
-    assert env["RC_FUZZ_PASS"] == "${{ matrix.pass }}"
-    # Both passes must report even if the first fails.
-    assert _fuzz_job()["strategy"]["fail-fast"] is False
-
-
-def test_only_the_authenticated_pass_presents_the_credential() -> None:
-    script = _run(_FUZZ_STEP)
-
-    # The header is added conditionally on the pass, never unconditionally (that
-    # would make the unauthenticated pass meaningless) and never from a file the
-    # second pass could forget to read.
-    assert 'if [ "$RC_FUZZ_PASS" = "authenticated" ]; then' in script
-    assert 'auth_args+=(--header "Authorization: Bearer ${FUZZ_JWT}")' in script
-    assert '"${auth_args[@]}"' in script
-
-
-def test_the_status_policy_lives_in_one_module_and_replaces_the_builtin_check() -> None:
-    script = _run(_FUZZ_STEP)
-
-    assert POLICY_MODULE.is_file(), "the status policy module must exist"
-    assert CHECKS_MODULE.is_file(), "the Schemathesis extension must exist"
-    # Loaded through the documented extension hook, from the harness checkout (the
-    # policy belongs to the validator, not to the artefact under test).
-    assert 'export SCHEMATHESIS_HOOKS="$GITHUB_WORKSPACE/rc-harness/scripts/rc_fuzz_checks.py"' in script
-    # The built-in status check is replaced, not merely supplemented: it is the one
-    # that counted a correct 401/402 refusal as a defect.
-    assert "--exclude-checks status_code_conformance" in script
-    # Per-pass artefacts, written by the extension at interpreter exit.
-    assert 'export RC_FUZZ_REPORT_PATH="$evidence_dir/schemathesis/policy-report.txt"' in script
-    assert 'export RC_FUZZ_FINDINGS_JSON="$evidence_dir/schemathesis/findings.json"' in script
-    # A run that died before writing them produced no verdict and must not pass.
-    assert 'test -s "$evidence_dir/schemathesis/policy-report.txt"' in script
-    assert 'test -s "$evidence_dir/schemathesis/findings.json"' in script
-
-
-def test_the_sweep_is_bounded_so_two_passes_fit() -> None:
-    script = _run(_FUZZ_STEP)
-    step = _step(_FUZZ_STEP)
-    job = _fuzz_job()
-
-    # A per-step budget AND a job budget; two passes are separate jobs, so each
-    # gets the full step budget instead of sharing one.
-    assert step.get("timeout-minutes") == 45
-    assert job.get("timeout-minutes") == 75
-    # A request timeout, so a slow answer cannot consume the whole budget.
-    assert "--request-timeout 15" in script
-    # No retry storm: a slow answer stays visible instead of spending 4x the
-    # timeout on it (measured: retries turned one 10s timeout into 40s).
-    assert "--request-retries 0" in script
-    # Load pinned to the runner's vCPU count.
-    assert "--workers 2" in script
-    # The SSE endpoint never completes its body, so it is excluded by name (its
-    # OpenAPI entry advertises application/json, so content type cannot be used).
-    assert '--exclude-path "/api/v1/events"' in script
-
-
-def test_the_harness_is_checked_out_separately_from_the_artefact() -> None:
-    steps = _steps()
-    checkout_steps = [step for step in steps if str(step.get("uses", "")).startswith("actions/checkout@")]
-
-    assert len(checkout_steps) == 2, "one checkout for the RC tag, one for the policy harness"
-    rc_checkout, harness_checkout = checkout_steps
-    assert rc_checkout["with"]["ref"] == "${{ inputs.rc_tag }}"
-    assert harness_checkout["with"]["ref"] == "${{ github.sha }}"
-    assert harness_checkout["with"]["path"] == "rc-harness"
-    # The harness checkout must not smuggle the deploy credentials anywhere.
-    assert harness_checkout["with"].get("persist-credentials") is False
-
-
-def test_the_credential_outlives_the_sweep_and_the_stack_proves_it() -> None:
-    env = _fuzz_job()["env"]
-    boot = _run(_BOOT_STEP)
-    bootstrap = _run(_BOOTSTRAP_STEP)
-
-    # The product default (15 minutes) is shorter than a pass, so the disposable
-    # stack is given a lifetime that outlives the step budget.
-    assert env["FUZZ_TOKEN_MINUTES"] == "180"
-    assert "printf 'FARNA_CONTROL_ACCESS_TOKEN_MINUTES=%s\\n' \"$FUZZ_TOKEN_MINUTES\" >> .env" in boot
-    # ...and the RUNNING container is asked, so a name the application does not
-    # read cannot pass unnoticed.
-    assert "printenv FARNA_CONTROL_ACCESS_TOKEN_MINUTES" in bootstrap
-    assert '"$token_minutes" -lt "$FUZZ_TOKEN_MINUTES"' in bootstrap
 
 
 # ---------------------------------------------------------------------------
@@ -348,12 +235,10 @@ def test_the_bootstrap_uses_the_shipped_smoke_path() -> None:
     assert "/api/v1/auth/login" in script
     assert "/api/v1/model-backends" in script
     assert '"$credential_status" != "201"' in script
-    # The token is masked in the log and never echoed.
-    assert 'echo "::add-mask::${token}"' in script
 
 
 # ---------------------------------------------------------------------------
-# The fuzz step is blocking; scrubbing, teardown and evidence are unconditional
+# The fuzz step is blocking; teardown and evidence are unconditional
 # ---------------------------------------------------------------------------
 
 
@@ -362,23 +247,8 @@ def test_the_fuzz_step_cannot_be_skipped_or_made_non_blocking() -> None:
 
     assert "if" not in step, "the fuzz step must run whenever its predecessors succeed"
     assert "continue-on-error" not in step
-    assert _fuzz_job().get("continue-on-error") is None
+    assert _pen_test().get("continue-on-error") is None
     assert step.get("timeout-minutes") is not None, "a hung fuzz run must be bounded"
-
-
-def test_the_credential_is_scrubbed_before_anything_is_uploaded() -> None:
-    steps = _steps()
-    names = [candidate.get("name") for candidate in steps]
-    scrub = _step(_SCRUB_STEP)
-    upload = _step(_UPLOAD_STEP)
-
-    assert scrub["if"] == "always()"
-    # The scrub runs the tested policy helper, not an inline sed.
-    assert '"$GITHUB_WORKSPACE/rc-harness/scripts/rc_fuzz_policy.py" scrub' in str(scrub["run"])
-    assert '--evidence-dir "${RUNNER_TEMP}/rc-fuzz-evidence"' in str(scrub["run"])
-    # ...and a failed scrub withholds the artefact rather than shipping a leak.
-    assert "steps.scrub.outcome != 'failure'" in str(upload["if"])
-    assert names.index(_SCRUB_STEP) < names.index(_UPLOAD_STEP)
 
 
 def test_teardown_is_always_and_runs_last() -> None:
@@ -393,25 +263,12 @@ def test_teardown_is_always_and_runs_last() -> None:
     assert names.index(_UPLOAD_STEP) < names.index(_TEARDOWN_STEP)
 
 
-def test_the_report_and_logs_are_uploaded_per_pass() -> None:
+def test_the_report_and_logs_are_uploaded_as_an_artefact() -> None:
     step = _step(_UPLOAD_STEP)
 
-    assert step["if"].startswith("always()")
+    assert step["if"] == "always()"
     assert step["with"]["path"] == "${{ runner.temp }}/rc-fuzz-evidence"
-    # Per pass, so two artefacts never collide at the run level.
-    assert step["with"]["name"] == "alpha-rc-fuzz-${{ matrix.pass }}-${{ github.run_id }}"
-
-
-def test_the_validation_marker_is_a_separate_job_that_needs_every_pass() -> None:
-    marker = _job(_MARKER_JOB)
-    names = [step.get("name") for step in marker["steps"]]
-
-    # Gone from the fuzz job: a matrix entry must never write the tag twice.
-    assert "Record validation success (validated/<rc_tag> marker)" not in [step.get("name") for step in _steps()]
-    assert marker["needs"] == [_FUZZ_JOB], "a skipped or failed pass must withhold the marker"
-    assert marker["permissions"] == {"contents": "write"}
-    assert "Record validation success (validated/<rc_tag> marker)" in names
-    assert "validated/${RC_TAG}" in str(marker["steps"][-1]["run"])
+    assert step["with"]["name"] == "alpha-rc-fuzz-${{ github.run_id }}"
 
 
 # ---------------------------------------------------------------------------

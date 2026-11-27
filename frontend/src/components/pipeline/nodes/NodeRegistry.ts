@@ -35,6 +35,16 @@ export const PIPELINE_CONNECTORS_KEY: InjectionKey<Ref<Array<Record<string, any>
  * extracted components keep the editor's existing translations.
  */
 
+/**
+ * Upper bound on a canvas node card's width (FAR-2851).
+ *
+ * Without it a card grows to fit its longest unwrapped line, so cards overlap
+ * their neighbours and `line-clamp-2` never wraps. Every pipeline canvas card
+ * applies the class. `max-w-56` is 14rem (224px): it fits inside the 240px rank
+ * pitch graph-layout uses for unmeasured cards (200px width + 40px gap).
+ */
+export const PIPELINE_NODE_MAX_WIDTH_CLASS = 'max-w-56'
+
 /** Visual theme for a node type. */
 export interface NodeTheme {
   /** Border Tailwind classes (e.g. 'border-2 border-warning/60'). */

@@ -1,132 +1,28 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
-import type { Stubs } from '@vue/test-utils'
-import { createPinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
-const testRoute = vi.hoisted(() => ({
-  params: { id: 'test-run-id' },
-  fullPath: '/runs/test-run-id',
-  path: '/runs/test-run-id',
-  query: {},
-  hash: '',
-  matched: [],
-  name: 'run-detail',
-  redirectedFrom: undefined,
-  meta: {},
-}))
+// The doubles live in ./helpers/runDetailViewApi because `vi.mock` factories are
+// hoisted above this file's imports and so cannot close over spec-local state;
+// the mount helpers and the shared hooks come from ./helpers/runDetailViewHarness.
+vi.mock('vue-router', async () => (await import('./helpers/runDetailViewApi')).vueRouterMock())
+vi.mock('../lib/api/client', async () => (await import('./helpers/runDetailViewApi')).apiClientMock())
+vi.mock('../lib/jwt', async () => (await import('./helpers/runDetailViewApi')).jwtMock())
 
-const mockRouterPush = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+import {
+  afterEachRunDetail,
+  baseRun,
+  beforeEachRunDetail,
+  getMock,
+  mountView,
+  mountWith,
+  overrideDialogStub,
+  postMock,
+} from './helpers/runDetailViewHarness'
 
-vi.mock('vue-router', () => ({
-  useRoute: vi.fn(() => testRoute),
-  useRouter: vi.fn(() => ({
-    push: mockRouterPush,
-    replace: vi.fn(),
-    resolve: vi.fn(),
-    go: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-    beforeEach: vi.fn(),
-    afterEach: vi.fn(),
-    onError: vi.fn(),
-    currentRoute: { value: testRoute },
-    getRoutes: vi.fn(() => []),
-    addRoute: vi.fn(),
-    removeRoute: vi.fn(),
-    hasRoute: vi.fn(() => false),
-    isReady: vi.fn().mockResolvedValue(undefined),
-    install: vi.fn(),
-  })),
-  // RunDetailView pulls in the Analyze action (FAR-1235), whose assistant
-  // store chain imports @/router — that module calls beforeEach/afterEach/
-  // onError on the router it builds at import time, so the stub must answer them.
-  createRouter: vi.fn(() => ({
-    install: vi.fn(),
-    push: vi.fn(),
-    replace: vi.fn(),
-    resolve: vi.fn(),
-    go: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-    beforeEach: vi.fn(),
-    afterEach: vi.fn(),
-    onError: vi.fn(),
-    currentRoute: { value: {} },
-    getRoutes: vi.fn(() => []),
-    addRoute: vi.fn(),
-    removeRoute: vi.fn(),
-    hasRoute: vi.fn(() => false),
-    isReady: vi.fn(() => Promise.resolve(true)),
-  })),
-  createWebHistory: vi.fn(() => ({})),
-}))
+beforeEach(beforeEachRunDetail)
 
-const { getMock, postMock } = vi.hoisted(() => ({
-  getMock: vi.fn(),
-  postMock: vi.fn(),
-}))
-
-vi.mock('../lib/api/client', () => ({
-  api: { GET: getMock, POST: postMock },
-  getAccessToken: vi.fn().mockReturnValue('mock-token'),
-}))
-
-vi.mock('../lib/jwt', () => ({
-  decodeJwtPayload: () => ({ org_role: 'operator' }),
-  principalSubject: () => null,
-}))
-
-import RunDetailView from '../views/RunDetailView.vue'
-
-function baseRun(overrides: Record<string, unknown> = {}) {
-  return {
-    run_id: 'test-run-id',
-    pipeline_id: 'test-pipeline',
-    status: 'complete',
-    total_cost_usd: 1.23,
-    node_token_usage: null,
-    trace_id: null,
-    ...overrides,
-  }
-}
-
-function mountView(options: { stubs?: Stubs } = {}) {
-  return mount(RunDetailView, {
-    // The Analyze action (FAR-1235) reads plan/assistant stores, so the
-    // view's test host needs an active Pinia.
-    global: { plugins: [createPinia()], ...(options.stubs ? { stubs: options.stubs } : {}) },
-  })
-}
-
-const overrideDialogStub = {
-  template: '<div class="p-dialog"><slot name="header" /><slot /><slot name="footer" /></div>',
-}
-
-async function mountWith(run: Record<string, unknown>, io: Record<string, unknown> = {}) {
-  getMock.mockImplementation((url: string) => {
-    if (url === '/api/v1/runs/{run_id}') return Promise.resolve({ data: run, error: undefined })
-    if (url === '/api/v1/runs/{run_id}/io') return Promise.resolve({ data: io, error: undefined })
-    if (url === '/api/v1/runs/{run_id}/hitl/pending') return Promise.resolve({ data: { reviews: [] }, error: undefined })
-    if (url === '/api/v1/pipelines/{pipeline_id}/graph') return Promise.resolve({ data: { nodes: [], edges: [] }, error: undefined })
-    return Promise.resolve({ data: null, error: undefined })
-  })
-  const wrapper = mountView()
-  await flushPromises()
-  await nextTick()
-  return wrapper
-}
-
-beforeEach(() => {
-  vi.clearAllMocks()
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
-  postMock.mockResolvedValue({ data: { run_id: 'test-run-id', status: 'pending' }, error: undefined })
-})
-
-afterEach(() => {
-  vi.useRealTimers()
-  vi.unstubAllGlobals()
-})
+afterEach(afterEachRunDetail)
 
 describe('RunDetailView — branch coverage sweep', () => {
   // -- submitOverride: 422 error path --

@@ -29,8 +29,8 @@
  * Variant map (PrimeVue flags):
  *   primary        -> default severity, solid
  *   secondary      -> severity="secondary" + outlined
- *   secondary-text -> severity="secondary" + text (the secondary severity at
- *                     rest: Aura surface.500 / surface.400)
+ *   secondary-text -> severity="secondary" + text (the secondary severity's
+ *                     ink, see the token route below)
  *   ghost          -> text
  *   link           -> PrimeVue's `link` flag (transparent hover, underlined
  *                     label on hover) - deliberately distinct from `text`
@@ -38,8 +38,12 @@
  *   warning        -> severity="warn", solid (the warning token pair)
  *
  * `secondary-text` is the text-button form of `secondary`: it keeps the
- * secondary severity's resting colour instead of the primary one. `link` is the
- * underlined-on-hover action the `text` flag does not render.
+ * secondary severity's resting colour instead of the primary one. The secondary
+ * severity's label ink is routed through `--muted-foreground` via the token
+ * bridge (`src/lib/primevue-theme.ts`), for BOTH the outlined (`secondary`) and
+ * text (`secondary-text`) variants: Aura's own surface-scale value measured
+ * 4.39:1 on the light `bg-muted/30` card, below the WCAG AA floor (FAR-2764).
+ * `link` is the underlined-on-hover action the `text` flag does not render.
  *
  * The `warning` variant is solid (PrimeVue `severity="warn"`), using the Aura
  * warn background/colour token pair. An outlined warning action is reachable

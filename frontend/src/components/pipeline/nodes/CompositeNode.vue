@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useNode } from "@vue-flow/core";
 import { useCompositeStore } from "../../../stores/compositeStore";
+import { PIPELINE_NODE_MAX_WIDTH_CLASS } from "./NodeRegistry";
 
 const { id, node } = useNode<{
   label?: string;
@@ -34,7 +35,10 @@ const portIndicator = computed(() => {
 
 <template>
   <div
-    class="relative rounded-lg border-2 border-node-composite/60 bg-node-composite/10 px-4 py-3 shadow-sm"
+    :class="[
+      'relative break-words rounded-lg border-2 border-node-composite/60 bg-node-composite/10 px-4 py-3 shadow-sm',
+      PIPELINE_NODE_MAX_WIDTH_CLASS,
+    ]"
   >
     <span
       class="absolute -top-2 left-2 rounded-full border border-node-composite/40 bg-node-composite/20 px-2 py-0.5 text-[10px] font-medium text-node-composite-muted"
