@@ -560,7 +560,9 @@ _DEMO_RUN_SPECS: list[tuple[int, str, str, str, int, float, int, int]] = [
     (4, "complete", "webhook", PR_REVIEW_PIPELINE_NAME, 2800, 0.0065, 1, 14),
     # Day 2
     (5, "complete", "cron", RELEASE_NOTES_PIPELINE_NAME, 4100, 0.0095, 2, 9),
-    (6, "awaiting_human", "manual", PR_REVIEW_PIPELINE_NAME, 1500, 0.0035, 2, 16),
+    # Run 6 waits at the Human review gate, so it must stay on the pipeline
+    # that has that gate (FAR-2856).
+    (6, "awaiting_human", "manual", DEMO_PIPELINE_NAME, 1500, 0.0035, 2, 16),
     # Day 3
     (7, "complete", "webhook", PR_REVIEW_PIPELINE_NAME, 2900, 0.0067, 3, 11),
     (8, "failed", "cron", DOCS_SYNC_PIPELINE_NAME, 890, 0.0021, 3, 15),
@@ -620,10 +622,12 @@ class _GovernanceRunPath:
 
 # FAR-1248: the governance runs' routes through the conditional edges.
 # risk <= 0.50 -> straight to Open PR; risk > 0.50 -> Human review (approved)
-# -> Open PR. Run 2 failed while scoring risk (no score, no PR).
+# -> Open PR. Run 2 failed while scoring risk (no score, no PR). Run 6 is still
+# waiting at the Human review gate (no PR yet).
 _GOVERNANCE_RUN_PATHS: dict[int, _GovernanceRunPath] = {
     1: _GovernanceRunPath(risk_score=0.18, pr_number=1482),
     2: _GovernanceRunPath(risk_score=None),
+    6: _GovernanceRunPath(risk_score=0.68, human_review=True),
     9: _GovernanceRunPath(risk_score=0.74, human_review=True, pr_number=1471),
     12: _GovernanceRunPath(risk_score=0.31, pr_number=1466),
     17: _GovernanceRunPath(risk_score=0.62, human_review=True, pr_number=1459),
@@ -775,8 +779,13 @@ def _governance_path(run_number: int) -> _GovernanceRunPath:
     return _GOVERNANCE_RUN_PATHS.get(run_number, _GovernanceRunPath(risk_score=0.25, pr_number=1400 + run_number))
 
 
-def _governance_steps(run_number: int) -> list[_NodeStep]:
-    """The governance run's route through the conditional edges."""
+def _governance_steps(run_number: int, status: str) -> list[_NodeStep]:
+    """The governance run's route through the conditional edges.
+
+    An ``awaiting_human`` run is paused at the Human review gate: only the steps
+    before it have executed. The pending gate has no step of its own (no output,
+    usage or telemetry); the undecided ``HitlClaim`` row represents it.
+    """
     nodes = {node.key: node for node in _GOVERNANCE_PIPELINE.nodes}
     path = _governance_path(run_number)
     steps = [_complete_step(nodes["implement"], {"branch": f"feat/demo-ticket-{run_number}"})]
@@ -795,6 +804,8 @@ def _governance_steps(run_number: int) -> list[_NodeStep]:
             },
         )
     )
+    if status == "awaiting_human":
+        return steps
     if path.human_review:
         steps.append(
             _complete_step(
@@ -817,19 +828,20 @@ def _governance_steps(run_number: int) -> list[_NodeStep]:
 
 
 def _generic_steps(spec: _PipelineSpec, status: str) -> list[_NodeStep]:
-    """Linear pipelines: complete runs ran every node; failed runs stopped at node 2."""
+    """Linear pipelines: complete runs ran every node; failed runs stopped at node 2.
+
+    These pipelines have no human gate, so none of their runs can await one.
+    """
     nodes = list(spec.nodes)
     if status == "failed":
         fail_index = min(1, len(nodes) - 1)
         return [*(_complete_step(node) for node in nodes[:fail_index]), _failed_step(nodes[fail_index])]
-    if status == "awaiting_human":
-        return [_complete_step(node) for node in nodes[: max(1, len(nodes) - 1)]]
     return [_complete_step(node) for node in nodes]
 
 
 def _run_steps(spec: _PipelineSpec, run_number: int, status: str) -> list[_NodeStep]:
     if spec.name == DEMO_PIPELINE_NAME:
-        return _governance_steps(run_number)
+        return _governance_steps(run_number, status)
     return _generic_steps(spec, status)
 
 
@@ -1646,6 +1658,39 @@ async def _ensure_demo_eval_result(
         )
 
 
+async def _retire_misattached_demo_eval_results(
+    session: AsyncSession,
+    org: Organisation,
+    evaluation: Eval,
+) -> None:
+    """Delete synthetic results whose run no longer belongs to the eval's pipeline.
+
+    A seeded run can move between pipelines across releases (FAR-2856), which
+    would leave the old pipeline's eval scoring another pipeline's run. Only
+    rows this seed wrote, for demo-org seeded runs, are removed.
+    """
+    seeded_run_numbers = [run_spec[0] for run_spec in _DEMO_RUN_SPECS]
+    result = await session.execute(
+        select(EvalResult)
+        .join(Run, Run.id == EvalResult.run_id)
+        .where(
+            EvalResult.organisation_id == org.id,
+            EvalResult.eval_id == evaluation.id,
+            Run.organisation_id == org.id,
+            Run.run_number.in_(seeded_run_numbers),
+            Run.pipeline_id != evaluation.pipeline_id,
+        )
+    )
+    for eval_result in result.scalars().all():
+        if (eval_result.judge_result_json or {}).get("source") != "demo_seed":
+            continue
+        await session.delete(eval_result)
+        _log.info(
+            "demo_seed.eval_result_retired",
+            extra={"eval_name": evaluation.name, "run_id": str(eval_result.run_id)},
+        )
+
+
 async def _select_current_demo_eval_runs(
     session: AsyncSession,
     org: Organisation,
@@ -1687,6 +1732,7 @@ async def _seed_demo_evals(
     ):
         pipeline, _ = pipeline_lookup[pipeline_name]
         evaluation = await _get_or_create_demo_eval(session, org, account, pipeline, label)
+        await _retire_misattached_demo_eval_results(session, org, evaluation)
         runs = await _select_current_demo_eval_runs(session, org, pipeline)
         for run in runs:
             await _ensure_demo_eval_result(session, org, evaluation, run, index)
@@ -1919,6 +1965,12 @@ async def _converge_demo_hitl_claim(
             log_extra={"run_number": review.run_number},
         )
         return
+    # ``pipeline_id`` is a copy of the run's pipeline, not decision provenance.
+    # An older seed put run 6 on a pipeline without this gate (FAR-2856), and
+    # the review surfaces name the pipeline from this column.
+    if claim.pipeline_id != run.pipeline_id:
+        claim.pipeline_id = run.pipeline_id
+        _log.info("demo_seed.hitl_claim_pipeline_converged", extra={"run_number": review.run_number})
     if claim.decision is None:
         claim.expires_at = now + timedelta(days=2)
         claim.terminalize_at = now + timedelta(days=2)
