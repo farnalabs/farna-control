@@ -1538,7 +1538,7 @@ def _patch_crud(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     new_schema = SimpleNamespace(id=uuid.uuid4())
     new_sv = SimpleNamespace(version="1.0")
     new_agent = SimpleNamespace(id=uuid.uuid4())
-    new_pipeline = SimpleNamespace(id=uuid.uuid4())
+    new_pipeline = SimpleNamespace(id=uuid.uuid4(), owner_team_id=None)
     new_prim = SimpleNamespace(id=uuid.uuid4())
     create_schema_mock = AsyncMock(return_value=new_schema)
     create_schema_version_mock = AsyncMock(return_value=new_sv)
