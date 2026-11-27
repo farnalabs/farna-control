@@ -19,6 +19,7 @@ import { api, shouldReRunAutoLogin } from '../lib/api/client'
 import {
   getAccessToken,
   isDemoSession,
+  refreshSession,
   setAccessToken,
   setDemoSession,
   wasDemoSessionEnded,
@@ -313,5 +314,137 @@ describe('startup request racing the /demo hand-off', () => {
     await startupRequest
 
     expectNewDemoSession()
+  })
+})
+
+describe('hung token refresh', () => {
+  // Never answers; like fetch, rejects only when the request is aborted.
+  function hang(signal: AbortSignal | null | undefined): Promise<Response> {
+    return new Promise<Response>((_resolve, reject) => {
+      signal?.addEventListener('abort', () =>
+        reject(new DOMException('The operation was aborted.', 'AbortError')),
+      )
+    })
+  }
+
+  let refreshSignal: AbortSignal | null | undefined
+
+  function useHungRefresh(options: { hungProbe?: boolean } = {}): void {
+    fetchMock.mockImplementation(async (input, init) => {
+      const path = String(input)
+      calls.push(path)
+      if (path === REFRESH) {
+        refreshSignal = init?.signal
+        return hang(init?.signal)
+      }
+      if (path === PROBE && options.hungProbe) return hang(init?.signal)
+      return reply(401)
+    })
+  }
+
+  beforeEach(() => {
+    refreshSignal = undefined
+    vi.useFakeTimers()
+    storeSession(expiredToken, 'real')
+  })
+
+  // Not vi.stubGlobal: unstubbing it would also remove the shared fetch spy.
+  function useLocks(request: (...args: never[]) => Promise<unknown>): void {
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request } })
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'locks')
+  })
+
+  it.each([false, true])(
+    'decides /demo within 8s, keeping the session without aborting the refresh (hung probe: %s)',
+    async (hungProbe) => {
+      useHungRefresh({ hungProbe })
+      const settled = vi.fn()
+
+      const entry = resolveDemoEntry().then(settled)
+      await vi.advanceTimersByTimeAsync(7_999)
+      expect(settled).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      await entry
+
+      expect(settled).toHaveBeenCalledWith('dashboard')
+      expectKeptSession(expiredToken, 'real')
+      expect(refreshSignal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(20_000)
+    },
+  )
+
+  it("aborts the refresh after 20s, reports 'unavailable' and allows a new attempt", async () => {
+    useHungRefresh()
+
+    const first = refreshSession()
+    await vi.advanceTimersByTimeAsync(19_999)
+    expect(refreshSignal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(await first).toBe('unavailable')
+    expect(getAccessToken()).toBe(expiredToken)
+
+    const second = refreshSession()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(await second).toBe('unavailable')
+    expect(calls).toStrictEqual([REFRESH, REFRESH])
+  })
+
+  it('stores the token when the refresh answers after /demo stopped waiting', async () => {
+    fetchMock.mockImplementation(async (input) => {
+      if (String(input) !== REFRESH) return reply(401)
+      await new Promise((resolve) => setTimeout(resolve, 12_000))
+      return reply(200, { access_token: refreshedToken })
+    })
+
+    const entry = resolveDemoEntry()
+    await vi.advanceTimersByTimeAsync(8_000)
+    expect(await entry).toBe('dashboard')
+    await vi.advanceTimersByTimeAsync(4_000)
+
+    expect(getAccessToken()).toBe(refreshedToken)
+  })
+
+  it("gives up on a cross-tab lock held elsewhere as 'unavailable' without sending a request", async () => {
+    useHungRefresh()
+    const request = (_name: string, options: LockOptions) =>
+      new Promise((_resolve, reject) => {
+        options.signal?.addEventListener('abort', () =>
+          reject(new DOMException('The request was aborted.', 'AbortError')),
+        )
+      })
+    useLocks(request)
+
+    const pending = refreshSession()
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(await pending).toBe('unavailable')
+    expect(calls).toStrictEqual([])
+  })
+
+  it('gives the request its full limit however long the lock took to be granted', async () => {
+    useHungRefresh()
+    const request = async (_name: string, _options: LockOptions, run: () => Promise<unknown>) => {
+      await new Promise((resolve) => setTimeout(resolve, 15_000))
+      return run()
+    }
+    useLocks(request)
+
+    const pending = refreshSession()
+    await vi.advanceTimersByTimeAsync(34_999)
+    expect(refreshSignal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(await pending).toBe('unavailable')
+  })
+
+  it('still surfaces a lock failure that is not a timeout', async () => {
+    const failure = new Error('lock manager unavailable')
+    useLocks(() => Promise.reject(failure))
+
+    await expect(refreshSession()).rejects.toBe(failure)
   })
 })

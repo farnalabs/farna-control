@@ -6,6 +6,7 @@ import {
   refreshSession,
   setAccessToken,
   setDemoSession,
+  type RefreshOutcome,
 } from './auth'
 import { setMustChangePassword } from '../mustChangePassword'
 
@@ -15,6 +16,10 @@ import { setMustChangePassword } from '../mustChangePassword'
 const DEMO_HANDOFF_TIMEOUT_MS = 15_000
 // Also pre-mount, so also bounded. Shorter: a timeout only means "no verdict".
 const SESSION_PROBE_TIMEOUT_MS = 5_000
+// Longest the entry decision waits on a stored session, probe and refresh
+// together. Kept under the 10s main.ts waits for the first navigation before
+// mounting anyway.
+const SESSION_CHECK_BUDGET_MS = 8_000
 // A cheap read that checks the token's signature and expiry AND that its
 // account, organisation and membership still exist.
 const SESSION_PROBE_URL = '/api/v1/me/settings'
@@ -48,13 +53,29 @@ async function isAccessTokenDead(token: string): Promise<boolean> {
   return isPastExpiry(token)
 }
 
+// Stops waiting after `ms` and reports 'unavailable'. The refresh itself is
+// left running (see REFRESH_TIMEOUT_MS in ./auth): if it succeeds later, the
+// new token is still stored.
+async function refreshWithin(ms: number): Promise<RefreshOutcome> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const gaveUp = new Promise<RefreshOutcome>((resolve) => {
+    timeoutId = setTimeout(() => resolve('unavailable'), ms)
+  })
+  try {
+    return await Promise.race([refreshSession(), gaveUp])
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 // Whether the browser holds a session worth keeping. A dead access token is
 // refreshed where possible. The session is given up only when the refresh is
 // refused: a refresh that could not be completed keeps it, so a transient
 // failure never swaps a real session for a demo one.
 async function keepStoredSession(token: string): Promise<boolean> {
+  const deadline = Date.now() + SESSION_CHECK_BUDGET_MS
   if (!(await isAccessTokenDead(token))) return true
-  if ((await refreshSession()) !== 'rejected') return true
+  if ((await refreshWithin(deadline - Date.now())) !== 'rejected') return true
   // A sign-in elsewhere (e.g. another tab) may have replaced the token while
   // we were waiting; never tear that one down.
   const current = getAccessToken()
