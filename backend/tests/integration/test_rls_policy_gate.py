@@ -28,6 +28,24 @@ quoted-identifier aware), balanced-paren stripped and split on top-level
 ``AND``/``OR``; no substring matching is used. Tables with RLS but no policy fail
 unless they are on the checked-in exception list.
 
+Independently of the top-level shape, every read of the org GUC must be
+**fail-closed** — it must pass ``missing_ok => true`` AND be wrapped in
+``NULLIF(..., '')``::
+
+    NULLIF(current_setting('app.organisation_id', true), '')
+
+The one-argument ``current_setting('app.organisation_id')`` RAISES
+``unrecognized configuration parameter`` when no context has ever been set, and
+a two-argument read that is not ``NULLIF``-normalised turns the pool-checkout
+reset value ``''`` into a comparable value instead of "no context". Migration
+0366 fixed exactly that divergence on ``onboarding_progress``, but this gate
+could not see it: :func:`is_org_equality` only requires *some* read of the org
+GUC, so reverting to the raising form still passed. The invariant is therefore
+enforced as a class — ``test_every_org_guc_read_is_null_safe`` sweeps every
+predicate in the census, and ``test_legacy_predicate_*`` prove the sweep is not
+vacuous by restoring the exact 0351 predicate inside a rolled-back transaction
+and asserting both the structural and the behavioural leg fail.
+
 The four pre-auth tables (``oauth_clients``, ``oauth_consent_states``,
 ``org_memberships``, ``token_families``) were exceptions while their NULL arm
 stood. Migration 0367 replaced that arm with the bootstrap grant, so they left the
@@ -43,14 +61,19 @@ pre-auth accept lookup is authorised by the explicit grant instead of by the
 absence of a policy. Its accept call site pins the unique ``token_hash``.
 
 Part 2 (behavioural) — for ``pipelines``, ``runs``, ``connector_instances``,
-``model_backends`` and ``system_maps`` this seeds two organisations (two teams
-each) and asserts, as a NON-superuser role so RLS actually applies, that an org-B
-context returns zero org-A rows across the full GUC matrix (cross-org, cross-org +
-admin, cross-org + execution context, org unset) and — for the team-scoped
-tables — that a team-B member returns zero team-A rows inside the *same* org.
-Every context carries a positive control so a policy that simply denies
-everything cannot pass. The pre-auth bootstrap grant is proved behaviourally in
-``test_rls_bootstrap_context.py``.
+``model_backends``, ``system_maps`` and ``onboarding_progress`` this seeds two
+organisations (two teams each) and asserts, as a NON-superuser role so RLS
+actually applies, that an org-B context returns zero org-A rows across the full
+GUC matrix (cross-org, cross-org + admin, cross-org + execution context, org
+unset) and — for the team-scoped tables — that a team-B member returns zero
+team-A rows inside the *same* org. Every context carries a positive control so a
+policy that simply denies everything cannot pass. The pre-auth bootstrap grant is
+proved behaviourally in ``test_rls_bootstrap_context.py``.
+
+``onboarding_progress`` is the table migration 0366 exists for: it is seeded with
+one row per organisation (``uq_onboarding_progress_org``), so the org-unset probe
+is the behavioural proof that an unset context yields **zero rows** rather than
+the ``DBAPIError`` the 0351 predicate raised.
 
 Scope note: ``runs`` is org-scoped today (ADR 070 Phase 1B flips the runs family
 to the team predicate). It is therefore exercised across orgs only; the cross-team
@@ -62,12 +85,15 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 pytestmark = pytest.mark.integration
 
@@ -307,6 +333,203 @@ def has_is_null_arm(expr: str) -> bool:
     return _IS_NULL.search(_mask_literals(_unwrap(expr))) is not None
 
 
+# ---------------------------------------------------------------------------
+# Null-safety invariant — how the org GUC must be read
+# ---------------------------------------------------------------------------
+# ``current_setting('app.organisation_id')`` (one argument) RAISES
+# ``unrecognized configuration parameter`` when the GUC was never set. The
+# pool-checkout reset writes ``app.organisation_id = ''``, which a bare
+# two-argument read would compare as a literal value rather than as "no
+# context". The only fail-closed spelling is::
+#
+#     NULLIF(current_setting('app.organisation_id', true), '')
+#
+# which maps BOTH no-context shapes (absent GUC, empty GUC) to NULL and therefore
+# to zero rows. Migration 0366 established this for ``onboarding_progress``; the
+# invariant below is what makes it a class-wide requirement rather than a fact
+# pinned by one migration's unit test.
+
+#: The literal GUC name a policy must read to be org-scoped.
+_ORG_GUC_SETTING = "app.organisation_id"
+
+#: The canonical, fail-closed spelling of an org-GUC read. Split into the call
+#: and its wrapper so a test can pin the deparsed call text itself (an equality
+#: against the parsed span, never a substring search) and the NULLIF separately.
+_CANONICAL_ORG_GUC_CALL = "current_setting('app.organisation_id'::text, true)"
+_CANONICAL_ORG_GUC_READ = f"NULLIF({_CANONICAL_ORG_GUC_CALL}, ''::text)"
+
+#: The exact predicate migration 0351 shipped for ``onboarding_progress`` and
+#: migration 0366 replaced. Kept verbatim so the mutation proof below exercises
+#: the real regression instead of an invented one.
+_LEGACY_ONBOARDING_PROGRESS_PREDICATE = "(organisation_id = (current_setting('app.organisation_id'::text))::uuid)"
+
+_CURRENT_SETTING_CALL = re.compile(r"(?<![A-Za-z0-9_$])current_setting\s*\(", re.IGNORECASE)
+_STRING_LITERAL_WITH_CASTS = re.compile(r"^(?P<literal>'(?:[^']|'')*')(?:\s*::\s*[A-Za-z_][A-Za-z0-9_.]*(?:\s*\(\s*\d+\s*\))?)*$")
+_BOOLEAN_TRUE = re.compile(r"^true(?:\s*::\s*(?:bool|boolean))?$", re.IGNORECASE)
+_TRAILING_CAST = re.compile(r"\s*::\s*[A-Za-z_][A-Za-z0-9_.]*(?:\s*\(\s*\d+\s*\))?$")
+
+
+def _split_on_comma(expr: str) -> tuple[str, ...]:
+    """Split *expr* on every depth-0 comma (literal-aware, paren-balanced)."""
+    masked = _mask_literals(expr)
+    parts: list[str] = []
+    cursor = 0
+    for index, char in enumerate(masked):
+        if char == "," and _depth_at(masked, index) == 0:
+            parts.append(expr[cursor:index].strip())
+            cursor = index + 1
+    parts.append(expr[cursor:].strip())
+    return tuple(parts)
+
+
+def _string_literal_value(expr: str) -> str | None:
+    """The value of *expr* when it is exactly one (optionally cast) string literal.
+
+    ``''`` yields ``""``; ``'app.organisation_id'::text`` yields the unquoted
+    name. Anything that is not a lone literal (a column, a function call, a
+    concatenation) yields None, so the parse can never mistake a dynamic
+    expression for the required constant.
+    """
+    match = _STRING_LITERAL_WITH_CASTS.match(_unwrap(expr))
+    if match is None:
+        return None
+    return match.group("literal")[1:-1].replace("''", "'")
+
+
+def _is_boolean_true(expr: str) -> bool:
+    """True when *expr* is the boolean literal ``true`` (optionally cast)."""
+    return _BOOLEAN_TRUE.match(_unwrap(expr)) is not None
+
+
+def _strip_casts(expr: str) -> str:
+    """*expr* with outer parentheses and trailing ``::type`` casts removed."""
+    inner = _unwrap(expr)
+    while True:
+        match = _TRAILING_CAST.search(inner)
+        if match is None:
+            return inner
+        inner = _unwrap(inner[: match.start()])
+
+
+def _identifier_before(masked: str, open_index: int) -> str | None:
+    """The identifier immediately preceding the ``(`` at *open_index*, if any."""
+    cursor = open_index - 1
+    while cursor >= 0 and masked[cursor].isspace():
+        cursor -= 1
+    end = cursor + 1
+    while cursor >= 0 and (masked[cursor].isalnum() or masked[cursor] in "_$"):
+        cursor -= 1
+    name = masked[cursor + 1 : end]
+    return name if name and not name[0].isdigit() else None
+
+
+def _enclosing_call(masked: str, span_start: int) -> tuple[str | None, int, int] | None:
+    """The innermost parenthesised group containing *span_start*.
+
+    Returns ``(callee, open_index, close_index)``. ``callee`` is None for a bare
+    grouping paren (``(expr)``) rather than a function call.
+    """
+    depth = 0
+    for index in range(span_start - 1, -1, -1):
+        char = masked[index]
+        if char == ")":
+            depth += 1
+        elif char == "(":
+            if depth == 0:
+                return _identifier_before(masked, index), index, _matching_paren(masked, index)
+            depth -= 1
+    return None
+
+
+def _nullif_empty_wrapped(expr: str, masked: str, span_start: int, span_end: int) -> bool:
+    """True when the call spanning ``[span_start, span_end)`` is wrapped in ``NULLIF(<call>, '')``.
+
+    The ``NULLIF`` first argument must *be* the read (outer parens and trailing
+    casts are transparent), not merely contain it: ``NULLIF(f(call), '')``
+    normalises ``f``'s result, not the GUC read, and is rejected. The second
+    argument must be the empty string literal — ``NULLIF(x, 'null')`` does not
+    normalise the pool-checkout reset value.
+
+    Enclosing levels are walked so a redundant grouping paren between the call
+    and the ``NULLIF`` does not hide the normalisation.
+    """
+    call = _strip_casts(expr[span_start:span_end])
+    cursor = span_start
+    while True:
+        enclosing = _enclosing_call(masked, cursor)
+        if enclosing is None:
+            return False
+        callee, open_index, close_index = enclosing
+        if callee is not None and callee.lower() == "nullif":
+            arguments = _split_on_comma(expr[open_index + 1 : close_index])
+            if len(arguments) == 2 and _string_literal_value(arguments[1]) == "" and _strip_casts(arguments[0]) == call:
+                return True
+        cursor = open_index
+
+
+@dataclass(frozen=True)
+class OrgGucRead:
+    """One read of ``app.organisation_id`` in a predicate, with its verdict."""
+
+    call: str
+    missing_ok: bool
+    nullif_empty: bool
+
+    @property
+    def null_safe(self) -> bool:
+        return self.missing_ok and self.nullif_empty
+
+    def describe(self) -> str:
+        problems: list[str] = []
+        if not self.missing_ok:
+            problems.append("current_setting is called without the missing_ok argument, so it RAISES on an unset context")
+        if not self.nullif_empty:
+            problems.append("the read is not wrapped in NULLIF(..., ''), so the pool-checkout reset value '' is not normalised to NULL")
+        return "; ".join(problems)
+
+
+def org_guc_reads(expr: str) -> tuple[OrgGucRead, ...]:
+    """Every read of ``app.organisation_id`` in *expr*, parsed structurally.
+
+    A ``current_setting`` call is an org-GUC read only when its FIRST argument is
+    the string literal ``'app.organisation_id'``; the bootstrap-context GUC (and
+    any other setting) is therefore not counted. The call span is located on the
+    literal-masked copy, so the words ``current_setting('app.organisation_id')``
+    inside a string literal are never mistaken for a read.
+    """
+    masked = _mask_literals(expr)
+    reads: list[OrgGucRead] = []
+    for match in _CURRENT_SETTING_CALL.finditer(masked):
+        open_index = match.end() - 1
+        close_index = _matching_paren(masked, open_index)
+        if close_index == -1:
+            continue
+        arguments = _split_on_comma(expr[open_index + 1 : close_index])
+        if not arguments or _string_literal_value(arguments[0]) != _ORG_GUC_SETTING:
+            continue
+        reads.append(
+            OrgGucRead(
+                call=expr[match.start() : close_index + 1],
+                missing_ok=len(arguments) >= 2 and _is_boolean_true(arguments[1]),
+                nullif_empty=_nullif_empty_wrapped(expr, masked, match.start(), close_index + 1),
+            )
+        )
+    return tuple(reads)
+
+
+def _null_safety_failures(census: dict[str, TablePolicies]) -> list[str]:
+    """Every org-GUC read in *census* that is not the fail-closed spelling."""
+    failures: list[str] = []
+    for table, policies in sorted(census.items()):
+        for policy in policies.policies:
+            for predicate in policy.predicates():
+                for read in org_guc_reads(predicate):
+                    if read.null_safe:
+                        continue
+                    failures.append(f"{table}.{policy.name} ({policy.command}): {read.describe()} — {read.call!r} in {predicate}")
+    return failures
+
+
 @dataclass(frozen=True)
 class PredicateShape:
     """The top-level structure of one policy predicate."""
@@ -380,8 +603,33 @@ class TablePolicies:
     policies: tuple[PolicyRow, ...]
 
 
+def _census_from_rows(rows: Sequence[Any]) -> dict[str, TablePolicies]:
+    """Group ``(table, policy, command, qual, with_check)`` catalog rows by table."""
+    census: dict[str, list[PolicyRow]] = {}
+    for row in rows:
+        table_name, policy_name, command, qual, with_check = row[0], row[1], row[2], row[3], row[4]
+        bucket = census.setdefault(table_name, [])
+        if policy_name is None:  # LEFT JOIN: RLS enabled, no policy at all
+            continue
+        bucket.append(
+            PolicyRow(
+                name=policy_name,
+                command=command.decode() if isinstance(command, bytes) else str(command),
+                qual=qual,
+                with_check=with_check,
+            )
+        )
+    return {table: TablePolicies(table=table, policies=tuple(policies)) for table, policies in census.items()}
+
+
 async def _load_tenant_policy_census(db_engine: AsyncEngine) -> dict[str, TablePolicies]:
     """Every RLS-enabled public table carrying an ``organisation_id`` column."""
+    async with db_engine.connect() as conn:
+        return await _load_census_from(conn)
+
+
+async def _load_census_from(conn: AsyncConnection) -> dict[str, TablePolicies]:
+    """Load the census over *conn* (so a caller inside a transaction sees its DDL)."""
     statement = text(
         """
         SELECT c.relname AS table_name,
@@ -404,29 +652,44 @@ async def _load_tenant_policy_census(db_engine: AsyncEngine) -> dict[str, TableP
          ORDER BY c.relname, p.polname
         """
     )
-    async with db_engine.connect() as conn:
-        rows = (await conn.execute(statement)).fetchall()
+    rows = (await conn.execute(statement)).fetchall()
 
-    census: dict[str, list[PolicyRow]] = {}
-    for table_name, policy_name, command, qual, with_check in rows:
-        bucket = census.setdefault(table_name, [])
-        if policy_name is None:  # LEFT JOIN: RLS enabled, no policy at all
-            continue
-        bucket.append(
-            PolicyRow(
-                name=policy_name,
-                command=command.decode() if isinstance(command, bytes) else str(command),
-                qual=qual,
-                with_check=with_check,
-            )
-        )
-    return {table: TablePolicies(table=table, policies=tuple(policies)) for table, policies in census.items()}
+    return _census_from_rows(rows)
 
 
 @pytest_asyncio.fixture(scope="session")
 async def tenant_policy_census(db_engine: AsyncEngine) -> dict[str, TablePolicies]:
     """Session-cached census so the 102-table sweep queries the catalog once."""
     return await _load_tenant_policy_census(db_engine)
+
+
+async def _load_all_rls_policies(db_engine: AsyncEngine) -> dict[str, TablePolicies]:
+    """Every policy on every RLS-enabled public table.
+
+    The tenant census is deliberately narrow (RLS *and* an ``organisation_id``
+    column). The null-safety invariant is about how the GUC is read, so it must
+    not stop at that boundary: a table keyed by another tenant column can read
+    the same GUC and raise on an unset context exactly like 0366's predecessor.
+    """
+    statement = text(
+        """
+        SELECT c.relname AS table_name,
+               p.polname,
+               p.polcmd,
+               pg_get_expr(p.polqual, p.polrelid) AS qual,
+               pg_get_expr(p.polwithcheck, p.polrelid) AS with_check
+          FROM pg_class c
+          JOIN pg_policy p ON p.polrelid = c.oid
+         WHERE c.relkind IN ('r', 'p')
+           AND c.relnamespace = 'public'::regnamespace
+           AND c.relrowsecurity
+         ORDER BY c.relname, p.polname
+        """
+    )
+    async with db_engine.connect() as conn:
+        rows = (await conn.execute(statement)).fetchall()
+
+    return _census_from_rows(rows)
 
 
 def _policy_failures(policies: TablePolicies) -> list[str]:
@@ -579,6 +842,115 @@ def test_no_policy_regains_an_org_context_is_null_arm(tenant_policy_census: dict
     assert not offenders, "fail-open org-context arm regained (ADR 070 §2 forbids it; use app.bootstrap_context instead):\n" + "\n".join(f"{table}: {rows}" for table, rows in offenders.items())
 
 
+def test_every_org_guc_read_is_null_safe(tenant_policy_census: dict[str, TablePolicies]) -> None:
+    """Every policy must read the org GUC through ``NULLIF(current_setting(..., true), '')``.
+
+    This is the class-wide invariant migration 0366 established for
+    ``onboarding_progress``. It is enforced across the whole census — every
+    policy, every USING and WITH CHECK predicate — because the pre-0366 defect
+    was not "one table has a bug", it was "the gate cannot see the raising
+    spelling at all": :func:`is_org_equality` accepts any read of the org GUC, so
+    the one-argument form passed every other assertion in this file.
+
+    The two failure modes are distinct and both are fatal:
+
+    * one-argument ``current_setting`` — RAISES ``unrecognized configuration
+      parameter`` on an unset context, escaping as a 500 from whatever read path
+      did not set the org;
+    * a two-argument read that is not ``NULLIF``-normalised — the pool-checkout
+      reset value ``''`` is compared as a value instead of being treated as "no
+      context".
+
+    A census with no org-GUC read at all fails as vacuous, so this cannot pass
+    by sweeping nothing.
+    """
+    failures = _null_safety_failures(tenant_policy_census)
+    reads = [read for policies in tenant_policy_census.values() for policy in policies.policies for predicate in policy.predicates() for read in org_guc_reads(predicate)]
+    assert reads, "the census contains no org-GUC read — the null-safety invariant is vacuous (is the census query broken?)"
+    assert not failures, f"org GUC is not read fail-closed in {len(failures)} of {len(reads)} reads (ADR 070 §2; migration 0366 fixed onboarding_progress, this gate must keep the whole class fixed):\n" + "\n".join(failures)
+
+
+def test_the_fail_closed_spelling_is_what_the_schema_uses(tenant_policy_census: dict[str, TablePolicies]) -> None:
+    """The canonical spelling is pinned to the shipped one, not just to a shape.
+
+    ``test_every_org_guc_read_is_null_safe`` proves null-safety structurally; this
+    pins that the schema actually carries the documented call text (so a change
+    in how PostgreSQL deparses the call is caught here rather than silently
+    redefining what "fail-closed" means). The pin is a set-membership test over
+    the parsed call spans — not a substring search over the predicate.
+    """
+    calls = {read.call for policies in tenant_policy_census.values() for policy in policies.policies for predicate in policy.predicates() for read in org_guc_reads(predicate)}
+    assert _CANONICAL_ORG_GUC_CALL in calls, f"no policy parses an org-GUC call spelled {_CANONICAL_ORG_GUC_CALL!r} (parsed calls: {sorted(calls)}); the deparsed spelling changed and the invariant needs reviewing"
+    onboarding = tenant_policy_census.get("onboarding_progress")
+    assert onboarding is not None, "onboarding_progress is no longer an RLS tenant table — migration 0366's subject dropped out of the census"
+    onboarding_reads = [read for policy in onboarding.policies for predicate in policy.predicates() for read in org_guc_reads(predicate)]
+    assert onboarding_reads, "onboarding_progress carries no org-GUC read at all"
+    assert all(read.null_safe for read in onboarding_reads), f"onboarding_progress regressed to the raising org-GUC form (migration 0366): {[read.call for read in onboarding_reads]}"
+
+
+#: RLS tables that read the org GUC but carry no ``organisation_id`` column, so
+#: the tenant census does not include them. Both are null-safe today (pinned by
+#: the test below); naming them means a third such table is a reviewed act
+#: rather than a silent widening of the set of policies the invariant covers.
+_ORG_GUC_OUTSIDE_CENSUS: frozenset[str] = frozenset({"collection_install_entity", "organisation_cost_state"})
+
+
+async def test_org_guc_reads_outside_the_tenant_census_are_null_safe(
+    db_engine: AsyncEngine,
+    tenant_policy_census: dict[str, TablePolicies],
+) -> None:
+    """The invariant must not stop at the census boundary.
+
+    ``collection_install_entity`` and ``organisation_cost_state`` are RLS-enabled
+    but are keyed by another tenant column, so they sit outside the 104-table
+    census — yet their policies read ``app.organisation_id`` and would raise on an
+    unset context in exactly the way 0366 fixed. Sweeping every RLS policy (not
+    just the census) is what makes the rule a property of the *read* rather than
+    of a table list.
+    """
+    all_policies = await _load_all_rls_policies(db_engine)
+    failures = _null_safety_failures(all_policies)
+    assert not failures, "org GUC is not read fail-closed outside the tenant census (ADR 070 §2):\n" + "\n".join(failures)
+
+    outside_readers = {table for table in all_policies if table not in tenant_policy_census and any(org_guc_reads(predicate) for policy in all_policies[table].policies for predicate in policy.predicates())}
+    assert outside_readers == set(_ORG_GUC_OUTSIDE_CENSUS), f"the set of out-of-census tables reading the org GUC changed (expected {sorted(_ORG_GUC_OUTSIDE_CENSUS)}, found {sorted(outside_readers)}) — review the new table, then update this register"
+
+
+async def test_legacy_predicate_is_rejected_by_the_structural_gate(db_engine: AsyncEngine) -> None:
+    """Non-vacuity: restoring the 0351 predicate makes the gate FAIL, for the right reason.
+
+    The gap this closes was invisible to every other assertion in this file, so
+    the proof has to show two things at once: the pre-mutation census is clean,
+    and the *legacy* predicate fails **only** the null-safety invariant while the
+    top-level shape gate still accepts it (that is precisely why 0366 was
+    undefended).
+
+    The ``ALTER POLICY`` runs inside a transaction that is always rolled back, and
+    the census is reloaded over the same connection so the test observes its own
+    uncommitted DDL — exactly as the session-cached census observes a committed
+    migration.
+    """
+    async with db_engine.connect() as conn:
+        transaction = await conn.begin()
+        try:
+            before = await _load_census_from(conn)
+            assert _null_safety_failures(before) == [], "the baseline census is already unsafe — the mutation proof could not attribute the failure to the mutation"
+
+            await conn.execute(text(f"ALTER POLICY rls_org_isolation ON public.onboarding_progress USING {_LEGACY_ONBOARDING_PROGRESS_PREDICATE}"))
+
+            after = await _load_census_from(conn)
+            failures = _null_safety_failures(after)
+            assert len(failures) == 1, f"expected exactly the mutated policy to fail, got {failures}"
+            assert failures[0].startswith("onboarding_progress.rls_org_isolation"), failures[0]
+            assert "RAISES on an unset context" in failures[0], failures[0]
+            # The gap: the pre-existing shape gate accepts the legacy predicate,
+            # so the null-safety invariant is the only thing standing between
+            # 0366 and a silent revert.
+            assert _policy_failures(after["onboarding_progress"]) == [], "the top-level shape gate is expected to accept the legacy predicate; if it now rejects it, this proof is no longer testing the gap it was written for"
+        finally:
+            await transaction.rollback()
+
+
 def test_bootstrap_grant_tables_use_the_scoped_arm(tenant_policy_census: dict[str, TablePolicies]) -> None:
     """The reviewed pre-auth tables must hold the scoped bootstrap grant, and no others.
 
@@ -708,6 +1080,75 @@ def test_parser_accepts_only_the_scoped_bootstrap_widening(predicate: str, accep
 
 
 @pytest.mark.parametrize(
+    ("predicate", "missing_ok", "nullif_empty"),
+    [
+        # The canonical fail-closed read every org-scoped policy ships.
+        (f"({_ORG_ARM})", True, True),
+        # The 0351 shape migration 0366 replaced: one argument, no NULLIF. Both
+        # halves of the invariant are missing and the read RAISES when unset.
+        (f"({_LEGACY_ONBOARDING_PROGRESS_PREDICATE})", False, False),
+        # Two arguments but no normalisation: the '' reset value compares as a
+        # value instead of meaning "no context".
+        ("(organisation_id = (current_setting('app.organisation_id'::text, true))::uuid)", True, False),
+        # NULLIF is present but does not normalise the empty string.
+        ("(organisation_id = (NULLIF(current_setting('app.organisation_id'::text, true), 'null'::text))::uuid)", True, False),
+        # missing_ok explicitly false is still the raising form.
+        ("(organisation_id = (NULLIF(current_setting('app.organisation_id'::text, false), ''::text))::uuid)", False, True),
+        # Operand order is irrelevant to the invariant.
+        (f"(({_CANONICAL_ORG_GUC_READ})::uuid = organisation_id)", True, True),
+        # A cast / redundant grouping between the call and NULLIF does not hide
+        # the normalisation.
+        ("(organisation_id = (NULLIF((current_setting('app.organisation_id'::text, true))::text, ''::text))::uuid)", True, True),
+        # A NULLIF that normalises a DERIVED value (not the read itself) does not
+        # make the read fail-closed.
+        ("(organisation_id = (NULLIF(current_setting('app.organisation_id'::text, true) || 'x'::text, ''::text))::uuid)", True, False),
+        # The team predicate's org arm carries the same read.
+        (f"({_ORG_ARM} AND (((visibility)::text = 'org'::text) OR (owner_team_id IS NULL)))", True, True),
+        # The scoped pre-auth shape: the bootstrap read is NOT an org read, so
+        # exactly one read is parsed even though the predicate reads two settings.
+        (f"({_ORG_ARM} OR {_BOOTSTRAP_ARM})", True, True),
+    ],
+    ids=[
+        "canonical",
+        "legacy-one-argument",
+        "two-arguments-no-nullif",
+        "nullif-wrong-filler",
+        "missing-ok-false",
+        "reversed-operands",
+        "cast-between-call-and-nullif",
+        "nullif-wraps-a-derived-expression",
+        "team-predicate",
+        "scoped-bootstrap-grant",
+    ],
+)
+def test_org_guc_reads_classify_the_fail_closed_form(predicate: str, missing_ok: bool, nullif_empty: bool) -> None:
+    """Pin both halves of the invariant independently, on the real shipped shapes."""
+    reads = org_guc_reads(predicate)
+    assert len(reads) == 1, f"expected exactly one org-GUC read, parsed {[read.call for read in reads]}"
+    read = reads[0]
+    assert read.missing_ok is missing_ok
+    assert read.nullif_empty is nullif_empty
+    assert read.null_safe is (missing_ok and nullif_empty)
+
+
+@pytest.mark.parametrize(
+    "predicate",
+    [
+        # The bootstrap-context GUC is a different setting and is not the org read.
+        f"({_BOOTSTRAP_ARM})",
+        # A literal that merely spells the call must not be parsed as a read.
+        "(name = 'current_setting(''app.organisation_id'', true)')",
+        # A different setting read the same way is not the org GUC.
+        "(current_setting('app.user_id'::text, true) = 'x'::text)",
+    ],
+    ids=["bootstrap-guc", "call-inside-literal", "other-setting"],
+)
+def test_org_guc_reads_ignores_non_org_settings_and_literals(predicate: str) -> None:
+    """Only a structural ``current_setting('app.organisation_id', ...)`` counts."""
+    assert org_guc_reads(predicate) == ()
+
+
+@pytest.mark.parametrize(
     ("predicate", "expected_arms"),
     [
         # Bootstrap arm in the TRAILING position (the shape the schema ships).
@@ -763,8 +1204,27 @@ def test_widened_arms_are_recorded_order_independently(predicate: str, expected_
 # Tables the behavioural matrix covers, and which of them carry the team
 # predicate today. ``runs`` is org-scoped until ADR 070 Phase 1B, so it is
 # checked structurally for its scope and behaviourally across orgs only.
-_BEHAVIOURAL_TABLES: tuple[str, ...] = ("pipelines", "runs", "connector_instances", "model_backends", "system_maps")
+# ``onboarding_progress`` is org-scoped by design and is the subject of migration
+# 0366: its org-unset probe is the behavioural proof that an unset context yields
+# zero rows instead of the ``DBAPIError`` the 0351 predicate raised.
+_BEHAVIOURAL_TABLES: tuple[str, ...] = ("pipelines", "runs", "connector_instances", "model_backends", "system_maps", "onboarding_progress")
 _TEAM_SCOPED_TABLES: frozenset[str] = frozenset({"pipelines", "connector_instances", "model_backends", "system_maps"})
+_ORG_SCOPED_TABLES: frozenset[str] = frozenset({"runs", "onboarding_progress"})
+
+# Rows seeded per behavioural table. Every table except ``onboarding_progress``
+# gets two rows per organisation so the cross-team probe has a sibling team to be
+# isolated from; ``onboarding_progress`` carries ``uq_onboarding_progress_org``
+# (one row per organisation), so it is seeded once per org. Aliases are prefixed
+# with the owning org (``a``/``b``) so the matrix derives its expected row sets
+# from this map rather than from a hard-coded alias list.
+_BEHAVIOURAL_ROW_ALIASES: dict[str, tuple[str, ...]] = {
+    "pipelines": ("a1", "a2", "b1", "b2"),
+    "runs": ("a1", "a2", "b1", "b2"),
+    "connector_instances": ("a1", "a2", "b1", "b2"),
+    "model_backends": ("a1", "a2", "b1", "b2"),
+    "system_maps": ("a1", "a2", "b1", "b2"),
+    "onboarding_progress": ("a1", "b1"),
+}
 
 _ROW_SELECTS: dict[str, str] = {
     "pipelines": "SELECT id::text FROM pipelines WHERE id = ANY(:ids)",
@@ -772,6 +1232,7 @@ _ROW_SELECTS: dict[str, str] = {
     "connector_instances": "SELECT id::text FROM connector_instances WHERE id = ANY(:ids)",
     "model_backends": "SELECT id::text FROM model_backends WHERE id = ANY(:ids)",
     "system_maps": "SELECT id::text FROM system_maps WHERE id = ANY(:ids)",
+    "onboarding_progress": "SELECT id::text FROM onboarding_progress WHERE id = ANY(:ids)",
 }
 
 _ORGANISATION_INSERT = "INSERT INTO organisations (id, name, slug, settings_json) VALUES (:id, :name, :slug, '{}'::json)"
@@ -792,6 +1253,10 @@ _MODEL_BACKEND_INSERT = (
     "INSERT INTO model_backends (id, organisation_id, name, display_name, provider, model_id, default_params, visibility, owner_team_id, credentials_ciphertext, status, account_id) VALUES (:id, :oid, :name, :name, 'opencode', 'test-model', '{}'::jsonb, 'team', :tid, :secret, 'active', :aid)"
 )
 _SYSTEM_MAP_INSERT = "INSERT INTO system_maps (id, organisation_id, name, account_id, visibility, owner_team_id) VALUES (:id, :oid, :name, :aid, 'team', :tid)"
+# ``onboarding_progress`` is org-scoped and unique per organisation, so it is
+# seeded once per org (no team, no owner) — completed/skipped/dismissed carry
+# server defaults.
+_ONBOARDING_PROGRESS_INSERT = "INSERT INTO onboarding_progress (id, organisation_id) VALUES (:id, :oid)"
 
 
 @dataclass(frozen=True)
@@ -816,7 +1281,7 @@ class TenantSeed:
 
 async def _seed_tenant_world(db_engine: AsyncEngine) -> TenantSeed:
     ids = {name: uuid.uuid4() for name in ("org_a", "org_b", "account_a1", "account_a2", "account_b1", "account_b2", "team_a1", "team_a2", "team_b1", "team_b2")}
-    rows: dict[str, dict[str, uuid.UUID]] = {table: {alias: uuid.uuid4() for alias in ("a1", "a2", "b1", "b2")} for table in _BEHAVIOURAL_TABLES}
+    rows: dict[str, dict[str, uuid.UUID]] = {table: {alias: uuid.uuid4() for alias in aliases} for table, aliases in _BEHAVIOURAL_ROW_ALIASES.items()}
     snapshots = {alias: uuid.uuid4() for alias in ("a1", "a2", "b1", "b2")}
     slug = f"rls-gate-{ids['org_a'].hex[:10]}"
 
@@ -857,6 +1322,12 @@ async def _seed_tenant_world(db_engine: AsyncEngine) -> TenantSeed:
             )
             await conn.execute(text(_SYSTEM_MAP_INSERT), {"id": str(rows["system_maps"][alias]), "oid": org_id, "name": f"{slug}-map-{alias}", "aid": account_id, "tid": team_id})
 
+        # One ``onboarding_progress`` row per organisation (unique on
+        # ``organisation_id``): the org-unset probe only proves "zero rows" if a
+        # row actually exists for the policy to hide.
+        for alias, org_key in (("a1", "org_a"), ("b1", "org_b")):
+            await conn.execute(text(_ONBOARDING_PROGRESS_INSERT), {"id": str(rows["onboarding_progress"][alias]), "oid": str(ids[org_key])})
+
     return TenantSeed(
         org_a=ids["org_a"],
         org_b=ids["org_b"],
@@ -884,6 +1355,7 @@ async def _cleanup_tenant_world(db_engine: AsyncEngine, seed: TenantSeed) -> Non
             "DELETE FROM connector_instances WHERE organisation_id = ANY(:orgs)",
             "DELETE FROM model_backends WHERE organisation_id = ANY(:orgs)",
             "DELETE FROM system_maps WHERE organisation_id = ANY(:orgs)",
+            "DELETE FROM onboarding_progress WHERE organisation_id = ANY(:orgs)",
             "DELETE FROM team_memberships WHERE organisation_id = ANY(:orgs)",
             "DELETE FROM teams WHERE organisation_id = ANY(:orgs)",
             "DELETE FROM org_memberships WHERE organisation_id = ANY(:orgs)",
@@ -940,6 +1412,16 @@ def _org_contexts(seed: TenantSeed) -> dict[str, RlsContext]:
     }
 
 
+def _org_row_ids(seed: TenantSeed, table: str, org_prefix: str) -> set[str]:
+    """Seeded row ids of *table* owned by the org whose aliases start with *org_prefix*.
+
+    Derived from ``_BEHAVIOURAL_ROW_ALIASES`` so a table seeded with one row per
+    org (``onboarding_progress``) is compared against its real row set instead of
+    a hard-coded two-alias list.
+    """
+    return {str(seed.rows[table][alias]) for alias in _BEHAVIOURAL_ROW_ALIASES[table] if alias.startswith(org_prefix)}
+
+
 def test_behavioural_subset_scope_metadata_is_as_expected(tenant_policy_census: dict[str, TablePolicies]) -> None:
     """Pin which behavioural tables carry the team predicate today.
 
@@ -947,11 +1429,16 @@ def test_behavioural_subset_scope_metadata_is_as_expected(tenant_policy_census: 
     the matrix below *means* while still passing. Making the expectation explicit
     keeps the two in step.
     """
-    for table in _TEAM_SCOPED_TABLES:
+    for table in sorted(_TEAM_SCOPED_TABLES):
         names = {policy.name for policy in tenant_policy_census[table].policies}
         assert names == {"rls_team_isolation"}, f"{table}: expected only rls_team_isolation, found {sorted(names)}"
-    runs_names = {policy.name for policy in tenant_policy_census["runs"].policies}
-    assert runs_names == {"rls_org_isolation"}, f"runs is expected to be org-scoped until ADR 070 Phase 1B; found {sorted(runs_names)}. If the runs family has been flipped to the team predicate, extend the cross-team assertions to runs and update this expectation."
+    for table in sorted(_ORG_SCOPED_TABLES):
+        names = {policy.name for policy in tenant_policy_census[table].policies}
+        hint = " If the runs family has been flipped to the team predicate, extend the cross-team assertions to runs and update this expectation." if table == "runs" else ""
+        assert names == {"rls_org_isolation"}, f"{table} is expected to be org-scoped; found {sorted(names)}.{hint}"
+    # Every behavioural table must have a declared scope, or the matrix below
+    # silently changes meaning when a table is added.
+    assert set(_BEHAVIOURAL_TABLES) == _TEAM_SCOPED_TABLES | _ORG_SCOPED_TABLES, f"behavioural tables without a declared scope: {sorted(set(_BEHAVIOURAL_TABLES) - (_TEAM_SCOPED_TABLES | _ORG_SCOPED_TABLES))}"
 
 
 @pytest.mark.parametrize("table", _BEHAVIOURAL_TABLES)
@@ -974,8 +1461,8 @@ async def test_cross_org_matrix_returns_zero_foreign_rows(
     """
     context = _org_contexts(rls_tenant_seed)[context_label]
     visible = await _visible_row_ids(db_engine, non_superuser_role, table, rls_tenant_seed.ids(table), context)
-    a_ids = {str(rls_tenant_seed.rows[table][alias]) for alias in ("a1", "a2")}
-    b_ids = {str(rls_tenant_seed.rows[table][alias]) for alias in ("b1", "b2")}
+    a_ids = _org_row_ids(rls_tenant_seed, table, "a")
+    b_ids = _org_row_ids(rls_tenant_seed, table, "b")
 
     leaked = visible & a_ids
     assert not leaked, f"{table} under {context_label}: leaked org-A rows {sorted(leaked)}"
@@ -1024,15 +1511,45 @@ async def test_cross_team_member_reads_only_its_own_team(
         assert not (visible & foreign), f"{table} {label}: cross-org rows leaked inside a member context: {sorted(visible & foreign)}"
 
 
-async def test_org_scoped_runs_positive_control(
+@pytest.mark.parametrize("table", sorted(_ORG_SCOPED_TABLES))
+async def test_org_scoped_positive_control(
+    db_engine: AsyncEngine,
+    non_superuser_role: str,
+    rls_tenant_seed: TenantSeed,
+    table: str,
+) -> None:
+    """An org-scoped table shows a member of org A exactly org A's rows and no others."""
+    context = RlsContext(label="org-A/team-A2", org=rls_tenant_seed.org_a, user_id=rls_tenant_seed.account_a2, org_role="operator")
+    visible = await _visible_row_ids(db_engine, non_superuser_role, table, rls_tenant_seed.ids(table), context)
+    a_ids = _org_row_ids(rls_tenant_seed, table, "a")
+    b_ids = _org_row_ids(rls_tenant_seed, table, "b")
+    assert visible == a_ids, f"{table}: expected exactly org A's rows in an org-A context, got {sorted(visible)}"
+    assert not (visible & b_ids), f"{table}: cross-org leak inside a member context"
+
+
+async def test_legacy_predicate_raises_on_an_unset_org_context(
     db_engine: AsyncEngine,
     non_superuser_role: str,
     rls_tenant_seed: TenantSeed,
 ) -> None:
-    """``runs`` is org-scoped: a member of org A sees org A's runs and no others."""
-    context = RlsContext(label="org-A/team-A2", org=rls_tenant_seed.org_a, user_id=rls_tenant_seed.account_a2, org_role="operator")
-    visible = await _visible_row_ids(db_engine, non_superuser_role, "runs", rls_tenant_seed.ids("runs"), context)
-    a_ids = {str(rls_tenant_seed.rows["runs"][alias]) for alias in ("a1", "a2")}
-    b_ids = {str(rls_tenant_seed.rows["runs"][alias]) for alias in ("b1", "b2")}
-    assert visible == a_ids, f"runs: expected exactly org A's rows in an org-A context, got {sorted(visible)}"
-    assert not (visible & b_ids), "runs: cross-org leak inside a member context"
+    """Non-vacuity of the behavioural leg: the 0351 predicate ERRORS where the matrix expects zero rows.
+
+    ``test_cross_org_matrix_returns_zero_foreign_rows`` asserts the org-unset
+    context returns no rows for ``onboarding_progress``. Under the legacy
+    one-argument predicate that same probe raises ``unrecognized configuration
+    parameter`` instead — the 500 migration 0366 removed. The probe below is the
+    matrix's own statement against the matrix's own seeded row, run under the
+    matrix's role with no org GUC set. The ALTER is rolled back, so the schema is
+    untouched.
+    """
+    row_id = str(rls_tenant_seed.rows["onboarding_progress"]["a1"])
+    async with db_engine.connect() as conn:
+        transaction = await conn.begin()
+        try:
+            await conn.execute(text(f"ALTER POLICY rls_org_isolation ON public.onboarding_progress USING {_LEGACY_ONBOARDING_PROGRESS_PREDICATE}"))
+            await conn.execute(text(f'SET LOCAL ROLE "{non_superuser_role}"'))
+            with pytest.raises(DBAPIError) as raised:
+                await conn.execute(text(_ROW_SELECTS["onboarding_progress"]), {"ids": [row_id]})
+            assert "unrecognized configuration parameter" in str(raised.value), f"expected the raising org-GUC error, got: {raised.value}"
+        finally:
+            await transaction.rollback()
