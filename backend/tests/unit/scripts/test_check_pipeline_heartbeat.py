@@ -22,6 +22,7 @@ quietly stop seeing:
 
 from __future__ import annotations
 
+import inspect
 import io
 import json
 import sys
@@ -288,14 +289,57 @@ def test_fetch_last_run_fails_loud_when_a_run_has_no_readable_timestamp() -> Non
         heartbeat.fetch_last_run("dast.yml", repo="farnalabs/farna-control", token="t", opener=opener)
 
 
-def test_fetch_last_run_refuses_a_non_https_api_url() -> None:
-    """An overridden base URL must not be able to turn the read into a local file read."""
+def test_fetch_last_run_refuses_a_malformed_repo_slug() -> None:
+    """``repo`` is interpolated into the URL path, so only an ``owner/name`` slug may pass."""
+
+    def opener(request: Any, timeout: float | None = None) -> io.BytesIO:
+        raise AssertionError("the opener must not be called for a rejected repo slug")
+
+    with pytest.raises(heartbeat.GithubApiError, match="invalid repo"):
+        heartbeat.fetch_last_run("dast.yml", repo="../../evil", token="t", opener=opener)
+
+
+def test_fetch_last_run_refuses_a_dotdot_repo_segment() -> None:
+    """``../evil`` has the right shape but is a path traversal, not a repository."""
+
+    def opener(request: Any, timeout: float | None = None) -> io.BytesIO:
+        raise AssertionError("the opener must not be called for a rejected repo slug")
+
+    with pytest.raises(heartbeat.GithubApiError, match="invalid repo"):
+        heartbeat.fetch_last_run("dast.yml", repo="../evil", token="t", opener=opener)
+
+
+def test_url_construction_uses_the_module_constant_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PROVE-THE-FIX (S8703): the API host is a module constant, not a parameter.
+
+    The only way to reach a different host is to patch ``heartbeat.BASE_URL``
+    in-process, so no ``--api-url`` argument can redirect the monitor at an
+    arbitrary server.
+    """
+    monkeypatch.setattr(heartbeat, "BASE_URL", "https://api.example.test")
+    seen: list[str] = []
+    opener = _opener({"schedule": [], "workflow_dispatch": []}, seen)
+
+    heartbeat.fetch_last_run("dast.yml", repo="farnalabs/farna-control", token="t", opener=opener)
+
+    assert seen
+    assert all(url.startswith("https://api.example.test/repos/farnalabs/farna-control/actions/workflows/dast.yml/runs?") for url in seen)
+
+
+def test_fetch_last_run_has_no_base_url_parameter() -> None:
+    """The tainted input is gone, not merely defaulted to a safe value."""
+    assert "api_url" not in inspect.signature(heartbeat.fetch_last_run).parameters
+
+
+def test_a_patched_in_non_https_base_url_is_still_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Defence in depth: even a patched constant cannot turn the read into a file read."""
+    monkeypatch.setattr(heartbeat, "BASE_URL", "file:///etc")
 
     def opener(request: Any, timeout: float | None = None) -> io.BytesIO:
         raise AssertionError("the opener must not be called for a rejected scheme")
 
     with pytest.raises(heartbeat.GithubApiError, match="non-https"):
-        heartbeat.fetch_last_run("dast.yml", repo="farnalabs/farna-control", token="t", api_url="file:///etc", opener=opener)
+        heartbeat.fetch_last_run("dast.yml", repo="farnalabs/farna-control", token="t", opener=opener)
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +353,28 @@ def test_load_manifest_reads_the_shipped_manifest() -> None:
 
     assert pipelines
     assert all(pipeline.expected_max_silence_minutes > 0 for pipeline in pipelines)
+
+
+def test_load_manifest_rejects_a_path_outside_the_repository(tmp_path: Path) -> None:
+    """PROVE-THE-FIX (S8707): the manifest path is confined to the checkout.
+
+    The file exists, so the rejection is about its location - not about it being
+    missing - which is what path traversal would exploit.
+    """
+    outside = tmp_path / "pipeline-heartbeat.json"
+    outside.write_text('{"pipelines": []}', encoding="utf-8")
+
+    with pytest.raises(heartbeat.ManifestError, match="outside the repository root"):
+        heartbeat.load_manifest(outside)
+
+
+def test_load_manifest_rejects_a_dotdot_escape() -> None:
+    """``../escape.json`` must not climb out of the checkout."""
+    escaping = _REPO_ROOT / ".." / "escape.json"
+    assert ".." in escaping.parts
+
+    with pytest.raises(heartbeat.ManifestError, match="outside the repository root"):
+        heartbeat.load_manifest(escaping)
 
 
 def test_manifest_rejects_an_unknown_entry_key() -> None:
@@ -345,6 +411,71 @@ def test_manifest_rejects_a_path_instead_of_a_filename() -> None:
 
     with pytest.raises(heartbeat.ManifestError):
         heartbeat.parse_manifest(document)
+
+
+@pytest.mark.parametrize(
+    "bad_workflow",
+    [
+        "dast.sh",
+        "dast.yaml",
+        "da st.yml",
+        "../dast.yml",
+        "dast.yml;rm -rf /",
+        "dast.yml?event=push",
+        "dast.yml#frag",
+    ],
+)
+def test_manifest_rejects_an_invalid_workflow_filename(bad_workflow: str) -> None:
+    """PROVE-THE-FIX (S8703): only ``^[A-Za-z0-9._-]+\\.yml$`` may reach the URL path.
+
+    The workflow name is interpolated into the API URL, so anything that could
+    change the path, add a query or carry whitespace is refused before it is
+    ever built into a request.
+    """
+    document = {"pipelines": [{"workflow": bad_workflow, "expected_max_silence_minutes": 3000}]}
+
+    with pytest.raises(heartbeat.ManifestError, match="must be a workflow filename matching"):
+        heartbeat.parse_manifest(document)
+
+
+# ---------------------------------------------------------------------------
+# The CLI boundary: no base-URL override, and a bad repo is a usage error
+# ---------------------------------------------------------------------------
+
+
+def test_the_cli_no_longer_accepts_an_api_url() -> None:
+    """PROVE-THE-FIX (S8703): ``--api-url`` is gone from the parser, not hidden."""
+    argv = [
+        "--manifest",
+        str(_MANIFEST),
+        "--repo",
+        "farnalabs/farna-control",
+        "--token",
+        "t",
+        "--api-url",
+        "https://evil.example",
+    ]
+
+    with pytest.raises(SystemExit) as excinfo:
+        heartbeat.main(argv)
+
+    assert excinfo.value.code == 2
+
+
+def test_main_returns_a_usage_exit_for_a_malformed_repo() -> None:
+    """A bad repo slug fails once as a usage error, not as N unreadable pipelines."""
+    argv = [
+        "--manifest",
+        str(_MANIFEST),
+        "--repo",
+        "not a repo slug",
+        "--token",
+        "t",
+        "--now",
+        "2026-11-27T12:00:00Z",
+    ]
+
+    assert heartbeat.main(argv) == heartbeat.EXIT_USAGE
 
 
 # ---------------------------------------------------------------------------
