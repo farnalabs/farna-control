@@ -34,14 +34,34 @@ _TRANSPORT_MESSAGE = "unclosed transport <_SelectorSocketTransport fd=29>"
 def leak_quarantine() -> Any:
     """Import the integration conftest with its import-time effects undone.
 
-    Importing it pins integration-only environment defaults (``setdefault``) and
-    swaps the asyncio event-loop policy on Windows. Both are process-global, so
-    neither may leak into a unit session: ``patch.dict(os.environ)`` restores the
-    exact pre-import environment, and the policy swap is stubbed out outright so
-    there is nothing to restore. The module object itself stays imported, which
-    is all the classifier tests need.
+    Importing it pins integration-only environment defaults (``setdefault``),
+    swaps the asyncio event-loop policy on Windows, and probes for Docker by
+    constructing a ``testcontainers`` ``DockerClient`` - which calls
+    ``docker.from_env`` and issues a request to the daemon. All three are
+    process-global or touch real resources:
+
+    * ``patch.dict(os.environ)`` restores the exact pre-import environment;
+    * the policy swap is stubbed out outright, so there is nothing to restore;
+    * ``docker.from_env`` is patched to raise before the probe runs, so
+      ``_docker_available()`` returns ``False`` without opening a socket.
+
+    Without that last measure a docker-less host leaks the failed probe's
+    unclosed socket; the next cyclic GC raises ``ResourceWarning`` inside
+    ``socket.__del__``, the project's ``error::ResourceWarning`` filter escalates
+    it, and pytest's unraisable plugin fails the FIRST test at setup. Neutralising
+    the probe keeps every socket-creating path out of the import entirely.
+
+    The module object itself stays imported, which is all the classifier tests
+    need.
     """
-    with patch.dict(os.environ), patch("asyncio.set_event_loop_policy"):
+    import docker.errors
+
+    probe_neutralised = docker.errors.DockerException("docker probe neutralised in a unit session")
+    with (
+        patch.dict(os.environ),
+        patch("asyncio.set_event_loop_policy"),
+        patch("docker.from_env", side_effect=probe_neutralised),
+    ):
         from tests.integration import conftest as integration_conftest
 
     return integration_conftest
