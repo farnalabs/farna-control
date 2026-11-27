@@ -1,0 +1,127 @@
+{
+  "_note": "Declared cadence of every scheduled pipeline in this repo. .github/scripts/check_pipeline_heartbeat.py fails the run when a workflow has not been started by its scheduler (or by a human, via workflow_dispatch) inside its expected_max_silence_minutes window. Add an entry when you add a schedule: trigger - backend/tests/unit/scripts/test_check_pipeline_heartbeat.py fails if this list and the workflow tree disagree.",
+  "_window_rule": "expected_max_silence_minutes is roughly two cron intervals plus an hour of slack, so one late or skipped tick does not alert. Weekly jobs get eight days for the same reason (a single skipped Monday must not page anyone).",
+  "_excluded": "pipeline-heartbeat.yml monitors this list and is deliberately not in it: a scheduler that has stopped firing cannot run the monitor that would report it, so self-monitoring can only ever raise a false alert on its own first run.",
+  "pipelines": [
+    {
+      "workflow": "merge-queue.yml",
+      "expected_max_silence_minutes": 180,
+      "note": "Merge queue fallback poller. Hourly cron (:07); two intervals (120 min) plus an hour of slack."
+    },
+    {
+      "workflow": "deploy-staleness-check.yml",
+      "expected_max_silence_minutes": 180,
+      "note": "Production staleness check. Hourly cron (:40); two intervals plus an hour of slack."
+    },
+    {
+      "workflow": "deploy-watchdog.yml",
+      "expected_max_silence_minutes": 180,
+      "note": "Deploy self-heal watchdog. Hourly cron (:50); two intervals plus an hour of slack."
+    },
+    {
+      "workflow": "web-watchdog.yml",
+      "expected_max_silence_minutes": 180,
+      "note": "Public web-surface watchdog. Hourly cron (:05); two intervals plus an hour of slack."
+    },
+    {
+      "workflow": "pr-conflict-reconcile.yml",
+      "expected_max_silence_minutes": 180,
+      "note": "Conflicted-PR reconciler. Hourly cron (:17); two intervals plus an hour of slack."
+    },
+    {
+      "workflow": "merge-queue-watchdog.yml",
+      "expected_max_silence_minutes": 300,
+      "note": "Out-of-lock merge-queue sweep. Every 2 hours (:22); two intervals (240 min) plus an hour of slack."
+    },
+    {
+      "workflow": "macos-staple-retry.yml",
+      "expected_max_silence_minutes": 420,
+      "note": "macOS notarisation staple retry. Every 3 hours; two intervals (360 min) plus an hour of slack."
+    },
+    {
+      "workflow": "audit-chain-monitor.yml",
+      "expected_max_silence_minutes": 780,
+      "note": "Audit chain continuity monitor. Every 6 hours; two intervals (720 min) plus an hour of slack."
+    },
+    {
+      "workflow": "fast-lane-post-merge-audit.yml",
+      "expected_max_silence_minutes": 780,
+      "note": "Post-merge audit of the fast lane. Every 6 hours; two intervals (720 min) plus an hour of slack."
+    },
+    {
+      "workflow": "main-integration.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily integration suite against main (05:17). Two days (2880 min) plus two hours of slack, so one skipped day does not alert."
+    },
+    {
+      "workflow": "tier1b-nightly.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily Tier 1b connector suite (03:07). Two days plus two hours of slack."
+    },
+    {
+      "workflow": "schemathesis-nightly.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily API fuzz suite (03:00). Two days plus two hours of slack."
+    },
+    {
+      "workflow": "backup-restore-nightly.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily backup restore rehearsal (04:30). Two days plus two hours of slack."
+    },
+    {
+      "workflow": "dast.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily dynamic application security scan (02:25). Two days plus two hours of slack."
+    },
+    {
+      "workflow": "dast-auth.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily authenticated DAST scan (02:40). Two days plus two hours of slack."
+    },
+    {
+      "workflow": "provider-contract-probe.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily model-provider contract probe (04:15). Two days plus two hours of slack."
+    },
+    {
+      "workflow": "signing-canary.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily release-signing canary (03:37). Two days plus two hours of slack."
+    },
+    {
+      "workflow": "native-release-smoke.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily native installer smoke test (03:30). Also runs on push; only a schedule or workflow_dispatch run counts as evidence. Two days plus two hours of slack."
+    },
+    {
+      "workflow": "determination-eval.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily determination eval run (03:00). Also runs on pull_request; only a schedule or workflow_dispatch run counts as evidence. Two days plus two hours of slack."
+    },
+    {
+      "workflow": "k8s-conformance.yml",
+      "expected_max_silence_minutes": 3000,
+      "note": "Daily conformance staleness leg (05:17) plus a weekly managed-cluster leg (Monday 04:00). The daily tick governs this window. Also runs on push and pull_request; only a schedule or workflow_dispatch run counts as evidence. Two days plus two hours of slack."
+    },
+    {
+      "workflow": "flyctl-version-drift.yml",
+      "expected_max_silence_minutes": 11520,
+      "note": "Weekly flyctl drift issue (Monday 06:00). Eight days so one skipped Monday is not an alert."
+    },
+    {
+      "workflow": "mutation-testing.yml",
+      "expected_max_silence_minutes": 11520,
+      "note": "Weekly mutation-testing sweep (Sunday 04:00). Eight days so one skipped run is not an alert."
+    },
+    {
+      "workflow": "runner-ci-backstop.yml",
+      "expected_max_silence_minutes": 11520,
+      "note": "Weekly runner CI backstop (Monday 03:23). Eight days so one skipped Monday is not an alert."
+    },
+    {
+      "workflow": "windows-artifacts.yml",
+      "expected_max_silence_minutes": 11520,
+      "note": "Weekly Windows artifact build (Monday 06:00). Also runs on push and workflow_call; only a schedule or workflow_dispatch run counts as evidence. Eight days so one skipped Monday is not an alert."
+    }
+  ]
+}
