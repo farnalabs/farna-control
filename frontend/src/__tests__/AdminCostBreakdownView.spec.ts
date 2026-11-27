@@ -403,6 +403,53 @@ describe('AdminCostBreakdownView', () => {
     expect(card.text()).toContain('—')
   })
 
+  it('shows dash when the analytics request throws (graceful degradation)', async () => {
+    ;(api.GET as any).mockImplementation((path: string) => {
+      if (path === '/api/v1/admin/costs') {
+        return Promise.resolve({
+          data: {
+            period: 'month',
+            group_by: 'team',
+            items: [
+              { entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 100.0, total_runs: 5 },
+            ],
+          },
+          error: undefined,
+        })
+      }
+      if (path === '/api/v1/analytics/query') {
+        // A rejected request (not an error envelope) exercises the catch arm
+        // that degrades the success count to 0 (FAR-2820).
+        return Promise.reject(new Error('analytics unavailable'))
+      }
+      if (path === '/api/v1/admin/costs/anomalies') {
+        return Promise.resolve({ data: [], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = usePlanStore()
+    store.$patch({ features: { admin_cost_breakdown: true } })
+
+    const wrapper = mount(AdminCostBreakdownView, {
+      global: { plugins: [pinia] },
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    const card = wrapper.find('[data-testid="cost-per-successful-run"]')
+    expect(card.exists()).toBe(true)
+    // Analytics threw → graceful degradation → dash, not Infinity/NaN
+    expect(card.text()).toContain('—')
+
+    const countEl = wrapper.find('[data-testid="cost-successful-runs-count"]')
+    expect(countEl.exists()).toBe(true)
+    expect(countEl.text()).toContain('No successful runs')
+  })
+
   it('shows an error alert when the anomalies request fails', async () => {
     ;(api.GET as any).mockImplementation((path: string) => {
       if (path === '/api/v1/admin/costs') {
