@@ -38,6 +38,7 @@ EMAIL = os.getenv("FARNA_CONTROL_EMAIL")
 PASSWORD = os.getenv("FARNA_CONTROL_PASSWORD")
 POLL_INTERVAL = float(os.getenv("FARNA_CONTROL_POLL_INTERVAL", "2"))
 MAX_POLLS = int(os.getenv("FARNA_CONTROL_MAX_POLLS", "30"))
+SCHEMAS_PATH = "/api/v1/schemas"
 
 
 def bail(msg: str):
@@ -123,7 +124,7 @@ def main():
         # ═══════════════════════════════════════════════════════════
         step("3. Create Schema")
         resp = client.post(
-            "/api/v1/schemas",
+            SCHEMAS_PATH,
             json={
                 "name": "PR Review Input",
                 "description": "Input schema for code review agent",
@@ -135,7 +136,7 @@ def main():
             schema_id = schema["id"]
             # Create a version of the schema
             version_resp = client.post(
-                f"/api/v1/schemas/{schema_id}/versions",
+                f"{SCHEMAS_PATH}/{schema_id}/versions",
                 json={
                     "version": "1.0.0",
                     "version_number": 1,
@@ -157,7 +158,7 @@ def main():
         else:
             print(f"  Schema creation skipped ({resp.status_code}): {resp.text}")
             # Use existing schema if available
-            schemas = client.get("/api/v1/schemas", params={"page": 1, "page_size": 1}, headers=headers)
+            schemas = client.get(SCHEMAS_PATH, params={"page": 1, "page_size": 1}, headers=headers)
             if schemas.status_code == 200 and schemas.json()["items"]:
                 schema_id = schemas.json()["items"][0]["id"]
                 print(f"  Using existing input schema: {schema_id}")
@@ -168,7 +169,7 @@ def main():
         # The agent requires an output schema as well as an input schema. A
         # permissive object keeps the demo runnable against any model backend.
         resp = client.post(
-            "/api/v1/schemas",
+            SCHEMAS_PATH,
             json={
                 "name": "PR Review Output",
                 "description": "Output schema for the code review agent",
@@ -179,7 +180,7 @@ def main():
             output_schema = resp.json()
             output_schema_id = output_schema["id"]
             version_resp = client.post(
-                f"/api/v1/schemas/{output_schema_id}/versions",
+                f"{SCHEMAS_PATH}/{output_schema_id}/versions",
                 json={
                     "version": "1.0.0",
                     "version_number": 1,
