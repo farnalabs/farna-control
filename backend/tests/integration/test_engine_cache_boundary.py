@@ -47,6 +47,15 @@ async def test_integration_boundary_clears_polluted_sqlite_engine_caches() -> No
 
     polluted_engine = _PollutedSQLiteEngine(create_async_engine("sqlite+aiosqlite:///:memory:"))
 
+    # Dispose whatever is already cached BEFORE overwriting the caches. The
+    # caches may still hold a real asyncpg engine left by an earlier test; a
+    # bare ``setattr`` drops that engine without closing it, so its pooled
+    # connections are only reclaimed by GC and surface as an unclosed asyncpg
+    # connection attributed to THIS test (observed on merge-train integration
+    # shard 2). ``dispose_process_global_engines`` runs on the current loop, so
+    # the connections really close instead of racing a closed loop.
+    await integration_conftest.dispose_process_global_engines()
+
     single_engine_caches = (
         (db_session, "_shared_engine"),
         (api_dependencies, "_engine"),
