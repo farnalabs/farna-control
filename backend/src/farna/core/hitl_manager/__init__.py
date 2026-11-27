@@ -219,6 +219,7 @@ class HITLManager:
         context_json: HitlReviewContext | dict[str, Any] | None = None,
         gate_config_json: dict[str, Any] | None = None,
         terminalize_at: datetime | None = None,
+        revision: str | None = None,
     ) -> HitlClaim:
         """Insert a new unclaimed gate row. Idempotent if called again for same key.
 
@@ -249,6 +250,17 @@ class HITLManager:
         (the default, and every legacy row) keeps the legacy
         ``expires_at + grace`` fallback in the sweep. Same idempotent
         contract: a replay never restamps the first fire's deadline.
+
+        ``revision`` (FAR-2837) is the code revision this gate is raised for
+        and its approval is bound to — the run's ``input_hash`` (the work-item
+        content hash gate coalescing already treats as the "entity SHA"). It is
+        stamped here so the resume path can refuse a decision given for a
+        revision the run has since left (``node_runner``:
+        ``_validate_approved_revision``). When not supplied the run row is read;
+        a missing run (or legacy replay) leaves it ``None``, which the resume
+        check treats as "cannot validate" and skips rather than fabricating a
+        revision. Same idempotent contract: a replay never restamps the first
+        fire's revision.
         """
         # Check for existing row first (unique constraint: run_id + review_id).
         # Race: a concurrent caller may insert between our check and flush.
@@ -256,6 +268,7 @@ class HITLManager:
         existing = await self._get(session, run_id=run_id, review_id=review_id, org_id=org_id)
         if existing is not None:
             return existing
+        revision = await self._resolve_gate_revision(session, run_id=run_id, org_id=org_id, explicit=revision)
         gate = HitlClaim(
             organisation_id=org_id,
             run_id=run_id,
@@ -266,6 +279,7 @@ class HITLManager:
             terminalize_at=terminalize_at,
             context_json=context_json,
             gate_config_json=gate_config_json,
+            revision=revision,
         )
         session.add(gate)
         try:
@@ -1099,6 +1113,28 @@ class HITLManager:
         )
         return result.scalar_one_or_none()
 
+    @staticmethod
+    async def _resolve_gate_revision(
+        session: AsyncSession,
+        *,
+        run_id: uuid.UUID,
+        org_id: uuid.UUID,
+        explicit: str | None,
+    ) -> str | None:
+        """Resolve the revision a gate is raised for (FAR-2837).
+
+        An explicit ``revision`` (a caller that already has it) wins. Otherwise
+        the run's ``input_hash`` — the work-item content hash that gate
+        coalescing already treats as the "entity SHA" — is read from the run
+        row. A missing run (defensive: a gate is always raised for a live run)
+        yields ``None``; the resume check treats ``None`` as "cannot validate"
+        and skips, so a legacy/edge row is never retro-invalidated.
+        """
+        if explicit is not None:
+            return explicit
+        result = await session.execute(select(Run.input_hash).where(Run.id == run_id, Run.organisation_id == org_id))
+        return result.scalar_one_or_none()
+
     async def _decide(
         self,
         session: AsyncSession,
@@ -1345,6 +1381,14 @@ class HITLManager:
             "decision": gate.decision,
             "team_id": str(gate.required_team_id) if gate.required_team_id else None,
         }
+        # FAR-2837: expose WHAT was approved, not only who approved it — the
+        # code revision the gate was raised for and this decision is bound to.
+        # Omitted when NULL (legacy gate / unresolvable run) rather than
+        # emitting a misleading null; the audit record then simply carries no
+        # revision claim.
+        revision = getattr(gate, "revision", None)
+        if isinstance(revision, str) and revision:
+            payload["revision"] = revision
         if client_type is not None:
             payload["client_type"] = client_type
         if isinstance(answer, dict):

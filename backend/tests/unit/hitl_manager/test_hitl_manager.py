@@ -261,6 +261,70 @@ async def test_create_gate_without_stamp_leaves_gate_config_null():
     assert added.terminalize_at is None
 
 
+async def test_create_gate_stamps_resolved_revision_from_run():
+    """FAR-2837: the gate records the revision it was raised for — the run's
+    ``input_hash`` (the work-item content hash gate coalescing treats as the
+    "entity SHA")."""
+    session = configure_mock_session(AsyncMock(), allow_empty_execute=True)
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+    claim_result = MagicMock()
+    claim_result.scalar_one_or_none.return_value = None  # no existing gate
+    run_result = MagicMock()
+    run_result.scalar_one_or_none.return_value = "sha-abc-123"
+
+    async def _execute(stmt: Any) -> Any:
+        # Dispatch on statement shape: the claim lookup vs the run-hash read.
+        if "hitl_claims" in str(stmt):
+            return claim_result
+        return run_result
+
+    session.execute = _execute
+    begin_nested_cm = AsyncMock()
+    begin_nested_cm.__aenter__ = AsyncMock(return_value=None)
+    begin_nested_cm.__aexit__ = AsyncMock(return_value=False)
+    session.begin_nested = MagicMock(return_value=begin_nested_cm)
+
+    await HITLManager().create_gate(session, run_id=_RUN, review_id=_GATE, pipeline_id=_PIPELINE, org_id=_ORG)
+    added = session.add.call_args[0][0]
+    assert added.revision == "sha-abc-123"
+
+
+async def test_create_gate_honours_an_explicit_revision_without_a_run_read():
+    """An explicit ``revision`` is stamped verbatim (no run read needed)."""
+    session = _session_get(return_value=None)
+    await HITLManager().create_gate(session, run_id=_RUN, review_id=_GATE, pipeline_id=_PIPELINE, org_id=_ORG, revision="explicit-rev")
+    added = session.add.call_args[0][0]
+    assert added.revision == "explicit-rev"
+
+
+async def test_create_gate_without_a_run_row_leaves_revision_null():
+    """A missing run (defensive — a gate is always raised for a live run) leaves
+    ``revision`` NULL, which the resume check treats as "cannot validate"."""
+    session = _session_get(return_value=None)  # claim select AND run read -> None
+    await HITLManager().create_gate(session, run_id=_RUN, review_id=_GATE, pipeline_id=_PIPELINE, org_id=_ORG)
+    added = session.add.call_args[0][0]
+    assert added.revision is None
+
+
+def test_base_audit_payload_exposes_the_revision():
+    """FAR-2837 criterion 5: the decision audit record exposes WHAT was approved
+    (the bound revision), not only who approved it."""
+    gate = _gate(decision="approved")
+    gate.revision = "sha-abc-123"
+    payload = HITLManager._base_audit_payload(gate)
+    assert payload["revision"] == "sha-abc-123"
+
+
+def test_base_audit_payload_omits_a_null_revision():
+    """A legacy gate with no bound revision emits no revision claim rather than a
+    misleading null."""
+    gate = _gate(decision="approved")
+    gate.revision = None
+    payload = HITLManager._base_audit_payload(gate)
+    assert "revision" not in payload
+
+
 async def test_create_gate_stamps_passed_terminalize_at():
     """FAR-1257: the executor's resolved ABSOLUTE review deadline rides onto
     the claim row verbatim — the sweep's predicate collapses to

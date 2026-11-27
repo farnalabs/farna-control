@@ -140,6 +140,7 @@ from farna.core.pipeline_engine.modulo_saver import ModuloPostgresSaver  # noqa:
 from farna.core.pipeline_engine.node_runner import (
     LEGACY_SYNTHETIC_FAILURE_MARKERS,  # noqa: F401
     SYNTHETIC_FAILURE_MARKER,  # noqa: F401
+    ApprovalRevisionStaleError,
     ConnectorNodeFailedError,
     OutputSchemaValidationError,
     SandboxNodeFailedError,
@@ -5980,6 +5981,27 @@ class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
                 broker,
                 "eval_failed",
                 "eval_blocked",
+                _sanitize_detail(exc, limit=None),
+                node_token_usage,
+            )
+        if isinstance(exc, ApprovalRevisionStaleError):
+            # FAR-2837: the human's approval was bound to a revision the run has
+            # since left. Fail LOUD and terminal (never silently apply an
+            # approval for code the approver never saw); re-triggering grounds a
+            # fresh gate for the new revision.
+            _log.warning(
+                "pipeline.approval_revision_stale",
+                extra={
+                    "run_id": str(run_id),
+                    "review_id": getattr(exc, "review_id", None),
+                    "approved_revision": getattr(exc, "approved_revision", None),
+                    "current_revision": getattr(exc, "current_revision", None),
+                },
+            )
+            return _terminal_failure(
+                broker,
+                "failed",
+                "hitl.approval_stale",
                 _sanitize_detail(exc, limit=None),
                 node_token_usage,
             )
