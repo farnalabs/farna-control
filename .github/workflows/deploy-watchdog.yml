@@ -19,11 +19,11 @@ name: "Deploy: Staleness Watchdog"
 #
 # Division of labour with deploy-staleness-check.yml (independent cron; both
 # must exist):
-#   - deploy-staleness-check.yml = app-level VISIBILITY (2-hourly): reads the
+#   - deploy-staleness-check.yml = app-level VISIBILITY (hourly): reads the
 #     app's /api/v1/deployment build SHA vs origin/main; 10h grace; escalates
 #     with ::error:: once staleness exceeds the grace window. It does NOT
 #     heal.
-#   - deploy-watchdog.yml (this file) = fly-level SELF-HEAL (*/30): compares
+#   - deploy-watchdog.yml (this file) = fly-level SELF-HEAL (hourly): compares
 #     the fly image tag vs main HEAD and dispatches deploy.yml to heal WITHIN
 #     that grace window.
 #   - Escalation semantics: if staleness-check's ::error:: fires, the
@@ -45,17 +45,17 @@ name: "Deploy: Staleness Watchdog"
 
 on:
   schedule:
+    # Fallback poller (not a primary trigger): hourly at :50 - a failed or gapped
+    # deploy is re-armed within ~1h, well inside the 10h staleness grace.
     # FAR-492: GitHub DROPS high-frequency cron events on high-activity repos
     # (a sibling */10 workflow collapsed to 2-4 runs/day; 1/day crons never
-    # missed). */30 is an UNVERIFIED BEST-EFFORT band: the lesson's data
-    # proves only >=1/day is safe on this repo, so treat every tick as
-    # opportunistic and verify run history before trusting liveness.
-    # Residual risks: GitHub auto-disables scheduled workflows after 60 days
-    # of repo inactivity, and dropped ticks are silent - staleness-check's
-    # independent escalation covers these watchdog liveness gaps. If cron
-    # proves unreliable here, the known reliability upgrade is a
+    # missed), so treat every tick as opportunistic and verify run history
+    # before trusting liveness. Residual risks: GitHub auto-disables scheduled
+    # workflows after 60 days of repo inactivity, and dropped ticks are silent -
+    # staleness-check's independent escalation covers these watchdog liveness
+    # gaps. If cron proves unreliable here, the known reliability upgrade is a
     # PR-Housekeeper dispatch leg calling this workflow.
-    - cron: "*/30 * * * *"
+    - cron: "50 * * * *"
   workflow_dispatch:
 
 # Overlapping scheduled ticks must not pile up, and an in-flight tick

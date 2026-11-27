@@ -348,6 +348,16 @@ jobs:
               if not repo:
                   fail("GITHUB_REPOSITORY is unset; refusing to look for CI runs in an unknown repository.")
               max_attempts = max(1, -(-max_wait_seconds // poll_seconds))
+              raw_backoff = os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2")
+              try:
+                  delete_retry_backoff_seconds = int(raw_backoff)
+              except ValueError:
+                  fail(
+                      "SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: "
+                      + repr(raw_backoff) + "."
+                  )
+              if delete_retry_backoff_seconds < 0:
+                  fail("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative.")
 
               def list_tags(prefix):
                   listing = gh("api", "--paginate", "--slurp", "repos/" + repo + "/git/matching-refs/tags/" + prefix)
@@ -355,11 +365,41 @@ jobs:
                       return None
                   return tag_names(listing.stdout)
 
+              def tag_is_absent(detail):
+                  # GitHub reports a missing ref as 404 "Not Found" or 422
+                  # "Reference does not exist" (observed via the git/refs DELETE
+                  # endpoint). Both mean there is nothing to delete - never a
+                  # leaked tag and never a reason to warn an operator.
+                  return "Not Found" in detail or "404" in detail or "Reference does not exist" in detail
+
+
               def delete_tag(name):
-                  result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
-                  detail = (result.stderr or "") + (result.stdout or "")
-                  if result.returncode != 0 and "Not Found" not in detail and "404" not in detail:
-                      print("::warning::Could not delete the temporary CI-verification tag " + name + "; delete it manually.")
+                  # Delete-and-verify. A non-zero DELETE is benign only when the
+                  # ref is genuinely absent; otherwise the tag may still be on
+                  # origin, and a leaked ci-verify-* tag is not inert: an
+                  # unfiltered tag lookup could pick it as the changelog base.
+                  # Re-read the remote after a failed attempt, back off briefly,
+                  # retry once, and RETURN a loud diagnostic if it survives (the
+                  # caller decides whether that replaces an original error).
+                  for attempt in (1, 2):
+                      result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
+                      if result.returncode == 0:
+                          return None
+                      detail = (result.stderr or "") + (result.stdout or "")
+                      if tag_is_absent(detail):
+                          return None
+                      remaining = list_tags(tag_prefix)
+                      if remaining is not None and name not in remaining:
+                          return None
+                      if attempt == 1 and delete_retry_backoff_seconds > 0:
+                          time.sleep(delete_retry_backoff_seconds)
+                  return (
+                      "Could not delete the temporary CI-verification tag " + name
+                      + " from origin after a retry; it is still present. A leaked "
+                      + "ci-verify-* tag can be mistaken for the changelog base by an "
+                      + "unfiltered tag lookup, so refusing to continue. Remove it with: "
+                      + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
+                  )
 
               def sweep_stale_tags():
                   # A tag leaked by an earlier attempt for this exact commit (a
@@ -373,14 +413,17 @@ jobs:
                       return
                   for name in names:
                       if name != tag:
-                          delete_tag(name)
+                          problem = delete_tag(name)
+                          if problem:
+                              fail(problem)
 
               def delete_temporary_tag():
                   # Always attempt deletion, even when no create response was
                   # observed: a POST whose response was lost still creates the
-                  # tag server-side.
-                  delete_tag(tag)
+                  # tag server-side. Returns a diagnostic when it survives.
+                  return delete_tag(tag)
 
+              proof_succeeded = False
               try:
                   sweep_stale_tags()
                   deadline = time.monotonic() + max_wait_seconds
@@ -546,8 +589,21 @@ jobs:
                           + str(max_wait_seconds) + "s): " + last_state + "."
                       )
                       time.sleep(min(poll_seconds, remaining))
+              except SystemExit as exc:
+                  # A clean proof exit is remembered so a cleanup failure below
+                  # can fail the job; a failing exit keeps its own diagnostic.
+                  if exc.code in (0, None):
+                      proof_succeeded = True
+                  raise
               finally:
-                  delete_temporary_tag()
+                  cleanup_problem = delete_temporary_tag()
+                  if cleanup_problem:
+                      # Always loud, but never replace a diagnostic that is
+                      # already propagating: print the cleanup error and only
+                      # raise when the proof itself had succeeded.
+                      print("::error::" + cleanup_problem)
+                      if proof_succeeded:
+                          raise SystemExit(1)
 
 
           if __name__ == "__main__":
@@ -1305,6 +1361,16 @@ jobs:
               if not repo:
                   fail("GITHUB_REPOSITORY is unset; refusing to look for CI runs in an unknown repository.")
               max_attempts = max(1, -(-max_wait_seconds // poll_seconds))
+              raw_backoff = os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2")
+              try:
+                  delete_retry_backoff_seconds = int(raw_backoff)
+              except ValueError:
+                  fail(
+                      "SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: "
+                      + repr(raw_backoff) + "."
+                  )
+              if delete_retry_backoff_seconds < 0:
+                  fail("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative.")
 
               def list_tags(prefix):
                   listing = gh("api", "--paginate", "--slurp", "repos/" + repo + "/git/matching-refs/tags/" + prefix)
@@ -1312,11 +1378,41 @@ jobs:
                       return None
                   return tag_names(listing.stdout)
 
+              def tag_is_absent(detail):
+                  # GitHub reports a missing ref as 404 "Not Found" or 422
+                  # "Reference does not exist" (observed via the git/refs DELETE
+                  # endpoint). Both mean there is nothing to delete - never a
+                  # leaked tag and never a reason to warn an operator.
+                  return "Not Found" in detail or "404" in detail or "Reference does not exist" in detail
+
+
               def delete_tag(name):
-                  result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
-                  detail = (result.stderr or "") + (result.stdout or "")
-                  if result.returncode != 0 and "Not Found" not in detail and "404" not in detail:
-                      print("::warning::Could not delete the temporary CI-verification tag " + name + "; delete it manually.")
+                  # Delete-and-verify. A non-zero DELETE is benign only when the
+                  # ref is genuinely absent; otherwise the tag may still be on
+                  # origin, and a leaked ci-verify-* tag is not inert: an
+                  # unfiltered tag lookup could pick it as the changelog base.
+                  # Re-read the remote after a failed attempt, back off briefly,
+                  # retry once, and RETURN a loud diagnostic if it survives (the
+                  # caller decides whether that replaces an original error).
+                  for attempt in (1, 2):
+                      result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
+                      if result.returncode == 0:
+                          return None
+                      detail = (result.stderr or "") + (result.stdout or "")
+                      if tag_is_absent(detail):
+                          return None
+                      remaining = list_tags(tag_prefix)
+                      if remaining is not None and name not in remaining:
+                          return None
+                      if attempt == 1 and delete_retry_backoff_seconds > 0:
+                          time.sleep(delete_retry_backoff_seconds)
+                  return (
+                      "Could not delete the temporary CI-verification tag " + name
+                      + " from origin after a retry; it is still present. A leaked "
+                      + "ci-verify-* tag can be mistaken for the changelog base by an "
+                      + "unfiltered tag lookup, so refusing to continue. Remove it with: "
+                      + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
+                  )
 
               def sweep_stale_tags():
                   # A tag leaked by an earlier attempt for this exact commit (a
@@ -1330,14 +1426,17 @@ jobs:
                       return
                   for name in names:
                       if name != tag:
-                          delete_tag(name)
+                          problem = delete_tag(name)
+                          if problem:
+                              fail(problem)
 
               def delete_temporary_tag():
                   # Always attempt deletion, even when no create response was
                   # observed: a POST whose response was lost still creates the
-                  # tag server-side.
-                  delete_tag(tag)
+                  # tag server-side. Returns a diagnostic when it survives.
+                  return delete_tag(tag)
 
+              proof_succeeded = False
               try:
                   sweep_stale_tags()
                   deadline = time.monotonic() + max_wait_seconds
@@ -1503,8 +1602,21 @@ jobs:
                           + str(max_wait_seconds) + "s): " + last_state + "."
                       )
                       time.sleep(min(poll_seconds, remaining))
+              except SystemExit as exc:
+                  # A clean proof exit is remembered so a cleanup failure below
+                  # can fail the job; a failing exit keeps its own diagnostic.
+                  if exc.code in (0, None):
+                      proof_succeeded = True
+                  raise
               finally:
-                  delete_temporary_tag()
+                  cleanup_problem = delete_temporary_tag()
+                  if cleanup_problem:
+                      # Always loud, but never replace a diagnostic that is
+                      # already propagating: print the cleanup error and only
+                      # raise when the proof itself had succeeded.
+                      print("::error::" + cleanup_problem)
+                      if proof_succeeded:
+                          raise SystemExit(1)
 
 
           if __name__ == "__main__":
@@ -2387,14 +2499,6 @@ jobs:
           # forced deploy that puts this RC into the production soak.
           echo "Dispatching Deploy: Staging + Prod for ${RC_TAG} (force_deploy=true)."
           RC_SHA="$(git rev-parse "${RC_TAG}^{commit}")"
-          # Capture this dispatch's identity before dispatching, so the deploy
-          # run it creates can be told apart from any earlier forced deploy.
-          STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          MAIN_SHA="$(git rev-parse HEAD)"
-          BEFORE_IDS="$(gh run list --workflow deploy.yml --event workflow_dispatch --limit 20 --json databaseId 2>/dev/null || echo '[]')"
-          if ! printf '%s' "$BEFORE_IDS" | jq -e . >/dev/null 2>&1; then
-            BEFORE_IDS='[]'
-          fi
           # Dispatch from main, NOT the RC tag: deploy.yml serialises on
           # `deploy-pipeline-${{ github.ref_name }}`, so a tag ref gives each
           # RC its own concurrency group and two forced deploys can race the
@@ -2405,42 +2509,13 @@ jobs:
             -f release_ref="${RC_TAG}" \
             -f release_sha="${RC_SHA}"
 
-          # FAR-2790: resolve the run this dispatch just created and tell
-          # rc-validate which deploy to watch. Without it, validation can only
-          # observe "the deployment SHA never matched" and cannot say whether
-          # the deploy shipped and mismatched or never shipped at all.
-          # Bounded (~60s): GitHub registers a dispatched run within seconds,
-          # and if it cannot be resolved the id is simply omitted - rc-validate
-          # discovers the run itself. This step must never fail the release
-          # because the id could not be observed.
-          DEPLOY_RUN_ID=""
-          for _ in $(seq 1 20); do
-            RUNS_JSON="$(gh run list --workflow deploy.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt,headSha 2>/dev/null || echo '[]')"
-            DEPLOY_RUN_ID="$(printf '%s' "$RUNS_JSON" | jq -r --arg since "$STARTED_AT" --arg sha "$MAIN_SHA" --argjson before "$BEFORE_IDS" '
-              [ .[]
-                | select(.createdAt >= $since)
-                | select(.databaseId as $id | ([ $before[]?.databaseId ] | index($id)) == null) ]
-              | sort_by(.createdAt) | reverse
-              | (map(select(.headSha == $sha)) + .) | .[0].databaseId // empty
-            ' 2>/dev/null || true)"
-            if [ -n "$DEPLOY_RUN_ID" ] && [ "$DEPLOY_RUN_ID" != "null" ]; then
-              break
-            fi
-            DEPLOY_RUN_ID=""
-            sleep 3
-          done
-
-          # Dispatch validation only after GitHub has accepted the deploy
-          # dispatch. rc-validate waits for /api/v1/deployment to report the RC
-          # commit, then owns the validated/${RC_TAG} marker on success.
-          if [ -n "$DEPLOY_RUN_ID" ]; then
-            echo "Resolved deploy run ${DEPLOY_RUN_ID} for ${RC_TAG} (dispatched from main at ${MAIN_SHA:0:12})."
-            echo "Dispatching rc-validate.yml for ${RC_TAG} (deploy_run_id=${DEPLOY_RUN_ID})."
-            gh workflow run rc-validate.yml --ref "${RC_TAG}" -f rc_tag="${RC_TAG}" -f deploy_run_id="${DEPLOY_RUN_ID}"
-          else
-            echo "::warning::Could not resolve the deploy run id for ${RC_TAG} within 60s; dispatching rc-validate.yml without deploy_run_id (it discovers the deploy run itself)."
-            gh workflow run rc-validate.yml --ref "${RC_TAG}" -f rc_tag="${RC_TAG}"
-          fi
+          # FAR-2800: validation is independent of any deployment. rc-validate
+          # boots the RC's own disposable stack and fuzzes that, so it takes
+          # nothing but the tag. Dispatched from main so the CURRENT validation
+          # definition runs; every job checks out `inputs.rc_tag` for the
+          # artefact under test, which is what lets an already-cut RC be
+          # re-validated after a validation-only fix.
+          gh workflow run rc-validate.yml --ref main -f rc_tag="${RC_TAG}"
 
           echo "Dispatched Deploy (force) and rc-validate for ${RC_TAG}."
 

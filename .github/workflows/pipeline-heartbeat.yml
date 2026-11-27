@@ -1,0 +1,75 @@
+# pipeline-heartbeat - the one monitor that notices when a SCHEDULED workflow
+# stops firing at all.
+#
+# Why this exists: the estate's fallback pollers were retuned to slow cadences
+# (merge queue hourly, watchdogs hourly or every 2 hours, macOS staple every 3
+# hours - PR #3604) because GitHub demonstrably DROPS high-frequency cron events
+# on busy repositories. Slow pollers are only safe while something notices when
+# a schedule stops firing entirely. This is that thing, and it is what lets the
+# rest stay slow.
+#
+# What it does: reads .github/pipeline-heartbeat.json (the declared cadence of
+# every scheduled pipeline) and asks the Actions API for the newest run each
+# workflow was STARTED by - schedule or workflow_dispatch. A workflow silent
+# past its declared window fails THIS run with an ::error:: naming it. It
+# dispatches nothing and changes nothing else: when a pipeline is silent, this
+# workflow is the only thing that goes red.
+#
+# Evidence rule (why not "any recent run"): a push / pull_request /
+# repository_dispatch run proves the workflow file is alive but says nothing
+# about the scheduler, and three of the monitored workflows also run on push or
+# pull_request - counting those would let a dead cron hide behind unrelated
+# activity.
+#
+# Cadence: hourly at :47, a minute no other cron in this repo uses (:05 :07 :17
+# :22 :23 :25 :30 :37 :40 :50 carry the frequent jobs). Hourly is frequent enough
+# that a dead pipeline is noticed inside its own window plus an hour, and cheap:
+# two API requests per monitored workflow, no other resource.
+#
+# Least privilege: actions:read is the run-history read and contents:read is the
+# checkout that supplies the manifest. No write scope of any kind.
+#
+# Always evaluate the merged definition (ref: main), mirroring
+# audit-chain-monitor.yml: a manual dispatch from an unmerged branch must not
+# report on that branch's manifest.
+name: "Monitor: Pipeline heartbeat"
+
+on:
+  schedule:
+    - cron: "47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  # A monitor has nothing to serialise mid-flight except its own API reads, and a
+  # cancelled run must never be the record of a tick, so queue rather than cancel.
+  group: pipeline-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    name: Check every scheduled pipeline has fired
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 10
+    steps:
+      - name: Checkout the heartbeat manifest and script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check pipeline heartbeat
+        env:
+          # github.token is the same-repo installation token: the run-history
+          # read needs no PAT, and a PAT would widen the blast radius of this
+          # job for no gain.
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/check_pipeline_heartbeat.py

@@ -494,29 +494,41 @@ def test_merge_queue_ci_gates_are_pinned_to_the_pr_head_sha() -> None:
 
 
 def test_merge_queue_concurrency_is_scoped_to_the_queue_job() -> None:
-    """The ``merge-queue`` concurrency group must live on the ``queue`` job.
+    """Every job that merges to main must hold the ``merge-queue`` group.
 
-    At workflow level the group is held by the WHOLE run — including
-    ``event-gate``'s ~10-min ``CHAIN_READY_AT`` pacing sleep — so every chained
-    pass queued behind an incumbent's sleep and waited out the full ~10 min
-    before its own turn. Only the ``queue`` job merges to main, so only it needs
-    serialising; scoping the group there keeps merges strictly serialised while
-    freeing the pacing sleep. ``cancel-in-progress`` must stay ``false``, or a
-    later run would cancel a merge that is already in flight.
+    The group serialises merges: two runs that both reach ``gh pr merge`` would
+    otherwise race labels, branch cleanup and post-merge CI dispatch. It lives
+    on the JOB, not the workflow, so ``event-gate``'s ~10-min ``CHAIN_READY_AT``
+    pacing sleep does not hold it and delay every chained pass. Historically only
+    the ``queue`` job merged to main; the merge train's ``merge`` job (behind
+    ``MERGE_TRAIN_ENABLED``) is a second merge-to-main job, so it must hold the
+    same group too. ``cancel-in-progress`` must stay ``false``, or a later run
+    would cancel a merge that is already in flight.
     """
     workflow = _load_yaml(MERGE_QUEUE_YML)
-    job_concurrency = _queue_job(workflow).get("concurrency")
+    jobs = workflow.get("jobs") or {}
+
+    def _merges_to_main(job: object) -> bool:
+        if not isinstance(job, dict):
+            return False
+        return any(isinstance(step, dict) and "gh pr merge" in (step.get("run") or "") for step in (job.get("steps") or []))
+
+    merging_jobs = {name: job for name, job in jobs.items() if _merges_to_main(job)}
+    assert merging_jobs, "merge-queue.yml: no job runs `gh pr merge` — the merge jobs moved; update this test deliberately"
+
     violations: list[str] = []
     if "concurrency" in workflow:
-        violations.append("  merge-queue.yml: workflow-level `concurrency` is present — the group must be scoped to the `queue` job, or event-gate's pacing sleep holds it and delays every chained pass")
-    if not isinstance(job_concurrency, dict):
-        violations.append("  merge-queue.yml: jobs.queue has no `concurrency` mapping — merges to main are no longer serialised")
-    else:
+        violations.append("  merge-queue.yml: workflow-level `concurrency` is present — the group must be scoped to each merge job, or event-gate's pacing sleep holds it and delays every chained pass")
+    for name, job in merging_jobs.items():
+        job_concurrency = job.get("concurrency")
+        if not isinstance(job_concurrency, dict):
+            violations.append(f"  merge-queue.yml: jobs.{name} merges to main but has no `concurrency` mapping — merges to main are no longer serialised")
+            continue
         if job_concurrency.get("group") != "merge-queue":
-            violations.append(f"  merge-queue.yml: jobs.queue.concurrency.group must be 'merge-queue' (got {job_concurrency.get('group')!r})")
+            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.group must be 'merge-queue' (got {job_concurrency.get('group')!r})")
         if job_concurrency.get("cancel-in-progress") is not False:
-            violations.append(f"  merge-queue.yml: jobs.queue.concurrency.cancel-in-progress must be false (got {job_concurrency.get('cancel-in-progress')!r}) — a later run must never cancel an in-flight merge")
-    assert not violations, "merge-queue.yml no longer scopes the merge-queue concurrency group to the queue job:\n" + "\n".join(violations)
+            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.cancel-in-progress must be false (got {job_concurrency.get('cancel-in-progress')!r}) — a later run must never cancel an in-flight merge")
+    assert not violations, "merge-queue.yml no longer serialises every merge-to-main job on the merge-queue group:\n" + "\n".join(violations)
 
 
 # --- The queue only collects PRs that target main ---------------------------
@@ -1525,10 +1537,6 @@ DEPLOY_ASSUMING_JOBS = (
     "deploy-production",
     "prod-smoke",
     "notify-deploy-failure",
-    # FAR-2800: records "this run is deploying release X" for rc-validate to
-    # select on. A throttled run deploys nothing, so it must never emit a
-    # release-identity record - the same gate applies.
-    "record-release-identity",
 )
 
 

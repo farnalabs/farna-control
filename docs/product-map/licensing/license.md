@@ -53,10 +53,14 @@ status: partial
 # Feature Licensing and Plan Tiers
 
 Licensing manages Ed25519-signed license keys and the Community / Team tier gates on
-`/settings/license`. An uploaded key is verified (validity period + signature), expands to
-the feature set for its tier, gates Team-scoped surfaces (SSO, team RBAC, audit viewer,
-admin spend limits) with a 402 when absent or expired, and backs the admin license-status,
-tier-catalog and feature-flag inspection endpoints. (The public, unauthenticated
+`/settings/license`. An uploaded key is verified (validity period + signature) and grants
+its tier's ENTITLEMENTS. Team capability is not a flat flag set: it is three named groups
+declared in `backend/src/farna/core/entitlements.py` - Identity (`sso`, `scim`,
+`team_rbac`), Audit and evidence (`audit_viewer`, `admin_run_retention`) and Cost
+governance (`admin_spend_limits`, `admin_cost_controls`, `admin_cost_breakdown`). A
+surface gated on any of those groups answers 402 when the licence does not grant that
+group. The same key backs the admin license-status, tier-catalog and feature-flag
+inspection endpoints. (The public, unauthenticated
 `/api/v1/license` surface resolves the deployment-level license ladder - the persisted
 system license, then a verified env-var key - and reports community / `is_valid: false`
 when neither is valid; see Behaviors.)

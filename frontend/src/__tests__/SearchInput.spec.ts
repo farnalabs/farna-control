@@ -31,28 +31,34 @@ describe('SearchInput', () => {
     expect(inputOf(wrapper).attributes('inputmode')).toBe('search')
   })
 
-  // PrimeVue's `.p-inputtext` padding is unlayered CSS, so it beats every
-  // ordinary (layered) Tailwind utility. Only an important utility takes effect,
-  // and jsdom computes no layout, so the class list is what we can pin (FAR-2809).
-  it('reserves room for the icon with padding that overrides the PrimeVue base style', () => {
+  // PrimeVue's `.p-inputtext` padding lives in `@layer primevue`, below
+  // `@layer utilities` (main.ts configures `cssLayer` - see
+  // primevue-css-layer.spec.ts), so ordinary utilities win. jsdom computes no
+  // layout, so the class list is what we can pin; the real-browser
+  // computed-padding evidence was measured with Playwright (FAR-2817).
+  it('reserves room for the icon with an ordinary padding utility', () => {
     const wrapper = mountHarness('<SearchInput data-testid="control" />')
 
     expect(inputOf(wrapper).classes()).toContain('p-inputtext')
-    expect(inputOf(wrapper).classes()).toContain('pl-9!')
+    expect(inputOf(wrapper).classes()).toContain('pl-9')
+    // The FAR-2809 `!important` escape must not come back: it defeats the
+    // layer contract for every caller and was only ever a workaround.
+    expect(inputOf(wrapper).classes()).not.toContain('pl-9!')
   })
 
-  it('reserves room for the clear button with overriding padding only while it is shown', async () => {
+  it('reserves room for the clear button with padding only while it is shown', async () => {
     const value = ref('')
     const wrapper = mountHarness(
       '<SearchInput v-model="value" data-testid="control" clearable clear-label="Clear search" />',
       { value },
     )
 
-    expect(inputOf(wrapper).classes()).not.toContain('pr-9!')
+    expect(inputOf(wrapper).classes()).not.toContain('pr-9')
 
     await inputOf(wrapper).setValue('query')
 
-    expect(inputOf(wrapper).classes()).toContain('pr-9!')
+    expect(inputOf(wrapper).classes()).toContain('pr-9')
+    expect(inputOf(wrapper).classes()).not.toContain('pr-9!')
   })
 
   it('puts the caller class on the wrapper and inputClass on the control', () => {

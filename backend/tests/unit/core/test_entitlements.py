@@ -68,6 +68,35 @@ class TestRegistryShape:
             validate_entitlement_key("not_a_capability")
 
 
+class TestTeamBundleIsPinnedToWhatTheCodeGates:
+    """FAR-2654: the Team bundle is one set — declaration and gate must agree.
+
+    ``EXPECTED_GROUPS`` is the authoritative pin of the three named Team
+    capabilities (Identity / Audit and evidence / Cost governance) and exactly
+    which flags each owns. This check ties that pin to what the code actually
+    gates: the feature-flag registry PRESENTS a flag as ``team`` exactly when an
+    entitlement covers it (``FeatureFlag.tier`` is a projection of
+    :mod:`farna.core.entitlements`, never a separately declared tier), so the
+    set of flags it projects as Team must equal the union of the pinned groups.
+    Pinning the literal groups AND asserting the gated set against that literal
+    is what stops the documented Team bundle and the code from drifting apart —
+    a flag added to (or removed from) an entitlement group without updating this
+    pin, or a flag the registry gates as Team that no group declares, fails
+    here. Documents across repos cannot be read from this checkout, so this is
+    the in-repo guarantee they can be checked against.
+    """
+
+    def test_the_bundle_is_pinned_and_matches_the_gated_team_set(self) -> None:
+        # 1. The entitlement registry declares exactly the pinned groups and flags.
+        declared = {key: set(entitlement.flags) for key, entitlement in ENTITLEMENTS.items()}
+        assert declared == EXPECTED_GROUPS
+
+        # 2. What the code gates as Team is exactly the pinned union — no more, no less.
+        pinned = set().union(*EXPECTED_GROUPS.values())
+        gated = {flag.name for flag in FeatureFlagRegistry(current_tier="community").list_flags() if flag.tier == "team"}
+        assert gated == pinned
+
+
 class TestLoweredFlags:
     """FAR-2665 stage 1: each lowered flag is Community behaviour."""
 

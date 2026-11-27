@@ -2343,6 +2343,7 @@ import { CANVAS_EDGE_STROKE, PIPELINE_EDITOR_VIRTUALIZATION_THRESHOLD } from '..
 import {
   layoutNodes,
   layoutNodesIncrementalWithBaseline,
+  type GraphNodeInput,
   type ProvenanceMap,
 } from '../utils/graph-layout'
 import { api } from '../lib/api/client'
@@ -2473,7 +2474,7 @@ function nodeComponent(nodeType: string) {
   return NODE_COMPONENTS[nodeType] ?? AgentNode
 }
 
-const { fitView, onPaneReady, addEdges } = useVueFlow()
+const { fitView, onPaneReady, addEdges, findNode } = useVueFlow()
 
 // Vue Flow renders edge geometry from these presentation options; semantic
 // edge metadata lives on each edge's `data` and is never affected.
@@ -2487,6 +2488,13 @@ const defaultEdgeOptions = {
     height: 16,
     color: CANVAS_EDGE_STROKE,
   },
+  // FAR-2816: Vue Flow 1.48.2 writes the focusable edge's `tabIndex` attribute
+  // with a capital I. SVG attribute names are case-sensitive, so `tabindex`
+  // never exists on the rendered <g>, browsers do not put the edge in the tab
+  // order, and `.focus()` is a no-op. `domAttributes` is spread onto that same
+  // <g> AFTER Vue Flow's own attributes and is written verbatim, so this adds
+  // the correctly-cased attribute the browser needs.
+  domAttributes: { tabindex: '0' },
 }
 
 // Layout ownership is frontend provenance (FAR-2420), not inferred from
@@ -2591,8 +2599,31 @@ async function runInitialFitView() {
     console.warn('[PipelineEditorView] initial fitView failed; retry paths remain armed', error)
   }
 }
-onPaneReady(() => { void runInitialFitView() })
-watch(() => flowNodes.value.length, (len) => { if (len > 0) void runInitialFitView() })
+/**
+ * FAR-2815: keep edge badges visible over node cards.
+ *
+ * Vue Flow renders the edge-label layer BEFORE the nodes layer and gives
+ * neither a z-index, so a label that lands over a card (a loop edge's midpoint
+ * sits mid-graph) is painted underneath that card and disappears. The layer is
+ * `pointer-events: none`, so raising it only changes paint order. Node cards
+ * are elevated to z-index 1000 when selected (`elevateNodesOnSelect`), hence
+ * 1001. Re-applied on pane-ready because Vue Flow remounts on pipeline switch.
+ */
+function liftEdgeLabelsAboveNodes(): void {
+  const labels = canvasRef.value?.querySelector<HTMLElement>('.vue-flow__edge-labels')
+  if (labels) labels.style.zIndex = '1001'
+}
+
+onPaneReady(() => {
+  void runInitialFitView()
+  liftEdgeLabelsAboveNodes()
+})
+watch(() => flowNodes.value.length, (len) => {
+  if (len > 0) {
+    void runInitialFitView()
+    liftEdgeLabelsAboveNodes()
+  }
+})
 
 const agents = ref<any[]>([])
 const connectors = ref<any[]>([])
@@ -4054,6 +4085,44 @@ function hasPlacedPositions(nodes: any[]): boolean {
   })
 }
 
+/**
+ * The size Vue Flow measured for a rendered node, if it has measured it yet.
+ *
+ * FAR-2815: the backend graph carries no pixel dimensions and the cards size to
+ * their own content (no fixed width), so a layout fed only the backend fields
+ * falls back to graph-layout's 200x100 defaults. A wider or taller real card
+ * then lands on top of its neighbour when the ranks are spaced for 200x100.
+ * Vue Flow stores the measured box on the live node, which is the only truthful
+ * source for the arrangement.
+ */
+function measuredNodeSize(id: string): { width?: number; height?: number } {
+  const dimensions = findNode(id)?.dimensions
+  const width = dimensions?.width
+  const height = dimensions?.height
+  return {
+    width: typeof width === 'number' && width > 0 ? width : undefined,
+    height: typeof height === 'number' && height > 0 ? height : undefined,
+  }
+}
+
+/**
+ * Layout input for every node: measured canvas size when known, otherwise the
+ * node's own (usually absent) dimensions so graph-layout applies its defaults.
+ */
+function layoutNodeInputs(nodes: any[]): GraphNodeInput[] {
+  return nodes.map((node) => {
+    const measured = measuredNodeSize(node.id)
+    return {
+      id: node.id,
+      node_type: node.node_type,
+      label: node.label,
+      width: measured.width ?? node.width,
+      height: measured.height ?? node.height,
+      position: node.position,
+    }
+  })
+}
+
 function computeGraphLayout(): Record<string, PositionSnapshot> {
   // Validate the source graph before layout so malformed/unknown fields cannot
   // be carried into a generated arrangement.
@@ -4062,13 +4131,7 @@ function computeGraphLayout(): Record<string, PositionSnapshot> {
     edges: rawEdges.value.map(buildEdgePayload),
   })
   const laidOut = layoutNodes(
-    rawNodes.value.map((node: any) => ({
-      id: node.id,
-      node_type: node.node_type,
-      label: node.label,
-      width: node.width,
-      height: node.height,
-    })),
+    layoutNodeInputs(rawNodes.value),
     rawEdges.value.map((edge: any) => ({
       source: edge.source_node_id,
       target: edge.target_node_id,
@@ -4142,15 +4205,10 @@ async function arrangeGraph(): Promise<void> {
     generatedLayout: preArrangeGeneratedLayout,
     provenance: preArrangeProvenance,
   }
-  // Build nodes input for layoutNodesIncremental
-  const nodesInput = rawNodes.value.map((node: any) => ({
-    id: node.id,
-    node_type: node.node_type,
-    label: node.label,
-    width: node.width,
-    height: node.height,
-    position: node.position,
-  }))
+  // Build nodes input for layoutNodesIncremental. Measured canvas sizes are
+  // included (FAR-2815): without them the layout spaces ranks and rows for its
+  // 200x100 defaults and a real, wider card overlaps its neighbour.
+  const nodesInput = layoutNodeInputs(rawNodes.value)
   const edgesInput = rawEdges.value.map((edge: any) => ({
     source: edge.source_node_id,
     target: edge.target_node_id,
@@ -4823,6 +4881,25 @@ function handleCanvasArrow(event: KeyboardEvent): void {
 }
 
 /**
+ * FAR-2816: Enter/Space on a focused canvas edge opens its properties.
+ *
+ * Vue Flow puts the edge in the tab order (see `defaultEdgeOptions`) but only a
+ * pointer click emits `edge-click`, so a keyboard user could focus an edge and
+ * get no further. The edge's <g> carries Vue Flow's `data-id`, which is enough
+ * to route the key press through the same click path.
+ */
+function activateFocusedCanvasEdge(event: KeyboardEvent): boolean {
+  if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return false
+  const target = event.target instanceof Element ? event.target : null
+  const edgeId = target?.closest('.vue-flow__edge')?.getAttribute('data-id')
+  if (!edgeId) return false
+  if (!inspectSourceEdges.value.some((edge: any) => edge.id === edgeId)) return false
+  event.preventDefault()
+  onEdgeClick({ edge: { id: edgeId } })
+  return true
+}
+
+/**
  * Canvas-scoped key handling. Deliberately ignores events originating in an
  * editable control (the palette input has its own handler) so typing a node
  * label can never trigger a shortcut.
@@ -4838,6 +4915,7 @@ function onCanvasKeydown(event: KeyboardEvent): void {
   // Modified key presses belong to the browser/OS (Ctrl+A, Cmd+E, ...), not the
   // canvas shortcuts below.
   if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (activateFocusedCanvasEdge(event)) return
   switch (event.key) {
     case 'Escape':
       handleCanvasEscape(event)

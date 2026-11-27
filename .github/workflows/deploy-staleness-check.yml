@@ -36,7 +36,7 @@ name: "Deploy staleness check (prod vs main)"
 # missing previous verdict is treated as UNKNOWN and emails the current state
 # (fail loud, never silently suppress the first alert after this change).
 #
-# Division of labour: deploy-watchdog.yml (*/30) is the fly-level SELF-HEAL --
+# Division of labour: deploy-watchdog.yml (hourly) is the fly-level SELF-HEAL --
 # it compares the fly image tag vs main HEAD and re-dispatches deploy.yml to
 # heal WITHIN this check's grace window. If this check's ::error:: fires,
 # the watchdog failed to heal -- investigate the watchdog, not this check.
@@ -56,12 +56,11 @@ name: "Deploy staleness check (prod vs main)"
 
 on:
   schedule:
-    # FAR-2116: tightened from "0 */2" so a 2-consecutive-failure condition is
-    # surfaced within ~30 minutes of the second failure completing instead of
-    # up to two hours later. The workflow is one 30s job (a couple of API
-    # reads), and */30 is the cadence the sibling deploy-watchdog.yml already
-    # runs at. The staleness half is unaffected by the extra ticks (10h grace).
-    - cron: "*/30 * * * *"
+    # Fallback poller (not a primary trigger): hourly at :40 - a 2-consecutive-failure
+    # condition or a staleness breach surfaces within ~1h of it completing, and the
+    # 10h staleness grace is unaffected. One ~30s job of API reads; the sibling
+    # deploy-watchdog.yml (:50) is hourly too.
+    - cron: "40 * * * *"
   workflow_dispatch:
 
 permissions:

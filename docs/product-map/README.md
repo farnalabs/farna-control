@@ -209,6 +209,21 @@ Proves: frontend/src/__tests__/design-system-components.spec.ts::stacks on mobil
   holds it must be part of the PR's changed-file list – a proving test is added
   or updated by the same change, never an untouched test that happened to pass
   before.
+- A frontend test title declared with a template literal, or with an `each`/`for`
+  printf (`%s`) or `$var` placeholder, must be written VERBATIM as declared,
+  placeholders included – that is the only string the gate matches, because the
+  test that must exist declares exactly that string. For a real example,
+  `frontend/tests/e2e/wcag-contrast.spec.ts` declares
+  `authenticated ${path} has no unexpected WCAG AA violations (light theme)` (the
+  `@regression` light-theme scan, which runs for every light-scanned authenticated
+  route), so the marker is
+  `Proves: frontend/tests/e2e/wcag-contrast.spec.ts::authenticated ${path} has no unexpected WCAG AA violations (light theme)`
+  – not the substituted title a single run prints. When a reference does not
+  match, the gate quotes the nearest declared title(s) that CAN be named as a
+  `Proves:` ref (annotating any that cannot prove anything because they are
+  skipped). A title containing a comma cannot be named as a ref – one ref names
+  one test per line – so it is never suggested; if only such titles are close,
+  there is no suggestion.
 - A test that is skipped or expected to fail cannot prove anything, at any
   pytest scope: a `@pytest.mark.skip` / `skipif` / `xfail` decorator on the test
   or on its enclosing class, a module-level `pytestmark = pytest.mark.skip(...)`

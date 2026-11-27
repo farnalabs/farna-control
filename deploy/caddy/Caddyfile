@@ -128,6 +128,42 @@
     }
 
     # -------------------------------------------------------------------------
+    # Native installer entry point — stable and version-pinned forms
+    # -------------------------------------------------------------------------
+    # /install.sh                 -> scripts/install.sh on the default branch (main)
+    # /install.sh?version=<X.Y.Z> -> scripts/install.sh at release tag bundle-v<X.Y.Z>
+    #
+    # Exact-path match only, and it sits AFTER every backend route (health, api,
+    # .well-known, mcp, ws) and BEFORE the SPA catch-all below. `handle` blocks
+    # are mutually exclusive and evaluated in file order, so no earlier route can
+    # capture /install.sh and this exact path cannot capture anything those
+    # routes own; the catch-all is reached only when no earlier handle matched.
+    # ACME /.well-known/acme-challenge is answered by Caddy's automatic HTTPS
+    # before any user handler.
+    #
+    # The pinned tag convention is the one the release pipeline creates and
+    # scripts/install.sh consumes: bundle-v<version>, where version is X.Y.Z.
+    # A malformed version is refused rather than silently falling back to the
+    # default branch.
+    @installer {
+        path /install.sh
+    }
+    handle @installer {
+        @installer_pinned {
+            query version=*
+            expression {query.version}.matches('^[0-9]+[.][0-9]+[.][0-9]+$')
+        }
+        redir @installer_pinned https://raw.githubusercontent.com/farnalabs/farna-control/bundle-v{query.version}/scripts/install.sh 302
+
+        @installer_stable {
+            not query version=*
+        }
+        redir @installer_stable https://raw.githubusercontent.com/farnalabs/farna-control/main/scripts/install.sh 302
+
+        respond "Invalid installer version: expected X.Y.Z (for example 0.3.329)." 400
+    }
+
+    # -------------------------------------------------------------------------
     # Frontend — Vue.js SPA (Vite dev server or built nginx)
     # -------------------------------------------------------------------------
     handle {

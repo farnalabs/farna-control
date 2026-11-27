@@ -108,7 +108,7 @@ bash library/curl.sh
 
 | Language | Description |
 |---|---|
-| Python (httpx) | End-to-end: login → create pipeline → add agent → configure connector → trigger run → monitor via WebSocket → handle HITL gate → view results |
+| Python (httpx) | End-to-end: login → create pipeline → create input/output schemas → create agent → configure connector → save graph → trigger run → monitor via WebSocket → handle HITL gate → view results |
 
 ## Environment Variables
 
