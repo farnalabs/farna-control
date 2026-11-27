@@ -203,6 +203,17 @@ for (const path of paths) {
   })
 }
 
+// The placeholder is the WHOLE prefix, the shape nine declared titles in the real
+// tree use. A fabricated prefix must never resolve against it.
+const pagePaths = ['/settings/mcp', '/admin']
+
+for (const pagePath of pagePaths) {
+  test(`${pagePath} has no WCAG AA violations when authenticated`, { tag: '@regression' }, async ({ page }) => {
+    await page.goto(pagePath)
+    expect(true).toBe(true)
+  })
+}
+
 test.skip(`parameterised ${path} is parked for now`, async () => {
   expect(true).toBe(true)
 })
@@ -516,30 +527,58 @@ def test_a_test_inside_a_skipped_describe_block_is_rejected(tmp_path: Path):
 
 
 # --- parameterised (template-literal) spec titles (FAR-2835) ----------------
+#
+# The gate matches a declared title EXACTLY, placeholders and all: the named test
+# must exist, and a substituted title is a string no test declares. What removes
+# the friction is the error, which quotes the verbatim declared title to copy.
 
 
-def test_a_substituted_parameterised_title_resolves(tmp_path: Path):
-    """The form an author copies from a CI run: the placeholders filled in."""
+def test_a_substituted_parameterised_title_is_rejected_and_quotes_the_declared_title(tmp_path: Path):
+    """The title a single run prints is NOT declared, so it is not proof."""
     root = _make_repo(tmp_path)
     problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::authenticated /settings/mcp has no violations (light theme)", root, _changed(_PARAM_SPEC_MODULE))
-    assert problem is None, f"a filled-in title must resolve against its declared template, got {problem!r}"
+    assert problem is not None, "a substituted title is not a declared title and must be rejected"
+    assert "not defined" in problem
+    assert "'authenticated ${path} has no violations (light theme)'" in problem, f"the error must quote the verbatim declared title, got {problem!r}"
 
 
-def test_a_verbatim_parameterised_title_still_resolves(tmp_path: Path):
-    """The template exactly as written, placeholders included, keeps working."""
+def test_a_verbatim_parameterised_title_resolves(tmp_path: Path):
+    """The template exactly as declared, placeholders included, is accepted."""
     root = _make_repo(tmp_path)
     problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::authenticated ${{path}} has no violations (light theme)", root, _changed(_PARAM_SPEC_MODULE))
-    assert problem is None, f"the verbatim template title must still resolve, got {problem!r}"
+    assert problem is None, f"the verbatim template title must resolve, got {problem!r}"
+
+
+def test_a_title_beginning_with_a_placeholder_resolves_only_verbatim(tmp_path: Path):
+    """A whole-prefix placeholder matches its verbatim form and nothing else."""
+    root = _make_repo(tmp_path)
+    verbatim = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::${{pagePath}} has no WCAG AA violations when authenticated", root, _changed(_PARAM_SPEC_MODULE))
+    filled = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::/admin has no WCAG AA violations when authenticated", root, _changed(_PARAM_SPEC_MODULE))
+    assert verbatim is None, f"the verbatim declared title must resolve, got {verbatim!r}"
+    assert filled is not None, "a filled-in title must not resolve against a declared placeholder"
+
+
+def test_a_fabricated_prefix_does_not_resolve(tmp_path: Path):
+    """Regression guard: no wildcard may invent a match for an unconstrained prefix."""
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(
+        f"{_PARAM_SPEC_MODULE}::the entire admin console and every widget on it has no WCAG AA violations when authenticated",
+        root,
+        _changed(_PARAM_SPEC_MODULE),
+    )
+    assert problem is not None, "a fabricated prefix names no real test and must be rejected"
+    assert "not defined" in problem
 
 
 def test_an_absent_title_is_rejected_with_a_real_defined_title_as_suggestion(tmp_path: Path):
-    """A near miss is still rejected, but the error names a title to copy."""
+    """A near miss is still rejected, but the error names a runnable title to copy."""
     root = _make_repo(tmp_path)
     problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::authenticated /settings/mcp has no violations (dark theme)", root, _changed(_PARAM_SPEC_MODULE))
     assert problem is not None
     assert "not defined" in problem
     assert "Did you mean:" in problem
     assert "'authenticated ${path} has no violations (light theme)'" in problem, f"suggestion must quote a real declared title, got {problem!r}"
+    assert "(skipped:" not in problem, f"a runnable suggestion must not be annotated as skipped, got {problem!r}"
 
 
 def test_an_unrelated_absent_title_keeps_the_plain_not_defined_message(tmp_path: Path):
@@ -551,30 +590,33 @@ def test_an_unrelated_absent_title_keeps_the_plain_not_defined_message(tmp_path:
     assert "Did you mean:" not in problem, f"an unrelated title must not offer a misleading suggestion, got {problem!r}"
 
 
-def test_a_skipped_or_fixme_parameterised_test_is_rejected_under_both_forms(tmp_path: Path):
-    """Skipping still wins over the wildcard: neither form may resolve."""
+def test_a_skipped_parameterised_title_is_rejected(tmp_path: Path):
+    """A skipped title cannot prove anything, however it is spelled."""
     root = _make_repo(tmp_path)
-    cases = (
-        ("parameterised ${path} is parked for now", "skipped/fixme/todo"),
-        ("parameterised /settings/mcp is parked for now", "skipped/fixme/todo"),
-        ("parameterised ${path} is a known fixme", "skipped/fixme/todo"),
-        ("parameterised /settings/mcp is a known fixme", "skipped/fixme/todo"),
-    )
-    for ref_title, expected in cases:
+    for ref_title in ("parameterised ${path} is parked for now", "parameterised ${path} is a known fixme"):
         problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::{ref_title}", root, _changed(_PARAM_SPEC_MODULE))
         assert problem is not None, f"{ref_title!r} must be rejected as unrunnable"
-        assert expected in problem, f"{ref_title!r}: expected {expected!r} in {problem!r}"
+        assert "skipped/fixme/todo" in problem, f"{ref_title!r}: expected the skip reason in {problem!r}"
+
+
+def test_the_suggestion_never_offers_a_skipped_title_as_a_bare_trap(tmp_path: Path):
+    """When only an unrunnable title is close, the suggestion says so."""
+    root = _make_repo(tmp_path)
+    problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::parameterised ${{path}} is parked for longer", root, _changed(_PARAM_SPEC_MODULE))
+    assert problem is not None
+    assert "Did you mean:" in problem
+    assert "'parameterised ${path} is parked for now' (skipped: it is marked skipped/fixme/todo)" in problem, f"an unrunnable suggestion must be annotated, got {problem!r}"
 
 
 def test_one_runnable_match_among_several_resolves(tmp_path: Path):
-    """Several declared titles match one ref; one runs, so the ref is proof."""
+    """The same title declared twice, once skipped: the runnable one is proof."""
     root = _make_repo(tmp_path)
-    problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::shared abc123 case", root, _changed(_PARAM_SPEC_MODULE))
+    problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::shared ${{token}} case", root, _changed(_PARAM_SPEC_MODULE))
     assert problem is None, f"a runnable match among several must resolve, got {problem!r}"
 
 
-def test_a_title_with_regex_metacharacters_matches_only_itself(tmp_path: Path):
-    """Parentheses and a dot are escaped: no near-variant may resolve."""
+def test_a_title_with_regex_metacharacters_matches_only_exactly(tmp_path: Path):
+    """Parentheses and a dot are just characters: no near-variant may resolve."""
     root = _make_repo(tmp_path)
     exact = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::renders (A) v1.0 badge", root, _changed(_PARAM_SPEC_MODULE))
     near = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::renders A v1x0 badge", root, _changed(_PARAM_SPEC_MODULE))
@@ -584,7 +626,7 @@ def test_a_title_with_regex_metacharacters_matches_only_itself(tmp_path: Path):
 
 
 def test_a_pattern_in_the_ref_resolves_nothing(tmp_path: Path):
-    """Only placeholders in the DECLARED title are wildcards, never the ref."""
+    """Matching is exact: a regex written in the ref matches no declared title."""
     root = _make_repo(tmp_path)
     problem = _module.verify_ref(f"{_PARAM_SPEC_MODULE}::renders .* badge", root, _changed(_PARAM_SPEC_MODULE))
     assert problem is not None, "a regex written in the ref must not match a declared title"
