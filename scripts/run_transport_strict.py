@@ -198,6 +198,8 @@ def _run_pytest(modules: list[Path], report: Path, timeout: int, jobs: int, base
         "no:randomly",
         "-W",
         "error::pytest.PytestUnraisableExceptionWarning",
+        "-W",
+        "error::ResourceWarning",
         "--disable-warnings",
     ]
     if jobs > 1:
@@ -296,8 +298,20 @@ def main(argv: list[str] | None = None) -> int:
 
     baseline = _load_baseline(args.baseline)
 
+    explicitly_requested = bool(args.paths)
     if args.paths:
-        modules = [_resolve_arg(p) for p in args.paths]
+        requested = [_resolve_arg(p) for p in args.paths]
+        missing = [path for path in requested if not path.exists() or not _is_collectable(path.name)]
+        if missing:
+            # A caller that names modules asked for THOSE modules. Silently
+            # dropping a nonexistent one would turn a typo (or a deleted test)
+            # into a green no-op.
+            print(
+                f"::error::strict transport policy was given module(s) that do not exist or are not collectable: {', '.join(str(path) for path in missing)}. Refusing to pass.",
+                file=sys.stderr,
+            )
+            return 2
+        modules = requested
     elif args.all:
         modules = _baseline_modules(baseline)
     else:
@@ -309,6 +323,9 @@ def main(argv: list[str] | None = None) -> int:
 
     modules = [m for m in modules if m.exists() and _is_collectable(m.name)]
     if not modules:
+        if explicitly_requested:
+            print("::error::strict transport policy was given only modules that were filtered out; refusing to pass with an empty selection.", file=sys.stderr)
+            return 2
         # Still create the report when one was requested: CI runs the ratchet
         # architecture test unconditionally against that path, and a missing
         # file must mean "the runner never ran", never "nothing changed".

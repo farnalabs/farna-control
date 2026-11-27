@@ -999,15 +999,23 @@ jobs:
             --base-ref "$BASE" \
             --timeout 300 \
             --report "$RUNNER_TEMP/transport-strict-report.jsonl"
+          # Defence in depth: the runner returns 2 when it cannot produce a
+          # report, but CI must never treat a silently absent report as a pass.
+          test -f "$RUNNER_TEMP/transport-strict-report.jsonl" || {
+            echo "::error::strict transport runner produced no report; the policy did not run."
+            exit 1
+          }
       - name: Ratchet (architecture gate over the same report)
-        # UNCONDITIONAL: the runner always writes the report (an empty one when
-        # no test module changed), so a missing file means the runner did not
-        # run. The architecture test fails - not skips - on that, which is why
-        # this step must never be wrapped in a conditional.
+        # ALWAYS: it must run even when the runner step failed, so a missing or
+        # partially written report is reported as the gate's own failure. The
+        # runner always writes the report (an empty one when no test module
+        # changed), so a missing file means the runner did not run. The
+        # architecture test fails - not skips - on that.
+        if: always()
         shell: bash
         env:
           FARNA_STRICT_TRANSPORT_REPORT: ${{ runner.temp }}/transport-strict-report.jsonl
-        run: uv run --no-sync pytest tests/architecture/test_transport_policy.py -q --tb=short --timeout=300 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+        run: uv run --no-sync pytest tests/architecture/test_transport_policy.py -q --tb=short --timeout=300 -W "error::pytest.PytestUnraisableExceptionWarning" -W "error::ResourceWarning" --disable-warnings
 
   contract-roundtrip:
     # FAR-2702: call a small, explicit sample of GET routes through the ASGI app
@@ -1042,6 +1050,7 @@ jobs:
         # Repo root: the pathspecs below are repo-relative (see integration-changed).
         working-directory: .
         run: |
+          set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             if git rev-parse -q --verify "HEAD^2" >/dev/null 2>&1; then
               BASE="HEAD^"
@@ -1076,7 +1085,7 @@ jobs:
         shell: bash
         run: |
           uv run --no-build --no-sync pytest tests/integration/test_contract_roundtrip.py \
-            -q --tb=short --timeout=300 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+            -q --tb=short --timeout=300 -W "error::pytest.PytestUnraisableExceptionWarning" -W "error::ResourceWarning" --disable-warnings
         env:
           # Testcontainers provisions its own Postgres; the round-trip needs
           # Docker only (available on these runners, like integration-changed).

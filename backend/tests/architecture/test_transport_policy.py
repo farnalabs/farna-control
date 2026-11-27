@@ -34,11 +34,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from tests import _transport_strict
 
 TESTS_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_PATH = Path(__file__).resolve().parent / "transport_policy_baseline.json"
+CI_WORKFLOW_PATH = TESTS_ROOT.parent.parent / ".github" / "workflows" / "ci.yml"
+STRICT_RUNNER_PATH = TESTS_ROOT.parent.parent / "scripts" / "run_transport_strict.py"
 
 _PARAM_SUFFIX = "["
 
@@ -182,6 +185,88 @@ def test_baseline_ratchet_against_strict_report() -> None:
         new.append(f"{node} [{kind}] {fingerprint}")
 
     assert not new, "Strict transport violations not recorded in the baseline (the ratchet is shrink-only):\n  " + "\n  ".join(new) + "\nFix the test, or record a pre-existing violation deliberately with `python scripts/run_transport_strict.py --write-baseline` and justify it in the PR."
+
+
+def test_ratchet_fails_when_report_env_points_at_a_missing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A set-but-missing report is a failure, never a skip.
+
+    CI runs the architecture ratchet unconditionally against the runner's
+    report. If the runner crashed before writing it, the ratchet must say so
+    instead of quietly passing.
+    """
+    monkeypatch.setenv("FARNA_STRICT_TRANSPORT_REPORT", str(tmp_path / "missing-report.jsonl"))
+
+    with pytest.raises(AssertionError, match="does not exist"):
+        test_baseline_ratchet_against_strict_report()
+
+
+# ---------------------------------------------------------------------------
+# CI wiring: the gate must not be able to pass without a report
+# ---------------------------------------------------------------------------
+def _transport_job_steps() -> list[dict[str, Any]]:
+    workflow = yaml.safe_load(CI_WORKFLOW_PATH.read_text(encoding="utf-8"))
+    return workflow["jobs"]["transport-policy"]["steps"]
+
+
+def _step_with_text(steps: list[dict[str, Any]], *needles: str) -> dict[str, Any]:
+    for step in steps:
+        run = step.get("run") or ""
+        if all(needle in run for needle in needles):
+            return step
+    raise AssertionError(f"no CI step runs a command containing {needles}")
+
+
+def test_ci_transport_runner_fails_when_no_report_is_written() -> None:
+    """The CI transport step asserts the report exists after the runner."""
+    step = _step_with_text(_transport_job_steps(), "run_transport_strict.py")
+    run = step["run"]
+
+    assert "transport-strict-report.jsonl" in run
+    assert 'test -f "$RUNNER_TEMP/transport-strict-report.jsonl"' in run
+    # The runner invokes pytest itself; its argv carries both warning flags
+    # (pinned below by the script-level assertion).
+    assert "python scripts/run_transport_strict.py" in run
+
+
+def test_strict_runner_pytest_argv_carries_the_repo_warning_flags() -> None:
+    """The runner's own pytest invocation keeps the repo warning gate.
+
+    ``run_transport_strict.py`` builds the argv itself, so the generic
+    command-scanner sees only the escalation it already requires. The repo-wide
+    ``error::ResourceWarning`` filter must travel with it too.
+    """
+    text = STRICT_RUNNER_PATH.read_text(encoding="utf-8")
+
+    assert '"error::pytest.PytestUnraisableExceptionWarning",' in text
+    assert '"error::ResourceWarning",' in text
+    assert '"--disable-warnings",' in text
+
+
+def test_ci_ratchet_step_runs_unconditionally_over_the_same_report() -> None:
+    """The architecture ratchet runs even when the runner step failed."""
+    step = _step_with_text(_transport_job_steps(), "test_transport_policy.py")
+    run = step["run"]
+
+    assert step.get("if") == "always()"
+    assert "FARNA_STRICT_TRANSPORT_REPORT" in step.get("env", {})
+    assert "error::ResourceWarning" in run
+    assert "error::pytest.PytestUnraisableExceptionWarning" in run
+
+
+def test_ci_contract_roundtrip_diff_fails_closed() -> None:
+    """A failed git diff must fail the contract job, not skip the ratchet."""
+    workflow = yaml.safe_load(CI_WORKFLOW_PATH.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["contract-roundtrip"]["steps"]
+    detect = next(step for step in steps if step.get("name") == "Detect changed API route / schema files")
+    code = "\n".join(line for line in detect["run"].splitlines() if not line.lstrip().startswith("#"))
+
+    assert "set -euo pipefail" in code
+    assert "|| true" not in code
+    assert "api_files" in code
+
+    roundtrip = next(step for step in steps if step.get("name") == "Run contract round-trip")
+    assert "error::ResourceWarning" in roundtrip["run"]
+    assert "error::pytest.PytestUnraisableExceptionWarning" in roundtrip["run"]
 
 
 # ---------------------------------------------------------------------------

@@ -59,6 +59,10 @@ _ROUNDTRIP_BASELINE = Path(__file__).resolve().parents[1] / "architecture" / "co
 #: test below still proves the rule.
 CHANGED_API_FILES_ENV = "FARNA_CONTRACT_CHANGED_API_FILES"
 
+#: Only the API package owns route handlers; a change anywhere else cannot
+#: introduce an uncovered route, and CI diffs exactly this prefix.
+API_SOURCE_PREFIX = "backend/src/farna/api/"
+
 #: The OpenAPI path-item keys that name an operation.
 _OPENAPI_METHODS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
 
@@ -70,6 +74,33 @@ SAMPLED_ROUTES: tuple[dict[str, str], ...] = (
     {"path": "/api/v1/auth/me", "method": "get", "operation_id": "me_api_v1_auth_me_get"},
     {"path": "/api/v1/me/settings", "method": "get", "operation_id": "get_user_settings_api_v1_me_settings_get"},
 )
+
+#: A representative, well-formed payload per sampled route. Shared by the
+#: OpenAPI check and the generated-frontend-type check so both contracts are
+#: exercised with the same deterministic shape (no database needed).
+SAMPLE_PAYLOADS: dict[str, dict[str, Any]] = {
+    "/api/v1/me": {
+        "user": {"username": "someone"},
+        "org": {"org_id": "00000000-0000-0000-0000-000000000001", "org_name": "Org", "settings": {}},
+        "team_memberships": [{"team_id": "00000000-0000-0000-0000-000000000002", "team_role": "admin"}],
+        "team_memberships_truncated": False,
+        "org_role": "admin",
+        "preferences": {},
+        "is_system_admin": False,
+        "must_change_password": False,
+    },
+    "/api/v1/auth/me": {
+        "id": "00000000-0000-0000-0000-000000000003",
+        "email": "someone@example.com",
+        "display_name": "Someone",
+        "org_role": "admin",
+        "active": True,
+        "created_at": "2026-01-02T03:04:05Z",
+        "is_system_admin": False,
+        "must_change_password": False,
+    },
+    "/api/v1/me/settings": {},
+}
 
 _TS_PROP_RE = re.compile(r"([A-Za-z_$][\w$]*)(\?)?:")
 
@@ -168,28 +199,132 @@ def _ts_operation_response_type(text: str, operation_id: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _ts_interface_props(text: str, type_name: str) -> dict[str, bool]:
-    """Top-level property names of a generated ``components["schemas"]`` entry.
-
-    ``{name: True}`` means optional (``name?:``). openapi-typescript writes the
-    entry header at 8 spaces and its top-level properties at 12, so indentation
-    is the delimiter — no brace matching against doc comments needed.
-    """
+def _ts_type_body(text: str, type_name: str) -> str | None:
+    """Return one generated schema type body, using balanced braces."""
     marker = f"        {type_name}: {{"
     start = text.find(marker)
     if start < 0:
+        return None
+    opening = text.find("{", start)
+    depth = 0
+    for index in range(opening, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[opening + 1 : index]
+    return None
+
+
+def _ts_interface_props(text: str, type_name: str) -> dict[str, tuple[bool, str]]:
+    """Return top-level generated properties and their recursive TS types.
+
+    ``openapi-typescript`` emits nested response models as named schema refs.
+    The parser deliberately accepts only the deterministic property-line shape
+    emitted by that generator; unsupported syntax is omitted and therefore
+    cannot create a false positive in the contract gate.
+    """
+    body = _ts_type_body(text, type_name)
+    if body is None:
         return {}
-    end = text.find("\n        };", start)
-    if end < 0:  # pragma: no cover - generated file is well formed
-        return {}
-    props: dict[str, bool] = {}
-    for line in text[start:end].splitlines():
+    props: dict[str, tuple[bool, str]] = {}
+    for line in body.splitlines():
         if not line.startswith(" " * 12) or line.startswith(" " * 13):
             continue
-        match = _TS_PROP_RE.match(line.strip())
-        if match:
-            props[match.group(1)] = match.group(2) == "?"
+        match = re.match(r"\s{12}([A-Za-z_$][\w$]*)(\?)?:\s*(.*)$", line)
+        if not match:
+            continue
+        name, optional, raw_type = match.group(1), match.group(2) == "?", match.group(3).strip()
+        # An inline object (`settings?: {`) is emitted across several lines; its
+        # nested properties are 16-space indented and are not part of this type.
+        # Treat the whole inline object as opaque rather than parsing it.
+        if raw_type.startswith("{") and not raw_type.rstrip().endswith("}"):
+            props[name] = (optional, "{...}")
+            continue
+        props[name] = (optional, raw_type.rstrip().rstrip(";").strip())
     return props
+
+
+def _ts_property_types(text: str, type_name: str) -> dict[str, bool]:
+    """Compatibility view used by the focused negative test."""
+    return {name: optional for name, (optional, _type) in _ts_interface_props(text, type_name).items()}
+
+
+def _ts_ref_name(type_expr: str) -> str | None:
+    match = re.fullmatch(r'components\["schemas"\]\["([^"]+)"\]', type_expr.strip())
+    return match.group(1) if match else None
+
+
+def _split_ts_union(type_expr: str) -> list[str]:
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for char in type_expr:
+        if char in "<{[":
+            depth += 1
+        elif char in ">}]":
+            depth -= 1
+        if char == "|" and depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    if current:
+        parts.append("".join(current).strip())
+    return parts
+
+
+def _ts_value_matches_primitive(type_expr: str, value: Any) -> bool:
+    type_expr = type_expr.strip().replace(" | undefined", "")
+    if type_expr in {"unknown", "any", "never"}:
+        return type_expr != "never"
+    if type_expr in {"string", "number", "boolean"}:
+        return {"string": isinstance(value, str), "number": isinstance(value, (int, float)) and not isinstance(value, bool), "boolean": isinstance(value, bool)}[type_expr]
+    if type_expr in {"null", "undefined"}:
+        return value is None
+    return True
+
+
+def frontend_wire_mismatches(text: str, type_name: str, value: Any, pointer: str = "response") -> list[str]:
+    """Check a live JSON value against generated frontend types recursively."""
+    expressions = _split_ts_union(type_name)
+    if len(expressions) > 1:
+        if any(not frontend_wire_mismatches(text, expression, value, pointer) for expression in expressions):
+            return []
+        return [f"{pointer}: matches none of generated frontend type branches ({type_name})"]
+
+    expression = expressions[0].strip()
+    if expression.endswith("[]"):
+        if not isinstance(value, list):
+            return [f"{pointer}: expected array, got {type(value).__name__}"]
+        return [problem for index, item in enumerate(value) for problem in frontend_wire_mismatches(text, expression[:-2], item, f"{pointer}[{index}]")]
+    array_match = re.fullmatch(r"Array<(.+)>", expression)
+    if array_match:
+        if not isinstance(value, list):
+            return [f"{pointer}: expected array, got {type(value).__name__}"]
+        return [problem for index, item in enumerate(value) for problem in frontend_wire_mismatches(text, array_match.group(1), item, f"{pointer}[{index}]")]
+
+    ref = _ts_ref_name(expression)
+    if ref:
+        props = _ts_interface_props(text, ref)
+        if not props:
+            return [f"{pointer}: generated frontend type {ref} is missing or has no properties"]
+        if not isinstance(value, dict):
+            return [f"{pointer}: expected object for {ref}, got {type(value).__name__}"]
+        problems: list[str] = []
+        for key, (optional, child_type) in props.items():
+            if not optional and key not in value:
+                problems.append(f"{pointer}.{key}: required by generated frontend type, missing from response")
+        for key in sorted(set(value) - set(props)):
+            problems.append(f"{pointer}.{key}: present in response, undeclared by generated frontend type {ref}")
+        for key in sorted(set(value) & set(props)):
+            problems.extend(frontend_wire_mismatches(text, props[key][1], value[key], f"{pointer}.{key}"))
+        return problems
+
+    if expression.startswith("{") and expression.endswith("}"):
+        return []
+    return [] if _ts_value_matches_primitive(expression, value) else [f"{pointer}: expected generated frontend type {expression}, got {type(value).__name__}"]
 
 
 def _frontend_schema_text() -> str:
@@ -298,7 +433,7 @@ def changed_api_modules() -> set[str]:
     modules: set[str] = set()
     for line in raw.replace(",", "\n").splitlines():
         path = line.strip()
-        if not path.startswith("backend/src/") or not path.endswith(".py"):
+        if not path.startswith(API_SOURCE_PREFIX) or not path.endswith(".py"):
             continue
         relative = path[len("backend/src/") : -len(".py")]
         parts = relative.split("/")
@@ -370,7 +505,7 @@ def test_checker_catches_camelcase_snake_case_mismatch() -> None:
 
     type_name = _ts_operation_response_type(_frontend_schema_text(), "me_api_v1_auth_me_get")
     assert type_name is not None
-    props = _ts_interface_props(_frontend_schema_text(), type_name)
+    props = _ts_property_types(_frontend_schema_text(), type_name)
     assert "display_name" in props
     assert "displayName" not in props
 
@@ -384,34 +519,70 @@ def test_sampled_routes_validate_a_representative_payload() -> None:
     from farna.api.main import app
 
     app_schema = app.openapi()
-    payloads: dict[str, Any] = {
-        "/api/v1/me": {
-            "user": {"username": "someone"},
-            "org": {"org_id": str(uuid.uuid4()), "org_name": "Org", "settings": {}},
-            "team_memberships": [{"team_id": str(uuid.uuid4()), "team_role": "admin"}],
-            "team_memberships_truncated": False,
-            "org_role": "admin",
-            "preferences": {},
-            "is_system_admin": False,
-            "must_change_password": False,
-        },
-        "/api/v1/auth/me": {
-            "id": str(uuid.uuid4()),
-            "email": "someone@example.com",
-            "display_name": "Someone",
-            "org_role": "admin",
-            "active": True,
-            "created_at": "2026-01-02T03:04:05Z",
-            "is_system_admin": False,
-            "must_change_password": False,
-        },
-        "/api/v1/me/settings": {},
-    }
     problems = []
-    for path, payload in payloads.items():
+    for path, payload in SAMPLE_PAYLOADS.items():
         node = _openapi_response_schema(app_schema, path, "get")
         problems.extend(f"{path}: {problem}" for problem in wire_mismatches(app_schema, node, payload))
     assert not problems, "\n".join(problems)
+
+
+def test_generated_frontend_types_accept_the_sample_payloads() -> None:
+    """The generated frontend types accept the same payloads, recursively.
+
+    This is the deterministic half of the live check: every sampled route is
+    resolved from its operationId to a named schema type and the payload is
+    validated against that type, including nested named refs and arrays. No
+    database and no network are involved.
+    """
+    text = _frontend_schema_text()
+    problems: list[str] = []
+    for sample in SAMPLED_ROUTES:
+        type_name = _ts_operation_response_type(text, sample["operation_id"])
+        if type_name is None:
+            problems.append(f"{sample['operation_id']}: no named generated frontend type")
+            continue
+        problems.extend(f"{sample['operation_id']}: {problem}" for problem in frontend_wire_mismatches(text, f'components["schemas"]["{type_name}"]', SAMPLE_PAYLOADS[sample["path"]]))
+    assert not problems, "\n".join(problems)
+
+
+def test_generated_frontend_type_check_reaches_nested_properties() -> None:
+    """A nested wire mismatch is reported, not just a top-level key mismatch.
+
+    Top-level-only checking was the original hole: a nested model could rename
+    or retype a field and the sampled route still passed. The synthetic schema
+    mirrors the generator's exact indentation so the test is deterministic.
+    """
+    text = (
+        "        Parent: {\n"
+        '            child: components["schemas"]["Child"];\n'
+        '            optional_child?: components["schemas"]["Child"] | null;\n'
+        "        };\n"
+        "        Child: {\n"
+        "            id: string;\n"
+        '            nested: components["schemas"]["Grandchild"];\n'
+        "        };\n"
+        "        Grandchild: {\n"
+        "            value: number;\n"
+        "        };\n"
+    )
+    parent = 'components["schemas"]["Parent"]'
+    good = {"child": {"id": "x", "nested": {"value": 3}}}
+    assert not frontend_wire_mismatches(text, parent, good)
+
+    bad_nested_type = {"child": {"id": "x", "nested": {"value": "three"}}}
+    problems = frontend_wire_mismatches(text, parent, bad_nested_type)
+    assert any("child.nested.value" in problem and "number" in problem for problem in problems), problems
+
+    missing_nested_key = {"child": {"nested": {"value": 3}}}
+    problems = frontend_wire_mismatches(text, parent, missing_nested_key)
+    assert any("child.id" in problem and "required" in problem for problem in problems), problems
+
+    undeclared_nested_key = {"child": {"id": "x", "nested": {"value": 3}, "extra": True}}
+    problems = frontend_wire_mismatches(text, parent, undeclared_nested_key)
+    assert any("child.extra" in problem and "undeclared" in problem for problem in problems), problems
+
+    # The optional branch accepts null.
+    assert not frontend_wire_mismatches(text, parent, {"child": {"id": "x", "nested": {"value": 3}}, "optional_child": None})
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +627,42 @@ def test_ratchet_flags_an_uncovered_route_in_a_changed_module() -> None:
 
     # No changed module: nothing to ratchet.
     assert not ratchet_findings(inventory, covered, baseline, set())
+
+
+def test_an_unrelated_sampled_route_does_not_cover_a_changed_route() -> None:
+    """A green sample must not vouch for a different route in the same module."""
+    inventory = [
+        ApiRoute("get", "/api/v1/touched", "farna.api.routes.touched"),
+        ApiRoute("get", "/api/v1/touched/sampled", "farna.api.routes.touched"),
+    ]
+    covered = {"get /api/v1/touched/sampled"}
+    findings = ratchet_findings(inventory, covered, set(), {"farna.api.routes.touched"})
+
+    assert findings == ["get /api/v1/touched (handler in farna.api.routes.touched): no round-trip case and not in contract_roundtrip_baseline.json"]
+
+
+def test_an_explicitly_baselined_route_is_tolerated() -> None:
+    """The baseline is the documented escape hatch, but only route by route."""
+    inventory = [
+        ApiRoute("get", "/api/v1/touched", "farna.api.routes.touched"),
+        ApiRoute("get", "/api/v1/touched/other", "farna.api.routes.touched"),
+    ]
+    baseline = {"get /api/v1/touched"}
+    findings = ratchet_findings(inventory, set(), baseline, {"farna.api.routes.touched"})
+
+    assert findings == ["get /api/v1/touched/other (handler in farna.api.routes.touched): no round-trip case and not in contract_roundtrip_baseline.json"]
+
+
+def test_changed_api_modules_reads_the_ci_file_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI passes repo-relative source paths; only API handler modules count."""
+    monkeypatch.setenv(
+        CHANGED_API_FILES_ENV,
+        "backend/src/farna/api/routes/agents.py\nbackend/src/farna/api/routes/__init__.py\nfrontend/src/lib/api/schema.ts\nbackend/src/farna/core/engine.py\n",
+    )
+
+    modules = changed_api_modules()
+
+    assert modules == {"farna.api.routes.agents", "farna.api.routes"}
 
 
 def test_changed_api_routes_are_covered_or_baselined() -> None:
@@ -510,8 +717,5 @@ async def test_live_response_matches_openapi_and_generated_type(
     assert type_name is not None, f"{sample['operation_id']} has no generated frontend type"
     props = _ts_interface_props(text, type_name)
     assert props, f"{type_name} has no top-level properties in the generated frontend type"
-
-    undeclared = sorted(set(body) - set(props))
-    assert not undeclared, f"live keys not declared in the generated frontend type {type_name}: {undeclared}"
-    missing_required = sorted(prop for prop, optional in props.items() if not optional and prop not in body)
-    assert not missing_required, f"required keys of {type_name} missing from the live response: {missing_required}"
+    frontend_problems = frontend_wire_mismatches(text, f'components["schemas"]["{type_name}"]', body)
+    assert not frontend_problems, f"live body disagrees with generated frontend type {type_name}:\n  " + "\n  ".join(frontend_problems)
