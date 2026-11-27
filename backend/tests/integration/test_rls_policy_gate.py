@@ -934,7 +934,7 @@ async def test_legacy_predicate_is_rejected_by_the_structural_gate(db_engine: As
         transaction = await conn.begin()
         try:
             before = await _load_census_from(conn)
-            assert _null_safety_failures(before) == [], "the baseline census is already unsafe — the mutation proof could not attribute the failure to the mutation"
+            assert not _null_safety_failures(before), "the baseline census is already unsafe — the mutation proof could not attribute the failure to the mutation"
 
             await conn.execute(text(f"ALTER POLICY rls_org_isolation ON public.onboarding_progress USING {_LEGACY_ONBOARDING_PROGRESS_PREDICATE}"))
 
@@ -946,7 +946,7 @@ async def test_legacy_predicate_is_rejected_by_the_structural_gate(db_engine: As
             # The gap: the pre-existing shape gate accepts the legacy predicate,
             # so the null-safety invariant is the only thing standing between
             # 0366 and a silent revert.
-            assert _policy_failures(after["onboarding_progress"]) == [], "the top-level shape gate is expected to accept the legacy predicate; if it now rejects it, this proof is no longer testing the gap it was written for"
+            assert not _policy_failures(after["onboarding_progress"]), "the top-level shape gate is expected to accept the legacy predicate; if it now rejects it, this proof is no longer testing the gap it was written for"
         finally:
             await transaction.rollback()
 
@@ -1145,7 +1145,7 @@ def test_org_guc_reads_classify_the_fail_closed_form(predicate: str, missing_ok:
 )
 def test_org_guc_reads_ignores_non_org_settings_and_literals(predicate: str) -> None:
     """Only a structural ``current_setting('app.organisation_id', ...)`` counts."""
-    assert org_guc_reads(predicate) == ()
+    assert not org_guc_reads(predicate)
 
 
 @pytest.mark.parametrize(
