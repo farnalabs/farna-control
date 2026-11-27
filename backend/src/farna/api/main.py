@@ -716,38 +716,47 @@ async def _seed_system_schemas(settings: Settings) -> None:
 
 
 async def _seed_environment_profiles(settings: Settings) -> None:
-    """Seed a default modulo-dev EnvironmentProfile for the default org.
+    """Seed the shipped "Bundled Runner (Docker)" EnvironmentProfile for the default org.
 
-    Creates a reusable sandbox profile for the dogfood pipeline. Skips if
-    a profile named 'modulo-dev' already exists.
+    FAR-2803: this used to create a legacy ``modulo-dev`` ``local_docker`` row, and
+    two defects meant it never landed on a fresh install:
+
+    * it read ``Organisation`` with ``order_by(created_at).limit(1)``, which picks
+      the sentinel "Orphan (unattributed errors)" org the baseline migration seeds
+      first - the trap ``first_tenant_organisation`` exists to avoid (FAR-2581) -
+      so the row would have belonged to no tenant; and
+    * it never bound an RLS context, so the INSERT ran with no
+      ``app.organisation_id`` and ``rls_team_isolation`` rejected it ("new row
+      violates row-level security policy for table environment_profiles"), which
+      is what every fresh boot logged.
+
+    It now resolves the tenant org through ``first_tenant_organisation``, binds the
+    RLS context BEFORE the existence read (that read inside
+    ``seed_bundled_runner_profile`` is RLS-filtered too: without the context an
+    already-seeded profile is invisible and the insert collides with
+    ``uq_environment_profiles_org_name``), and seeds the same shipped template the
+    org-creation hook seeds - never the retired ``local_docker`` row. Idempotent.
     """
     from sqlalchemy import select
 
     from farna.api.dependencies import get_or_create_engine, get_or_create_session_factory
-    from farna.db.crud.environment_profile import create_environment_profile
     from farna.db.models.account import Account
-    from farna.db.models.environment_profile import EnvironmentProfile
-    from farna.db.models.organisation import Organisation
+    from farna.db.rls import set_rls_org
+    from farna.db.seed import first_tenant_organisation, seed_bundled_runner_profile
 
     engine = get_or_create_engine(settings)
     factory = get_or_create_session_factory(engine)
 
     async with factory() as session, session.begin():
-        org_result = await session.execute(select(Organisation).order_by(Organisation.created_at).limit(1))
-        org = org_result.scalar_one_or_none()
+        # Org ENUMERATION runs without an org context (we do not know the org yet),
+        # exactly like the cost-component seed; ``first_tenant_organisation``
+        # excludes the sentinel library/orphan orgs.
+        org = await first_tenant_organisation(session)
         if org is None:
             logger.warning("startup.no_org_for_env_profile_seed")
             return
 
-        existing = await session.execute(
-            select(EnvironmentProfile).where(
-                EnvironmentProfile.organisation_id == org.id,
-                EnvironmentProfile.name == "modulo-dev",
-            )
-        )
-        if existing.scalar_one_or_none() is not None:
-            logger.info("startup.env_profile_modulo_dev_exists")
-            return
+        await set_rls_org(session, org.id)
 
         admin_result = await session.execute(select(Account).where(Account.email == "admin").order_by(Account.created_at).limit(1))
         admin = admin_result.scalar_one_or_none()
@@ -758,20 +767,7 @@ async def _seed_environment_profiles(settings: Settings) -> None:
                 logger.warning("startup.no_admin_for_env_profile_seed")
                 return
 
-        await create_environment_profile(
-            session,
-            org_id=org.id,
-            name="modulo-dev",
-            description="Default sandbox for Farna Control dogfood development. Python 3.12, git, pip.",
-            provider_type="local_docker",
-            image_ref="python:3.12-slim",
-            capabilities=["git", "python>=3.12", "shell", "network:github.com", "network:pypi.org"],
-            network_policy="outbound",
-            initialisation_strategy="git_clone",
-            persistence_policy="ephemeral",
-            account_id=admin.id,
-        )
-        logger.info("startup.env_profile_modulo_dev_seeded")
+        await seed_bundled_runner_profile(session, org.id, admin.id)
 
 
 async def _init_checkpointer(conn_string: str, fernet_key: str, fernet_key_old: str = "") -> None:
@@ -969,7 +965,8 @@ async def _run_boot_guards_and_seeds(settings: Settings) -> None:
     # Seed system schemas for all existing organisations (idempotent).
     await _boot_seed("system_schemas", _seed_system_schemas(settings))
 
-    # Seed the default modulo-dev EnvironmentProfile for the dogfood pipeline.
+    # Seed the shipped "Bundled Runner (Docker)" EnvironmentProfile for the
+    # tenant org (FAR-2803: same template the org-creation hook seeds).
     await _boot_seed("environment_profiles", _seed_environment_profiles(settings))
 
     # Seed the tier catalog and feature flag definitions (idempotent).
