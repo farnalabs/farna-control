@@ -14,8 +14,8 @@ Isolation (FAR-2705 qa):
   the GLOBAL park/slot sweeps — which enumerate every organisation — cannot reap
   another test's rows. A companion test proves it: a matching row seeded in the
   SHARED database is untouched by this module's sweeps.
-* Every engine runs as the non-superuser ``modulo_integration_app`` role, so RLS
-  is live (not inert as it is under the testcontainer superuser).
+* Every engine runs as the conftest's NON-SUPERUSER integration role, so RLS is
+  live (not inert as it is under the testcontainer superuser).
 
 After EVERY step it asserts, against the database and ``farna.lifecycle``:
 

@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, a
 from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 
-# psycopg (used by the LangGraph checkpointer via ModuloPostgresSaver) cannot
+# psycopg (used by the LangGraph checkpointer via the saver class) cannot
 # run on Windows' default ProactorEventLoop. The integration session loop is
 # created via asyncio.new_event_loop(), which honours this policy — set the
 # Selector policy at import time so every integration session loop (and any
@@ -39,7 +39,7 @@ if sys.platform == "win32":
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://farna_control_test:farna_control_test@localhost/farna_control_test")
 os.environ.setdefault("SECRET_KEY", "a" * 32)
 # A valid Fernet key (32 base64-decoded bytes). ``"a" * 32`` is NOT a valid
-# Fernet key — the executor's ModuloPostgresSaver constructs ``Fernet()`` from
+# Fernet key — the executor's LangGraph saver constructs ``Fernet()`` from
 # settings.fernet_key, and an invalid key raises ValueError, failing every run
 # (the deploy gate failure). Must match what ci.yml sets at the workflow level.
 os.environ.setdefault("FERNET_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
@@ -699,7 +699,7 @@ async def cron_helpers_rls_engine(non_superuser_role: str) -> Generator[None, No
     under the first *unpaused* org's iteration and gets enqueued (skip-not-defer
     broken). In production the app connects as ``farna_control_app`` (NOBYPASSRLS), so
     RLS applies. This fixture patches ``cron_helpers._get_engine`` to
-    ``SET ROLE`` to the non-superuser ``modulo_integration_app`` role on every
+    ``SET ROLE`` to the non-superuser integration app role on every
     checkout — the same pattern ``app_engine`` uses — restoring RLS for the SAQ
     scheduler/reconcile code paths.
     """
