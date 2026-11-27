@@ -383,8 +383,8 @@ jobs:
                   fail(
                       "Could not delete the temporary CI-verification tag " + name
                       + " from origin after a retry; it is still present. A leaked "
-                      + "ci-verify-* tag can be chosen as the `git describe --tags` "
-                      + "changelog base, so refusing to continue. Remove it with: "
+                      + "ci-verify-* tag can be chosen as the changelog base, "
+                      + "so refusing to continue. Remove it with: "
                       + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
                   )
 
@@ -1367,8 +1367,8 @@ jobs:
                   fail(
                       "Could not delete the temporary CI-verification tag " + name
                       + " from origin after a retry; it is still present. A leaked "
-                      + "ci-verify-* tag can be chosen as the `git describe --tags` "
-                      + "changelog base, so refusing to continue. Remove it with: "
+                      + "ci-verify-* tag can be chosen as the changelog base, "
+                      + "so refusing to continue. Remove it with: "
                       + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
                   )
 

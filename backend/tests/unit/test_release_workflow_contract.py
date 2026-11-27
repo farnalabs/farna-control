@@ -1832,12 +1832,17 @@ def _fake_gh(
     list_sequence: list[list[dict[str, Any]]] | None = None,
     list_returncode: int = 0,
     create_returncode: int = 0,
+    delete_returncode: int = 0,
+    delete_stderr: str = "",
     existing_tags: list[str] | None = None,
 ) -> Any:
     """Stand-in for the ``gh`` CLI the proof shells out to.
 
     ``list_sequence`` (when supplied) is consumed one entry per ``gh run list``
     call, which is how a test models a run that changes state between polls.
+    ``delete_returncode`` / ``delete_stderr`` model the DELETE of the temporary
+    tag: the default succeeds, while a non-zero code models GitHub answering a
+    missing ref with 404/422 or a genuine failure.
     """
     dispatched = [False]
     sequence = list(list_sequence) if list_sequence is not None else None
@@ -1848,6 +1853,8 @@ def _fake_gh(
             if create_returncode != 0:
                 return SimpleNamespace(returncode=create_returncode, stdout="", stderr="gh: HTTP 502")
             return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+        if args[:3] == ("api", "-X", "DELETE"):
+            return SimpleNamespace(returncode=delete_returncode, stdout="", stderr=delete_stderr)
         if args[:2] == ("api", "-X"):
             return SimpleNamespace(returncode=0, stdout="{}", stderr="")
         if args[0] == "api" and any("matching-refs" in arg for arg in args):
@@ -2128,6 +2135,58 @@ def test_release_schema_freshness_proof_fails_when_the_tag_was_not_created(tmp_p
     assert code == 1
     assert "::error::Could not create the temporary CI-verification tag" in stdout
     assert not _dispatches(calls)
+
+
+def test_release_schema_freshness_proof_treats_an_absent_ref_delete_as_clean(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: GitHub answers a DELETE of a ref that never existed (or was
+    # already reclaimed by the always-run cleanup job) with 422 "Reference does
+    # not exist". That is absence, not a leak: the proof must finish cleanly
+    # with no ::warning:: and no ::error::, rather than falsely warning an
+    # operator about a tag that was already gone.
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        runs_after_dispatch=[_SCHEMA_GREEN_RUN],
+        jobs_after_dispatch=_SCHEMA_GREEN_JOBS,
+        delete_returncode=1,
+        delete_stderr="gh: Reference does not exist (HTTP 422)",
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 0, stdout
+    assert "::warning::" not in stdout
+    assert "::error::" not in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert deletes, "the proof must still attempt to delete the temporary tag"
+
+
+def test_release_schema_freshness_proof_fails_loudly_when_the_tag_survives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: a non-zero DELETE that does NOT mean "absent", with the tag
+    # still listed on origin after both attempts, is a real leak. A leaked
+    # ci-verify-* tag is not inert - an unfiltered describe could pick it as
+    # the changelog base - so the proof must fail loudly, not warn.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        runs_after_dispatch=[_SCHEMA_GREEN_RUN],
+        jobs_after_dispatch=_SCHEMA_GREEN_JOBS,
+        delete_returncode=1,
+        delete_stderr="gh: HTTP 502",
+        existing_tags=[tag],
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 1, stdout
+    assert "::error::Could not delete the temporary CI-verification tag " + tag in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) >= 2, "the proof must retry the delete before failing loudly"
 
 
 def test_release_schema_gate_cleanup_reclaims_this_runs_tags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
