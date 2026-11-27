@@ -2364,7 +2364,9 @@ async def replace_pipeline_graph(
             pipeline_id=pipeline_id,
             # ADR 070 Phase 1A: an edge is part of the pipeline's live graph, so it
             # inherits the locked pipeline's owner (migration 0369). The pipeline
-            # row is already in memory, so this costs no extra round trip.
+            # row is already in memory, so a team owner costs no extra round trip;
+            # a NULL owner (org-level) makes the listener re-read once per edge,
+            # because it cannot tell an explicit NULL from unset.
             owner_team_id=pipeline.owner_team_id,
             source_node_id=uuid.UUID(str(edge["source_node_id"])),
             target_node_id=uuid.UUID(str(edge["target_node_id"])),

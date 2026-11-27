@@ -1,14 +1,10 @@
 """Ownership stamping for the pipeline family (ADR 070 Phase 1A).
 
-The stamp has two halves and both are exercised here against a real SQLite
-session (no Docker needed):
-
-* the model-level ``before_insert`` guard, which stamps ``owner_team_id`` from the
-  parent pipeline for EVERY ORM insert - including the writers this change does
-  not edit (the MCP trigger builder) and any future writer that forgets. The
-  insert-without-an-owner tests below are what fail if that listener is removed;
-* :func:`resolve_pipeline_owner_team_id`, the explicit path used by writers that
-  need the value in Python.
+Exercised here against a real SQLite session (no Docker needed): the model-level
+``before_insert`` guard, which stamps ``owner_team_id`` from the parent pipeline
+for EVERY ORM insert - including the writers this change does not edit (the MCP
+trigger builder) and any future writer that forgets. The insert-without-an-owner
+tests below are what fail if that listener is removed.
 
 The rule under test is the pipeline-family rule, not the runs-family one: the
 value is the pipeline's CURRENT owner, so an org-level pipeline leaves the child
@@ -27,7 +23,7 @@ from farna.db.models.base import Base
 from farna.db.models.pipeline import Pipeline
 from farna.db.models.pipeline_edge import PipelineEdge
 from farna.db.models.trigger import Trigger
-from farna.db.pipeline_ownership import resolve_pipeline_owner_team_id, stamp_owner_from_pipeline
+from farna.db.pipeline_ownership import stamp_owner_from_pipeline
 
 _TABLE_NAMES = {
     "organisations",
@@ -130,16 +126,6 @@ async def test_an_explicitly_stamped_child_is_never_overwritten(session: AsyncSe
     await session.flush()
     assert trigger.owner_team_id == explicit
     assert edge.owner_team_id == explicit
-
-
-async def test_resolve_pipeline_owner_team_id_reads_the_current_owner(session: AsyncSession) -> None:
-    team = uuid.uuid4()
-    team_pipeline = await _pipeline(session, team)
-    org_pipeline = await _pipeline(session, None)
-
-    assert await resolve_pipeline_owner_team_id(session, team_pipeline.id) == team
-    assert await resolve_pipeline_owner_team_id(session, org_pipeline.id) is None
-    assert await resolve_pipeline_owner_team_id(session, uuid.uuid4()) is None
 
 
 class _ListenerTarget:
