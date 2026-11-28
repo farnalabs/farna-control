@@ -16,7 +16,7 @@ overrides:
   '@tanstack/query-core': 5.108.4
   '@tanstack/vue-query': 5.108.4
   mutation-server-protocol>zod: '>=4.6.6 <5'
-  ajv>fast-uri: '>=3.1.9 <4'
+  ajv>fast-uri: '>=3.1.9 <5'
   js-beautify>glob: '>=14.0.2'
 
 importers:

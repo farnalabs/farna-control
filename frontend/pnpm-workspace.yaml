@@ -45,7 +45,7 @@ overrides:
   # GHSA-xhq7-xmqj-769h: fast-uri <3.1.9 affected. Scoped to ajv (dev-only
   # Stryker toolchain) and capped to the ^3 major ajv declares; the fix floor
   # is 3.1.9. Remove once ajv ships a patched fast-uri.
-  "ajv>fast-uri": ">=3.1.9 <4"
+  "ajv>fast-uri": ">=3.1.9 <5"
   # GHSA-3g3m-2fjr-6pw4 (glob <14.0.2): affected versions vulnerable to ReDoS
   # via specially crafted patterns. Affects js-beautify@2.0.3 (Stryker HTML
   # reporter). Scoped to this dev-only chain; nothing in production bundle.
