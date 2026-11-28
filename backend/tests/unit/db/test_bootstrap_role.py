@@ -870,6 +870,35 @@ class TestBootstrap:
         assert "GRANT EXECUTE ON FUNCTION public.deactivate_break_glass" in joined
         assert fake.closed is True
 
+    async def test_default_privileges_are_scoped_to_the_app_role_as_creator(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """FAR-2828: runtime tables are created by the APP role, not the owner.
+
+        ``ALTER DEFAULT PRIVILEGES`` without ``FOR ROLE`` covers only objects
+        created by the role that ISSUES it — here the admin/owner connection.
+        The LangGraph checkpointer tables are created by ``farna_control_app``
+        inside the backend lifespan, so the defaults must ALSO be scoped to it;
+        otherwise the cross-org system role is denied them and ``saq-system``
+        logs ``permission denied for table checkpoints`` every 5 minutes from
+        the stale-run-recovery sweep.
+        """
+        fake = _fresh_db_posture_conn()
+        monkeypatch.setenv("FARNA_CONTROL_BREAK_GLASS_DATABASE_URL", "")
+        monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
+        with patch("farna.db.bootstrap_role.asyncpg.connect", new=AsyncMock(return_value=fake)):
+            await bootstrap_roles(
+                "postgresql+asyncpg://admin:secret@db:5432/modulo",
+                "postgresql+asyncpg://farna_control_app:apppw@db:5432/modulo",
+            )
+
+        joined = "\n".join(fake.executed)
+        assert 'ALTER DEFAULT PRIVILEGES FOR ROLE "farna_control_app" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "farna_control_system"' in joined
+        assert 'ALTER DEFAULT PRIVILEGES FOR ROLE "farna_control_app" IN SCHEMA public GRANT USAGE ON SEQUENCES TO "farna_control_system"' in joined
+        # The owner-scoped defaults must survive: they are what covers the
+        # Alembic-created schema.
+        assert "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES" in joined
+        # Never PUBLIC — the runtime tables must not become world-readable.
+        assert "TO PUBLIC" not in joined
+
     async def test_bootstrap_uses_configured_break_glass_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
         fake = _clean_posture_conn()
         fake.roles = {}
