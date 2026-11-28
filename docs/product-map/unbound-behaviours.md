@@ -10,7 +10,7 @@ the stale-entry check until the entry is removed from the baseline.
 A behaviour whose intended test genuinely does not exist is a real coverage gap, not a
 paperwork gap. Write the test and bind it; do not delete the behaviour.
 
-Bound today: 530 of 922 ticked behaviours (144 node, 144 feature, 242 module strength).
+Bound today: 538 of 922 ticked behaviours (152 node, 144 feature, 242 module strength).
 Weak bindings (module-only): 242. This count is ratcheted shrink-only in the baseline.
 
 ## docs/product-map/admin/org.md
@@ -71,27 +71,6 @@ Derived status: `partial`
 - `auth-11` - OAuth consent screen authorizes third-party MCP applications via PKCE flow
   - why: behaviour text names no test; only code paths (or nothing) are cited
 - `auth-14` - Access revocation is immediate (ADR 047): every tenant-scoped request
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-
-## docs/product-map/auth/jwt-auth.md
-
-Derived status: `partial`
-
-- `jwt-auth-01` - `create_access_token` issues a signed JWT carrying user identity (`sub`),
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `jwt-auth-02` - `decode_principal` validates signature and expiry, and validates a token's
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `jwt-auth-03` - `none` algorithm is rejected and only allowlisted signing algorithms pass
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `jwt-auth-04` - Refresh tokens carry a `refresh` purpose and issue a new access token via
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `jwt-auth-05` - The JWT WebSocket-token helper (`auth/jwt.py` `create_ws_token`) stamps
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `jwt-auth-06` - Claim tokens (`create_claim_token` / `decode_claim_token`) are purpose-scoped
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `jwt-auth-07` - Tenant identity is embedded in the token and validated on decode
-  - why: behaviour text names no test; only code paths (or nothing) are cited
-- `jwt-auth-08` - Purpose isolation holds in the `decode_principal` contract: an access token
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
 ## docs/product-map/auth/oidc-integration.md
@@ -1075,7 +1054,7 @@ Every clean binding is one of three strengths:
 - `feature` - a registered BDD feature file whose scenarios execute; scenario-level proof.
 - `module` - the test module as a whole; the weak form, tolerated while backfilling.
 
-Node: 144  Feature: 144  Module (weak): 242
+Node: 152  Feature: 144  Module (weak): 242
 
 ### Weak (module-only) bindings
 

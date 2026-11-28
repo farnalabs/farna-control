@@ -613,38 +613,6 @@
       "entry": "docs/product-map/hitl/hitl-gates.md",
       "reason": "behaviour text cites a test artefact that does not resolve to a proving test"
     },
-    "jwt-auth-01": {
-      "entry": "docs/product-map/auth/jwt-auth.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "jwt-auth-02": {
-      "entry": "docs/product-map/auth/jwt-auth.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "jwt-auth-03": {
-      "entry": "docs/product-map/auth/jwt-auth.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "jwt-auth-04": {
-      "entry": "docs/product-map/auth/jwt-auth.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "jwt-auth-05": {
-      "entry": "docs/product-map/auth/jwt-auth.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "jwt-auth-06": {
-      "entry": "docs/product-map/auth/jwt-auth.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "jwt-auth-07": {
-      "entry": "docs/product-map/auth/jwt-auth.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "jwt-auth-08": {
-      "entry": "docs/product-map/auth/jwt-auth.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "key-rotation-01": {
       "entry": "docs/product-map/system/key-rotation.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
