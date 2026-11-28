@@ -20,7 +20,7 @@ bdd:
 depends-on:
   - feat-runs
   - feat-feedback
-status: partial
+status: covered
 ---
 
 # Analytics
@@ -59,14 +59,14 @@ reports resolve against a consistent fact model.
       is 422, a rate-limited org is 429 and a statement timeout is 503, while the
       bucketed response carries the `group_by`/`dimension` envelope and the
       freshness indicators (`facts_freshness_hours` / `facts_stale`)
-      <!-- behaviour: analytics-07 | tests: none -->
+      <!-- behaviour: analytics-07 | tests: backend/tests/bdd/features/analytics/query.feature -->
 - [x] A repeated `pipeline_id` composes an A/B comparison (both ids reach the
       service) and a `dimension` is echoed back on the response
-      <!-- behaviour: analytics-08 | tests: none -->
+      <!-- behaviour: analytics-08 | tests: backend/tests/bdd/features/analytics/query.feature -->
 - [x] Export (`/export`) returns paginated JSON rows (`items`/`total`/`offset`
       /`limit`) and a CSV attachment with a `Content-Disposition: attachment`
       header for `format=csv`
-      <!-- behaviour: analytics-09 | tests: none -->
+      <!-- behaviour: analytics-09 | tests: backend/tests/bdd/features/analytics/query.feature -->
 - [x] Scan export (`/scan`) streams the WHOLE matching fact set in one response
       (NDJSON by default, or a CSV attachment) with no offset/limit pagination -
       the server keyset-paginates over the stable `(run_date, created_at,
@@ -100,7 +100,7 @@ reports resolve against a consistent fact model.
       (`pool_reference` + per-bucket `max_active`/`avg_active`/`max_queued`/
       `avg_queued`), and the guardrail scorecard (`/guardrails`) is labelled
       `advisory_only: true`
-      <!-- behaviour: analytics-13 | tests: none -->
+      <!-- behaviour: analytics-13 | tests: backend/tests/bdd/features/analytics/query.feature -->
 
 ## Known Gaps
 

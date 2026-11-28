@@ -5,22 +5,6 @@
   "description": "Product-map behaviours that cannot be bound to a resolving, non-vacuous test yet, plus the shrink-only ratchets that govern them. See docs/product-map/README.md.",
   "generated_by": "scripts/run_behaviour_bindings_baseline.py --write-baseline",
   "entries": {
-    "analytics-07": {
-      "entry": "docs/product-map/analytics/analytics.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "analytics-08": {
-      "entry": "docs/product-map/analytics/analytics.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "analytics-09": {
-      "entry": "docs/product-map/analytics/analytics.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
-    "analytics-13": {
-      "entry": "docs/product-map/analytics/analytics.md",
-      "reason": "behaviour text names no test; only code paths (or nothing) are cited"
-    },
     "assistant-01": {
       "entry": "docs/product-map/configure/assistant.md",
       "reason": "behaviour text names no test; only code paths (or nothing) are cited"
@@ -1991,7 +1975,7 @@
     "container-deployment-12": "13a6b31d66078c9c",
     "container-deployment-13": "f08e85756db8ff52",
     "container-deployment-14": "134a4a3f6137495a",
-    "container-deployment-15": "d59461fede74d311",
+    "container-deployment-15": "61cb65c277c36832",
     "container-deployment-16": "e3ce0260f8435fc4",
     "container-deployment-17": "97d4a5297bdc1393",
     "container-deployment-18": "756496edbb8e2021",
