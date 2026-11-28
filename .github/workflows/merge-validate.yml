@@ -23,29 +23,41 @@ name: "Merge train: validate"
 #                     ratchet, connector contracts, self-contained BDD modules).
 #   integration       deploy.yml's sharding pattern (4 shards; auth IdP files in
 #                     their own shard) - Testcontainers Postgres.
-#   tier1b            ci.yml tier1b-light (Testcontainers light connector/model set).
-#   frontend          ci.yml "Frontend and WCAG" (lint, type-check, WCAG contrast,
-#                     vitest WITH coverage, build). e2e-route-coverage stays in
-#                     ci.yml (the fast-tier frontend-lint job), not here.
-#   e2e-visual        the three checks that had NO home after the PR tier became
-#                     fast: the @visual canvas snapshots (FAR-2461), the
-#                     mobile-nav specs (FAR-1850) and the e2e-visual-slice
-#                     classification guard (FAR-2017). None of them is selected
-#                     by the frontend job (vitest + WCAG contrast only) and none
-#                     is selected by the staging @regression gate (@visual tests
-#                     are not @regression), so before this job they ran in no
-#                     gate at all.
-#   sonar             ci.yml sonarcloud-scan (coverage import). Analyses the MAIN
-#                     branch only when `ref` is `main`. Nothing dispatches this
-#                     workflow with `ref: main` automatically (the merge queue
-#                     dispatches ci.yml on main and calls this workflow with the
-#                     TRAIN branch), so until a scheduled/dispatch path exists the
-#                     main baseline and coverage badge update only on a MANUAL
-#                     dispatch with `ref: main`.
-#   sonar-new-issues  ci.yml sonar-new-issues-gate (PR-scoped; see the job note).
+#   tier1b            the former ci.yml tier1b-light (Testcontainers light
+#                     connector/model set).
+#   frontend          the former ci.yml "Frontend and WCAG" job's fast remainder
+#                     (lint, type-check, vitest WITH coverage, build) plus the
+#                     E2E route-coverage gate. It PRODUCES the frontend-coverage
+#                     artifact the coverage/sonar jobs download, so no Playwright
+#                     run is sequenced ahead of the coverage upload.
+#   frontend-e2e      the visual/mobile Playwright slices, the canvas @visual
+#                     snapshots, the WCAG contrast run and the Playwright
+#                     compilation gate, split out of `frontend` into a PARALLEL
+#                     job so the coverage artifact is not delayed ~6-8 min behind
+#                     them. Since the PR tier became fast-only (2026-11-27) those
+#                     slices have no per-PR home, so they run HERE, once per
+#                     train, before anything merges (FAR-1850/FAR-2017/FAR-2461).
+#                     Do not let them go unrun again.
+#   frontend-unit-parity
+#                     the FAR-1947 guard: reruns the merge queue's EXACT
+#                     `pnpm run test:unit` (4 workers) at train time, so the
+#                     non-train queue path's ordering-sensitive worker count is
+#                     validated on the composed branch too.
+#   runner-ci-harness ci.yml's runner-ci-harness job (FAR-773): boots the
+#                     runner-ci compose rig and runs the docker-marked Bundled
+#                     Runner suite. The fast-tier split removed its per-PR home,
+#                     so it runs HERE, once per train, against the composed
+#                     branch (path-filtered internally against base_ref). Do not
+#                     let backend/tests/docker/** go unrun before merge.
+#   sonar             former ci.yml sonarcloud-scan (coverage import).
+#   sonar-new-issues  former ci.yml sonar-new-issues-gate (PR-scoped; retired from
+#                     the PR tier - the train passes no PR number so it reports a
+#                     notice - see the job note).
 #   coverage          ci.yml backend-coverage thresholds + coverage-gate
 #                     (diff-cover changed lines).
-#   bdd               bdd.yml (full BDD/E2E against a live app).
+#   bdd               bdd.yml's backend pytest-bdd suite against a live app
+#                     (frontend + preview served); NOT the frontend Playwright
+#                     E2E specs.
 #   summary           folds the results into one verdict + a `failed_jobs` output
 #                     the caller posts on the PR.
 #
@@ -410,14 +422,110 @@ jobs:
           TESTCONTAINERS_RYUK_DISABLED: "true"
 
   frontend:
-    # Lint, type-check, WCAG contrast, the vitest suite WITH coverage, and the
-    # production build. Not the frontend-unit-parity duplicate (FAR-1947). The
-    # Playwright e2e checks (mobile-nav, @visual canvas snapshots, the
-    # visual-slice guard) are the separate parallel `e2e-visual` job, not these
-    # steps - they need Playwright browsers and their own dev server, and folding
-    # them in here would serialise them onto this job for no wall-clock gain.
+    # The fast remainder of the former ci.yml "Frontend and WCAG" job: lint,
+    # type-check, the vitest suite WITH coverage, the production build, and the
+    # E2E route-coverage gate. This job PRODUCES the `frontend-coverage`
+    # artifact that the `coverage` and `sonar` jobs download, so NO Playwright
+    # run is sequenced ahead of the coverage upload: bundling ~6-8 min of browser
+    # work here delayed the artifact behind the consumers' download window and
+    # let them fall through to `--allow-missing-js-report`. The Playwright
+    # slices, the WCAG contrast run and the full-spec `playwright test --list`
+    # compile check live in the parallel `frontend-e2e` job below (FAR-1850
+    # mobile nav, FAR-2017 visual/token slice, FAR-2461 canvas @visual); the
+    # FAR-1947 4-worker parity guard is its own parallel job too.
+    # `pnpm audit` is deliberately NOT re-homed anywhere in the train: npm CVEs
+    # are covered by the Trivy CRITICAL/HIGH fs scan in ci.yml `backend-lint`
+    # and by the deploy pre-deploy `pnpm audit`, so a network-dependent advisory
+    # gate on the train would add merge-blocking flake without new coverage.
     name: "Validation: frontend"
     runs-on: ubicloud-standard-2
+    # No Playwright in this job: lint, type-check, vitest coverage, upload,
+    # build, route-coverage. ~12-14 min with headroom.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.29.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # Lint and type-check first: cheapest, and no Playwright browsers needed.
+      - run: pnpm run lint
+      - run: pnpm run type-check
+      - name: Run unit tests (vitest, with coverage)
+        # --maxWorkers=2 matches the 2-vCPU runner (package.json's test:unit
+        # hardcodes 4, which starves setImmediate). v8+lcov produces
+        # frontend/coverage/lcov.info for the changed-lines gate and Sonar.
+        # Runs BEFORE the build so the coverage artifact is available to the
+        # coverage/sonar jobs as early as possible.
+        run: pnpm exec vitest run src --pool=threads --maxWorkers=2 --coverage --coverage.provider=v8 --coverage.reporter=lcov
+      - name: Upload frontend coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/lcov.info
+      - run: pnpm run build
+      # FAR-637: every production route must be referenced by at least one e2e
+      # spec (guards against routes rotting with zero e2e coverage, e.g.
+      # /pipelines/:id/editor, FAR-616). Known-uncovered MVP routes are tracked
+      # in FAR-638; until those specs land this gate is NON-ENFORCING on rc=1 so
+      # it cannot block every train (a permanently red gate defeats itself). The
+      # per-route table still prints to the step summary as the live tracker.
+      # rc=2 (malformed router / missing e2e dir) is a real breakage and fails
+      # closed.
+      #
+      # The job default working directory is frontend/, but the script reads the
+      # repo tree, so run it from the repo root. It was previously in the
+      # (now fast-only) ci.yml frontend job; the train owns it now.
+      - name: E2E route coverage gate
+        id: route-coverage
+        working-directory: .
+        run: |
+          set +e
+          python3 .github/scripts/check_e2e_route_coverage.py
+          rc=$?
+          echo "route_coverage_rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 1 ]; then
+            exit 0
+          fi
+          exit "$rc"
+      - name: E2E route coverage gate (fail closed)
+        # An explicit aggregate step that only runs on a real failure (rc=2),
+        # ending with `exit 1` so the check genuinely fails rather than being
+        # silently masked.
+        if: failure() && steps.route-coverage.outputs.route_coverage_rc == '2'
+        working-directory: .
+        run: |
+          echo "::error::E2E route coverage gate failed (rc=2: malformed router or missing e2e directory). See the 'E2E route coverage gate' step output." >&2
+          exit 1
+
+  frontend-e2e:
+    # The Playwright visual/mobile slices, split out of the coverage-producing
+    # `frontend` job (2026-11-28, PR #3634 review) so the `frontend-coverage`
+    # artifact is never delayed behind ~6-8 min of browser work. These slices
+    # have no per-PR home since the fast-tier split (2026-11-27), so they run
+    # HERE, once per train, before anything merges (FAR-1850 mobile nav,
+    # FAR-2017 visual/token slice, FAR-2461 canvas @visual). A SEPARATE parallel
+    # job, like `frontend-unit-parity`, keeps the train's cost the slowest job,
+    # not the sum.
+    name: "Validation: frontend e2e slices"
+    runs-on: ubicloud-standard-2
+    # The slices each boot a fresh Vite dev server and a 2-vCPU runner runs the
+    # canvas snapshot comparison slowly; keep headroom above the ~12-15 min they
+    # need on their own. A timeout here blocks merges.
     timeout-minutes: 30
     permissions:
       contents: read
@@ -438,51 +546,87 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      # Lint and type-check first, before the Playwright browser download.
-      - run: pnpm run lint
-      - run: pnpm run type-check
       - name: Install Playwright browsers
         run: pnpm exec playwright install chromium
+      - name: Validate Playwright test compilation
+        # `--list` compiles EVERY spec, so a malformed spec outside the selected
+        # slices is caught here. `vue-tsc` type-checks tests/e2e but never
+        # executes the runner's collection, so a spec that throws at import or
+        # at registration would otherwise surface only in the post-deploy
+        # staging @regression run. The fast-tier split (2026-11-27) removed this
+        # from ci.yml and nothing re-homed it until now. No browser interaction
+        # - it is a cheap parse/compile check.
+        run: pnpm exec playwright test --list
       - name: Run WCAG contrast tests
         run: pnpm exec playwright test wcag-contrast
-      - name: Run unit tests (vitest, with coverage)
-        # --maxWorkers=2 matches the 2-vCPU runner (package.json's test:unit
-        # hardcodes 4, which starves setImmediate). v8+lcov produces
-        # frontend/coverage/lcov.info for the changed-lines gate and Sonar.
-        run: pnpm exec vitest run src --pool=threads --maxWorkers=2 --coverage --coverage.provider=v8 --coverage.reporter=lcov
-      - name: Upload frontend coverage report
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: frontend-coverage
-          path: frontend/coverage/lcov.info
-      - run: pnpm run build
+      # FAR-1850: the mobile nav specs used to run only inside the staging E2E
+      # job, so a regression surfaced (at best) days later. They run against the
+      # local mock target (Playwright's webServer boots the dev server) and do
+      # not need staging, so the earliest enforcing gate that can own them is
+      # this train validation - which runs before anything merges. These came
+      # from the (now fast-only) ci.yml frontend job; keep them here.
+      - name: Run mobile nav specs (flash + usable)
+        env:
+          E2E_TARGET: local
+        run: pnpm exec playwright test mobile-nav-flash mobile-nav-usable
+      # FAR-2017: the visual/token/layout slice runs on every train validation.
+      # These specs previously ran ONLY in the post-deploy staging @regression
+      # gate, so a token/CSS regression passed every PR check, landed on main
+      # and broke the deploy train (FAR-2016 json-viewer light-mode token probe;
+      # FAR-1913/FAR-2028 mobile-layout axe contrast).
+      #
+      # The selection is deliberately UNCONDITIONAL (not changed-path gated). A
+      # path filter can miss a spec whose subject changed without a matching
+      # path (a token defined in JS, a class rename in a .vue script block), and
+      # a selector that under-selects reads as coverage. `--check` turns that
+      # into a hard failure instead: a new @regression spec asserting rendered
+      # CSS/tokens/layout must be classified in SLICE or STAGING_ONLY (with a
+      # reason) or the gate fails.
+      #
+      # Serial (--workers=1): the slice shares one cold Vite dev server, and
+      # parallel workers competing with its on-demand compile produced
+      # full-element-timeout flakes in combined local runs.
+      - name: Check the e2e visual slice classification
+        run: node scripts/e2e-visual-slice.mjs --check
+      - name: Run the visual/token e2e slice
+        env:
+          E2E_TARGET: local
+        run: |
+          read -r -a FILES <<< "$(node scripts/e2e-visual-slice.mjs --list)"
+          echo "visual/token e2e slice: ${FILES[*]}"
+          pnpm exec playwright test "${FILES[@]}" --grep "@regression" --workers=1 --reporter=line
+      # FAR-2461: the canvas visual snapshots are tagged @visual, which the
+      # @regression slice above never selects. Without this step the visual
+      # regression coverage runs in no gate at all. The baselines under
+      # tests/e2e/canvas.visual.spec.ts-snapshots/ are committed per platform,
+      # including the Linux set this runner uses.
+      - name: Run canvas visual regression snapshots
+        env:
+          E2E_TARGET: local
+        run: pnpm exec playwright test --grep "@visual" --workers=1 --reporter=line
 
-  e2e-visual:
-    # The three checks that had NO home after the PR tier became fast (they were
-    # removed from ci.yml by the 2026-11-27 fast-tier cut, and merge-validate.yml
-    # did not inherit them):
-    #   * the @visual canvas snapshots (FAR-2461) - tagged @visual, so the
-    #     staging @regression gate never selects them;
-    #   * the mobile-nav specs (FAR-1850);
-    #   * the e2e-visual-slice classification guard (FAR-2017), which fails when
-    #     a new visual @regression spec is classified in neither SLICE nor
-    #     STAGING_ONLY.
-    # The `frontend` job does not cover them: it runs vitest and WCAG contrast,
-    # neither of which is a Playwright e2e selection.
+  frontend-unit-parity:
+    # FAR-1947: the `frontend` job runs the unit suite with `--maxWorkers=2` (a
+    # deliberate 2-vCPU cap), but a merge-queue pass with light validation off
+    # (and the flag-off non-train `queue` path) runs `pnpm run test:unit`, which
+    # is `vitest run src --pool=threads --maxWorkers=4`, against the MERGED
+    # state. Worker count changes file -> worker assignment, so an order-
+    # dependent spec can pass at 2 workers and fail at 4. On 2026-10-17 exactly
+    # that happened (main-bootstrap.spec.ts, since made order-independent by
+    # FAR-1943): the queue's frontend step failed, main CI stayed green, PR CI
+    # reported "Frontend and WCAG" green, and NOTHING merged for ~2.5 h.
     #
-    # Independent and parallel, so it costs the train NO wall clock: the train's
-    # longest gate is `integration`/`bdd`, and this job is minutes.
+    # Before the fast-tier split ci.yml ran this parity job per PR. It now runs
+    # HERE, once per train, so the composed branch is validated with the queue's
+    # EXACT invocation before it merges. It is a SEPARATE parallel job (not a
+    # second step in `frontend`) so the train's cost stays the slowest job, not
+    # the sum. On the flag-off non-train path the `queue` job still runs the
+    # exact 4-worker command at merge time, so this guard only moves the signal
+    # earlier - it does not remove the guard from that path.
     #
-    # Install/artefacts: the workflow has no cross-job channel for a frontend
-    # install or build (only the coverage lcov artefact is passed between jobs),
-    # and the e2e harness serves the Vite DEV server itself
-    # (playwright.config.ts `webServer.command: npm run dev` for the local
-    # target), so a production `dist` would be dead weight here. The install is
-    # store-cache backed (`setup-node` `cache: pnpm` below), which is cheaper
-    # than an artefact round-trip of node_modules and is the mechanism this
-    # workflow already uses.
-    name: "Validation: visual + mobile-nav e2e"
+    # Do NOT add flags (--coverage, a worker-count override): that would diverge
+    # from what the queue runs and defeat the point of this job.
+    name: "Validation: frontend unit parity (4 workers)"
     runs-on: ubicloud-standard-2
     timeout-minutes: 20
     permissions:
@@ -504,25 +648,25 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install chromium
-      # Cheap, dependency-free schema check first: a misclassified visual spec
-      # fails in seconds instead of after the browser run.
-      - name: Check the e2e visual slice classification
-        run: node scripts/e2e-visual-slice.mjs --check
-      # FAR-1850: previously only inside the staging E2E job. They run against
-      # the local mock target and do not need staging.
-      - name: Run mobile nav specs (flash + usable)
-        run: pnpm exec playwright test mobile-nav-flash mobile-nav-usable
-      # FAR-2461: the canvas visual snapshots are tagged @visual, which the
-      # @regression slice never selects. The baselines under
-      # tests/e2e/canvas.visual.spec.ts-snapshots/ are committed per platform,
-      # including the Linux set this job runs on. Serial (--workers=1) so the
-      # snapshots do not race each other on one cold dev server.
-      - name: Run canvas visual regression snapshots
-        env:
-          E2E_TARGET: local
-        run: pnpm exec playwright test --grep "@visual" --workers=1 --reporter=line
+      - name: Run unit tests (exact merge-queue invocation)
+        run: pnpm run test:unit
+
+  runner-ci-harness:
+    # FAR-773: the Bundled Runner harness (boots deploy/compose/runner-ci.yml -
+    # socket-proxy + dind + workspace network - and runs every docker-marked
+    # module in backend/tests/docker/). ci.yml ran it per PR before the
+    # fast-tier split (2026-11-27); it runs HERE now, once per train, on the
+    # composed branch, so a PR touching bundled_runner / runtime_provider /
+    # executor still fails this gate before merge instead of only on the weekly
+    # backstop. The reusable workflow path-filters internally against
+    # `base_ref`, so it boots the rig only when the Bundled Runner surface
+    # changed (FAR-528: it fails OPEN, loudly, if the filter cannot decide).
+    name: "Validation: Bundled Runner harness (compose + socket-proxy + dind)"
+    uses: ./.github/workflows/runner-ci-harness.yml
+    with:
+      ref: ${{ inputs.ref }}
+      base_ref: ${{ inputs.base_ref }}
+    secrets: inherit
 
   sonar:
     # SonarCloud scan with coverage import. It needs the combined backend
@@ -605,11 +749,11 @@ jobs:
           # this workflow with the TRAIN branch). So the project's main baseline
           # and coverage badge update only on a MANUAL dispatch with `ref: main`
           # until a scheduled/dispatch path exists. For that case the scanner is
-          # told the branch EXPLICITLY, because its own SCM
-          # detection follows the CALLER's ref (a train branch, or a detached
-          # dispatch ref) and the report would otherwise land as a feature-branch
-          # analysis that never touches the main baseline. Any other ref is left
-          # to the scanner's default (a branch analysis, never main).
+          # told the branch EXPLICITLY, because its own SCM detection follows the
+          # CALLER's ref (a train branch, or a detached dispatch ref) and the
+          # report would otherwise land as a feature-branch analysis that never
+          # touches the main baseline. Any other ref is left to the scanner's
+          # default (a branch analysis, never main).
           #
           # NOT named SONAR_*: SonarScanner maps SONAR_<NAME> environment
           # variables onto sonar.<name> analysis properties, so a SONAR_-prefixed
@@ -675,12 +819,16 @@ jobs:
           exit 1
 
   sonar-new-issues:
-    # ci.yml sonar-new-issues-gate. It queries the PR's analysis by PR number, so
-    # it can only run when a PR number is supplied. The merge train validates a
-    # BRANCH (no PR analysis exists), so it leaves pr_number empty and this job
-    # reports a clear notice instead of a false pass; the SonarCloud quality gate
-    # on the scan above (new-code ratios) still applies to the train. Wiring a
-    # branch-scoped issue count is a phase-2 refinement.
+    # The former ci.yml sonar-new-issues-gate, re-homed here on 2026-11-27.
+    # RETIREMENT, stated explicitly: PR CI no longer runs a SonarCloud analysis,
+    # so the automatic PR-scoped BUG/VULNERABILITY + BLOCKER/CRITICAL CODE_SMELL
+    # count gate is retired from the PR tier. The pre-merge quality signal is the
+    # SonarCloud quality gate on the `sonar` scan above (new-code ratios, which
+    # `sonar.qualitygate.wait=true` enforces). This job still runs the full count
+    # gate when a caller supplies a PR number (a manual dispatch); the train
+    # validates a BRANCH with no PR analysis, so it leaves pr_number empty and
+    # this job reports a clear notice rather than a false pass. Wiring a
+    # branch-scoped issue count is a phase-2 refinement, not a silent gap.
     name: "Validation: new issues gate (SonarCloud)"
     if: ${{ always() && inputs.full && needs.sonar.result == 'success' }}
     needs: [sonar]
@@ -999,7 +1147,7 @@ jobs:
     # always() so a failed validation still names the failing job; a skipped job
     # (full=false) is not a failure.
     name: "Validation: summary"
-    needs: [backend-unit, backend-non-unit, integration, tier1b, frontend, e2e-visual, sonar, sonar-new-issues, coverage, bdd]
+    needs: [backend-unit, backend-non-unit, integration, tier1b, frontend, frontend-e2e, frontend-unit-parity, runner-ci-harness, sonar, sonar-new-issues, coverage, bdd]
     if: always()
     runs-on: ubicloud-standard-2
     timeout-minutes: 5
@@ -1017,7 +1165,9 @@ jobs:
           R_INTEGRATION: ${{ needs.integration.result }}
           R_TIER1B: ${{ needs.tier1b.result }}
           R_FRONTEND: ${{ needs.frontend.result }}
-          R_E2E_VISUAL: ${{ needs.e2e-visual.result }}
+          R_FRONTEND_E2E: ${{ needs.frontend-e2e.result }}
+          R_FRONTEND_UNIT_PARITY: ${{ needs.frontend-unit-parity.result }}
+          R_RUNNER_CI_HARNESS: ${{ needs.runner-ci-harness.result }}
           R_SONAR: ${{ needs.sonar.result }}
           R_SONAR_NEW_ISSUES: ${{ needs.sonar-new-issues.result }}
           R_COVERAGE: ${{ needs.coverage.result }}
@@ -1040,7 +1190,9 @@ jobs:
           record integration "$R_INTEGRATION"
           record tier1b "$R_TIER1B"
           record frontend "$R_FRONTEND"
-          record e2e-visual "$R_E2E_VISUAL"
+          record frontend-e2e "$R_FRONTEND_E2E"
+          record frontend-unit-parity "$R_FRONTEND_UNIT_PARITY"
+          record runner-ci-harness "$R_RUNNER_CI_HARNESS"
           record sonar "$R_SONAR"
           record sonar-new-issues "$R_SONAR_NEW_ISSUES"
           record coverage "$R_COVERAGE"

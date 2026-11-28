@@ -1499,16 +1499,37 @@ def test_sonar_new_issues_gate_fail_closed_on_api_error() -> None:
     assert not violations, "sonar-new-issues no longer fails closed on API error:\n" + "\n".join(violations)
 
 
+def test_sonar_new_issues_gate_is_retired_from_the_pr_tier() -> None:
+    """The PR-scoped Sonar count gate is deliberately gone from ci.yml.
+
+    This is a documented, intentional retirement, not an accidental drop: on
+    2026-11-27 the PR tier stopped running a SonarCloud analysis, so the
+    PR-scoped new-issues COUNT gate has nothing to query automatically. The
+    pre-merge quality signal is the SonarCloud quality gate on the train's
+    ``sonar`` scan (new-code ratios); this test pins the retirement so that
+    re-adding a ci.yml job is a deliberate, visible change rather than a
+    resurrection of a gate that could silently no-op.
+    """
+    ci_wf = _load_yaml(CI_YML)
+    jobs = ci_wf.get("jobs") or {}
+    stale = [name for name in ("sonarcloud-scan", "sonar-new-issues-gate") if name in jobs]
+    assert not stale, (
+        f"ci.yml unexpectedly runs the PR-tier Sonar jobs {stale}; the PR-scoped count gate was retired on 2026-11-27 (it lives in merge-validate.yml, which only enforces it when a PR number is supplied). If this is deliberate, update this test and the merge-validate sonar-new-issues note together."
+    )
+
+
 def test_sonar_new_issues_gate_counts_only_the_blocking_subset() -> None:
     """Only the two blocking queries can contribute to the failing count.
 
-    The gate used to run a third, non-blocking query (INFO/MINOR/MAJOR smells)
-    purely to emit a notice. The surviving implementation carries no such query
-    at all, which is the strongest form of the same guarantee: nothing outside
-    BUG/VULNERABILITY and BLOCKER/CRITICAL CODE_SMELL can ever reach the count
-    the gate fails on. This pins that shape - exactly two issues queries, and a
-    total that is their sum - so re-adding a query that could fail the gate is a
-    deliberate, visible change rather than a silent widening.
+    The gate lives in merge-validate.yml now (retired from the PR tier - see
+    test_sonar_new_issues_gate_is_retired_from_the_pr_tier). It used to also run
+    a third, non-blocking query (INFO/MINOR/MAJOR smells) purely to emit a
+    notice. The surviving implementation carries no such query at all, which is
+    the strongest form of the same guarantee: nothing outside BUG/VULNERABILITY
+    and BLOCKER/CRITICAL CODE_SMELL can ever reach the count the gate fails on.
+    This pins that shape - exactly two issues queries, and a total that is their
+    sum - so re-adding a query that could fail the gate is a deliberate, visible
+    change rather than a silent widening.
     """
     step = _sonar_new_issues_gate_step()
     run = _run_script(step)
