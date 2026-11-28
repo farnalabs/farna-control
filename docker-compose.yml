@@ -108,7 +108,7 @@ services:
       # rotation) use the same URL. Same password as farna_control_app by design.
       FARNA_CONTROL_SYSTEM_DATABASE_URL: postgresql+asyncpg://farna_control_system:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
       FARNA_CONTROL_DB: postgres
-      SECRET_KEY: modulo-docker-compose-secret-key-32bytes!
+      SECRET_KEY: farna-docker-compose-secret-key-32bytes!
       # FAR-2181: FERNET_KEY encrypts every stored credential. `Settings` only
       # checks its LENGTH (>= 32 bytes), so the 47-char placeholder this file
       # used to ship booted fine and then failed on the FIRST credential write:
@@ -172,7 +172,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://farna_control_app:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
       FARNA_CONTROL_DB: postgres
-      SECRET_KEY: modulo-docker-compose-secret-key-32bytes!
+      SECRET_KEY: farna-docker-compose-secret-key-32bytes!
       # FAR-2181: same required key as the backend service above - every process
       # that reads or writes a stored credential must hold the SAME Fernet key.
       FERNET_KEY: '${FERNET_KEY:?FERNET_KEY is required - generate one (openssl rand -base64 32) and put FERNET_KEY=<value> in .env at the repo root; see docs/quickstart.md step 1}'
@@ -222,7 +222,7 @@ services:
       # dispatcher_reconcile `unavailable` — which GATES readiness (503).
       FARNA_CONTROL_SYSTEM_DATABASE_URL: postgresql+asyncpg://farna_control_system:${POSTGRES_PASSWORD:-changeme}@db:5432/farna_control
       FARNA_CONTROL_DB: postgres
-      SECRET_KEY: modulo-docker-compose-secret-key-32bytes!
+      SECRET_KEY: farna-docker-compose-secret-key-32bytes!
       # FAR-2181: same required key as the backend service above.
       FERNET_KEY: '${FERNET_KEY:?FERNET_KEY is required - generate one (openssl rand -base64 32) and put FERNET_KEY=<value> in .env at the repo root; see docs/quickstart.md step 1}'
       SSRF_ALLOW_PRIVATE_RANGES: ${SSRF_ALLOW_PRIVATE_RANGES:-}
@@ -230,7 +230,7 @@ services:
       FARNA_CONTROL_PUBLIC_URL: http://localhost:8000
       FARNA_CONTROL_USERS: admin:admin
       SAQ_AUTH_USERNAME: admin
-      SAQ_AUTH_PASSWORD: modulo
+      SAQ_AUTH_PASSWORD: farna
       DB_CAPACITY_PATH: /var/lib/farna/db-volume
     ports:
       - "127.0.0.1:8081:8081"
@@ -260,7 +260,7 @@ services:
 
   # Health watchdog — Gatus (https://gatus.io), config-as-code in
   # deploy/watchdog/. Probes the backend's readiness over the compose network
-  # and tells the operator when Modulo is unhealthy — including when the app is
+  # and tells the operator when Farna Control is unhealthy — including when the app is
   # fully down, which is the one failure the app cannot report about itself.
   # Enabled by default: it comes up with `docker compose up`.
   #
