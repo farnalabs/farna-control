@@ -67,7 +67,7 @@
 {"constant": "_SANDBOX_LOG_PATH", "modules": ["core/pipeline_engine/node_runner.py", "core/runtime_provider/k8s.py"], "value": "/home/user/agent.log"}
 {"constant": "_SCAN_NDJSON_MEDIA_TYPE", "modules": ["api/routes/analytics.py", "api/routes/audit.py"], "value": "application/x-ndjson"}
 {"constant": "_SECRETS_FILENAME", "modules": ["launcher/doctor.py", "launcher/upgrade.py"], "value": "secrets.json"}
-{"constant": "_SQL_SET_ORG_ID", "modules": ["core/pipeline_execution.py", "core/run_admission.py", "core/worker_handoff.py"], "value": "SELECT set_config('app.organisation_id', :val, true)"}
+{"constant": "_SQL_SET_ORG_ID", "modules": ["core/pipeline_execution.py", "core/run_admission.py"], "value": "SELECT set_config('app.organisation_id', :val, true)"}
 {"constant": "_SQL_SET_STATEMENT_TIMEOUT", "modules": ["core/analytics/guardrails.py", "core/analytics/service.py", "db/crud/run_retention.py"], "value": "SELECT set_config('statement_timeout', :ms, true)"}
 {"constant": "_SQL_SET_TIMEZONE_UTC", "modules": ["core/analytics/guardrails.py", "core/analytics/maintenance.py", "core/analytics/service.py"], "value": "SELECT set_config('timezone', 'UTC', true)"}
 {"constant": "_TENANT_COLUMN", "modules": ["db/repositories/generic.py", "db/rls.py"], "value": "organisation_id"}

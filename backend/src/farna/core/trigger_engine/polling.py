@@ -420,7 +420,12 @@ async def _update_next_fire_no_last(session: AsyncSession, trigger: Trigger) -> 
 
 
 async def _set_rls_org(session: AsyncSession, org_id: uuid.UUID) -> None:
-    """Set org-scoped RLS context for a polling-trigger transaction."""
+    """Set org-scoped RLS context for a polling-trigger transaction.
+
+    Same grant as ``farna.db.background.background_session`` (org, then
+    ``app.execution_context``): the polling lane receives an already-open
+    session, so it applies the grant rather than acquiring one.
+    """
     dialect = session.get_bind().dialect.name
     if dialect == "postgresql":
         await session.execute(

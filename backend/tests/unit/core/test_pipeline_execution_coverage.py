@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy.exc import DBAPIError, OperationalError
 
 import farna.core.pipeline_execution as pe
+import farna.db.background as background
 
 # -----------------------------------------------------------------------
 # _resolve_claim_stale_seconds — settings path (line 177)
@@ -174,17 +175,17 @@ class TestLoadAndSetup:
         async def _fake_get_run(session: Any, rid: object) -> Any:
             return fake_run
 
-        async def _fake_set_rls(session: Any, oid: object) -> None:
-            pass
-
         factory_cm = AsyncMock()
         factory_cm.__aenter__ = AsyncMock(return_value=factory_cm)
         factory_cm.__aexit__ = AsyncMock(return_value=False)
         factory_cm.begin = MagicMock(return_value=factory_cm)
 
-        monkeypatch.setattr(pe, "set_rls_org", _fake_set_rls)
         monkeypatch.setattr(pe, "get_run", _fake_get_run)
-        monkeypatch.setattr(pe, "async_sessionmaker", MagicMock(return_value=lambda: factory_cm))
+        # ADR 070 §3: the session (and its grant) come from
+        # ``db.background.background_session`` — that is where a test binds the
+        # factory and stubs the grant now.
+        monkeypatch.setattr(background, "async_sessionmaker", MagicMock(return_value=lambda: factory_cm))
+        monkeypatch.setattr(background, "apply_background_grant", AsyncMock())
         monkeypatch.setattr(
             pe,
             "get_settings",
@@ -210,17 +211,17 @@ class TestLoadAndSetup:
         async def _fake_get_run(session: Any, rid: object) -> Any:
             return None
 
-        async def _fake_set_rls(session: Any, oid: object) -> None:
-            pass
-
         factory_cm = AsyncMock()
         factory_cm.__aenter__ = AsyncMock(return_value=factory_cm)
         factory_cm.__aexit__ = AsyncMock(return_value=False)
         factory_cm.begin = MagicMock(return_value=factory_cm)
 
-        monkeypatch.setattr(pe, "set_rls_org", _fake_set_rls)
         monkeypatch.setattr(pe, "get_run", _fake_get_run)
-        monkeypatch.setattr(pe, "async_sessionmaker", MagicMock(return_value=lambda: factory_cm))
+        # ADR 070 §3: the session (and its grant) come from
+        # ``db.background.background_session`` — that is where a test binds the
+        # factory and stubs the grant now.
+        monkeypatch.setattr(background, "async_sessionmaker", MagicMock(return_value=lambda: factory_cm))
+        monkeypatch.setattr(background, "apply_background_grant", AsyncMock())
         monkeypatch.setattr(
             pe,
             "get_settings",
@@ -243,17 +244,17 @@ class TestLoadAndSetup:
         async def _fake_get_run(session: Any, rid: object) -> Any:
             return fake_run
 
-        async def _fake_set_rls(session: Any, oid: object) -> None:
-            pass
-
         factory_cm = AsyncMock()
         factory_cm.__aenter__ = AsyncMock(return_value=factory_cm)
         factory_cm.__aexit__ = AsyncMock(return_value=False)
         factory_cm.begin = MagicMock(return_value=factory_cm)
 
-        monkeypatch.setattr(pe, "set_rls_org", _fake_set_rls)
         monkeypatch.setattr(pe, "get_run", _fake_get_run)
-        monkeypatch.setattr(pe, "async_sessionmaker", MagicMock(return_value=lambda: factory_cm))
+        # ADR 070 §3: the session (and its grant) come from
+        # ``db.background.background_session`` — that is where a test binds the
+        # factory and stubs the grant now.
+        monkeypatch.setattr(background, "async_sessionmaker", MagicMock(return_value=lambda: factory_cm))
+        monkeypatch.setattr(background, "apply_background_grant", AsyncMock())
         monkeypatch.setattr(
             pe,
             "get_settings",

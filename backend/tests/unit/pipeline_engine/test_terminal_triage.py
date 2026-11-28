@@ -40,6 +40,7 @@ from farna.api.routes import runs as runs_module
 from farna.core import cron_helpers as ch
 from farna.core import pipeline_execution as pe
 from farna.core.worker_handoff import WORKER_LOST_ERROR_CODE
+from farna.db import background
 
 _ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 _RUN = uuid.UUID("00000000-0000-0000-0000-000000000002")
@@ -546,8 +547,8 @@ async def test_worker_lost_triage_helper_sets_rls_and_delegates_the_reason() -> 
     rls = AsyncMock()
 
     with (
-        patch.object(pe, "async_sessionmaker", MagicMock(return_value=factory)),
-        patch.object(pe, "set_rls_org", rls),
+        patch.object(background, "async_sessionmaker", MagicMock(return_value=factory)),
+        patch.object(background, "apply_background_grant", rls),
         patch.object(ch, "persist_terminal_triage_marker", writer),
     ):
         await pe._persist_worker_lost_triage(
@@ -574,8 +575,8 @@ async def test_worker_lost_triage_helper_swallows_a_generic_failure(caplog: pyte
     caplog.set_level(logging.WARNING, logger="farna.core.pipeline_execution")
 
     with (
-        patch.object(pe, "async_sessionmaker", MagicMock(return_value=factory)),
-        patch.object(pe, "set_rls_org", AsyncMock(side_effect=RuntimeError("db down"))),
+        patch.object(background, "async_sessionmaker", MagicMock(return_value=factory)),
+        patch.object(background, "apply_background_grant", AsyncMock(side_effect=RuntimeError("db down"))),
         patch.object(ch, "persist_terminal_triage_marker", writer),
     ):
         result = await pe._persist_worker_lost_triage(
@@ -597,8 +598,8 @@ async def test_worker_lost_triage_helper_propagates_cancellation() -> None:
     factory, _session = _worker_lost_factory()
 
     with (
-        patch.object(pe, "async_sessionmaker", MagicMock(return_value=factory)),
-        patch.object(pe, "set_rls_org", AsyncMock(side_effect=asyncio.CancelledError)),
+        patch.object(background, "async_sessionmaker", MagicMock(return_value=factory)),
+        patch.object(background, "apply_background_grant", AsyncMock(side_effect=asyncio.CancelledError)),
         pytest.raises(asyncio.CancelledError),
     ):
         await pe._persist_worker_lost_triage(
@@ -665,8 +666,8 @@ async def test_terminal_branch_persists_the_reaper_marker() -> None:
     terminal_writer = AsyncMock(return_value=True)
     deadlines, exec_task, stall, done = _deadline_kill_args()
     with (
-        patch.object(pe, "async_sessionmaker", MagicMock(return_value=factory)),
-        patch.object(pe, "set_rls_org", AsyncMock()),
+        patch.object(background, "async_sessionmaker", MagicMock(return_value=factory)),
+        patch.object(background, "apply_background_grant", AsyncMock()),
         patch("farna.core.pipeline_execution.fail_run_terminal", fail),
         patch.object(pe, "_record_node_deadline_watchdog_firing", AsyncMock()),
         patch.object(pe, "_record_derived_deadline_cost", AsyncMock()),
@@ -729,8 +730,8 @@ async def test_redispatch_branch_persists_a_non_terminal_marker() -> None:
     deadlines, exec_task, stall, done = _deadline_kill_args()
     hook = AsyncMock(return_value=True)
     with (
-        patch.object(pe, "async_sessionmaker", MagicMock(return_value=factory)),
-        patch.object(pe, "set_rls_org", AsyncMock()),
+        patch.object(background, "async_sessionmaker", MagicMock(return_value=factory)),
+        patch.object(background, "apply_background_grant", AsyncMock()),
         patch("farna.core.pipeline_execution.fail_run_terminal", AsyncMock(return_value=True)),
         patch.object(pe, "_record_node_deadline_watchdog_firing", AsyncMock()),
         patch.object(pe, "_record_derived_deadline_cost", AsyncMock()),
@@ -808,7 +809,7 @@ async def test_node_deadline_triage_failure_never_fails_the_kill(caplog: pytest.
     deadlines, exec_task, stall, done = _deadline_kill_args()
     caplog.set_level(logging.WARNING, logger="farna.core.pipeline_execution")
     with (
-        patch.object(pe, "set_rls_org", AsyncMock(side_effect=RuntimeError("db down"))),
+        patch.object(background, "apply_background_grant", AsyncMock(side_effect=RuntimeError("db down"))),
         patch("farna.core.pipeline_execution.fail_run_terminal", fail),
         patch.object(pe, "_record_node_deadline_watchdog_firing", AsyncMock()),
         patch.object(pe, "_record_derived_deadline_cost", derived),
@@ -871,8 +872,8 @@ async def test_node_deadline_triage_is_bounded_by_the_persist_timeout() -> None:
     factory, _session = _triage_factory()
     with (
         patch.object(ch, "_TERMINAL_TRIAGE_PERSIST_TIMEOUT", 0.05),
-        patch.object(pe, "async_sessionmaker", MagicMock(return_value=factory)),
-        patch.object(pe, "set_rls_org", _hanging_rls),
+        patch.object(background, "async_sessionmaker", MagicMock(return_value=factory)),
+        patch.object(background, "apply_background_grant", _hanging_rls),
     ):
         started = time.monotonic()
         await pe._persist_node_deadline_triage(MagicMock(), str(_RUN), str(_ORG), redispatched=False)

@@ -187,7 +187,7 @@ async def test_get_subscribed_endpoints_sets_rls_org_context() -> None:
     deliver to nobody."""
     ep = _fake_endpoint()
 
-    with patch("farna.core.notifier.set_rls_org", AsyncMock()) as mock_set_rls:
+    with patch("farna.db.background.apply_background_grant", AsyncMock()) as mock_set_rls:
         found = await _get_endpoints_for_event([ep])
 
     assert len(found) == 1
@@ -1015,7 +1015,7 @@ async def test_dispatch_event_re_raises_cancelled_error_from_in_app_block(notifi
             "farna.core.notifier.event_mapper.NotificationEventMapper",
             return_value=mapper_instance,
         ),
-        patch("farna.core.notifier.set_rls_org", AsyncMock(side_effect=asyncio.CancelledError)),
+        patch("farna.db.background.apply_background_grant", AsyncMock(side_effect=asyncio.CancelledError)),
     ):
         session = configure_mock_session(AsyncMock(), allow_empty_execute=True)
         session.begin = MagicMock(return_value=begin_context())

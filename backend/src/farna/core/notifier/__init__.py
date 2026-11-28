@@ -52,11 +52,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from farna.core.secret_patterns import mask_secret_values_in_text
 from farna.core.ssrf import pinned_async_client
+from farna.db.background import background_session
 from farna.db.crud.break_glass_deny import is_break_glass_denied, is_break_glass_live
 from farna.db.models.account import Account
 from farna.db.models.notification_delivery import NotificationDeliveryLog
 from farna.db.models.notification_endpoint import NotificationEndpoint
-from farna.db.rls import set_rls_org
 
 __all__ = [
     "EVENT_BUDGET_EXCEEDED",
@@ -420,8 +420,7 @@ class Notifier:
                 NotificationEndpoint.team_id.is_(team_filter),
                 NotificationEndpoint.auto_disabled.is_(False),
             )
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
+            async with background_session(org_id, session_factory=self._session_factory) as session:
                 result = await session.execute(stmt)
                 return self._filter_subscribed(list(result.scalars()), event_type)
 
@@ -583,6 +582,14 @@ class Notifier:
         org-scoped (explicit WHERE + RLS context) so a run from another tenant
         can never be consulted.
 
+        ADR 070 §3: the session comes from ``background_session``, so the read
+        runs under the BACKGROUND GRANT (org + ``app.execution_context``) rather
+        than org alone. That is load-bearing, not decorative: once the runs
+        family carries the team predicate (Phase 1B) an org-only read returns
+        zero rows for a team-owned run, and this guard — which fails OPEN on a
+        missing row — would silently conclude "not terminal" for every run it
+        exists to suppress.
+
         **Fails OPEN**: a missing run row, an unreadable run row or any DB
         error returns ``False`` (dispatch proceeds exactly as before). An
         observability blip must never silently swallow a live review request —
@@ -591,8 +598,7 @@ class Notifier:
         from farna.db.models.run import TERMINAL_STATUSES, Run
 
         try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, org_id)
+            async with background_session(org_id, session_factory=self._session_factory) as session:
                 result = await session.execute(
                     select(Run.status).where(
                         Run.organisation_id == org_id,
@@ -675,12 +681,11 @@ class Notifier:
             from farna.core.notifier.event_mapper import NotificationEventMapper
 
             mapper = NotificationEventMapper()
-            async with self._session_factory() as session, session.begin():
+            async with background_session(org_id, session_factory=self._session_factory) as session:
                 # Mark this session notifier-owned: the after_insert listener
                 # then suppresses ITS Redis leg for the notification row (the
                 # post-commit broadcast below is the single Redis message).
                 session.info[NOTIFIER_SESSION_KEY] = True
-                await set_rls_org(session, org_id)
                 notification = await mapper.create_from_event(
                     session,
                     org_id=org_id,
@@ -918,8 +923,7 @@ class Notifier:
         payload_ciphertext: bytes | None,
     ) -> None:
         try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, endpoint.organisation_id)
+            async with background_session(endpoint.organisation_id, session_factory=self._session_factory) as session:
                 log_entry = NotificationDeliveryLog(
                     organisation_id=endpoint.organisation_id,
                     event_type=event_type,
@@ -948,8 +952,7 @@ class Notifier:
     async def _increment_dead_letter(self, endpoint: NotificationEndpoint) -> None:
         """Increment dead-letter counter and auto-disable if threshold exceeded."""
         try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, endpoint.organisation_id)
+            async with background_session(endpoint.organisation_id, session_factory=self._session_factory) as session:
                 result = await session.execute(
                     update(NotificationEndpoint)
                     .where(
@@ -990,8 +993,7 @@ class Notifier:
     async def _reset_dead_letter(self, endpoint: NotificationEndpoint) -> None:
         """Reset consecutive dead-letter counter to 0 on successful delivery."""
         try:
-            async with self._session_factory() as session, session.begin():
-                await set_rls_org(session, endpoint.organisation_id)
+            async with background_session(endpoint.organisation_id, session_factory=self._session_factory) as session:
                 await session.execute(
                     update(NotificationEndpoint)
                     .where(

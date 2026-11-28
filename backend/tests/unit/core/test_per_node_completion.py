@@ -115,7 +115,7 @@ async def test_completion_writer_logs_and_swallows_database_failure(
 ) -> None:
     with (
         patch(
-            "farna.core.pipeline_execution.async_sessionmaker",
+            "farna.db.background.async_sessionmaker",
             side_effect=RuntimeError("database unavailable"),
         ),
         caplog.at_level(logging.WARNING, logger="farna.core.pipeline_execution"),

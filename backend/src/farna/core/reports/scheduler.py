@@ -170,12 +170,18 @@ def compute_next_send(cron_expression: str, after: datetime.datetime | None = No
 
 
 async def _set_rls_org(session: AsyncSession, org_id: uuid.UUID) -> None:
+    """Set the background grant on an open scheduled-report transaction.
+
+    Scheduled-report generation is background machinery (no user principal), so
+    the execution hatch lets it read team-scoped tables org-wide — the same
+    org-then-``app.execution_context`` grant
+    ``farna.db.background.background_session`` applies when a lane acquires its
+    own session.
+    """
     from farna.db.rls import set_rls_execution_context
     from farna.db.rls import set_rls_org as _set_rls
 
     await _set_rls(session, org_id)
-    # Scheduled-report generation is background machinery (no user principal) —
-    # the execution hatch lets it read team-scoped tables org-wide.
     await set_rls_execution_context(session)
 
 
