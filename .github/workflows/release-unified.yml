@@ -279,7 +279,7 @@ jobs:
       # Checkout only provides a git remote for `gh` repo inference; the proof
       # talks to the GitHub API and `gh` authenticates via GH_TOKEN, so no
       # repository credentials may be persisted on disk.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Ensure schema freshness CI on the exact commit
@@ -796,7 +796,7 @@ jobs:
           fi
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build all images (no push)
         # Mapped through the step env block (S7630): GitHub expressions inside a
@@ -864,7 +864,7 @@ jobs:
           PY
 
       - name: Upload SBOM as artefact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-cyclonedx
           path: sbom.json
@@ -3045,19 +3045,19 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.rc_tag }}
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bundle-artefacts-amd64
           path: release-artefacts
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-installer-${{ inputs.version }}-arm64
           path: release-artefacts
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-installer-${{ inputs.version }}-x86_64
           path: release-artefacts
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: inputs.include_windows
         with:
           name: windows-installer-${{ inputs.version }}
@@ -3065,7 +3065,7 @@ jobs:
       # FAR-2579 - the validated .deb. Downloaded beside (not into)
       # release-artefacts so only the package itself joins the release set; its
       # own .sha256 is checked here and the release SHA256SUMS below covers it.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.linux-deb.outputs.deb_artifact }}
           path: deb-artefacts
@@ -3190,7 +3190,7 @@ jobs:
 
           PY
           (cd release-artefacts && sha256sum --check SHA256SUMS)
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: final-release-artefacts-${{ inputs.version }}
           path: release-artefacts
@@ -3242,7 +3242,7 @@ jobs:
       arm64_sha256: ${{ steps.verify.outputs.arm64_sha256 }}
       x86_64_sha256: ${{ steps.verify.outputs.x86_64_sha256 }}
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: final-release-artefacts-${{ inputs.version }}
           path: release-artefacts
@@ -3376,7 +3376,7 @@ jobs:
           ref: ${{ needs.release.outputs.rc_tag }}
 
       - name: Download final Linux + macOS release artefacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: final-release-artefacts-${{ inputs.version }}
           path: release-artefacts
@@ -4676,7 +4676,7 @@ jobs:
           PY
 
       - name: Upload the SBOM artefact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-cyclonedx
           path: sbom.json
@@ -4707,35 +4707,35 @@ jobs:
       attestations: write
     steps:
       - name: Download the SBOM artefact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sbom-cyclonedx
           path: release-artefacts
 
       - name: Download the final cross-platform release artefact
         if: inputs.mode == 'cut' || inputs.mode == 'recut'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: final-release-artefacts-${{ inputs.version }}
           path: release-artefacts
 
       - name: Download the macOS arm64 installer artefact
         if: inputs.mode == 'cut' || inputs.mode == 'recut'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-installer-${{ inputs.version }}-arm64
           path: release-artefacts
 
       - name: Download the macOS x86_64 installer artefact
         if: inputs.mode == 'cut' || inputs.mode == 'recut'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-installer-${{ inputs.version }}-x86_64
           path: release-artefacts
 
       - name: Download the Windows installer artefact
         if: (inputs.mode == 'cut' || inputs.mode == 'recut') && inputs.include_windows
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-installer-${{ inputs.version }}
           path: release-artefacts
