@@ -9,6 +9,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, NoReturn, cast
+from urllib.parse import quote
 
 import httpx
 
@@ -89,6 +90,26 @@ _COMMIT_ACTIONS = frozenset({"create", "update", "delete", "move"})
 
 # Review events accepted by the PR review resource (write("pr_review"))
 _REVIEW_EVENTS = frozenset({"APPROVE", "REQUEST_CHANGES", "COMMENT"})
+
+# The stable commit-status context Farna Control publishes its delivery verdict
+# under, and the exact name a customer adds to a branch-protection rule to make
+# that verdict a REQUIRED status check. Namespaced under ``farna-control/`` so it
+# cannot collide with a CI job's check name. Documented in
+# ``docs/github-required-status-check.md``: changing it is a breaking change for
+# every repository that has marked it required (the branch block silently stops
+# matching), so treat it as a contract, not an implementation detail.
+REQUIRED_CHECK_CONTEXT = "farna-control/verdict"
+
+# A Farna Control verdict is binary: the delivery passed or it did not. The
+# GitHub commit-status API also accepts ``pending``/``error``, but those are not
+# verdicts (``pending`` is not a decision, ``error`` is a transport/plumbing
+# failure), so they are rejected here to keep the published check honest.
+_VERDICT_STATES = frozenset({"success", "failure"})
+
+# Marker GitHub returns in a 404 body when a branch exists but carries no
+# protection rule (``{"message": "Branch not protected"}``). Distinct from a
+# genuinely missing repo/branch, which must surface as an error.
+_BRANCH_NOT_PROTECTED_MARKER = "branch not protected"
 
 # Retry/backoff configuration (canonical values live in _retry_headers)
 _RETRYABLE_STATUSES = RETRYABLE_STATUSES
@@ -299,6 +320,88 @@ def _decode_read_content(info: Any) -> None:
         return
 
 
+def _required_status_check_contexts(required_checks: Any) -> tuple[list[str], list[dict[str, Any]]]:
+    """Extract required status-check contexts from a branch-protection payload.
+
+    GitHub reports required status checks in two shapes inside
+    ``required_status_checks``: a legacy ``contexts`` list of plain context
+    names, and a newer ``checks`` list of ``{"context", "app_id"}`` entries.
+    A context is "required" when it appears in EITHER, so both are collected
+    (de-duplicated, order preserved). The raw ``checks`` entries are returned
+    too so a caller can tell an app-scoped check (``app_id`` set) apart from a
+    plain commit status (``app_id`` null) — Farna Control publishes a plain
+    status, which satisfies a context only when it is not pinned to an App.
+
+    Tolerant of a malformed shape: a non-dict input, or entries that are not
+    strings/objects, are ignored rather than raising — an unreadable config is
+    reported as "not in the required set", never as a crash.
+    """
+    if not isinstance(required_checks, dict):
+        return [], []
+    contexts: list[str] = []
+    seen: set[str] = set()
+    raw_contexts = required_checks.get("contexts")
+    if isinstance(raw_contexts, list):
+        for item in raw_contexts:
+            if isinstance(item, str) and item not in seen:
+                seen.add(item)
+                contexts.append(item)
+    checks: list[dict[str, Any]] = []
+    raw_checks = required_checks.get("checks")
+    if isinstance(raw_checks, list):
+        for entry in raw_checks:
+            if not isinstance(entry, dict):
+                continue
+            context = entry.get("context")
+            if not isinstance(context, str):
+                continue
+            checks.append({"context": context, "app_id": entry.get("app_id")})
+            if context not in seen:
+                seen.add(context)
+                contexts.append(context)
+    return contexts, checks
+
+
+def _required_check_enforcement(
+    *,
+    context: str,
+    branch: str,
+    protected: bool,
+    status_checks_required: bool,
+    required_contexts: list[str],
+    required_checks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build the structured enforced-versus-advisory result for one check.
+
+    A published status that is not marked required blocks nothing, so the
+    distinction this dict carries is the whole point of the read:
+    ``enforced`` is True only when our context is in the branch's required set.
+    ``state`` is the display form (``"enforced"`` / ``"advisory"``) and
+    ``reason`` names why it is not enforced, so a caller can render a precise
+    message instead of a bare boolean.
+    """
+    enforced = context in required_contexts
+    if not protected:
+        reason = "branch_not_protected"
+    elif not status_checks_required:
+        reason = "status_checks_not_required"
+    elif enforced:
+        reason = "required"
+    else:
+        reason = "not_required"
+    return {
+        "context": context,
+        "branch": branch,
+        "protected": protected,
+        "status_checks_required": status_checks_required,
+        "enforced": enforced,
+        "state": "enforced" if enforced else "advisory",
+        "required_contexts": required_contexts,
+        "required_checks": required_checks,
+        "reason": reason,
+    }
+
+
 class GitHubConnector(ConnectorBase):
     """Read/write GitHub via the REST API.
 
@@ -331,6 +434,13 @@ class GitHubConnector(ConnectorBase):
                           (returns total_count and Link-header pagination)
       "rate_limit"      — current rate-limit budget via GET /rate_limit; records[0] is the full
                           {"core": ..., "search": ..., ...} resources map
+      "branch_protection" — read a branch's protection and report whether the Farna required
+                          check context is in its required status checks; filters: {"repo": ...,
+                          "branch": ...} and optional "context" (default
+                          REQUIRED_CHECK_CONTEXT). Returns ONE record: {context, branch, protected,
+                          status_checks_required, enforced, state, required_contexts,
+                          required_checks, reason}. A branch with no protection rule returns
+                          protected=False / enforced=False (state="advisory"), not an error.
 
     Every query result exposes ``metadata["rate_limit"]`` — the ``X-RateLimit-*`` headers
     reported by GitHub on the response (limit/remaining/used/reset/resource) so agents can
@@ -367,6 +477,14 @@ class GitHubConnector(ConnectorBase):
                            "reviewers": [...] and/or "team_reviewers": [...]}
       "pr_label"        — add labels to a pull request; data: {"repo": ..., "pull_number": ..., "labels": [...]}
       "issue_assign"    — assign an issue; data: {"repo": ..., "issue_number": ..., "assignees": [...]}
+      "commit_status"   — publish a Farna Control delivery verdict as a commit status; data:
+                           {"repo": ..., "sha": ..., "state": "success"|"failure", optional
+                           "context" (default REQUIRED_CHECK_CONTEXT), "description", "target_url",
+                           "branch"}. Returns {"check": {...}}. When "branch" is supplied the
+                           result also carries "enforcement" (the branch_protection read for that
+                           branch and context), so a caller can display enforced versus advisory
+                           from the publish result. Farna Control NEVER merges: the forge's branch
+                           protection enforces the verdict.
     """
 
     def __init__(
@@ -1008,6 +1126,7 @@ class GitHubConnector(ConnectorBase):
             "pr_diff": self._query_pr_diff,
             "search_issues": self._query_search_issues,
             "rate_limit": self._query_rate_limit,
+            "branch_protection": self._query_branch_protection,
         }
         handler = handlers.get(q.resource)
         if handler is None:
@@ -1191,6 +1310,75 @@ class GitHubConnector(ConnectorBase):
         resources = cast("dict[str, Any]", body.get("resources", {}))
         return self._result([resources], r, total=1)
 
+    async def _query_branch_protection(self, q: ConnectorQuery) -> ConnectorResult:
+        """Read a branch's protection; report whether our check is required.
+
+        The result record is the structured enforced-versus-advisory dict built
+        by :func:`_required_check_enforcement`. A branch with no protection rule
+        (GitHub's ``404 {"message": "Branch not protected"}``) is a legitimate
+        "advisory" answer, not an error; any other 404, or a 403 from a token
+        without branch-protection read permission, propagates so the caller
+        never mistakes an unreadable config for "not enforced".
+        """
+        owner_repo = self._require_filter(q.filters, "repo", "branch_protection")
+        branch = self._require_filter(q.filters, "branch", "branch_protection")
+        if not branch:
+            raise ValueError("GitHub branch_protection query requires a non-empty 'branch' filter")
+        context = q.filters.get("context", REQUIRED_CHECK_CONTEXT)
+        if not isinstance(context, str) or not context:
+            raise ValueError("GitHub branch_protection query filter 'context' must be a non-empty string")
+        enforcement, response = await self._read_required_check_enforcement(owner_repo, branch, context)
+        if response is None:
+            return ConnectorResult(records=[enforcement], total=1)
+        return self._result([enforcement], response, total=1)
+
+    async def _read_required_check_enforcement(
+        self,
+        owner_repo: str,
+        branch: str,
+        context: str,
+    ) -> tuple[dict[str, Any], httpx.Response | None]:
+        """Read branch protection; return (enforcement dict, response-or-None).
+
+        ``response`` is ``None`` only for the "branch is not protected" 404, so
+        a caller building a ``ConnectorResult`` can attach rate-limit metadata
+        when there is a real response and skip it when there is not.
+        """
+        encoded_branch = quote(branch, safe="")
+        try:
+            response = await self._call_api(
+                "GET",
+                f"/repos/{owner_repo}/branches/{encoded_branch}/protection",
+            )
+        except GitHubNotFoundError as exc:
+            if _BRANCH_NOT_PROTECTED_MARKER not in str(exc).lower():
+                raise
+            return (
+                _required_check_enforcement(
+                    context=context,
+                    branch=branch,
+                    protected=False,
+                    status_checks_required=False,
+                    required_contexts=[],
+                    required_checks=[],
+                ),
+                None,
+            )
+        body = self._parse_json_object(response)
+        required_checks = body.get("required_status_checks")
+        required_contexts, raw_checks = _required_status_check_contexts(required_checks)
+        return (
+            _required_check_enforcement(
+                context=context,
+                branch=branch,
+                protected=True,
+                status_checks_required=isinstance(required_checks, dict),
+                required_contexts=required_contexts,
+                required_checks=raw_checks,
+            ),
+            response,
+        )
+
     def _require_write_filter(self, data: dict[str, Any], key: str, resource: str) -> str:
         """Get a required write field or raise a descriptive ValueError."""
         if key not in data:
@@ -1259,6 +1447,7 @@ class GitHubConnector(ConnectorBase):
             "pr_review_request": self._write_pr_review_request,
             "pr_label": self._write_pr_label,
             "issue_assign": self._write_issue_assign,
+            "commit_status": self._write_commit_status,
         }
         handler = handlers.get(payload.resource)
         if handler is None:
@@ -1552,6 +1741,56 @@ class GitHubConnector(ConnectorBase):
             "assignees",
             {"assignees": self._require_string_list(payload.data, "assignees", "issue_assign")},
         )
+
+    async def _write_commit_status(self, payload: ConnectorPayload) -> dict[str, Any]:
+        """Publish a Farna Control verdict as a commit status.
+
+        The status is published under the stable :data:`REQUIRED_CHECK_CONTEXT`
+        (or a caller-supplied ``context``) so a repository's branch-protection
+        rule can require it. When ``branch`` is supplied the method also reads
+        that branch's protection and returns ``enforcement``, so the caller can
+        display enforced versus advisory without a second call. Every input is
+        validated BEFORE the network write, so a malformed payload never
+        publishes a status.
+        """
+        data = payload.data
+        owner_repo = self._require_write_filter(data, "repo", "commit_status")
+        sha = self._require_write_filter(data, "sha", "commit_status")
+        state = self._require_write_filter(data, "state", "commit_status")
+        if state not in _VERDICT_STATES:
+            raise ValueError(f"GitHub commit_status 'state' must be one of {sorted(_VERDICT_STATES)}; got {state!r}")
+        context = data.get("context", REQUIRED_CHECK_CONTEXT)
+        if not isinstance(context, str) or not context:
+            raise ValueError("GitHub commit_status 'context' must be a non-empty string")
+        branch = data.get("branch")
+        if branch is not None and (not isinstance(branch, str) or not branch):
+            raise ValueError("GitHub commit_status 'branch' must be a non-empty string when supplied")
+        body: dict[str, Any] = {"state": state, "context": context}
+        if "description" in data:
+            if not isinstance(data["description"], str):
+                raise ValueError("GitHub commit_status 'description' must be a string")
+            body["description"] = data["description"]
+        if "target_url" in data:
+            if not isinstance(data["target_url"], str):
+                raise ValueError("GitHub commit_status 'target_url' must be a string")
+            body["target_url"] = data["target_url"]
+        response = await self._call_api("POST", f"/repos/{owner_repo}/statuses/{sha}", json=body)
+        published = self._parse_json_object(response)
+        result: dict[str, Any] = {
+            "check": {
+                "context": context,
+                "state": state,
+                "description": body.get("description", ""),
+                "sha": sha,
+                "target_url": body.get("target_url"),
+                "status_id": published.get("id"),
+                "url": published.get("url"),
+            },
+        }
+        if isinstance(branch, str) and branch:
+            enforcement, _ = await self._read_required_check_enforcement(owner_repo, branch, context)
+            result["enforcement"] = enforcement
+        return result
 
     def _optional_reviewer_lists(self, data: dict[str, Any]) -> dict[str, Any]:
         """Build the reviewers/team_reviewers request body, requiring at least one."""
