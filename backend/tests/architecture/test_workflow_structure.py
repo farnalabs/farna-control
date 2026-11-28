@@ -1521,6 +1521,51 @@ def test_sonar_new_issues_gate_counts_only_the_blocking_subset() -> None:
     assert not violations, "sonar-new-issues no longer counts only the blocking subset:\n" + "\n".join(violations)
 
 
+# --- Merge-tier coverage: checks the fast PR tier left with no gate ---------
+#
+# The 2026-11-27 fast-tier cut removed three checks from ci.yml's frontend job
+# and nowhere else ran them, so they ran in NO gate at all until merge-validate
+# reintroduced them. This pin is about the WORKFLOW running them, not which job
+# holds them, so the checks may be moved between jobs freely.
+
+
+def _all_job_run_texts(workflow: dict) -> str:
+    """Every job step's ``run`` text in a workflow, joined with newlines."""
+    runs: list[str] = []
+    for job in (workflow.get("jobs") or {}).values():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps") or []:
+            if isinstance(step, dict) and step.get("run"):
+                runs.append(str(step["run"]))
+    return "\n".join(runs)
+
+
+#: label -> command substring. Each is a check whose ONLY gate is the merge tier:
+#: the @visual canvas snapshots are excluded from the staging @regression run by
+#: their tag, the mobile-nav specs were deliberately taken out of the staging E2E
+#: job (FAR-1850), and the slice guard inspects @regression specs rather than
+#: running them.
+MERGE_TIER_ONLY_CHECKS = {
+    "the mobile-nav specs": "playwright test mobile-nav-flash mobile-nav-usable",
+    "the @visual canvas snapshots": 'playwright test --grep "@visual"',
+    "the e2e-visual-slice classification guard": "scripts/e2e-visual-slice.mjs --check",
+}
+
+
+def test_merge_validate_runs_the_checks_that_have_no_other_gate() -> None:
+    """If one of these leaves merge-validate.yml, it runs in no gate at all.
+
+    That is exactly how the fast-PR-tier cut lost them: they lived only in
+    ci.yml's frontend job, the job was slimmed, and nothing failed - the checks
+    simply stopped running. A red test here is the only signal that would have
+    fired.
+    """
+    run_text = _all_job_run_texts(_load_yaml(VALIDATE_YML))
+    violations = [f"  merge-validate.yml: no job runs {label} ({command!r}) - that check would have no gate at all" for label, command in MERGE_TIER_ONLY_CHECKS.items() if command not in run_text]
+    assert not violations, "merge-validate.yml dropped a check that runs nowhere else:\n" + "\n".join(violations)
+
+
 # --- FAR-2139: the deploy escalation email edge is one shared implementation --
 
 

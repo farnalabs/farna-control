@@ -25,9 +25,20 @@ name: "Merge train: validate"
 #                     their own shard) - Testcontainers Postgres.
 #   tier1b            ci.yml tier1b-light (Testcontainers light connector/model set).
 #   frontend          ci.yml "Frontend and WCAG" (lint, type-check, WCAG contrast,
-#                     vitest WITH coverage, build). PR-head-only visual/mobile
-#                     slices and e2e-route-coverage stay in ci.yml.
-#   sonar             ci.yml sonarcloud-scan (coverage import).
+#                     vitest WITH coverage, build). e2e-route-coverage stays in
+#                     ci.yml.
+#   e2e-visual        the three checks that had NO home after the PR tier became
+#                     fast: the @visual canvas snapshots (FAR-2461), the
+#                     mobile-nav specs (FAR-1850) and the e2e-visual-slice
+#                     classification guard (FAR-2017). None of them is selected
+#                     by the frontend job (vitest + WCAG contrast only) and none
+#                     is selected by the staging @regression gate (@visual tests
+#                     are not @regression), so before this job they ran in no
+#                     gate at all.
+#   sonar             ci.yml sonarcloud-scan (coverage import). Analyses the MAIN
+#                     branch when `ref` is `main`, so the main baseline and the
+#                     coverage badge keep updating now that ci.yml has no push
+#                     trigger.
 #   sonar-new-issues  ci.yml sonar-new-issues-gate (PR-scoped; see the job note).
 #   coverage          ci.yml backend-coverage thresholds + coverage-gate
 #                     (diff-cover changed lines).
@@ -397,8 +408,11 @@ jobs:
 
   frontend:
     # Lint, type-check, WCAG contrast, the vitest suite WITH coverage, and the
-    # production build. Not the frontend-unit-parity duplicate (FAR-1947) and
-    # not the PR-head visual/mobile slices: those stay in ci.yml.
+    # production build. Not the frontend-unit-parity duplicate (FAR-1947). The
+    # Playwright e2e checks (mobile-nav, @visual canvas snapshots, the
+    # visual-slice guard) are the separate parallel `e2e-visual` job, not these
+    # steps - they need Playwright browsers and their own dev server, and folding
+    # them in here would serialise them onto this job for no wall-clock gain.
     name: "Validation: frontend"
     runs-on: ubicloud-standard-2
     timeout-minutes: 30
@@ -440,6 +454,72 @@ jobs:
           name: frontend-coverage
           path: frontend/coverage/lcov.info
       - run: pnpm run build
+
+  e2e-visual:
+    # The three checks that had NO home after the PR tier became fast (they were
+    # removed from ci.yml by the 2026-11-27 fast-tier cut, and merge-validate.yml
+    # did not inherit them):
+    #   * the @visual canvas snapshots (FAR-2461) - tagged @visual, so the
+    #     staging @regression gate never selects them;
+    #   * the mobile-nav specs (FAR-1850);
+    #   * the e2e-visual-slice classification guard (FAR-2017), which fails when
+    #     a new visual @regression spec is classified in neither SLICE nor
+    #     STAGING_ONLY.
+    # The `frontend` job does not cover them: it runs vitest and WCAG contrast,
+    # neither of which is a Playwright e2e selection.
+    #
+    # Independent and parallel, so it costs the train NO wall clock: the train's
+    # longest gate is `integration`/`bdd`, and this job is minutes.
+    #
+    # Install/artefacts: the workflow has no cross-job channel for a frontend
+    # install or build (only the coverage lcov artefact is passed between jobs),
+    # and the e2e harness serves the Vite DEV server itself
+    # (playwright.config.ts `webServer.command: npm run dev` for the local
+    # target), so a production `dist` would be dead weight here. The install is
+    # store-cache backed (`setup-node` `cache: pnpm` below), which is cheaper
+    # than an artefact round-trip of node_modules and is the mechanism this
+    # workflow already uses.
+    name: "Validation: visual + mobile-nav e2e"
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.29.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install chromium
+      # Cheap, dependency-free schema check first: a misclassified visual spec
+      # fails in seconds instead of after the browser run.
+      - name: Check the e2e visual slice classification
+        run: node scripts/e2e-visual-slice.mjs --check
+      # FAR-1850: previously only inside the staging E2E job. They run against
+      # the local mock target and do not need staging.
+      - name: Run mobile nav specs (flash + usable)
+        run: pnpm exec playwright test mobile-nav-flash mobile-nav-usable
+      # FAR-2461: the canvas visual snapshots are tagged @visual, which the
+      # @regression slice never selects. The baselines under
+      # tests/e2e/canvas.visual.spec.ts-snapshots/ are committed per platform,
+      # including the Linux set this job runs on. Serial (--workers=1) so the
+      # snapshots do not race each other on one cold dev server.
+      - name: Run canvas visual regression snapshots
+        env:
+          E2E_TARGET: local
+        run: pnpm exec playwright test --grep "@visual" --workers=1 --reporter=line
 
   sonar:
     # SonarCloud scan with coverage import. It needs the combined backend
@@ -516,15 +596,38 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
+          # MAIN-branch analysis. ci.yml lost its push trigger in the fast-tier
+          # cut, so this is the only path that can keep the project's main
+          # baseline and coverage badge updating. The dry-run / scheduled
+          # verification path dispatches this workflow with `ref: main`; for that
+          # case the scanner is told the branch EXPLICITLY, because its own SCM
+          # detection follows the CALLER's ref (a train branch, or a detached
+          # dispatch ref) and the report would otherwise land as a feature-branch
+          # analysis that never touches the main baseline. Any other ref is left
+          # to the scanner's default (a branch analysis, never main).
+          #
+          # NOT named SONAR_*: SonarScanner maps SONAR_<NAME> environment
+          # variables onto sonar.<name> analysis properties, so a SONAR_-prefixed
+          # hint would be read as configuration itself (and an empty value would
+          # send `sonar.branch.name=`). It is passed explicitly below instead.
+          MERGE_TIER_SONAR_BRANCH: ${{ (inputs.ref == 'main' || inputs.ref == 'refs/heads/main') && 'main' || '' }}
         run: |
           set -uo pipefail
           LOG="$(mktemp)"
           trap 'rm -f "$LOG"' EXIT
           CE_FAILURES=0
+          # Only main is named explicitly; every other ref stays a plain branch
+          # analysis, so a train-branch scan can never overwrite the main
+          # baseline.
+          SCAN_ARGS=(-Dsonar.projectBaseDir=.)
+          if [ -n "${MERGE_TIER_SONAR_BRANCH:-}" ]; then
+            echo "::notice::SonarCloud analysis is pinned to branch '${MERGE_TIER_SONAR_BRANCH}' (main-baseline update)."
+            SCAN_ARGS+=("-Dsonar.branch.name=${MERGE_TIER_SONAR_BRANCH}")
+          fi
           for attempt in 1 2 3; do
             : > "$LOG"
             set +e
-            "$SCANNER" -Dsonar.projectBaseDir=. 2>&1 | tee "$LOG"
+            "$SCANNER" "${SCAN_ARGS[@]}" 2>&1 | tee "$LOG"
             RC=${PIPESTATUS[0]}
             set -e
             if [ "$RC" -eq 0 ]; then
@@ -891,7 +994,7 @@ jobs:
     # always() so a failed validation still names the failing job; a skipped job
     # (full=false) is not a failure.
     name: "Validation: summary"
-    needs: [backend-unit, backend-non-unit, integration, tier1b, frontend, sonar, sonar-new-issues, coverage, bdd]
+    needs: [backend-unit, backend-non-unit, integration, tier1b, frontend, e2e-visual, sonar, sonar-new-issues, coverage, bdd]
     if: always()
     runs-on: ubicloud-standard-2
     timeout-minutes: 5
@@ -909,6 +1012,7 @@ jobs:
           R_INTEGRATION: ${{ needs.integration.result }}
           R_TIER1B: ${{ needs.tier1b.result }}
           R_FRONTEND: ${{ needs.frontend.result }}
+          R_E2E_VISUAL: ${{ needs.e2e-visual.result }}
           R_SONAR: ${{ needs.sonar.result }}
           R_SONAR_NEW_ISSUES: ${{ needs.sonar-new-issues.result }}
           R_COVERAGE: ${{ needs.coverage.result }}
@@ -931,6 +1035,7 @@ jobs:
           record integration "$R_INTEGRATION"
           record tier1b "$R_TIER1B"
           record frontend "$R_FRONTEND"
+          record e2e-visual "$R_E2E_VISUAL"
           record sonar "$R_SONAR"
           record sonar-new-issues "$R_SONAR_NEW_ISSUES"
           record coverage "$R_COVERAGE"
