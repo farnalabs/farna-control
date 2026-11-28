@@ -36,8 +36,10 @@ name: "Merge train: validate"
 #                     `pnpm run test:unit` (4 workers) at train time, so the
 #                     non-train queue path's ordering-sensitive worker count is
 #                     validated on the composed branch too.
-#   sonar             ci.yml sonarcloud-scan (coverage import).
-#   sonar-new-issues  ci.yml sonar-new-issues-gate (PR-scoped; see the job note).
+#   sonar             former ci.yml sonarcloud-scan (coverage import).
+#   sonar-new-issues  former ci.yml sonar-new-issues-gate (PR-scoped; retired from
+#                     the PR tier - the train passes no PR number so it reports a
+#                     notice - see the job note).
 #   coverage          ci.yml backend-coverage thresholds + coverage-gate
 #                     (diff-cover changed lines).
 #   bdd               bdd.yml's backend pytest-bdd suite against a live app
@@ -710,12 +712,16 @@ jobs:
           exit 1
 
   sonar-new-issues:
-    # ci.yml sonar-new-issues-gate. It queries the PR's analysis by PR number, so
-    # it can only run when a PR number is supplied. The merge train validates a
-    # BRANCH (no PR analysis exists), so it leaves pr_number empty and this job
-    # reports a clear notice instead of a false pass; the SonarCloud quality gate
-    # on the scan above (new-code ratios) still applies to the train. Wiring a
-    # branch-scoped issue count is a phase-2 refinement.
+    # The former ci.yml sonar-new-issues-gate, re-homed here on 2026-11-27.
+    # RETIREMENT, stated explicitly: PR CI no longer runs a SonarCloud analysis,
+    # so the automatic PR-scoped BUG/VULNERABILITY + BLOCKER/CRITICAL CODE_SMELL
+    # count gate is retired from the PR tier. The pre-merge quality signal is the
+    # SonarCloud quality gate on the `sonar` scan above (new-code ratios, which
+    # `sonar.qualitygate.wait=true` enforces). This job still runs the full count
+    # gate when a caller supplies a PR number (a manual dispatch); the train
+    # validates a BRANCH with no PR analysis, so it leaves pr_number empty and
+    # this job reports a clear notice rather than a false pass. Wiring a
+    # branch-scoped issue count is a phase-2 refinement, not a silent gap.
     name: "Validation: new issues gate (SonarCloud)"
     if: ${{ always() && inputs.full && needs.sonar.result == 'success' }}
     needs: [sonar]

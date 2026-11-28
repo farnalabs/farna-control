@@ -19,9 +19,14 @@ on:
   # and quick. Every whole-repo suite lives in merge-validate.yml and runs once
   # per train instead of ~150 times a day per PR:
   #   backend unit shards, architecture/connector/BDD-module suites, integration
-  #   shards, Tier 1b testcontainers, full frontend vitest + WCAG + build,
-  #   SonarCloud (scan and PR-scoped new-issues gate) and the changed-lines
-  #   coverage gate.
+  #   shards, Tier 1b testcontainers, full frontend vitest + WCAG + build, the
+  #   Playwright mobile-nav / visual-token / canvas @visual / route-coverage
+  #   gates, SonarCloud (scan and its new-code quality gate) and the
+  #   changed-lines coverage gate.
+  # The extra PR-scoped Sonar new-issues COUNT gate is retired from the PR tier
+  # (PR CI no longer runs a SonarCloud analysis, so there is no PR analysis to
+  # query); the train's SonarCloud quality gate is the pre-merge quality signal,
+  # and the count gate still runs on a manual dispatch that supplies a PR number.
   # A check that is cheap, deterministic and NOT duplicated there still runs
   # here: gitleaks, migration-heads (incl. the numeric-prefix collision check),
   # schema freshness, copy consistency, and the deploy-critical E2E route-method
