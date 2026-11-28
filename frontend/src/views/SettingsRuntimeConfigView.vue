@@ -5,10 +5,9 @@
     <FeatureGate feature-name="runtime_config" show-disabled>
 
     <div class="flex items-center gap-3">
-      <div v-if="hasDrift" class="flex items-center gap-2 rounded-lg border border-warning/50 bg-warning/10 px-4 py-2 text-sm text-warning-text">
-        <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" focusable="false" />
+      <Notice v-if="hasDrift" variant="warning" padding="none" class="flex items-center gap-2 px-4 py-2 text-sm">
         <span>{{ $t('views.SettingsRuntimeConfigView.some_values_differ_from_environment_restart_to_sync') }}</span>
-      </div>
+      </Notice>
       <button
         type="button"
         class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
@@ -65,19 +64,19 @@
                   <AlertTriangle v-if="entryHasDrift(entry)" class="h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" focusable="false" />
                   <span v-if="entryHasDrift(entry)" class="sr-only">{{ $t('views.SettingsRuntimeConfigView.value_differs_from_environment') }}</span>
                 <code class="text-sm font-mono">{{ entry.key }}</code>
-                  <span
+                  <Badge
                     v-if="entry.hot_reloadable"
-                    class="badge badge-status-success"
+                    variant="success"
                   >
                     {{ $t('views.SettingsRuntimeConfigView.hot') }}
-                  </span>
-                  <span
+                  </Badge>
+                  <Badge
                     v-else
-                    class="badge badge-status-muted"
+                    variant="neutral"
                     :title="$t('views.SettingsRuntimeConfigView.requires_server_restart')"
                   >
                     {{ $t('views.SettingsRuntimeConfigView.static') }}
-                  </span>
+                  </Badge>
               </div>
             </td>
 
@@ -184,9 +183,9 @@
     <!-- Save action error: no refetch loader; the Save button is the retry
          path. -->
     <ErrorAlert v-if="formError" :message="formError" :retryable="false" />
-    <div v-if="formSuccess" class="rounded-lg border border-success/50 bg-success/10 p-4 text-sm text-success-text">
+    <Notice v-if="formSuccess" variant="success" :icon="false" class="text-sm">
       {{ formSuccess }}
-    </div>
+    </Notice>
     </FeatureGate>
   </div>
 </template>
@@ -199,8 +198,10 @@ import { api } from '../lib/api/client'
 import { formatApiError, isFeatureRequiredProblem } from '../lib/api/formatError'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
+import Badge from '../components/ui/Badge.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import { AlertTriangle } from '@lucide/vue'
 

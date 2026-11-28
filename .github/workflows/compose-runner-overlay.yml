@@ -1,0 +1,206 @@
+# Prove the packaged compose bundle plus its Bundled Runner overlay (FAR-2854).
+#
+# The release bundle pins a LITERAL GHCR release tag, so CI cannot boot the
+# all-in-one application image for an arbitrary test tag (no such image exists
+# for `v0.0.0-ci`). This job proves the executor half of the packaged stack
+# instead, from the two compose files the bundle ships:
+#
+#   1. builds a real bundle with the packager, extracts it, and runs the
+#      bundled `init-env.sh` (the same artefacts an operator gets);
+#   2. asserts the BASE bundle is unchanged - no socket proxy, no Docker
+#      endpoint, no name-pinned network (the "executor off by default" half);
+#   3. asserts the overlay config merges cleanly, publishes no proxy port, sets
+#      FARNA_CONTROL_DOCKER_HOST on the all-in-one service, and pins the
+#      workspace network's engine-side name;
+#   4. boots the filtered socket proxy + workspace-network holder from the
+#      packaged files and creates, starts and `exec`s a real container on that
+#      network THROUGH the proxy - the executor's provisioning path.
+#
+# What it does NOT prove: it does not boot the all-in-one application image, so
+# it does not exercise the API/SAQ dispatch that calls the provider, and it does
+# not re-prove workspace isolation (the docker-marked Bundled Runner harness
+# does that against deploy/compose/runner-ci.yml). The app env wiring is proven
+# by `docker compose config`; the provisioning primitives are proven live.
+name: "Compose runner overlay"
+
+on:
+  pull_request:
+    paths:
+      - "scripts/package_compose_release.py"
+      - "deploy/compose/runner-all-in-one.yml"
+      - "deploy/compose/runner.yml"
+      - "backend/tests/unit/scripts/test_package_compose_release.py"
+      - "backend/tests/unit/scripts/test_compose_runner_all_in_one_overlay.py"
+      - ".github/workflows/compose-runner-overlay.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-runner-overlay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  overlay:
+    name: packaged stack + executor overlay
+    runs-on: ubicloud-standard-2
+    # Budget: one small bundle build/extract plus two image pulls (busybox,
+    # docker:28-cli) and a few container creates. The 5-attempt registry retry
+    # (growing backoff) covers transient lscr.io throttling as in the harness.
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT: farna-overlay-ci
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+
+      - name: Build and extract the compose bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist bundle
+          uv run --no-project --with "pyyaml==6.0.2" python scripts/package_compose_release.py \
+            --version 0.0.0-ci \
+            --tag v0.0.0-ci \
+            --output-dir dist
+          mkdir -p bundle
+          tar -xzf dist/farna-control-0.0.0-ci-compose.tar.gz -C bundle
+          ( cd bundle && ./init-env.sh )
+          ( cd bundle && sha256sum -c SHA256SUMS )
+          test -f bundle/runner-all-in-one.yml
+
+      - name: Base bundle stays executor-free
+        shell: bash
+        working-directory: bundle
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.prod.yml config > base-config.yml
+          if grep -Eq 'docker-socket-proxy|FARNA_CONTROL_DOCKER_HOST' base-config.yml; then
+            echo "::error::the base bundle leaked executor wiring"
+            exit 1
+          fi
+
+      - name: Overlay config is valid and pins the workspace network name
+        shell: bash
+        working-directory: bundle
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.prod.yml -f runner-all-in-one.yml config --format json > overlay-config.json
+          python3 - > ws-network.txt <<'PY'
+          import json
+          import sys
+
+          with open("overlay-config.json", encoding="utf-8") as handle:
+              config = json.load(handle)
+
+          services = config["services"]
+          proxy = services["docker-socket-proxy"]
+          if proxy.get("ports"):
+              sys.exit("the overlay proxy publishes a host port")
+
+          app_env = services["farna-control"].get("environment") or {}
+          endpoint = app_env.get("FARNA_CONTROL_DOCKER_HOST")
+          if endpoint != "tcp://docker-socket-proxy:2375":
+              sys.exit(f"unexpected app Docker endpoint: {endpoint!r}")
+
+          pinned = [key for key, value in config.get("networks", {}).items() if value.get("name") == key]
+          if len(pinned) != 1:
+              sys.exit(f"expected one name-pinned workspace network; got {pinned!r}")
+
+          print(pinned[0])
+          PY
+          WS_NETWORK="$(cat ws-network.txt)"
+          echo "workspace network: ${WS_NETWORK}"
+          echo "WS_NETWORK=${WS_NETWORK}" >> "$GITHUB_ENV"
+
+      - name: Pre-pull the small test images
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull busybox:1.36
+          docker pull docker:28-cli
+
+      - name: Boot the executor half of the packaged stack
+        shell: bash
+        working-directory: bundle
+        run: |
+          set -euo pipefail
+          up_ok=0
+          for i in 1 2 3 4 5; do
+            if docker compose -p "$COMPOSE_PROJECT" \
+              -f docker-compose.prod.yml -f runner-all-in-one.yml \
+              up -d docker-socket-proxy runner-workspace-network-holder; then
+              up_ok=1
+              break
+            fi
+            backoff=$(( i * 20 ))
+            echo "::warning::compose up attempt ${i}/5 failed (likely transient registry throttling); retrying in ${backoff}s"
+            sleep "$backoff"
+          done
+          if [ "$up_ok" -ne 1 ]; then
+            docker compose -p "$COMPOSE_PROJECT" -f docker-compose.prod.yml -f runner-all-in-one.yml logs || true
+            echo "::error::the packaged executor stack failed to boot"
+            exit 1
+          fi
+
+          docker network inspect "$WS_NETWORK" >/dev/null
+
+          proxy_id="$(docker compose -p "$COMPOSE_PROJECT" -f docker-compose.prod.yml -f runner-all-in-one.yml ps -q docker-socket-proxy)"
+          if [ -n "$(docker port "$proxy_id")" ]; then
+            echo "::error::the socket proxy published a host port"
+            docker port "$proxy_id"
+            exit 1
+          fi
+
+      - name: Provision a workspace through the proxy
+        shell: bash
+        working-directory: bundle
+        run: |
+          set -euo pipefail
+          client_network="$(docker network ls \
+            --filter "label=com.docker.compose.project=${COMPOSE_PROJECT}" \
+            --filter "label=com.docker.compose.network=default" \
+            --format '{{.Name}}')"
+          if [ -z "$client_network" ]; then
+            echo "::error::could not find the compose default network"
+            exit 1
+          fi
+
+          # The proxy publishes no ports, so the client container joins the
+          # compose default network and reaches the proxy by service name - the
+          # exact route the all-in-one app uses. The inner `docker run` creates
+          # the workspace attached to the workspace network at create-time (no
+          # /networks call), then execs in it: create -> start -> exec.
+          docker run --rm --network "$client_network" \
+            -e DOCKER_HOST=tcp://docker-socket-proxy:2375 \
+            docker:28-cli run -d --name ci-workspace --network "$WS_NETWORK" busybox:1.36 sleep 120
+          docker run --rm --network "$client_network" \
+            -e DOCKER_HOST=tcp://docker-socket-proxy:2375 \
+            docker:28-cli exec ci-workspace true
+
+          attached="$(docker inspect ci-workspace --format '{{json .NetworkSettings.Networks}}' \
+            | python3 -c 'import json, sys; print(",".join(sorted(json.load(sys.stdin))))')"
+          if [ "$attached" != "$WS_NETWORK" ]; then
+            echo "::error::the provisioned workspace is not attached to the declared workspace network (got: ${attached})"
+            exit 1
+          fi
+          echo "workspace provisioned on ${attached} through the proxy"
+
+      - name: Show proxy log and tear down
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker rm -f ci-workspace >/dev/null 2>&1 || true
+          if [ -d bundle ]; then
+            ( cd bundle && docker compose -p "$COMPOSE_PROJECT" -f docker-compose.prod.yml -f runner-all-in-one.yml logs docker-socket-proxy ) || true
+            ( cd bundle && docker compose -p "$COMPOSE_PROJECT" -f docker-compose.prod.yml -f runner-all-in-one.yml down -v --remove-orphans ) || true
+          fi

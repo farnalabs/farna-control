@@ -34,7 +34,7 @@ depends-on:
   - feat-auth-jwt-auth
   - feat-core-db-abstraction-core
   - feat-core-run-context
-status: covered
+status: partial
 ---
 
 # Teams Org Entity
@@ -52,16 +52,20 @@ authorization cleanup.
       (`active | suspended | deleted`), `created_by` (nullable, deliberately not an FK),
       `settings_json`, `plan_id`, `otel_config_json`, `daily_spend_limit`,
       `deletion_token` (24h, single-use), `export_bundle_json`
+      <!-- behaviour: org-entity-01 | tests: none -->
 - [x] `OrgMembership`: `(account_id, organisation_id)` unique, role check constraint
       `admin | operator | runner | viewer`, `joined_at`, `deactivated_at`
+      <!-- behaviour: org-entity-02 | tests: none -->
 - [x] System-admin org CRUD (`/api/v1/admin/orgs`): create/list, create user in org,
       delete org - 403 for non-system-admins, 409 on slug collision / duplicate
       membership, 422 on invalid slug/role/weak password, 404 when missing. Deletion
       is cross-organization only: the caller's own organization is refused with 409
       and the reserved infrastructure orgs (nil-UUID error ingest, modulo-library
       registry) with 404, both before any delete (`api/routes/admin_orgs.py`)
+      <!-- behaviour: org-entity-03 | tests: none -->
 - [x] Self-service org profile (`/api/v1/admin/org`): get/update name/logo, regenerate
       API key - admin role gate → 403
+      <!-- behaviour: org-entity-04 | tests: none -->
 - [x] Self-service organization deletion is refused (FAR-2225): the only
       organization these routes can address is the caller's active one, so
       `POST /api/v1/admin/org/deletion-request`, `POST
@@ -70,6 +74,7 @@ authorization cleanup.
       any token validation or database work. `PATCH
       /api/v1/admin/org/deletion-cancel` (a harmless safety valve) and `GET
       /api/v1/admin/org/export` remain functional
+      <!-- behaviour: org-entity-05 | tests: none -->
 - [x] Org-lifecycle evidence survives a hard delete (FAR-1517): because the
       `audit_events` chain is FK-cascaded from the org, the writers that can still
       delete or cancel - `PATCH /api/v1/admin/org/deletion-cancel` and the
@@ -79,15 +84,23 @@ authorization cleanup.
       failed append aborts the destructive act and the record outlives the org
       (`core/system_audit_logger.py`,
       `tests/integration/test_system_audit_org_deletion.py`)
+      <!-- behaviour: org-entity-06 | tests: backend/tests/integration/test_system_audit_org_deletion.py -->
 - [x] RLS tenant isolation: org-scoped tables carry `organisation_id`, `SET LOCAL
       app.organisation_id` in transactions, pool-checkout org reset, ORM tenant filter
-      for non-Postgres backends, `organisations` (root tenant) and `invitations` tables
-      excluded
+      for non-Postgres backends; only `organisations` (root tenant) and the
+      runtime-managed LangGraph checkpoint tables sit outside the regime, while
+      `invitations` is protected and its pre-auth accept read uses the scoped
+      `app.bootstrap_context` grant
+      <!-- behaviour: org-entity-07 | tests: none -->
 - [x] License management via `/api/v1/admin/orgs/{org_id}/license` (Ed25519 verified,
       422 on invalid key, falls back to system license)
+      <!-- behaviour: org-entity-08 | tests: none -->
 - [x] ViewModel `current` supplies org context, plan, team memberships, preferences
+      <!-- behaviour: org-entity-09 | tests: none -->
 - [x] ProgrammingError → 501 / SQLAlchemyError → 503 on the DB-accessing org route handlers
+      <!-- behaviour: org-entity-10 | tests: none -->
 - [x] Org-level `daily_spend_limit` enforced for the whole-org aggregate
+      <!-- behaviour: org-entity-11 | tests: none -->
 
 ## Known Gaps
 

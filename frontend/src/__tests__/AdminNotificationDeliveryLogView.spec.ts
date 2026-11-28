@@ -666,6 +666,46 @@ describe('AdminNotificationDeliveryLogView', () => {
     expect(wrapper.find('td[colspan="8"]').exists()).toBe(true)
   })
 
+  it('expands and collapses a delivery row from the disclosure trigger (FAR-2804)', async () => {
+    mockGet().mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: '1',
+            event_type: 'run_failed',
+            status: 'failed',
+            attempt_count: 3,
+            response_code: 500,
+            last_error: 'Internal server error',
+            response_body: null,
+            endpoint_url: 'https://example.com/hook',
+            endpoint_id: 'ep-1',
+            created_at: '2025-06-30T12:00:00Z',
+          },
+        ],
+        total: 1,
+        next_cursor: null,
+      },
+      error: undefined,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await nextTick()
+
+    const trigger = wrapper.find('[data-testid="admin-notification-log-expand-1"]')
+    expect(trigger.exists()).toBe(true)
+
+    // The Disclosure emits update:open, which the view maps to toggleRow.
+    await trigger.trigger('click')
+    await nextTick()
+    expect(wrapper.find('td[colspan="8"]').exists()).toBe(true)
+
+    await trigger.trigger('click')
+    await nextTick()
+    expect(wrapper.find('td[colspan="8"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('offers every registry event in the event-type filter (FAR-1319)', async () => {
     const wrapper = mountView()
     await flushPromises()

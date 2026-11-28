@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.db.crud.base import PageResult, apply_updates
 from farna.db.crud.pagination import CursorPaginator
+from farna.db.crud.team_scope import team_scope_clause
 from farna.db.models.agent import Agent
 from farna.db.models.model_backend import ModelBackend
 from farna.db.models.pipeline import Pipeline
@@ -95,10 +96,16 @@ async def list_model_backends(
     page_size: int = 20,
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
+    team_id: uuid.UUID | None = None,
 ) -> PageResult[ModelBackend]:
     if excluded_tiers is None:
         excluded_tiers = ["in_dev"]
     base = select(ModelBackend).where(ModelBackend.organisation_id == org_id)
+    # ADR 070 §5: a team-scoped credential's own team boundary (the DB policy
+    # filters on the KEY OWNER's memberships, not the key's team). Org-level
+    # rows (no owner team) stay visible, matching ``team_scope_clause``.
+    if team_id is not None:
+        base = base.where(team_scope_clause(ModelBackend.owner_team_id, team_id))
     if excluded_tiers:
         base = base.where(~ModelBackend.tier.in_(excluded_tiers))
     if cursor is not None:
@@ -122,6 +129,8 @@ async def list_model_backends(
     offset = (page - 1) * page_size
     try:
         total_query = select(func.count()).select_from(ModelBackend).where(ModelBackend.organisation_id == org_id)
+        if team_id is not None:
+            total_query = total_query.where(team_scope_clause(ModelBackend.owner_team_id, team_id))
         if excluded_tiers:
             total_query = total_query.where(~ModelBackend.tier.in_(excluded_tiers))
         total = (await session.execute(total_query)).scalar_one()
@@ -129,6 +138,8 @@ async def list_model_backends(
         return PageResult(items=[], total=0, page=page, page_size=page_size)
     try:
         items_stmt = select(ModelBackend).where(ModelBackend.organisation_id == org_id).order_by(ModelBackend.created_at.desc()).offset(offset).limit(page_size)
+        if team_id is not None:
+            items_stmt = items_stmt.where(team_scope_clause(ModelBackend.owner_team_id, team_id))
         if excluded_tiers:
             items_stmt = items_stmt.where(~ModelBackend.tier.in_(excluded_tiers))
         items = list((await session.execute(items_stmt)).scalars())

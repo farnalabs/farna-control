@@ -458,9 +458,8 @@ class RunExecuteMixin(_ExecutorHost):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            _raw_tb = _ref("_traceback_detail")(exc, limit=2000)
-            error_detail = _ref("_enrich_failure_detail")(_raw_tb, exc)
-            _log.exception(
+            error_detail = _ref("_enrich_failure_detail")(_ref("_failure_reason")(exc), exc)
+            _log.error(
                 "pipeline.resume_error",
                 extra={
                     "run_id": str(run_id),
@@ -473,6 +472,7 @@ class RunExecuteMixin(_ExecutorHost):
                         else {}
                     ),
                 },
+                exc_info=exc,
             )
             final_status = "failed"
             error_code = type(exc).__name__
@@ -626,9 +626,8 @@ class RunExecuteMixin(_ExecutorHost):
         retry_policy_eligible: bool,
     ) -> tuple[str, str | None, str | None, dict[str, Any] | None, bool]:
         """Handle exceptions from _prepare_and_stream; return updated status tuple."""
-        _tb = _ref("_traceback_detail")(exc, limit=2000)
-        error_detail = _ref("_enrich_failure_detail")(_tb, exc)
-        _log.exception(
+        error_detail = _ref("_enrich_failure_detail")(_ref("_failure_reason")(exc), exc)
+        _log.error(
             "pipeline.execution_error",
             extra={
                 "run_id": str(run_id),
@@ -641,6 +640,7 @@ class RunExecuteMixin(_ExecutorHost):
                     else {}
                 ),
             },
+            exc_info=exc,
         )
         final_status = "failed"
         error_code = type(exc).__name__

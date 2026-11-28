@@ -5,10 +5,10 @@
         :subtitle="$t('views.ModelBackendSetupView.page_subtitle')" />
 
       <div v-if="success" class="space-y-4">
-        <div class="rounded-md bg-green-50 p-3 text-sm text-green-800">
+        <div class="rounded-md bg-success/10 p-3 text-sm text-success-text">
           {{ $t('views.ModelBackendSetupView.backend_now_active', { name: backendName }) }}
         </div>
-        <Button severity="secondary" outlined class="w-full"
+        <Button variant="secondary" class="w-full"
           data-testid="model-backend-setup-view-backends"
           @click="router.push('/admin/model-backends')">
           {{ $t('views.ModelBackendSetupView.view_model_backends') }}
@@ -16,7 +16,7 @@
       </div>
 
       <div v-else-if="!token" class="space-y-4">
-        <div class="rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+        <div class="rounded-md bg-warning/10 p-3 text-sm text-warning-text">
           {{ $t('views.ModelBackendSetupView.missing_token_hint') }}
         </div>
       </div>
@@ -54,7 +54,7 @@ import ErrorAlert from '../../components/shared/ErrorAlert.vue'
 import { useApi } from '../../composables/useApi'
 import { getApiErrorCode } from '../../lib/api/apiError'
 import { useMutation } from '../../composables/useMutation'
-import Button from 'primevue/button'
+import Button from '../../components/ui/Button.vue'
 import InputText from 'primevue/inputtext'
 
 const { t } = useI18n()

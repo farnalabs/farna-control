@@ -35,18 +35,21 @@
       <CardSkeleton v-if="store.loading" data-testid="analytics-loading" :lines="3" />
 
       <template v-else-if="store.results">
-        <div
+        <Notice
           v-if="store.factsStale"
-          aria-live="polite"
-          class="mb-4 flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/40 dark:text-amber-200"
+          variant="warning"
+          live="polite"
+          :icon="false"
+          padding="sm"
+          class="mb-4 flex items-start gap-2 text-sm"
           data-testid="analytics-stale-notice"
         >
-          <span class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true"></span>
+          <span class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-warning" aria-hidden="true"></span>
           <div>
             <p class="font-medium">{{ $t('views.AnalyticsView.stale_data_title') }}</p>
             <p class="mt-0.5 text-muted-foreground">{{ $t('views.AnalyticsView.stale_data_detail') }}</p>
           </div>
-        </div>
+        </Notice>
 
         <EmptyState
           v-if="!store.hasData"
@@ -172,6 +175,7 @@ import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import PageHeader from "../components/shared/PageHeader.vue";
 import ErrorAlert from "../components/shared/ErrorAlert.vue";
+import Notice from "../components/shared/Notice.vue";
 import EmptyState from "../components/shared/EmptyState.vue";
 import AnalyticsChart from "../components/analytics/AnalyticsChart.vue";
 import AnalyticsFilterBar from "../components/analytics/AnalyticsFilterBar.vue";

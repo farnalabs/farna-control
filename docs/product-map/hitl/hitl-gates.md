@@ -19,6 +19,7 @@ code:
 unit-tests:
   - backend/tests/unit/hitl_manager/test_hitl_manager.py
   - backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py
+  - backend/tests/unit/pipeline_engine/test_executor.py
   - backend/tests/integration/test_hitl_resume_roundtrip.py
   - backend/tests/unit/hitl_manager/test_output_delivery_audit.py
   - backend/tests/unit/hitl_manager/test_overdue_warning.py
@@ -56,7 +57,7 @@ bdd:
 depends-on:
   - feat-audit
   - feat-teams
-status: covered
+status: partial
 ---
 
 # Human-in-the-loop (HITL) Gates & Review
@@ -73,6 +74,7 @@ may decide.
 
 - [x] A run reaching a HITL review edge creates a `HitlClaim` and pauses in
       `awaiting_human`
+      <!-- behaviour: hitl-gates-01 | tests: backend/tests/unit/hitl_manager/test_hitl_manager.py::test_create_gate_inserts_new_row, backend/tests/unit/pipeline_engine/test_executor.py::test_execute_sets_awaiting_human_on_node_interrupt -->
 - [x] Pending-gate queues: `GET /api/v1/runs/{run_id}/hitl/pending` (per run)
       and `GET /api/v1/hitl/pending` (org-wide; viewer team-clamped, see below),
       gated by the `hitl.list`
@@ -84,6 +86,7 @@ may decide.
       actionable-status filter. The review UI renders a gate held by another
       session as read-only (claimed by \<user\> at \<time\>) and shows
       approve/reject only to the session holding that gate's claim token
+      <!-- behaviour: hitl-gates-02 | tests: backend/tests/unit/hitl_manager/test_hitl_manager.py::test_list_pending_returns_undecided_gates, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_list_pending_filters_to_actionable_run_statuses, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_list_pending_include_claimed_false_excludes_claimed_gates -->
 - [x] HITL reads are viewer-level and team-membership bounded (PR #2552):
       `hitl.list` floors at `viewer`, but `hitl_claims` carries only the org-level
       RLS policy, so every REST list (per-run pending, org pending, org reviews) and
@@ -100,6 +103,7 @@ may decide.
       `backend/src/farna/core/hitl_manager/__init__.py`,
       `backend/tests/unit/api/test_hitl_routes_coverage.py`,
       `backend/tests/unit/mcp/test_team_scope_enforcement.py`)
+      <!-- behaviour: hitl-gates-03 | tests: backend/tests/unit/api/test_hitl_routes_coverage.py, backend/tests/unit/mcp/test_team_scope_enforcement.py -->
 - [x] Claim is atomic – `claim()` issues a short-lived (15-minute) JWT
       `claim_token` scoped to run + gate + client; expired/invalid claim
       tokens are rejected. The three claim conflicts each return 409 with a
@@ -117,6 +121,7 @@ may decide.
       stale gate (re-claim after expiry works: the expiry sweep resets the run
       back to `awaiting_human`) (FAR-612, FAR-645)
       (claim.feature, `test_hitl_manager`, `test_hitl_jwt`)
+      <!-- behaviour: hitl-gates-04 | tests: backend/tests/bdd/features/hitl/claim.feature -->
 - [x] Same-account re-claim (FAR-686 token recovery): a reviewer who reloaded
       the page may re-claim a gate they already hold, including during the
       claimed-but-undecided window when the run status itself is `claimed` –
@@ -124,8 +129,10 @@ may decide.
       `HITL_CLAIMABLE_RUN_STATUSES` base, so the atomic guard and the
       pre-check cannot drift. Fresh and cross-account claims keep the strict
       data-rot guard (`test_hitl_manager` same-account re-claim cases)
+      <!-- behaviour: hitl-gates-05 | tests: backend/tests/unit/hitl_manager/test_hitl_manager.py::test_claim_same_account_reclaim_issues_fresh_token, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_claim_same_account_reclaim_team_scoped_gate, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_claim_same_account_reclaim_on_claimed_run_succeeds -->
 - [x] Approve resumes the run (`action: approved`, optional notes) – gated by
       `hitl.approve`; a claimed-by-other caller cannot approve
+      <!-- behaviour: hitl-gates-06 | tests: backend/tests/bdd/features/hitl/approve.feature -->
 - [x] Reject records the decision and resumes the graph with one of three
       dispositions (FAR-1487, single resolver `resolve_reject_disposition`):
       `route` when a reject route is wired (the gate's `reject_target` config
@@ -137,11 +144,13 @@ may decide.
       only when the gate explicitly sets `on_reject: proceed` (the pre-FAR-1487
       continue-along-the-normal-edge behavior). A reject route always wins; an
       automated `correction_target` wins over terminate
+      <!-- behaviour: hitl-gates-07 | tests: backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_resolve_reject_disposition_precedence, backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_terminate_router_ends_on_stamped_rejection, backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_gate_with_explicit_proceed_keeps_plain_edge, backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_gate_with_reject_route_still_routes, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_reject_valid_token_records_decision -->
 - [x] The executor finalize downgrades a would-be `complete` to `rejected` only
       when BOTH the gate artifact (`result: rejected`, `reject_disposition:
       terminate`, this review_id) AND the committed `hitl_claims.decision =
       rejected` row agree - never on the agent's echo alone (END is a normal
       stream exit)
+      <!-- behaviour: hitl-gates-08 | tests: backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_finalize_downgrades_complete_to_rejected_on_committed_human_rejection, backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_finalize_keeps_complete_without_committed_rejected_claim -->
 - [x] A coalesced-supersede system rejection (committed
       `decision_payload.reason` = the supersede marker with no deciding
       account) with no reject route and no `on_reject: proceed` ends `rejected`
@@ -149,32 +158,39 @@ may decide.
       from failure analytics, never advances a journey, and labelled
       "Superseded by a newer version" on the run list and run detail - never
       "Rejected by reviewer". A superseded run WITH a reject route still routes
+      <!-- behaviour: hitl-gates-09 | tests: backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_finalize_labels_supersede_rejection_as_superseded_not_human_reject, backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_rejected_runs_classify_excluded_with_their_own_reason, backend/tests/integration/test_hitl_resume_roundtrip.py::test_hitl_reject_supersede_ends_rejected_with_superseded_code -->
 - [x] The reviewer briefing (`consequences.reject.disposition`) states the
       reject consequence in all three states (routes to X / ends the run /
       continues anyway); `on_reject` is validated at graph save (`terminate` |
       `proceed`) for edge-level and node-level gate configs
+      <!-- behaviour: hitl-gates-10 | tests: backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_briefing_states_terminate_by_default, backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_briefing_states_proceed_when_explicit, backend/tests/unit/pipeline_engine/test_hitl_reject_terminate.py::test_briefing_states_route_with_target_when_reject_target_set -->
 - [x] Modify-then-approve applies the reviewer's modified output into state
       before resuming; missing/expired claim_token → 403/410, already-decided
       → 409 (`test_hitl_manager` approve-with-modification cases,
       `test_node_runner_hitl` modified-output resume cases)
+      <!-- behaviour: hitl-gates-11 | tests: backend/tests/unit/hitl_manager/test_hitl_manager.py::test_approve_with_modification_valid_token_and_audit, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_approve_with_modification_persists_modified_output_payload, backend/tests/unit/pipeline_engine/test_node_runner_hitl.py::test_hitl_review_resume_with_modified_output_writes_output_key -->
 - [x] Modify-then-approve BDD surface: `POST
       /api/v1/runs/{run_id}/hitl/{review_id}/approve-with-modification` returns
       200 and resumes the graph with `action: approved` +
       `modified_output` when the reviewer holds a claim, 422 when the
       `claim_token` is missing (body validation), and 410 when it is expired
       (gate_policies.feature, `test_hitl_review_policies.py`)
+      <!-- behaviour: hitl-gates-12 | tests: backend/tests/bdd/steps/test_hitl_review_policies.py, backend/tests/bdd/features/hitl/gate_policies.feature -->
 - [x] `human_only` refusal BDD surface: a non-browser credential (API key)
       deciding a `human_only` gate receives a real 403 from the REST verdict
       (`human_only_denial` over a `{"human_only": true}` config resolved from
       the run), with the failure-isolated denial audit emission
       (gate_policies.feature, `test_hitl_review_policies.py`)
+      <!-- behaviour: hitl-gates-13 | tests: backend/tests/bdd/steps/test_hitl_review_policies.py, backend/tests/bdd/features/hitl/gate_policies.feature -->
 - [x] Overdue-warning BDD surface: `get_overdue_claims` reports held claims
       with `age_hours` and a `warning`/`escalated` status per the
       warning/escalation thresholds (gate_policies.feature,
       `test_hitl_review_policies.py`)
+      <!-- behaviour: hitl-gates-14 | tests: backend/tests/bdd/steps/test_hitl_review_policies.py, backend/tests/bdd/features/hitl/gate_policies.feature -->
 - [x] Deliver-manual / submit-manual validates reviewer-supplied output and
       passes it to the pipeline; manual output delivery is audited
       (deliver_manual.feature, `test_output_delivery_audit`)
+      <!-- behaviour: hitl-gates-15 | tests: backend/tests/bdd/features/hitl/deliver_manual.feature -->
 - [x] `human_only` gates refuse automation/MCP clients entirely – and every
       gate DEFAULTS to `human_only: true` (FAR-609): a gate config that omits
       the flag is human-only (fail-safe, not only the high-risk paths);
@@ -212,6 +228,7 @@ may decide.
       indistinguishable from a browser login at issuance – the credential
       class is defense-in-depth, and the FAR-611 sweep alarm is the detective
       control (`test_hitl_resilience`, `test_mcp_runtime_tools`)
+      <!-- behaviour: hitl-gates-16 | tests: backend/tests/bdd/features/teams/team_hitl_review.feature -->
 - [x] The fired gate's config is stamped on the claim row at fire time – the
       executor's interrupt handler resolves the gate's `hitl_review_config` and
       writes it to `hitl_claims.gate_config_json` (migration 0195) inside the
@@ -223,11 +240,14 @@ may decide.
       as the fallback for legacy rows (fired before the column existed) and
       never-fired gates, with the fail-closed unresolved semantics intact
       (`test_hitl_review_config`, `test_executor`)
+      <!-- behaviour: hitl-gates-17 | tests: backend/tests/unit/hitl_manager/test_hitl_manager.py::test_create_gate_stamps_gate_config_json, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_create_gate_without_stamp_leaves_gate_config_null -->
 - [x] Team-scoped gates restrict claiming to members whose team role is
       `runner`/`operator` – otherwise `NotTeamMemberError` (`_TEAM_CLAIM_ROLES`)
+      <!-- behaviour: hitl-gates-18 | tests: backend/tests/unit/hitl_manager/test_hitl_manager.py::test_claim_team_member_can_claim, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_claim_non_team_member_raises, backend/tests/unit/hitl_manager/test_hitl_manager.py::test_claim_team_viewer_role_denied -->
 - [x] Stale gates warn their owners and expired claims are reset to unclaimed
       (`test_overdue_warning`, `test_claim_expiry_job`, `overdue_warning.py`,
       `expiry_job.py`)
+      <!-- behaviour: hitl-gates-19 | tests: backend/tests/unit/hitl_manager/test_overdue_warning.py::test_returns_claims_older_than_warning_threshold, backend/tests/unit/hitl_manager/test_overdue_warning.py::test_escalates_claims_older_than_escalation_threshold, backend/tests/unit/hitl_manager/test_claim_expiry_job.py::test_expire_once_resets_stale_claims -->
 - [x] Configurable HITL review window (FAR-1257, org tiering FAR-1269): the
       effective window resolves pipeline override
       (`pipelines.hitl_review_window_seconds`, CHECK 60..604800, also settable
@@ -244,6 +264,7 @@ may decide.
       team_rbac FeatureGate and the route stays community-tier with an explicit
       `admin` role (`test_admin_hitl_review_window`,
       `test_hitl_review_window_resolution`, `test_hitl_review_window_terminalize`)
+      <!-- behaviour: hitl-gates-20 | tests: none -->
 - [x] Approaching-deadline warning (FAR-1270): while an undecided, unclaimed
       gate still has time left, the `hitl_deadline_warning` SAQ cron (every
       60s, unique) emails the same recipients the gate-fire alert uses
@@ -253,8 +274,10 @@ may decide.
       human can act before the terminalizer cancels the run
       (`core/hitl_manager/deadline_warning.py`, `test_deadline_warning`,
       `test_hitl_deadline_warning`)
+      <!-- behaviour: hitl-gates-21 | tests: none -->
 - [x] Conditional HITL: an eval condition decides whether a gate activates at
       run time (conditional_hitl BDD + `test_conditional_hitl`)
+      <!-- behaviour: hitl-gates-22 | tests: none -->
 - [x] Fire-time decision briefing: a fired gate captures a bounded, redacted
       context bundle on the claim row (`context_json`): the gate description,
       the JMESPath condition, the MATCHED condition value as PRIMARY evidence
@@ -268,20 +291,24 @@ may decide.
       captured description wins, the snapshot config is the fallback
       (FAR-613/FAR-688; `test_hitl_context`, `test_node_runner_hitl`,
       `test_executor`, `test_hitl_review_config`, `HitlBriefing.spec.ts`)
+      <!-- behaviour: hitl-gates-23 | tests: none -->
 - [x] The pipeline editor surfaces legacy gates whose descriptions predate
       the minimum in a dismissible banner (graph reads never hard-fail on
       them; the editor scans the loaded graph client-side and lists the
       offending edges/nodes) – and the MCP graph-write path keeps its narrow
       HITL-description check while deferring full validation (FAR-688;
       PipelineEditorView.spec.ts)
+      <!-- behaviour: hitl-gates-24 | tests: none -->
 - [x] Decisions and deliveries are audited (`hitl.output_delivered`,
       `hitl.claim_expired`) and feed the HITL effort-trends panel
       (`/api/v1/dashboard/trends`: hitl_volume, rejection_trend,
       decision/rejection/approval-time aggregates)
+      <!-- behaviour: hitl-gates-25 | tests: none -->
 - [x] Decision endpoints enforce per-action permissions
       (`hitl.claim`/`hitl.approve`/`hitl.reject`/`hitl.deliver_manual`/
       `hitl.list`) – a caller without the grant gets 403
       (`test_rate_limit_hitl_review`, `test_hitl_resilience`)
+      <!-- behaviour: hitl-gates-26 | tests: none -->
 - [x] Audit events carry the caller's client type when known (FAR-611):
       `hitl_claimed` / `hitl.output_delivered` / `hitl.output_modified` /
       `hitl.output_rejected` / `hitl.manual_delivery` gain `client_type`
@@ -289,6 +316,7 @@ may decide.
       `"api_key"` for mk_ keys, `"mcp"` for the MCP surface); internal
       callers that cannot know the client omit the key
       (`test_client_type_audit`)
+      <!-- behaviour: hitl-gates-27 | tests: none -->
 - [x] Approve-sweep anomaly alarm (FAR-611): when one actor's committed
       decisions exceed 5 within 60 seconds AND span more than one pipeline,
       the decision path emits `hitl_approve_sweep_suspected` – an audit
@@ -306,6 +334,7 @@ may decide.
       alarm per (org, actor) per hour via a bounded in-process marker (a
       multi-replica deployment may therefore emit up to one alarm per replica
       per hour – bounded duplicates, the correct envelope for an anomaly page)
+      <!-- behaviour: hitl-gates-28 | tests: none -->
 - [x] HITL review actions are rate limited at 20/min per identity,
       AGGREGATE across runs, gates, actions, and both surfaces – the
       `/hitl/` review routes AND the approve-capable
@@ -314,6 +343,7 @@ may decide.
       so the 2026-09-05 bulk sweep's per-gate bucket rotation cannot recur
       (`test_rate_limit_hitl_review` aggregate/throttle cases,
       `test_middleware_internals`)
+      <!-- behaviour: hitl-gates-29 | tests: none -->
 
 ## Known Gaps
 
@@ -325,6 +355,17 @@ may decide.
   (`expiry_job.py`).
 
 ## QA History
+
+- 2026-11-26: **Improve Architecture product-map walk** – bound twelve ticked
+  but previously unbound behaviours to their existing, running tests:
+  `hitl-gates-01` (gate creation + `awaiting_human` pause), `02` (pending-gate
+  queues and the actionable-run-status filter), `05` (same-account re-claim),
+  `06` (approve resumes, via `approve.feature`), `07`/`08`/`09`/`10` (reject
+  dispositions, the finalize downgrade and supersede label, and the reviewer
+  briefing), `11` (modify-then-approve into state), `17` (gate config stamped
+  on the claim row), `18` (team-scoped claim roles) and `19` (overdue warnings
+  and expired-claim reset). The `behaviour_bindings_baseline.json` ratchet
+  shrinks by twelve entries (490 -> 502 bound) and no product code changed.
 
 - 2026-09-29: **product-map review pass** – reconciled this tracker with the
   manifest `feat-hitl` behaviors: the configurable review window (FAR-1257 /

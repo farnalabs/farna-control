@@ -6,19 +6,21 @@
         {{ $t('connectors.rest.section_operational') }}
       </h3>
       <div class="space-y-4">
-        <div>
-          <label for="restconn-connector-base-url" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.base_url') }}</label>
-          <input id="restconn-connector-base-url"
+        <Field
+          id="restconn-connector-base-url"
+          :label="$t('connectors.rest.base_url')"
+          :error="errors.base_url"
+          error-id="restconn-base-url-error"
+          error-class="mt-1 text-sm text-destructive"
+        >
+          <Input
             v-model="config.base_url"
             type="url"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             :placeholder="$t('connectors.rest.base_url_placeholder')"
             data-testid="rest-connector-base-url"
-            :aria-invalid="!!errors.base_url"
-            :aria-describedby="errors.base_url ? 'restconn-base-url-error' : undefined"
           />
-          <p v-if="errors.base_url" id="restconn-base-url-error" class="mt-1 text-sm text-destructive">{{ errors.base_url }}</p>
-        </div>
+        </Field>
 
         <div>
           <label for="restconn-connector-method" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.method') }}</label>
@@ -40,20 +42,22 @@
           <p v-if="errors.method" id="restconn-method-error" class="mt-1 text-sm text-destructive">{{ errors.method }}</p>
         </div>
 
-        <div>
-          <label for="restconn-connector-timeout" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.timeout_seconds') }}</label>
-          <input id="restconn-connector-timeout"
+        <Field
+          id="restconn-connector-timeout"
+          :label="$t('connectors.rest.timeout_seconds')"
+          :error="errors.timeout_seconds"
+          error-id="restconn-timeout-error"
+          error-class="mt-1 text-sm text-destructive"
+        >
+          <Input
             v-model="config.timeout_seconds"
             type="number"
             min="1"
             step="1"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             data-testid="rest-connector-timeout"
-            :aria-invalid="!!errors.timeout_seconds"
-            :aria-describedby="errors.timeout_seconds ? 'restconn-timeout-error' : undefined"
           />
-          <p v-if="errors.timeout_seconds" id="restconn-timeout-error" class="mt-1 text-sm text-destructive">{{ errors.timeout_seconds }}</p>
-        </div>
+        </Field>
 
         <div>
           <label class="flex cursor-pointer items-center gap-2 text-sm">
@@ -84,31 +88,35 @@
           <p id="restconn-on-unknown-help" class="mt-1 text-xs text-muted-foreground">{{ $t(`connectors.rest.on_unknown_${config.on_unknown}_help`) }}</p>
         </div>
 
-        <div>
-          <label for="restconn-connector-records-path" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.records_path') }}</label>
-          <input id="restconn-connector-records-path"
+        <Field
+          id="restconn-connector-records-path"
+          :label="$t('connectors.rest.records_path')"
+          :help="$t('connectors.rest.records_path_help')"
+          help-id="restconn-records-path-help"
+        >
+          <Input
             v-model="config.records_path"
             type="text"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm"
             placeholder="data.items"
             data-testid="rest-connector-records-path"
-            :aria-describedby="'restconn-records-path-help'"
           />
-          <p id="restconn-records-path-help" class="mt-1 text-xs text-muted-foreground">{{ $t('connectors.rest.records_path_help') }}</p>
-        </div>
+        </Field>
 
-        <div>
-          <label for="restconn-connector-allowed-hosts" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.allowed_hosts') }}</label>
-          <input id="restconn-connector-allowed-hosts"
+        <Field
+          id="restconn-connector-allowed-hosts"
+          :label="$t('connectors.rest.allowed_hosts')"
+          :help="$t('connectors.rest.allowed_hosts_help')"
+          help-id="restconn-allowed-hosts-help"
+        >
+          <Input
             v-model="config.allowed_hosts"
             type="text"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             placeholder="api.example.com,cdn.example.com"
             data-testid="rest-connector-allowed-hosts"
-            :aria-describedby="'restconn-allowed-hosts-help'"
           />
-          <p id="restconn-allowed-hosts-help" class="mt-1 text-xs text-muted-foreground">{{ $t('connectors.rest.allowed_hosts_help') }}</p>
-        </div>
+        </Field>
       </div>
     </section>
 
@@ -122,7 +130,7 @@
            config_json, so the prefill silently defaults to bearer which may not
            match the stored credential — surface the ambiguity explicitly
            instead (FAR-532). -->
-      <p v-if="mode === 'edit' && legacyAuthEcho" data-testid="rest-connector-legacy-auth-hint" class="mb-3 text-xs text-amber-600 dark:text-amber-400">
+      <p v-if="mode === 'edit' && legacyAuthEcho" data-testid="rest-connector-legacy-auth-hint" class="mb-3 text-xs text-warning-text">
         {{ $t('connectors.rest.auth_mode_legacy_echo_hint') }}
       </p>
       <div class="space-y-4">
@@ -147,60 +155,68 @@
         </div>
 
         <template v-if="credentials.auth_mode === 'bearer'">
-          <div>
-            <label for="restconn-connector-token" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.token') }}</label>
-            <input id="restconn-connector-token"
+          <Field
+            id="restconn-connector-token"
+            :label="$t('connectors.rest.token')"
+            :error="errors.token"
+            error-id="restconn-token-error"
+            error-class="mt-1 text-sm text-destructive"
+          >
+            <Input
               v-model="credentials.token"
               type="password"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               data-testid="rest-connector-token"
-              :aria-invalid="!!errors.token"
-              :aria-describedby="errors.token ? 'restconn-token-error' : undefined"
             />
-            <p v-if="errors.token" id="restconn-token-error" class="mt-1 text-sm text-destructive">{{ errors.token }}</p>
-          </div>
+          </Field>
         </template>
 
         <template v-else-if="credentials.auth_mode === 'basic'">
-          <div>
-            <label for="restconn-connector-username" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.username') }}</label>
-            <input id="restconn-connector-username"
+          <Field
+            id="restconn-connector-username"
+            :label="$t('connectors.rest.username')"
+            :error="errors.username"
+            error-id="restconn-username-error"
+            error-class="mt-1 text-sm text-destructive"
+          >
+            <Input
               v-model="credentials.username"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               data-testid="rest-connector-username"
-              :aria-invalid="!!errors.username"
-              :aria-describedby="errors.username ? 'restconn-username-error' : undefined"
             />
-            <p v-if="errors.username" id="restconn-username-error" class="mt-1 text-sm text-destructive">{{ errors.username }}</p>
-          </div>
-          <div>
-            <label for="restconn-connector-password" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.password') }}</label>
-            <input id="restconn-connector-password"
+          </Field>
+          <Field
+            id="restconn-connector-password"
+            :label="$t('connectors.rest.password')"
+            :error="errors.password"
+            error-id="restconn-password-error"
+            error-class="mt-1 text-sm text-destructive"
+          >
+            <Input
               v-model="credentials.password"
               type="password"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               data-testid="rest-connector-password"
-              :aria-invalid="!!errors.password"
-              :aria-describedby="errors.password ? 'restconn-password-error' : undefined"
             />
-            <p v-if="errors.password" id="restconn-password-error" class="mt-1 text-sm text-destructive">{{ errors.password }}</p>
-          </div>
+          </Field>
         </template>
 
         <template v-else-if="credentials.auth_mode === 'api_key'">
-          <div>
-            <label for="restconn-connector-api-key" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.api_key') }}</label>
-            <input id="restconn-connector-api-key"
+          <Field
+            id="restconn-connector-api-key"
+            :label="$t('connectors.rest.api_key')"
+            :error="errors.api_key"
+            error-id="restconn-api-key-error"
+            error-class="mt-1 text-sm text-destructive"
+          >
+            <Input
               v-model="credentials.api_key"
               type="password"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               data-testid="rest-connector-api-key"
-              :aria-invalid="!!errors.api_key"
-              :aria-describedby="errors.api_key ? 'restconn-api-key-error' : undefined"
             />
-            <p v-if="errors.api_key" id="restconn-api-key-error" class="mt-1 text-sm text-destructive">{{ errors.api_key }}</p>
-          </div>
+          </Field>
           <div>
             <label for="restconn-connector-api-key-in" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.api_key_in') }}</label>
             <AppSelect id="restconn-connector-api-key-in"
@@ -218,22 +234,24 @@
             </AppSelect>
           </div>
           <div v-if="credentials.apiKeyIn === 'header'">
-            <label for="restconn-connector-header-name" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.header_name') }}</label>
-            <input id="restconn-connector-header-name"
-              v-model="credentials.header_name"
-              type="text"
-              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              data-testid="rest-connector-header-name"
-            />
+            <Field id="restconn-connector-header-name" :label="$t('connectors.rest.header_name')">
+              <Input
+                v-model="credentials.header_name"
+                type="text"
+                class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                data-testid="rest-connector-header-name"
+              />
+            </Field>
           </div>
           <div v-else>
-            <label for="restconn-connector-query-param" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.query_param_name') }}</label>
-            <input id="restconn-connector-query-param"
-              v-model="credentials.query_param_name"
-              type="text"
-              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              data-testid="rest-connector-query-param"
-            />
+            <Field id="restconn-connector-query-param" :label="$t('connectors.rest.query_param_name')">
+              <Input
+                v-model="credentials.query_param_name"
+                type="text"
+                class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                data-testid="rest-connector-query-param"
+              />
+            </Field>
           </div>
         </template>
       </div>
@@ -244,20 +262,23 @@
       <h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
         {{ $t('connectors.rest.section_advanced') }}
       </h3>
-      <div>
-        <label for="restconn-connector-advanced" class="mb-1 block text-sm font-medium">{{ $t('connectors.rest.advanced_json') }}</label>
-        <textarea id="restconn-connector-advanced"
+      <Field
+        id="restconn-connector-advanced"
+        :label="$t('connectors.rest.advanced_json')"
+        :help="$t('connectors.rest.advanced_json_help')"
+        help-id="restconn-advanced-help"
+        :error="errors.advanced_json"
+        error-id="restconn-advanced-error"
+        error-class="mt-1 text-sm text-destructive"
+      >
+        <Textarea
           v-model="config.advanced_json"
           rows="8"
           class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm"
           placeholder='{ "path": "/items", "headers": { "Accept": "application/json" }, "operations": {}, "fan_out": {} }'
           data-testid="rest-connector-advanced-json"
-          :aria-invalid="!!errors.advanced_json"
-          :aria-describedby="errors.advanced_json ? 'restconn-advanced-error' : 'restconn-advanced-help'"
-        ></textarea>
-        <p id="restconn-advanced-help" class="mt-1 text-xs text-muted-foreground">{{ $t('connectors.rest.advanced_json_help') }}</p>
-        <p v-if="errors.advanced_json" id="restconn-advanced-error" class="mt-1 text-sm text-destructive">{{ errors.advanced_json }}</p>
-      </div>
+        />
+      </Field>
     </section>
   </div>
 </template>
@@ -457,6 +478,9 @@ function validateConnectorConfig(input: ConnectorValidationInput): Record<string
 import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppSelect from '../shared/AppSelect.vue'
+import Field from '../ui/Field.vue'
+import Input from '../ui/Input.vue'
+import Textarea from '../ui/Textarea.vue'
 
 const config = defineModel<RestConfigState>('config', { required: true })
 const credentials = defineModel<RestCredsState>('credentials', { required: true })

@@ -68,8 +68,8 @@
             >
               <Background :gap="20" :size="1" />
               <template #node-agent="nodeProps">
-                <div class="rounded-lg border-2 border-indigo-500/60 bg-indigo-500/10 px-4 py-3 shadow-sm">
-                  <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-indigo-400">{{ $t('views.LibraryPipelineWizard.agent') }}</div>
+                <div :class="['break-words rounded-lg border-2 border-library-wizard/60 bg-library-wizard/10 px-4 py-3 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
+                  <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-library-wizard-soft">{{ $t('views.LibraryPipelineWizard.agent') }}</div>
                   <div class="text-sm font-semibold text-foreground">{{ nodeProps.data.label }}</div>
                 </div>
               </template>
@@ -164,16 +164,18 @@
           </button>
         </div>
 
-        <div
+        <Notice
           v-if="result"
-          class="mt-6 rounded-lg border border-success/50 bg-success/10 p-4 text-success-text"
+          variant="success"
+          :icon="false"
+          class="mt-6"
         >
           <p class="font-medium">{{ $t('views.LibraryPipelineWizard.pipeline_created') }}</p>
           <p class="text-sm mt-1">
             {{ $t('views.LibraryPipelineWizard.pipeline_ready', { name: result.name }) }}
              <a :href="`/pipelines/${result.id}`" class="underline font-medium" data-testid="library-wizard-view-pipeline">{{ $t('views.LibraryPipelineWizard.view_pipeline') }}</a>
           </p>
-        </div>
+        </Notice>
 
         <ErrorAlert v-if="createError" :message="createError" :on-retry="createPipeline" class="mt-6" />
       </div>
@@ -190,6 +192,7 @@ import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import Button from 'primevue/button'
 import { useDataFetch } from '../composables/useDataFetch'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import OwnershipPicker from '../components/OwnershipPicker.vue'
 import type { OwnershipValue } from '../components/OwnershipPicker.vue'
@@ -200,6 +203,7 @@ import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { layoutNodes } from '../utils/graph-layout'
+import { PIPELINE_NODE_MAX_WIDTH_CLASS } from '../components/pipeline/nodes/NodeRegistry'
 import { CANVAS_EDGE_STROKE } from '../constants/canvas'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'

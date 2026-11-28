@@ -82,7 +82,7 @@ from farna.db.models.invitation import Invitation
 from farna.db.models.org_membership import OrgMembership
 from farna.db.models.organisation import SYSTEM_ORG_ID, Organisation
 from farna.db.models.token_family import TokenFamily
-from farna.db.rls import set_rls_org
+from farna.db.rls import bootstrap_read, set_rls_org
 from farna.settings import Settings, get_settings
 
 _MSG_INCORRECT_EMAIL_PASSWORD = "Incorrect email or password"  # nosec B105 — error message, not a real credential
@@ -435,7 +435,13 @@ async def _run_login_transaction(
         # scoped to that org (live-role revalidation would then 401 on every
         # API call, so the tombstone has to gate here at the org-scoping
         # point). Other orgs' active memberships still resolve a login org.
-        memberships = await list_memberships_for_account(session, account.id, active_only=True)
+        #
+        # RLS (ADR 070 §2): this read is PRE-ORG by definition — it is what
+        # resolves the org — so it rides the explicit bootstrap grant around a
+        # lookup pinned to the authenticated account. Before migration 0367 the
+        # table's fail-open NULL arm made it work by accident.
+        async with bootstrap_read(session):
+            memberships = await list_memberships_for_account(session, account.id, active_only=True)
 
         org_id: uuid.UUID | None = None
         org_role: str | None = None
@@ -449,8 +455,11 @@ async def _run_login_transaction(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Organisation not available for login",
                 )
-            # Find the account's active membership in this org.
-            membership = await get_membership_by_account_and_org(session, account.id, org.id)
+            # Find the account's active membership in this org. Pinned to
+            # (account, org) and still pre-context (the request authenticated by
+            # password, not by an org claim), so it uses the same bootstrap grant.
+            async with bootstrap_read(session):
+                membership = await get_membership_by_account_and_org(session, account.id, org.id)
             if membership is None or membership.deactivated_at is not None:
                 # Account has no active membership in the requested org.
                 # Routing is NOT authorisation — do NOT silently fall back.
@@ -464,7 +473,16 @@ async def _run_login_transaction(
             # Legacy: pick the first active membership.
             org_id, org_role = _resolve_login_org_context(memberships, account)
 
-        family = await create_family(session, account.id, org_id)
+        # The org is now known, so bind it and mint the family org-scoped.
+        # A system admin has no org: the family row falls back to the sentinel
+        # org (``create_family``), which needs the same explicit bootstrap grant
+        # the pre-context reads above used.
+        if org_id is not None:
+            await set_rls_org(session, org_id)
+            family = await create_family(session, account.id, org_id)
+        else:
+            async with bootstrap_read(session):
+                family = await create_family(session, account.id, org_id)
 
         if must_consume:
             await _consume_break_glass_credential(
@@ -722,7 +740,11 @@ async def demo_login(
         # the boot seed. Anything else is treated as feature-absent.
         demo_context = None
         if not account.is_system_admin:
-            demo_context = await _resolve_demo_org_membership(session, account.id)
+            # PRE-ORG read (it is what resolves the demo org): pinned to the
+            # authenticated account + the demo slug + viewer role, and granted
+            # explicitly (ADR 070 §2) rather than by the old fail-open arm.
+            async with bootstrap_read(session):
+                demo_context = await _resolve_demo_org_membership(session, account.id)
         if demo_context is None:
             _log.warning(
                 "auth.demo_login_membership_not_found",
@@ -945,18 +967,26 @@ async def accept_invite(
 
     The invitation compare-and-swap consumption runs as the FINAL DB statement
     of the success path: if another consumer raced us, the CAS matches zero
-    rows and the whole transaction aborts. RLS context is set to the
-    *invitation's* org before any membership write (the caller is otherwise
-    pre-authenticated); the invitations table itself deliberately carries no
-    RLS policy. IP-based failures are recorded for every denial path; a
-    successful enrollment clears them (``record_success``).
+    rows and the whole transaction aborts. The pre-auth token lookup runs inside
+    ``bootstrap_read`` — the scoped ``app.bootstrap_context`` grant ADR 070 §2
+    requires — and pins the unique ``token_hash``; the grant is cleared again
+    before the transaction continues. RLS context is then set to the
+    *invitation's* org before any membership write, so the rest of the
+    transaction is ordinary org-scoped work against ``invitations``'
+    ``rls_org_isolation`` policy (migration 0368). IP-based failures are
+    recorded for every denial path; a successful enrollment clears them
+    (``record_success``).
     """
     ip = _client_ip(request)
     limiter = get_auth_rate_limiter(settings)
 
     try:
         async with session.begin():
-            invitation = await get_valid_by_token_hash(session, hash_invitation_token(req.token))
+            # Pre-auth: no principal and no org context exist yet. The grant is
+            # scoped to this one pinned lookup and cleared as the block exits, so
+            # the org-scoped work below cannot inherit it.
+            async with bootstrap_read(session):
+                invitation = await get_valid_by_token_hash(session, hash_invitation_token(req.token))
             if invitation is None:
                 await _reject_invitation(limiter, ip)
 
@@ -1146,14 +1176,19 @@ async def _advance_refresh_sequence(
             # (family_id AND account_id - never crosses accounts), same flags,
             # same transaction - expressed as a bulk statement so the denial
             # persists atomically. Account-bound like the logout blacklisting.
-            await session.execute(
-                update(TokenFamily)
-                .where(
-                    TokenFamily.family_id == claims.family_uuid,
-                    TokenFamily.account_id == claims.account_uuid,
+            # PRE-ORG: the refresh transaction has no org context (it is
+            # validating the claim, so it cannot authorise by it) — the write is
+            # pinned to (family_id, account_id) and rides the explicit bootstrap
+            # grant (ADR 070 §2).
+            async with bootstrap_read(session):
+                await session.execute(
+                    update(TokenFamily)
+                    .where(
+                        TokenFamily.family_id == claims.family_uuid,
+                        TokenFamily.account_id == claims.account_uuid,
+                    )
+                    .values(is_blacklisted=True, blacklisted_at=datetime.now(UTC))
                 )
-                .values(is_blacklisted=True, blacklisted_at=datetime.now(UTC))
-            )
             # Flag-and-raise-after-commit: raising inside the transaction would
             # roll back the blacklist above; committing it first also means a
             # later reactivation cannot resurrect pre-deactivation tokens.
@@ -1161,13 +1196,15 @@ async def _advance_refresh_sequence(
         else:
             # ADR 047: check live membership BEFORE advancing the token-family
             # sequence - a removed member's repeated refresh attempts must not
-            # keep advancing sequences needlessly.
+            # keep advancing sequences needlessly. PRE-ORG, pinned to
+            # (account, org), explicit bootstrap grant (ADR 070 §2).
             if claims.org_id:
-                live_org_role = await resolve_role_from_membership(
-                    session,
-                    claims.account_id,
-                    claims.org_id,
-                )
+                async with bootstrap_read(session):
+                    live_org_role = await resolve_role_from_membership(
+                        session,
+                        claims.account_id,
+                        claims.org_id,
+                    )
             if claims.org_id and live_org_role is None:
                 _log.warning(
                     "auth.refresh_membership_not_found",
@@ -1177,13 +1214,16 @@ async def _advance_refresh_sequence(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Account no longer has access to this organisation",
                 )
-            new_sequence, theft_detected, reuse_replay = await advance_sequence(
-                session,
-                claims.family_uuid,
-                claims.sequence,
-                claims.account_uuid,
-                reuse_grace_seconds=settings.refresh_reuse_grace_seconds,
-            )
+            # PRE-ORG: pinned to (family_id, account_id), explicit bootstrap
+            # grant (ADR 070 §2).
+            async with bootstrap_read(session):
+                new_sequence, theft_detected, reuse_replay = await advance_sequence(
+                    session,
+                    claims.family_uuid,
+                    claims.sequence,
+                    claims.account_uuid,
+                    reuse_grace_seconds=settings.refresh_reuse_grace_seconds,
+                )
             if reuse_replay:
                 _log.info(
                     "auth.refresh_reuse_replay",
@@ -1344,7 +1384,12 @@ async def _blacklist_refresh_family(session: AsyncSession, claims: dict[str, obj
         account_uuid = uuid.UUID(account_id_val)
         try:
             async with session.begin():
-                blacklisted = await blacklist_family(session, family_uuid, account_uuid)
+                # PRE-AUTH (logout resolves the cookie's identity itself) and
+                # deliberately cross-org: every family of the account is revoked
+                # regardless of the org it was minted under. Pinned to
+                # (family_id, account_id); explicit bootstrap grant (ADR 070 §2).
+                async with bootstrap_read(session):
+                    blacklisted = await blacklist_family(session, family_uuid, account_uuid)
                 if not blacklisted:
                     _log.warning("logout.family_not_found", extra={"family_id": truncate_token_family(family_id_val)})
         except IntegrityError:
@@ -1443,7 +1488,10 @@ async def _resolve_live_org_role(
     if org_id is None:
         return None
     try:
-        async with session.begin():
+        # PRE-ORG read: the caller holds a signed claim, not an org context
+        # (this is the read that validates it). Pinned to (account, org) and
+        # granted explicitly (ADR 070 §2).
+        async with session.begin(), bootstrap_read(session):
             live_org_role = await resolve_role_from_membership(session, account_id, org_id)
     except SQLAlchemyError as exc:
         raise_session_contract_error(exc, "auth._resolve_live_org_role")

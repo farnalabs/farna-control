@@ -163,7 +163,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 import Dialog from 'primevue/dialog'
 import { format, parseISO } from 'date-fns'
 import type { components } from '../../lib/api/schema'

@@ -25,6 +25,7 @@ from farna.api.dependencies import (
 from farna.api.middleware.sensitive_mask import mask_pipeline_graph_node, resolve_and_reject_mask_sentinels
 from farna.api.models.team_visibility import TeamVisibilityMixin
 from farna.api.routes.lifecycle_maps import LifecycleMapResponse
+from farna.api.run_scope import team_boundary_blocked
 from farna.api.team_scope import validate_owner_team_for_create
 from farna.auth.dependencies import get_current_tenant_user
 from farna.auth.jwt import TenantPrincipal
@@ -200,7 +201,17 @@ def _primitive_visible_to(
     if primitive is None:
         return False
     owner = primitive.organisation_id
-    return owner in (principal.organisation_id, _BUILTIN_ORG_ID)
+    if owner not in (principal.organisation_id, _BUILTIN_ORG_ID):
+        return False
+    # ADR 070 §5 / FAR-681: ``library_primitives`` carries
+    # ``rls_team_isolation`` keyed on the KEY OWNER's memberships, not on the
+    # key's own team. A team-A-scoped key whose owner is also in team B must
+    # not read team B's team-private primitive, so the request applies the same
+    # credential boundary the run surfaces share (org-level rows stay visible).
+    return not team_boundary_blocked(
+        getattr(principal, "team_id", None),
+        primitive.owner_team_id,
+    )
 
 
 async def _require_readable_primitive(
@@ -944,6 +955,15 @@ async def _fetch_primitives(
                 source=query.source,
                 cursor=query.cursor,
                 excluded_tiers=[] if query.include_in_dev else None,
+                # ADR 070 §5: the DB policy on ``library_primitives`` keys its
+                # team arm on the KEY OWNER's memberships, not on the
+                # credential's own team. This route is gated on
+                # ``require_permission`` (JWT-only), so ``principal.team_id`` is
+                # None today and the clamp is a no-op — but it is the same
+                # boundary the by-id read applies via ``_primitive_visible_to``
+                # (FAR-2682), and it keeps the listing correct if the route ever
+                # admits a team-scoped credential.
+                team_id=getattr(principal, "team_id", None),
             )
     except ProgrammingError:
         _log.exception("library.list_library_primitives_endpoint")
@@ -2256,6 +2276,9 @@ def _add_pipeline_edges(
                 id=uuid.uuid4(),
                 organisation_id=org_id,
                 pipeline_id=pipeline.id,
+                # ADR 070 Phase 1A: the installed edges become the new pipeline's
+                # live graph, so they take its owner (migration 0369).
+                owner_team_id=pipeline.owner_team_id,
                 source_node_id=uuid.UUID(edge_data["source_node_id"]),
                 target_node_id=uuid.UUID(edge_data["target_node_id"]),
                 edge_type=edge_data["edge_type"],
@@ -2341,6 +2364,16 @@ async def create_pipeline_from_template_endpoint(
             pipeline.graph_nodes_json = graph_nodes
             _add_pipeline_edges(session, principal.organisation_id, pipeline, edges)
             await session.flush()
+            # FAR-2819: assigning ``graph_nodes_json`` above dirties the row, so
+            # the flush issues an UPDATE whose server-side ``onupdate`` expires
+            # ``updated_at``. Reading it after this ``session.begin()`` block
+            # closes would lazy-load outside a transaction on an
+            # ``autobegin=False`` session (the DI default) and raise
+            # ``InvalidRequestError`` — surfaced as the session-contract 500.
+            # Reload the row inside the transaction (the same pattern the
+            # lifecycle-map create endpoint uses) so the response builder reads
+            # fully-loaded timestamps after commit.
+            await session.refresh(pipeline)
     except HTTPException:
         raise
     except IntegrityError:

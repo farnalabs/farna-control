@@ -40,7 +40,7 @@ bdd:
 depends-on:
   - feat-runtime
   - feat-pipelines
-status: covered
+status: partial
 ---
 
 # Environment Profiles
@@ -63,23 +63,29 @@ into the Runners page as redirects.)
       persistence_policy, owner_team_id and visibility
       (`backend/src/farna/api/routes/environment_profiles.py#create_profile`,
       `backend/tests/integration/crud/test_environment_profiles.py`)
+      <!-- behaviour: environments-01 | tests: backend/tests/integration/crud/test_environment_profiles.py -->
 - [x] Profiles are listed paginated (page / page_size capped 1..100) and fetchable by
       id; a missing profile resolves 404 with message "Environment profile not found"
       (`list_profiles` / `get_profile`)
+      <!-- behaviour: environments-02 | tests: none -->
 - [x] Update (`PUT /api/v1/environment-profiles/{id}`) is a partial merge: omitted
       fields are left untouched, `capabilities` / `secret_refs` are re-serialized into
       their JSON columns, and a name collision resolves 409
+      <!-- behaviour: environments-03 | tests: none -->
 - [x] Delete is a soft delete returning 204 (hard delete only via the immutable
       admin surface's reusable CRUD); restore is exposed on
       `/api/v1/environment-profiles/{id}/restore`
+      <!-- behaviour: environments-04 | tests: none -->
 - [x] Every CRUD endpoint runs inside the RLS transaction (`set_rls_org` +
       `set_rls_user_context`) so profiles are org-isolated: a cross-org read or list
       sees nothing (404 / empty list, never an enumeration)
+      <!-- behaviour: environments-05 | tests: none -->
 - [x] The GraphValidator resolves a snapshot's `environment_profile_id` into the
       profile's capabilities and fails closed with code `ENV_MISSING_CAPABILITIES`
       naming the missing capability (e.g. `egress:github.com`) when the profile does
       not cover every capability the agent requires
       (`backend/tests/unit/graph_validator/test_environment_capabilities.py`)
+      <!-- behaviour: environments-06 | tests: backend/tests/unit/graph_validator/test_environment_capabilities.py -->
 - [x] A profile carries a provider wall-clock capability (FAR-1359):
       `max_node_seconds` (default 3300, wire-bounded 60..604800) is persisted on
       the profile (baseline schema, `0350_baseline_schema.py`) and exposed
@@ -101,23 +107,28 @@ into the Runners page as redirects.)
       `backend/src/farna/core/bundled_runner/runner_dispatch.py`;
       `test_environment_capabilities.py`, `test_dispatch_route.py`,
       `EnvironmentProfileForm.spec.ts`)
+      <!-- behaviour: environments-07 | tests: backend/tests/unit/graph_validator/test_environment_capabilities.py, backend/tests/unit/core/bundled_runner/test_dispatch_route.py -->
 - [x] Profiles resolve against the RuntimeProviderHub by capabilities / provider hint;
       local is the default provider (only `local_docker` auto-registers and stays
       authoritative when no provider hint is set), and `e2b` resolves when the profile
       declares a `provider_hint` – see the hub-resolution scenarios in
       `backend/tests/bdd/features/environments/environment_profiles.feature`
+      <!-- behaviour: environments-08 | tests: backend/tests/bdd/features/environments/environment_profiles.feature -->
 - [x] `POST /api/v1/environment-profiles/{id}/test` provisions a sandbox from the
       profile, runs a hello command and destroys it, streaming a Server-Sent Events
       lifecycle (provisioning / provisioned / command_start / command_complete /
       destroying / destroyed, and a terminal `failed` event with cleanup on error);
       gated on `environment_profile.test` (operator)
+      <!-- behaviour: environments-09 | tests: none -->
 - [x] WorkspaceLease lifecycle follows pending → provisioning → active → completed as
       the run progresses, and Provider create/destroy transitions workspace status
       running ↔ terminated (BDD scenarios in `environment_profiles.feature`)
+      <!-- behaviour: environments-10 | tests: backend/tests/bdd/features/environments/environment_profiles.feature -->
 - [x] Admin org sandbox concurrency is viewable/updatable on
       `GET/PUT /api/v1/admin/org/sandbox-concurrency` (value clamped 1..100), writing
       an `org.sandbox_concurrency_updated` audit event on success
       (`backend/src/farna/api/routes/admin.py`)
+      <!-- behaviour: environments-11 | tests: none -->
 - [x] The frontend surfaces the whole lifecycle on the Runners page (FAR-591 D5):
       profiles tab (`/admin/runners/profiles`) with list + search + per-card
       "Test connection" (SSE) and new/edit form (`/admin/runners/profiles/new`,
@@ -125,6 +136,7 @@ into the Runners page as redirects.)
       (`/admin/runners/concurrency`); the legacy `/environment-profiles*` and
       `/admin/environments` deep links redirect to the profiles tab – testids
       enumerated in the product map
+      <!-- behaviour: environments-12 | tests: none -->
 - [x] The environment-profile create/edit form offers the `kubernetes` provider
       as a first-class option (FAR-1559): the provider select renders the three
       manually-creatable provider types - `local_docker`, `e2b` and `kubernetes`
@@ -137,6 +149,7 @@ into the Runners page as redirects.)
       EnvironmentProfileForm.vue`, `frontend/src/__tests__/environment-profiles/
       EnvironmentProfileForm.spec.ts`, `backend/src/farna/core/runtime_provider/
       k8s.py`)
+      <!-- behaviour: environments-13 | tests: none -->
 - [x] The pipeline to environment-profile binding is settable per pipeline
       (FAR-1558): `PATCH /api/v1/pipelines/{pipeline_id}` accepts
       `environment_profile_id` (omit to leave unchanged, explicit `null` clears
@@ -170,6 +183,7 @@ into the Runners page as redirects.)
       `unit-tests: test_pipeline_environment_profile_binding.py,
       test_environment_profiles_routes.py,
       test_environment_profile_scope_rls_guard.py`)
+      <!-- behaviour: environments-14 | tests: backend/tests/unit/api/test_pipeline_environment_profile_binding.py, backend/tests/unit/api/test_environment_profiles_routes.py, backend/tests/integration/test_environment_profile_scope_rls_guard.py -->
 - [x] The FAR-1558 team rule has a dispatch-time backstop as its last line of
       defense (FAR-1598): when the snapshot-bound environment profile is loaded
       for dispatch, `runner_dispatch` re-validates it with the SAME shared
@@ -196,6 +210,7 @@ into the Runners page as redirects.)
       `backend/src/farna/core/pipeline_engine/node_runner.py`;
       `unit-tests: test_dispatch_team_scope_backstop.py,
       test_dispatch_route.py`)
+      <!-- behaviour: environments-15 | tests: backend/tests/integration/test_dispatch_team_scope_backstop.py, backend/tests/unit/core/bundled_runner/test_dispatch_route.py -->
 - [x] The binding is exposed on the read and non-REST surfaces (FAR-1599):
       `SnapshotResponse` carries `environment_profile_id` (additive and nullable
       - legacy and partial stand-in snapshots serialize as null) so a snapshot's
@@ -212,6 +227,7 @@ into the Runners page as redirects.)
       `unit-tests: test_apply_environment_profile.py,
       test_mcp_update_pipeline.py,
       test_snapshot_environment_profile_coercion.py`)
+      <!-- behaviour: environments-16 | tests: backend/tests/unit/cli/test_apply_environment_profile.py, backend/tests/unit/api/test_mcp_update_pipeline.py, backend/tests/unit/api/test_snapshot_environment_profile_coercion.py -->
 
 ## Known Gaps
 

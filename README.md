@@ -1,15 +1,6 @@
 # Farna Control
 
 <p align="center">
-  <img src="docs/assets/farna-control-lockup-card-light.svg" width="360" alt="Farna Control logo">
-</p>
-
-<p align="center">
-  Farna Control is a self-hosted Delivery Governance Platform. Govern the software development lifecycle as AI and automation take on more of the work — recording, evaluating, controlling, and improving automated work across your SDLC.
-</p>
-
-
-<p align="center">
   <a href="https://github.com/farnalabs/farna-control/actions"><img src="https://img.shields.io/github/actions/workflow/status/farnalabs/farna-control/ci.yml?branch=main&amp;label=CI&amp;logo=github" alt="CI"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL%201.1-blue" alt="License"/></a>
   <a href="https://farna.dev/control/docs"><img src="https://img.shields.io/badge/docs-farna.dev-blue" alt="Docs"/></a>
@@ -32,9 +23,11 @@
 </p>
 
 > [!WARNING]
-> **Alpha software.** Farna Control is under active development. Interfaces,
-> database migrations, configuration, and deployment procedures may change.
-> Evaluate it before using it with production data and keep current backups.
+> **Alpha software.** Farna Control is under active development. Dependable today:
+> PostgreSQL 16 as the only supported runtime database, an immutable run snapshot,
+> an append-only hash-chained audit log, and self-hosted with no telemetry by
+> default. Still changing: the HTTP API (no stability contract yet), database
+> migrations, configuration keys and deployment procedures. Keep current backups.
 
 ## Table of Contents
 - [What it is](#what-it-is)
@@ -51,11 +44,11 @@
 
 ## What it is
 
-Farna Control is a Delivery Governance Platform you own and run. It records, evaluates, controls, and improves automated work across the software development lifecycle — including code, dependencies and licensing, security, release, documentation and knowledge, evidence, and remediation — while keeping execution, approvals, audit data, and credentials under the operator's control.
+Farna Control is a Delivery Governance Platform you run on your own infrastructure. It records, evaluates, controls, and improves the automated work in your software delivery lifecycle: code, dependencies and licensing, security, release, documentation, evidence, and remediation. Execution, approvals, audit data, and credentials stay under your control.
 
-The operating loop is **record → evaluate → control → improve**: capture what automated work did, assess its outputs and evidence, apply gates and human decisions where needed, then use the results to improve the delivery system. Issue-to-PR is one governed workflow in that system, not the whole product. The platform is not generic workflow automation, primarily governance of agent internals, or a prescriptive software factory; software-factory language is only a supporting implementation frame.
+Every governed workflow follows one loop. Record what the automated work did. Evaluate the result and its evidence. Apply gates and human decisions. Use the results to improve the system. Issue to pull request is one workflow in that system, not the whole product.
 
-In the current product, you wire AI agents into your tools inside a visual pipeline where every run is audited and budgeted, and can be gated on human approval — so AI-assisted delivery is repeatable and auditable, not a one-off experiment.
+Today you wire your AI agents into your tools as a visual pipeline. Every run is audited and budgeted, and can pause at a gate for a human decision, so AI-assisted delivery becomes repeatable and auditable rather than a one-off experiment.
 
 The detailed product intent and delivery status live in the product roadmap.
 Items described there may be planned or partially delivered; check the relevant
@@ -108,7 +101,9 @@ Farna Control connects to existing agents without requiring any agent rewrite:
 
 ## Quick start (five-minute demo)
 
-The shortest local evaluation uses Docker Desktop and Docker Compose:
+The shortest local evaluation uses Docker Desktop and Docker Compose.
+
+macOS and Linux:
 
 ```bash
 git clone https://github.com/farnalabs/farna-control.git
@@ -118,21 +113,38 @@ printf 'FERNET_KEY=%s\n' "$(openssl rand -base64 32)" > .env
 docker compose up -d
 ```
 
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+git clone https://github.com/farnalabs/farna-control.git
+cd farna-control
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# write FERNET_KEY=<the value> to .env at the repo root
+docker compose up -d
+```
+
+</details>
+
 `FERNET_KEY` encrypts every stored credential (model backends, connectors). It
 must be a real Fernet key — url-safe base64 of exactly 32 bytes — so it can
 never be a fixed value in the Compose file. Compose refuses to start without
 it and prints the generation command, rather than starting a stack that boots,
 lets you sign in, and then fails the first time you save a credential.
 
-On Windows PowerShell, generate the key with
-`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
-and write it to `.env` as `FERNET_KEY=<value>`.
-
 Keep `.env`: it is gitignored, and a different key on a later start makes the
 credentials already stored in the database unreadable.
 
 The first run builds the backend and frontend images and may take a few
 minutes; after that, the demo itself takes about five minutes.
+
+The stack runs the code baked into the image. To live-edit backend code without
+rebuilding, add the dev override (see
+[docs/dev-setup.md](docs/dev-setup.md#running-the-containerised-stack-and-live-editing)):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
 
 After the services become healthy, open <http://localhost:5173> and sign in
 with the local demo credentials `admin` / `admin`. These credentials and the
@@ -166,22 +178,26 @@ The [configuration reference](docs/configuration-reference.md) documents the
 server-side environment variables, and [agent-config.md](docs/agent-config.md)
 covers pipeline graph and node configuration.
 
-## Native install (Linux and macOS)
+## Native install (macOS and Linux)
 
-The native single-install path is for workstation and evaluation use. Linux
-uses the published `scripts/install.sh` bundle path. macOS signed and notarized
-`.dmg` artifacts are published by release when available; the current
-`bundle-v0.3.325` release includes Apple Silicon (`macos-arm64`) only, and does
-not include an Intel (`macos-x86_64`) artifact. Rosetta is not required for the
-published Apple Silicon artifact. Check the public [installation
+The native single-install path is for workstation and evaluation use.
+
+On macOS, signed and notarized `.dmg` artifacts are published by release when
+available. The current `bundle-v0.3.325` release includes Apple Silicon
+(`macos-arm64`) only, and does not include an Intel (`macos-x86_64`) artifact.
+Rosetta is not required for the published Apple Silicon artifact.
+
+On Linux, use the published `scripts/install.sh` bundle path.
+
+Check the public [installation
 documentation](https://farna.dev/control/docs/installation) and the release assets for
 current platform availability, requirements, and installation steps.
 
 Docker Compose remains the supported path for self-hosted server and production
 use. Start with the [system requirements](docs/system-requirements.md), then
-follow the [deployment guide](docs/deployment.md). Native Windows installation
-is Beta scope and is not a supported Alpha installation path.
-
+follow the [deployment guide](docs/deployment.md). A native Windows installer is
+coming. Until it ships, use Docker Desktop on Windows; see the installation
+documentation for current availability.
 
 ## Documentation
 

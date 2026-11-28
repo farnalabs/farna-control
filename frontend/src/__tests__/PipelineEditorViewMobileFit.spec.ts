@@ -60,6 +60,18 @@ import PipelineEditorView from '../views/PipelineEditorView.vue'
 import { usePlanStore } from '../stores/planStore'
 import { FOCUSABLE_SELECTOR } from '../composables/useFocusTrap'
 
+// The geometry Vue Flow hands an edge slot. These stubs call the slot by name;
+// PipelineEditorViewEdgeRendering.spec.ts proves the real Vue Flow picks it.
+const EDGE_GEOMETRY = {
+  id: 'edge-1',
+  sourceX: 0,
+  sourceY: 0,
+  targetX: 0,
+  targetY: 100,
+  sourcePosition: 'bottom',
+  targetPosition: 'top',
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -618,7 +630,7 @@ describe('PipelineEditorView — mobile properties-sheet dialogs (FAR-1861)', ()
 })
 
 describe('PipelineEditorView — edge badge variants (FAR-1861 changed-lines gate)', () => {
-  // The default mount stub renders only the unnamed slot, so the edge-default
+  // The default mount stub renders only the unnamed slot, so the edge-smoothstep
   // template (its loop/llm badge conditionals included) never runs. Rendering
   // it with each variant exercises both arms of the optional-suffix ternaries,
   // which the changed-lines coverage gate scores.
@@ -637,12 +649,12 @@ describe('PipelineEditorView — edge badge variants (FAR-1861 changed-lines gat
         stubs: {
           VueFlow: {
             render(this: { $slots: Record<string, any> }) {
-              const slot = this.$slots['edge-default']
+              const slot = this.$slots['edge-smoothstep']
               return h('div', [
-                slot?.({ data: { edge_type: 'loop', max_iterations: 5 } }),
-                slot?.({ data: { edge_type: 'loop', max_iterations: null } }),
-                slot?.({ data: { edge_type: 'llm', routing_label: 'retry' } }),
-                slot?.({ data: { edge_type: 'llm', routing_label: null } }),
+                slot?.({ ...EDGE_GEOMETRY, data: { edge_type: 'loop', max_iterations: 5 } }),
+                slot?.({ ...EDGE_GEOMETRY, data: { edge_type: 'loop', max_iterations: null } }),
+                slot?.({ ...EDGE_GEOMETRY, data: { edge_type: 'llm', routing_label: 'retry' } }),
+                slot?.({ ...EDGE_GEOMETRY, data: { edge_type: 'llm', routing_label: null } }),
               ])
             },
           },

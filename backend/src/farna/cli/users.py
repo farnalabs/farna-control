@@ -280,6 +280,7 @@ async def _add_user(url: str, email: str, password: str, as_admin: bool) -> str:
     """
     from farna.db.models.account import Account
     from farna.db.models.org_membership import OrgMembership
+    from farna.db.rls import set_rls_org
     from farna.db.seed import append_user_grant_audit, seed_modulo_user
 
     engine, maker = _engine_and_factory(url)
@@ -289,6 +290,13 @@ async def _add_user(url: str, email: str, password: str, as_admin: bool) -> str:
             if existing is not None:
                 raise UserCliError(f"user {email} already exists — nothing changed")
             org = await _tenant_org_for_new_user(session)
+            # Bind the seeding org before the membership insert/read: the CLI
+            # runs as the non-BYPASSRLS app role with no request context, and
+            # ``org_memberships`` no longer carries a fail-open NULL arm (ADR 070
+            # §2, migration 0367). Mirrors the boot seeder; without it the
+            # membership INSERT fails RLS WITH CHECK and the follow-up SELECT
+            # sees no row.
+            await set_rls_org(session, org.id)
             await seed_modulo_user(session, org, f"{email}:{password}")
             account = (await session.execute(select(Account).where(Account.email == email))).scalar_one()
             membership = (
@@ -333,6 +341,7 @@ async def _reset_password(url: str, email: str, password: str) -> str:
     from farna.auth.passwords import hash_password
     from farna.db.crud.token_family import blacklist_family, list_families_for_account
     from farna.db.models.account import Account
+    from farna.db.rls import bootstrap_read
 
     engine, maker = _engine_and_factory(url)
     try:
@@ -345,9 +354,13 @@ async def _reset_password(url: str, email: str, password: str) -> str:
             if account.is_break_glass is True:
                 raise UserCliError(f"{email} is a break-glass account — password reset refused (the admin route refuses too): overwriting its hash breaks the break-glass CAS and orphans the last-resort recovery credential.")
             account.password_hash = hash_password(password)
-            families = await list_families_for_account(session, account.id)
-            for family in families:
-                await blacklist_family(session, family.family_id, account.id)
+            # Revoke EVERY family of the account, across every org (the CLI has
+            # no org context at all). Pinned to ``account_id`` under the explicit
+            # pre-auth bootstrap grant (ADR 070 §2, migration 0367).
+            async with bootstrap_read(session):
+                families = await list_families_for_account(session, account.id)
+                for family in families:
+                    await blacklist_family(session, family.family_id, account.id)
             signed_out = len(families)
     finally:
         await engine.dispose()
@@ -364,11 +377,18 @@ async def _list_rows(url: str) -> tuple[list[ListRow], str]:
     """
     from farna.db.models.account import Account
     from farna.db.models.org_membership import OrgMembership
+    from farna.db.rls import set_rls_org
 
     engine, maker = _engine_and_factory(url)
     try:
         async with maker() as session:
             org = await _first_org(session)
+            # Bind the org before the membership read: the CLI runs as the
+            # non-BYPASSRLS app role with no request context, and
+            # ``org_memberships`` no longer carries a fail-open NULL arm (ADR 070
+            # §2, migration 0367). Without it every account reads as having no
+            # membership in the org.
+            await set_rls_org(session, org.id)
             pairs = (
                 await session.execute(
                     select(Account, OrgMembership.role)

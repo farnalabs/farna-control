@@ -5,71 +5,48 @@
     <PageHeader :title="$t('views.AdminAuditView.audit_log')" :subtitle="$t('views.AdminAuditView.tamper_evident_event_trail')">
       <template v-if="auditSource === 'org'" #right>
       <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="verifying"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           data-testid="admin-audit-verify-chain"
           @click="verifyChain"
         >
           {{ verifying ? $t('views.AdminAuditView.verifying') : $t('views.AdminAuditView.verify_chain') }}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
           :disabled="exporting"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           data-testid="admin-audit-export-csv"
           @click="exportCsv"
         >
           {{ exporting ? $t('views.AdminAuditView.exporting') : $t('views.AdminAuditView.export_csv') }}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
           :disabled="exportingJsonl"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           data-testid="admin-audit-export-jsonl"
           @click="exportJsonl"
         >
           {{ exportingJsonl ? $t('views.AdminAuditView.exporting') : $t('views.AdminAuditView.export_jsonl') }}
-        </button>
+        </Button>
       </div>
       </template>
     </PageHeader>
 
-    <div
+    <!-- StateTabs composes these stable tab test IDs from testid-prefix:
+         :data-testid="'admin-audit-tab-org'" and :data-testid="'admin-audit-tab-system'". -->
+    <StateTabs
       v-if="isSystemAdmin"
-      role="tablist"
-      :aria-label="$t('views.AdminAuditView.audit_source_group')"
-      class="mb-4 flex flex-wrap gap-2"
+      :ariaLabel="$t('views.AdminAuditView.audit_source_group')"
+      :model-value="auditSource"
+      :tabs="auditSourceTabs"
+      class="mb-4 flex-wrap"
       data-testid="admin-audit-source-tabs"
-    >
-      <button
-        id="admin-audit-tab-org"
-        type="button"
-        role="tab"
-        :aria-selected="auditSource === 'org'"
-        aria-controls="admin-audit-source-org"
-        class="rounded-lg border border-input px-4 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        :class="auditSource === 'org' ? 'bg-accent' : 'bg-background hover:bg-accent'"
-        data-testid="admin-audit-tab-org"
-        @click="auditSource = 'org'"
-      >
-        {{ $t('views.AdminAuditView.tab_org_events') }}
-      </button>
-      <button
-        id="admin-audit-tab-system"
-        type="button"
-        role="tab"
-        :aria-selected="auditSource === 'system'"
-        aria-controls="admin-audit-source-system"
-        class="rounded-lg border border-input px-4 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        :class="auditSource === 'system' ? 'bg-accent' : 'bg-background hover:bg-accent'"
-        data-testid="admin-audit-tab-system"
-        @click="auditSource = 'system'"
-      >
-        {{ $t('views.AdminAuditView.tab_system_events') }}
-      </button>
-    </div>
+      id-prefix="admin-audit-tab"
+      panel-id-prefix="admin-audit-source"
+      testid-prefix="admin-audit-tab"
+      @update:model-value="onAuditSourceSelected"
+    />
 
     <div
       v-if="auditSource === 'org'"
@@ -78,11 +55,11 @@
       :aria-labelledby="isSystemAdmin ? 'admin-audit-tab-org' : undefined"
       class="space-y-4"
     >
-    <div v-if="chainResult" class="rounded-lg border px-4 py-3 text-sm" :class="chainResult.valid ? 'border-green-500 bg-green-50 text-green-800' : 'border-red-500 bg-red-50 text-red-800'" aria-live="polite" data-testid="admin-audit-chain-result">
+    <Notice v-if="chainResult" :variant="chainResult.valid ? 'success' : 'danger'" :icon="false" padding="none" live="polite" class="px-4 py-3 text-sm" data-testid="admin-audit-chain-result">
       <strong>{{ chainResult.valid ? $t('views.AdminAuditView.chain_valid') : $t('views.AdminAuditView.chain_broken') }}</strong>
       <span v-if="chainResult.checked_events" class="ml-2">— {{ $t('views.AdminAuditView.events_verified', { count: chainResult.checked_events }) }}</span>
       <span v-if="chainResult.error" class="ml-2">— {{ chainResult.error }}</span>
-    </div>
+    </Notice>
 
     <BaseCard padding="md">
       <FilterBar
@@ -125,33 +102,38 @@
         @update:filter="(key, value) => { if (key === 'event_type') filterEventType = value }"
       >
         <template #after>
-          <input
+          <SearchInput
             v-model="filterActor"
-            type="text"
             :aria-label="$t('views.AdminAuditView.actor_id')"
             :placeholder="$t('views.AdminAuditView.actor_id')"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            class="w-full"
             data-testid="admin-audit-actor"
           />
-          <div>
-            <label for="adminauditview-field-from" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.from') }}</label>
-            <input id="adminauditview-field-from"
+          <Field
+            id="adminauditview-field-from"
+            :label="$t('views.AdminAuditView.from')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="filterDateFrom"
               type="date"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-date-from"
             />
-          </div>
+          </Field>
         </template>
-        <div>
-          <label for="adminauditview-field-2" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.to') }}</label>
-          <input id="adminauditview-field-2"
+        <Field
+          id="adminauditview-field-2"
+          :label="$t('views.AdminAuditView.to')"
+          label-class="mb-1 block text-xs font-medium text-muted-foreground"
+        >
+          <Input
             v-model="filterDateTo"
             type="date"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             data-testid="admin-audit-date-to"
           />
-        </div>
+        </Field>
         <div>
           <span class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.target_type') }}</span>
           <Select
@@ -171,14 +153,13 @@
         </div>
       </FilterBar>
       <div class="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        <Button
+          variant="secondary"
           data-testid="admin-audit-reset"
           @click="resetFilters"
         >
           {{ $t('views.AdminAuditView.reset') }}
-        </button>
+        </Button>
         <span v-if="total > 0" class="ml-auto text-sm text-muted-foreground">
           {{ $t('views.AdminAuditView.events_count', { count: total }, total) }}
         </span>
@@ -259,26 +240,23 @@
               </td>
               <td class="table-cell max-w-xs truncate text-muted-foreground" v-tooltip.top="{ value: summarize(event), showDelay: 300 }">{{ summarize(event) }}</td>
               <td class="table-cell text-xs text-muted-foreground">
-                <button
-                  type="button"
-                  class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                <Disclosure
+                  :open="expandedId === event.id"
+                  :controls="'admin-audit-event-detail-' + event.id"
+                  chevron="down"
                   :aria-label="$t('views.AdminAuditView.expand_event', { id: event.id })"
                   :data-testid="'admin-audit-event-expand-' + event.id"
-                  @click.stop="toggleExpand(event.id)"
-                >
-                  <ChevronDown
-                    class="h-4 w-4 transition-transform"
-                    :class="{ 'rotate-180': expandedId === event.id }"
-                    aria-hidden="true"
-                  />
-                </button>
+                  class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  stop-propagation
+                  @update:open="toggleExpand(event.id)"
+                />
               </td>
             </tr>
             <!-- The detail row is rendered as the expanded row's immediate
                  sibling. As a lone `v-if` after the loop it always appeared at
                  the BOTTOM of the table, so expanding a row near the top
                  flipped the chevron with no visible change on screen. -->
-            <tr v-if="expandedId === event.id">
+            <tr v-if="expandedId === event.id" :id="'admin-audit-event-detail-' + event.id">
               <td colspan="6" class="table-cell bg-muted">
                 <div class="space-y-3">
                   <div v-if="expandedEvent?.payload_json && Object.keys(expandedEvent.payload_json).length > 0">
@@ -308,27 +286,25 @@
       </div>
 
       <div class="flex items-center justify-between">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="!canGoPrevious"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
           data-testid="admin-audit-previous"
           @click="goToPreviousPage"
         >
           {{ $t('views.AdminAuditView.previous') }}
-        </button>
+        </Button>
         <span class="text-sm text-muted-foreground">
           {{ $t('views.AdminAuditView.page_of_total', { page, count: events.length, total: total }) }}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="!nextCursor"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
           data-testid="admin-audit-next"
           @click="goToNextPage"
         >
           {{ $t('views.AdminAuditView.next') }}
-        </button>
+        </Button>
       </div>
     </template>
     </div>
@@ -349,56 +325,63 @@
 
       <BaseCard padding="md">
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label for="admin-audit-system-event-type" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.event_type') }}</label>
-            <input
-              id="admin-audit-system-event-type"
+          <Field
+            id="admin-audit-system-event-type"
+            :label="$t('views.AdminAuditView.event_type')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="systemFilterEventType"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-system-event-type"
             />
-          </div>
-          <div>
-            <label for="admin-audit-system-org-id" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.system_organisation') }}</label>
-            <input
-              id="admin-audit-system-org-id"
+          </Field>
+          <Field
+            id="admin-audit-system-org-id"
+            :label="$t('views.AdminAuditView.system_organisation')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="systemFilterOrgId"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-system-org-id"
             />
-          </div>
-          <div>
-            <label for="admin-audit-system-date-from" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.from') }}</label>
-            <input
-              id="admin-audit-system-date-from"
+          </Field>
+          <Field
+            id="admin-audit-system-date-from"
+            :label="$t('views.AdminAuditView.from')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="systemFilterDateFrom"
               type="date"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-system-date-from"
             />
-          </div>
-          <div>
-            <label for="admin-audit-system-date-to" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminAuditView.to') }}</label>
-            <input
-              id="admin-audit-system-date-to"
+          </Field>
+          <Field
+            id="admin-audit-system-date-to"
+            :label="$t('views.AdminAuditView.to')"
+            label-class="mb-1 block text-xs font-medium text-muted-foreground"
+          >
+            <Input
               v-model="systemFilterDateTo"
               type="date"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="admin-audit-system-date-to"
             />
-          </div>
+          </Field>
         </div>
         <div class="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <Button
+            variant="secondary"
             data-testid="admin-audit-system-reset"
             @click="resetSystemFilters"
           >
             {{ $t('views.AdminAuditView.reset') }}
-          </button>
+          </Button>
           <output
             aria-live="polite"
             class="ml-auto text-sm text-muted-foreground"
@@ -467,22 +450,19 @@
                 </td>
                 <td class="table-cell max-w-xs truncate text-muted-foreground" v-tooltip.top="{ value: summarize(event), showDelay: 300 }">{{ summarize(event) }}</td>
                 <td class="table-cell text-xs text-muted-foreground">
-                  <button
-                    type="button"
-                    class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <Disclosure
+                    :open="expandedSystemId === event.id"
+                    :controls="'admin-audit-system-event-detail-' + event.id"
+                    chevron="down"
                     :aria-label="$t('views.AdminAuditView.expand_event', { id: event.id })"
                     :data-testid="'admin-audit-system-event-expand-' + event.id"
-                    @click.stop="toggleSystemExpand(event.id)"
-                  >
-                    <ChevronDown
-                      class="h-4 w-4 transition-transform"
-                      :class="{ 'rotate-180': expandedSystemId === event.id }"
-                      aria-hidden="true"
-                    />
-                  </button>
+                    class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    stop-propagation
+                    @update:open="toggleSystemExpand(event.id)"
+                  />
                 </td>
               </tr>
-              <tr v-if="expandedSystemId === event.id">
+              <tr v-if="expandedSystemId === event.id" :id="'admin-audit-system-event-detail-' + event.id">
                 <td colspan="6" class="table-cell bg-muted">
                   <div class="space-y-3">
                     <div v-if="expandedSystemEvent?.payload_json && Object.keys(expandedSystemEvent.payload_json).length > 0">
@@ -514,27 +494,25 @@
         </div>
 
         <div class="flex items-center justify-between">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             :disabled="systemPage <= 1"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
             data-testid="admin-audit-system-previous"
             @click="goSystemPage(systemPage - 1)"
           >
             {{ $t('views.AdminAuditView.previous') }}
-          </button>
+          </Button>
           <span class="text-sm text-muted-foreground">
             {{ $t('views.AdminAuditView.system_page_of_total', { page: systemPage, count: systemEvents.length, total: systemTotal }) }}
           </span>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             :disabled="systemPage * SYSTEM_PAGE_SIZE >= systemTotal"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
             data-testid="admin-audit-system-next"
             @click="goSystemPage(systemPage + 1)"
           >
             {{ $t('views.AdminAuditView.next') }}
-          </button>
+          </Button>
         </div>
       </template>
     </section>
@@ -544,10 +522,17 @@
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
+import StateTabs, { type StateTab } from '../components/shared/StateTabs.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
+import Button from '../components/ui/Button.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import FilterBar from '../components/shared/FilterBar.vue'
+import Notice from '../components/shared/Notice.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import SearchInput from '../components/ui/SearchInput.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../lib/api/client'
@@ -563,7 +548,6 @@ import { formatDateFilename } from '../lib/formatDate'
 import { shortId } from '../utils/format'
 import Select from '../components/shared/AppSelect.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
-import { ChevronDown } from '@lucide/vue'
 import { useCurrentUser } from '../composables/useCurrentUser'
 
 const { t } = useI18n()
@@ -636,6 +620,17 @@ const SYSTEM_PAGE_SIZE = 50
 // (default) and the org-independent durable ledger that survives a hard org
 // delete. `auditSource` is the single switch between the two panels.
 const auditSource = ref<'org' | 'system'>('org')
+
+const auditSourceTabs = computed<StateTab[]>(() => [
+  { id: 'org', label: t('views.AdminAuditView.tab_org_events') },
+  { id: 'system', label: t('views.AdminAuditView.tab_system_events') },
+])
+
+/** Only the two declared sources are selectable, whatever a caller sends. */
+function onAuditSourceSelected(id: string) {
+  const next = auditSourceTabs.value.find((tab) => tab.id === id)?.id
+  if (next === 'org' || next === 'system') auditSource.value = next
+}
 
 const systemPage = ref(1)
 const systemFilterEventType = ref('')

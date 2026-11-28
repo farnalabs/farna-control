@@ -431,7 +431,9 @@ describe('SettingsTriggersView — ongoing trigger (FAR-158)', () => {
     await flush()
 
     expect(api.POST).not.toHaveBeenCalled()
-    expect(wrapper.find('.text-destructive').exists()).toBe(true)
+    // Assert the error text itself: `.text-destructive` also matches the
+    // required-field asterisk in the Field label, so it proved nothing.
+    expect(wrapper.text()).toContain('A daily spend limit is required for ongoing triggers.')
   })
 
   it('edit: the form pre-fills target / interval / spend from the loaded ongoing trigger', async () => {
@@ -662,7 +664,7 @@ describe('SettingsTriggersView — FAR-191 streak surfacing + operator re-enable
 
     const badge = wrapper.find('[data-testid="settings-triggers-streak"]')
     expect(badge.exists()).toBe(true)
-    expect(badge.classes()).toContain('text-amber-600')
+    expect(badge.classes()).toContain('text-warning-text')
   })
 
   it('shows the deactivated badge with reason (a11y: aria-live) for a deactivated ongoing trigger', async () => {
@@ -725,6 +727,30 @@ describe('SettingsTriggersView — FAR-191 streak surfacing + operator re-enable
     expect(toggle.attributes('aria-expanded')).toBe('true')
     expect(wrapper.text()).toContain('no_work')
     expect(wrapper.text()).toContain('pr_merged')
+  })
+
+  it('renders a neutral outcome badge for non-delivered, non-no-delivery classifications', async () => {
+    const wrapper = mountView(fakeJwt('admin'), {
+      ...baseListData,
+      items: [
+        ongoing({
+          streak_status: streakStatus({
+            streak: 2,
+            last_outcomes: [
+              { run_id: 'r1', classification: 'excluded', reason: 'gate_skip', completed_at: '2026-08-01T00:00:00Z' },
+              { run_id: 'r2', classification: 'unclassified', reason: 'unknown', completed_at: '2026-08-01T01:00:00Z' },
+            ],
+          }),
+        }),
+      ],
+    })
+    await flush()
+
+    await wrapper.find('[data-testid="settings-triggers-outcomes-toggle"]').trigger('click')
+    await flush()
+
+    expect(wrapper.text()).toContain('gate_skip')
+    expect(wrapper.text()).toContain('unknown')
   })
 
   it('FAR-1373/FAR-1388: renders a visible qualifier for an agent-reported outcome', async () => {
@@ -963,8 +989,8 @@ describe('SettingsTriggersView — FAR-191 streak surfacing + operator re-enable
     const badges = wrapper.findAll('[data-testid="settings-triggers-streak"]')
     expect(badges).toHaveLength(2)
     expect(badges[0].classes()).toContain('text-destructive-text')
-    expect(badges[0].classes()).not.toContain('text-amber-600')
-    expect(badges[1].classes()).not.toContain('text-amber-600')
+    expect(badges[0].classes()).not.toContain('text-warning-text')
+    expect(badges[1].classes()).not.toContain('text-warning-text')
     expect(badges[1].classes()).not.toContain('text-destructive-text')
   })
 })
@@ -1513,5 +1539,22 @@ describe('SettingsTriggersView — FAR-617 create/delete/error-state coverage', 
     expect(wrapper.find('[data-testid="settings-triggers-delete-error"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('trigger busy')
     expect(vm.deleteDialogOpen).toBe(true)
+  })
+})
+
+describe('SettingsTriggersView — outcome badge classification', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('maps a no-delivery outcome to the warning badge and every other value to neutral', async () => {
+    const wrapper = mountView(fakeJwt('admin'), baseListData)
+    await flush()
+    const vm = wrapper.vm as unknown as { outcomeBadgeClass: (c: string | null | undefined) => string }
+
+    expect(vm.outcomeBadgeClass('no_delivery')).toContain('bg-warning')
+    expect(vm.outcomeBadgeClass('excluded')).toContain('bg-muted')
+    expect(vm.outcomeBadgeClass(null)).toContain('bg-muted')
   })
 })

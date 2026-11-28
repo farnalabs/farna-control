@@ -622,12 +622,16 @@ class StreamingMixin(_ExecutorHost):
         operational_outcome = self._stream_operational_outcome(exc, broker, run_id, node_token_usage)
         if operational_outcome is not None:
             return operational_outcome
-        _tb = _ref("_traceback_detail")(exc, limit=5000)
+        _log.error(
+            "pipeline.stream_unhandled_exception",
+            extra={"run_id": str(run_id), "exc_type": type(exc).__name__},
+            exc_info=exc,
+        )
         return _terminal_outcome(
             broker,
             "failed",
             type(exc).__name__,
-            _tb,
+            _ref("_failure_reason")(exc),
             state.node_token_usage or None,
         )
 

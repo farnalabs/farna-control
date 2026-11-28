@@ -7,7 +7,7 @@ Farna Control is a self-hosted Delivery Governance Platform: govern the software
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    Browser UI (Vue 3 SPA)                     │
-│  Standard Theme (light) │ Agent Theme (dark, v1)             │
+│  Single app theme: dark by default, light toggle available   │
 │  Pinia stores → Composables → Views → Components             │
 │  PrimeVue component library                             │
 └──────────────────────┬───────────────────────────────────────┘
@@ -60,7 +60,7 @@ Farna Control is a self-hosted Delivery Governance Platform: govern the software
 | **State** | Pinia | Client-side state |
 | **UI primitives** | PrimeVue | Component library (themed via `primevue-theme.ts` token bridge) |
 | **Routing** | Vue Router | Client-side routing |
-| **Styling** | CSS custom properties | Theming (standard/agent) |
+| **Styling** | CSS custom properties | Theming (single palette, light/dark toggle) |
 | **Database** | PostgreSQL 16 | Primary data store |
 | **Cache/queue** | Redis 8 | SAQ broker, rate limiting |
 | **Container** | Docker Compose | Local dev, production |
@@ -1032,7 +1032,8 @@ deployment backend (ADR 068).
 ### Docker Compose
 
 Compose files (`docker-compose*.yml` at the repo root; the non-default ones live under `deploy/compose/`):
-- `docker-compose.yml` – dev mode (builds from source, Postgres 16, Redis 8)
+- `docker-compose.yml` – full local stack, built from source (Postgres 16, Redis 8); the Python services run the code baked into the image
+- `docker-compose.dev.yml` – live-edit override for `docker-compose.yml` (re-adds the `./backend/src` bind mount; see [Compose first-boot latency](compose-first-boot-performance.md))
 - `docker-compose.local.yml` – with observability profile (otel-collector, Prometheus, Grafana)
 - `deploy/compose/docker-compose.prod.yml` – self-hosted single-server production (prebuilt image)
 - `deploy/compose/docker-compose.test.yml` – CI test environment

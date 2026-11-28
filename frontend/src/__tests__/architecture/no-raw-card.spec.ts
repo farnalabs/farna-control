@@ -3,7 +3,7 @@
  *
  * `.card` (plus `card-base` / `card-header` / `card-content` / `card-footer`)
  * is the ONE card surface in the app. It is emitted by `BaseCard` and reached
- * through its presets (`DataCard`, `TableCard`, `CollapsibleCard`,
+ * through its presets (`DataCard`, `CollapsibleCard`,
  * `CardSkeleton`, `CardHeader`, `CardContent`, `CardTable`, `EmptyState`,
  * `StatCard`, `SummaryCard`). A page must not re-implement the
  * surface with a raw `class="card ..."`, because that silently forks the
@@ -28,6 +28,7 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, extname, sep } from 'node:path'
+import { stripNonTemplateBlocks } from '../../test-utils/design-system-detectors'
 
 /** Vitest runs with `frontend/` as the working directory. */
 const SRC_DIR = join(process.cwd(), 'src')
@@ -65,20 +66,13 @@ function walk(dir: string): string[] {
   return results
 }
 
-/** Blank a matched region while preserving newlines (keeps line numbers true). */
-function blank(text: string): string {
-  return text.replace(/[^\n]/g, ' ')
-}
-
 /**
  * Blank everything that is not a static template class attribute: HTML
- * comments, `<style>` blocks and `<script>` blocks.
+ * comments, `<style>` blocks and `<script>` blocks. Regions are blanked rather
+ * than removed so reported line numbers stay true.
  */
 function templateOnly(source: string): string {
-  return source
-    .replace(/<!--[\s\S]*?-->/g, blank)
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, blank)
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, blank)
+  return stripNonTemplateBlocks(source, { preserveLines: true })
 }
 
 /**

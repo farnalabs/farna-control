@@ -6,7 +6,7 @@
 
       <BaseCard v-if="loadingRuns" padding="lg" data-testid="diff-loading">
         <div class="grid gap-4">
-          <div v-for="n in 3" :key="n" class="h-9 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock v-for="n in 3" :key="n" height-class="h-9 w-full" />
         </div>
       </BaseCard>
       <BaseCard v-else padding="lg">
@@ -94,14 +94,14 @@
 
       <BaseCard v-if="loading" padding="lg" data-testid="diff-comparing">
         <div class="grid gap-4">
-          <div v-for="n in 3" :key="n" class="h-9 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock v-for="n in 3" :key="n" height-class="h-9 w-full" />
         </div>
       </BaseCard>
       <div v-else-if="result" class="space-y-6">
         <div
           v-if="!result.has_diff"
           data-testid="diff-identical-banner"
-          class="rounded-lg border border-green-500/30 bg-green-500/10 p-4 text-center text-sm font-medium text-green-700 dark:text-green-400"
+          class="rounded-lg border border-diff-added/30 bg-diff-added/10 p-4 text-center text-sm font-medium text-diff-added-text"
         >
           {{ $t('views.AgentOutputDiffView.outputs_identical') }}
         </div>
@@ -110,10 +110,10 @@
           <span class="rounded bg-muted px-2.5 py-1 tabular-nums text-muted-foreground">
             {{ $t('views.AgentOutputDiffView.lines_total', { count: totalLines }) }}
           </span>
-          <span class="rounded bg-green-500/10 px-2.5 py-1 tabular-nums text-green-700 dark:text-green-400">
+          <span class="rounded bg-diff-added/10 px-2.5 py-1 tabular-nums text-diff-added-text">
             {{ $t('views.AgentOutputDiffView.added', { count: addedCount }) }}
           </span>
-          <span class="rounded bg-red-500/10 px-2.5 py-1 tabular-nums text-red-700 dark:text-red-400">
+          <span class="rounded bg-diff-removed/10 px-2.5 py-1 tabular-nums text-diff-removed-text">
             {{ $t('views.AgentOutputDiffView.removed', { count: removedCount }) }}
           </span>
           <span class="rounded bg-muted px-2.5 py-1 tabular-nums text-muted-foreground">
@@ -141,7 +141,7 @@
 
         <DataCard padding="none" class="overflow-hidden">
           <div class="border-b bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground">
-            {{ $t('views.AgentOutputDiffView.line_level_diff') }} <span class="ml-2 text-green-700 dark:text-green-400">{{ $t('views.AgentOutputDiffView.plus_added') }}</span> <span class="ml-1 text-red-700 dark:text-red-400">{{ $t('views.AgentOutputDiffView.minus_removed') }}</span>
+            {{ $t('views.AgentOutputDiffView.line_level_diff') }} <span class="ml-2 text-diff-added-text">{{ $t('views.AgentOutputDiffView.plus_added') }}</span> <span class="ml-1 text-diff-removed-text">{{ $t('views.AgentOutputDiffView.minus_removed') }}</span>
           </div>
           <div class="table-wrapper">
             <table class="w-full text-left font-mono text-xs leading-relaxed">
@@ -190,6 +190,7 @@ import { useMutation } from '../composables/useMutation'
 import type { components } from '../lib/api/client'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
+import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
@@ -257,14 +258,14 @@ const unchangedCount = computed(() => {
 })
 
 function diffRowClass(line: NodeOutputDiffLine): string {
-  if (line.type === 'added') return 'bg-green-500/5'
-  if (line.type === 'removed') return 'bg-red-500/5'
+  if (line.type === 'added') return 'bg-diff-added/5'
+  if (line.type === 'removed') return 'bg-diff-removed/5'
   return ''
 }
 
 function diffContentClass(line: NodeOutputDiffLine): string {
-  if (line.type === 'added') return 'text-green-700 dark:text-green-400'
-  if (line.type === 'removed') return 'text-red-700 dark:text-red-400'
+  if (line.type === 'added') return 'text-diff-added-text'
+  if (line.type === 'removed') return 'text-diff-removed-text'
   return 'text-foreground'
 }
 

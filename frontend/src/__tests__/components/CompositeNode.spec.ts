@@ -42,6 +42,7 @@ vi.mock('@vue-flow/core', () => ({
 }))
 
 import CompositeNode from '../../components/pipeline/nodes/CompositeNode.vue'
+import { PIPELINE_NODE_MAX_WIDTH_CLASS } from '../../components/pipeline/nodes/NodeRegistry'
 import ParameterPortForm from '../../components/pipeline/composite/ParameterPortForm.vue'
 import { useCompositeStore } from '../../stores/compositeStore'
 import type { ParameterPort } from '../../types/pipeline'
@@ -105,6 +106,14 @@ describe('CompositeNode', () => {
     await nextTick()
     expect(wrapper.text()).toContain('Label only')
     expect(wrapper.text()).toContain('0/0 ports set')
+  })
+
+  it('bounds the card width like every other canvas node card', () => {
+    const wrapper = mount(CompositeNode, {
+      global: { plugins: [createPinia()] },
+    })
+
+    expect(wrapper.classes()).toContain(PIPELINE_NODE_MAX_WIDTH_CLASS)
   })
 
   it('emits the node id when expand is clicked', async () => {

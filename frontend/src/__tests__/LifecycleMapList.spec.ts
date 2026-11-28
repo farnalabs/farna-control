@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
+import { nextTick } from 'vue'
 
 const routeState = vi.hoisted(() => ({
   query: {} as Record<string, string>,
@@ -50,6 +51,10 @@ const i18n = createI18n({
   locale: 'en-US',
   messages: {
     'en-US': {
+      common: {
+        cancel: 'Cancel',
+        confirm: 'Confirm',
+      },
       views: {
         LifecycleMapList: {
           edit: 'Edit',
@@ -94,6 +99,9 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.clearAllMocks()
   routeState.query = {}
+  // PrimeVue teleports dialogs to <body>; drop any left behind so one test's
+  // open dialog cannot leak into the next test's modal assertions.
+  document.querySelectorAll('.p-dialog-mask').forEach((el) => el.remove())
 })
 
 describe('LifecycleMapList', () => {
@@ -376,15 +384,16 @@ describe('LifecycleMapList create error', () => {
     await flushPromises()
 
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.find('[data-testid="lifecycle-map-list-create-name"]').setValue('Broken Map')
-    await wrapper.find('[data-testid="lifecycle-map-list-create-submit"]').trigger('click')
+    await flushPromises()
+    const dialog = createDialogEl()!
+    setValue(dialog.querySelector<HTMLInputElement>('[data-testid="lifecycle-map-list-create-name"]')!, 'Broken Map')
+    await nextTick()
+    dialogButtonByTestId(dialog, 'lifecycle-map-list-create-submit')!.click()
     await flushPromises()
 
-    const errorAlert = wrapper.findComponent({ name: 'ErrorAlert' })
-    expect(errorAlert.exists()).toBe(true)
-    expect(errorAlert.text()).toContain('Create failed: boom')
+    expect(dialog.textContent).toContain('Create failed: boom')
     // Create-action errors carry no refetch loader — no Retry control.
-    expect(wrapper.find('[data-testid="error-alert-retry"]').exists()).toBe(false)
+    expect(dialog.querySelector('[data-testid="error-alert-retry"]')).toBeNull()
   })
 })
 
@@ -693,52 +702,76 @@ describe('LifecycleMapList pagination', () => {
 })
 
 /** The native `close` event is queued as a task (see the jsdom dialog shim). */
-function flushCloseEvent(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0))
+/** PrimeVue's FormDialog teleports to <body>, outside the mounted wrapper. */
+function createDialogEl(): HTMLElement | null {
+  return Array.from(document.body.querySelectorAll<HTMLElement>('[role="dialog"]'))
+    .find((el) => el.textContent?.includes('Create Lifecycle Map')) ?? null
+}
+
+function dialogButtonByTestId(root: ParentNode, testid: string): HTMLButtonElement | null {
+  return root.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)
+}
+
+function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  el.value = value
+  el.dispatchEvent(new Event('input'))
+}
+
+/** PrimeVue runs its enter/leave transition hooks on rAF; give them a tick. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 50))
 }
 
 describe('LifecycleMapList create dialog', () => {
-  it('opens create dialog when New Map button is clicked', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okJson({ items: [] }))))
-    const wrapper = mount(LifecycleMapList, {
+  const ButtonStub = {
+    template: '<button :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+    props: ['disabled'],
+  }
+
+  function mountList() {
+    return mount(LifecycleMapList, {
+      attachTo: document.body,
       global: {
         plugins: [i18n],
-        stubs: {
-          PageHeader: true,
-          FilterBar: true,
-          ErrorAlert: true,
-          Button: true,
-        },
+        stubs: { PageHeader: true, FilterBar: true, Button: ButtonStub },
       },
     })
+  }
+
+  it('opens create dialog when New Map button is clicked', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okJson({ items: [] }))))
+    const wrapper = mountList()
     await flushPromises()
 
-    const newBtn = wrapper.find('[data-testid="lifecycle-map-list-empty-new"]')
-    await newBtn.trigger('click')
-    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
+    await flushPromises()
 
-    expect(wrapper.text()).toContain('Create Lifecycle Map')
-    expect(wrapper.text()).toContain('Cancel')
+    const dialog = createDialogEl()
+    expect(dialog).not.toBeNull()
+    expect(dialog!.textContent).toContain('Create Lifecycle Map')
+    expect(dialog!.textContent).toContain('Cancel')
+    expect(dialog!.querySelector('[data-testid="lifecycle-map-list-create-cancel"]')).not.toBeNull()
+    expect(dialog!.querySelector('[data-testid="lifecycle-map-list-create-submit"]')).not.toBeNull()
+    wrapper.unmount()
   })
 
   it('open/close dialog helpers are safe no-ops while the dialog is not rendered', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okJson({ items: [] }))))
-    const wrapper = mount(LifecycleMapList, {
-      global: {
-        plugins: [i18n],
-        stubs: { PageHeader: true, FilterBar: true, ErrorAlert: true, Button: true },
-      },
-    })
+    const wrapper = mountList()
     await flushPromises()
 
     const vm = wrapper.vm as unknown as {
       openCreateDialog: () => void
       closeCreateDialog: () => void
     }
-    expect(wrapper.find('dialog').exists()).toBe(false)
+    expect(createDialogEl()).toBeNull()
     expect(() => vm.openCreateDialog()).not.toThrow()
+    await flushPromises()
+    expect(createDialogEl()).not.toBeNull()
     expect(() => vm.closeCreateDialog()).not.toThrow()
-    expect(wrapper.find('dialog').exists()).toBe(false)
+    await flushPromises()
+    expect(createDialogEl()).toBeNull()
+    wrapper.unmount()
   })
 
   it('creates a map, closes the dialog and opens the editor', async () => {
@@ -747,137 +780,88 @@ describe('LifecycleMapList create dialog', () => {
       if (init?.method === 'POST') return Promise.resolve(okJson(created))
       return Promise.resolve(okJson({ items: [] }))
     }))
-    const ButtonStub = {
-      template: '<button :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
-      props: ['disabled'],
-    }
     routerPushMock.mockClear()
-    const wrapper = mount(LifecycleMapList, {
-      attachTo: document.body,
-      global: {
-        plugins: [i18n],
-        stubs: { PageHeader: true, FilterBar: true, Button: ButtonStub },
-      },
-    })
+    const wrapper = mountList()
     await flushPromises()
 
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.vm.$nextTick()
-    await wrapper.find('[data-testid="lifecycle-map-list-create-name"]').setValue('New Map')
-    await wrapper.find('[data-testid="lifecycle-map-list-create-submit"]').trigger('click')
     await flushPromises()
-    // The native close event is queued as a task; the @close handler that
-    // unmounts the v-if branch lands after it.
-    await flushCloseEvent()
+    const dialog = createDialogEl()!
+    const nameInput = dialog.querySelector<HTMLInputElement>('[data-testid="lifecycle-map-list-create-name"]')!
+    setValue(nameInput, 'New Map')
+    await nextTick()
+    dialogButtonByTestId(dialog, 'lifecycle-map-list-create-submit')!.click()
+    await flushPromises()
 
     expect(routerPushMock).toHaveBeenCalledWith({
       name: 'lifecycle-map-editor',
       params: { id: 'map-new' },
     })
-    expect(wrapper.find('dialog').exists()).toBe(false)
+    expect(createDialogEl()).toBeNull()
     wrapper.unmount()
   })
 
   it('re-opening an already-open create dialog is a guarded no-op', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okJson({ items: [] }))))
-    const wrapper = mount(LifecycleMapList, {
-      attachTo: document.body,
-      global: {
-        plugins: [i18n],
-        stubs: { PageHeader: true, FilterBar: true, ErrorAlert: true, Button: true },
-      },
-    })
+    const wrapper = mountList()
     await flushPromises()
 
     const vm = wrapper.vm as unknown as { openCreateDialog: () => void }
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.vm.$nextTick()
-    const dialogEl = wrapper.find('dialog').element as HTMLDialogElement
-    expect(dialogEl.open).toBe(true)
+    await flushPromises()
+    expect(createDialogEl()).not.toBeNull()
 
-    // A second showModal() would throw InvalidStateError; the guard makes it
-    // a no-op.
     expect(() => vm.openCreateDialog()).not.toThrow()
-    expect(dialogEl.open).toBe(true)
+    await flushPromises()
+    expect(document.body.querySelectorAll('[role="dialog"]')).toHaveLength(1)
     wrapper.unmount()
   })
 
   it('closes create dialog when Cancel is clicked', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okJson({ items: [] }))))
-    const wrapper = mount(LifecycleMapList, {
-      attachTo: document.body,
-      global: {
-        plugins: [i18n],
-        stubs: {
-          PageHeader: true,
-          FilterBar: true,
-          ErrorAlert: true,
-          Button: true,
-        },
-      },
-    })
+    const wrapper = mountList()
     await flushPromises()
 
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.vm.$nextTick()
-
-    // Find the Cancel button in the dialog
-    const cancelBtn = wrapper.findAll('button').find((b) => b.text().trim() === 'Cancel')
-    expect(cancelBtn).toBeDefined()
-    await cancelBtn!.trigger('click')
-    // The native close event is queued (shim models the browser), so the
-    // @close handler that unmounts the v-if branch lands a task later.
     await flushPromises()
-    await flushCloseEvent()
+    dialogButtonByTestId(createDialogEl()!, 'lifecycle-map-list-create-cancel')!.click()
+    await flushPromises()
+    expect(createDialogEl()).toBeNull()
 
-    // Dialog should be closed (no longer shows "Create Lifecycle Map")
-    expect(wrapper.text()).not.toContain('Create Lifecycle Map')
-
-    // Reopen: the dialog is a real modal (showModal), so focus lands inside it
-    // and Escape dispatched from the focused element closes it.
+    // Reopen: PrimeVue's Dialog owns the modal semantics (role, aria-modal).
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.vm.$nextTick()
-    const dialog = wrapper.find('dialog')
-    expect(dialog.exists()).toBe(true)
-    expect(dialog.attributes('role')).toBeUndefined()
-    const dialogEl = dialog.element as HTMLDialogElement
-    expect(dialogEl.open).toBe(true)
-    const focused = document.activeElement as HTMLElement | null
-    expect(focused).not.toBeNull()
-    expect(dialogEl.contains(focused)).toBe(true)
-
-    focused!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await flushPromises()
-    await flushCloseEvent()
+    await settle()
+    const dialog = createDialogEl()
+    expect(dialog).not.toBeNull()
+    expect(dialog!.getAttribute('role')).toBe('dialog')
+    expect(dialog!.getAttribute('aria-modal')).toBe('true')
+    expect(dialog!.getAttribute('aria-labelledby')).toBeTruthy()
 
-    expect(dialogEl.open).toBe(false)
-    expect(wrapper.text()).not.toContain('Create Lifecycle Map')
+    dialogButtonByTestId(dialog!, 'lifecycle-map-list-create-cancel')!.click()
+    await flushPromises()
+    await settle()
+    expect(createDialogEl()).toBeNull()
     wrapper.unmount()
   })
 
   it('closes the create dialog on a backdrop click', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okJson({ items: [] }))))
-    const wrapper = mount(LifecycleMapList, {
-      attachTo: document.body,
-      global: {
-        plugins: [i18n],
-        stubs: { PageHeader: true, FilterBar: true, ErrorAlert: true, Button: true },
-      },
-    })
+    const wrapper = mountList()
     await flushPromises()
 
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.vm.$nextTick()
-    const dialog = wrapper.find('dialog')
-    expect((dialog.element as HTMLDialogElement).open).toBe(true)
-
-    // A click whose target is the dialog itself is a ::backdrop click.
-    await dialog.trigger('click')
     await flushPromises()
-    await flushCloseEvent()
+    expect(createDialogEl()).not.toBeNull()
 
-    expect((dialog.element as HTMLDialogElement).open).toBe(false)
-    expect(wrapper.text()).not.toContain('Create Lifecycle Map')
+    // PrimeVue dismisses on a mask mousedown+mouseup whose target is the mask.
+    const mask = document.body.querySelector<HTMLElement>('.p-dialog-mask')
+    expect(mask).not.toBeNull()
+    mask!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    mask!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    await flushPromises()
+
+    expect(createDialogEl()).toBeNull()
     wrapper.unmount()
   })
 
@@ -890,23 +874,18 @@ describe('LifecycleMapList create dialog', () => {
     trigger.focus()
     expect(document.activeElement).toBe(trigger)
 
-    const wrapper = mount(LifecycleMapList, {
-      attachTo: document.body,
-      global: {
-        plugins: [i18n],
-        stubs: { PageHeader: true, FilterBar: true, ErrorAlert: true, Button: true },
-      },
-    })
+    const wrapper = mountList()
     await flushPromises()
 
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.vm.$nextTick()
-    const dialogEl = wrapper.find('dialog').element as HTMLDialogElement
-    expect(dialogEl.contains(document.activeElement as HTMLElement)).toBe(true)
-
-    const cancel = wrapper.findAll('button').find((b) => b.text().trim() === 'Cancel')!
-    await cancel.trigger('click')
     await flushPromises()
+    await settle()
+    const dialog = createDialogEl()
+    expect(dialog).not.toBeNull()
+
+    dialogButtonByTestId(dialog!, 'lifecycle-map-list-create-cancel')!.click()
+    await flushPromises()
+    await settle()
 
     expect(document.activeElement).toBe(trigger)
     wrapper.unmount()
@@ -915,30 +894,22 @@ describe('LifecycleMapList create dialog', () => {
 
   it('unmounts safely while the create dialog is open and remounts cleanly', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(okJson({ items: [] }))))
-    const mountList = () =>
-      mount(LifecycleMapList, {
-        attachTo: document.body,
-        global: {
-          plugins: [i18n],
-          stubs: { PageHeader: true, FilterBar: true, ErrorAlert: true, Button: true },
-        },
-      })
-
     const wrapper = mountList()
     await flushPromises()
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.vm.$nextTick()
-    expect((wrapper.find('dialog').element as HTMLDialogElement).open).toBe(true)
+    await flushPromises()
+    expect(createDialogEl()).not.toBeNull()
     expect(() => wrapper.unmount()).not.toThrow()
-    expect(document.querySelector('dialog')).toBeNull()
+    await flushPromises()
+    expect(createDialogEl()).toBeNull()
 
     // A fresh instance must still open its dialog — an unmount that left modal
     // state or a close handler behind would break this mount.
     const remounted = mountList()
     await flushPromises()
     await remounted.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await remounted.vm.$nextTick()
-    expect((remounted.find('dialog').element as HTMLDialogElement).open).toBe(true)
+    await flushPromises()
+    expect(createDialogEl()).not.toBeNull()
     remounted.unmount()
   })
 
@@ -953,19 +924,13 @@ describe('LifecycleMapList create dialog', () => {
       })
     vi.stubGlobal('fetch', fetchMock)
 
-    // Use a Button stub that renders slot content so text-based queries work
-    const ButtonStub = {
-      template: '<button :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
-      props: ['disabled'],
-    }
+    // ErrorAlert unstubbed so the converted create-error box renders its text.
     const wrapper = mount(LifecycleMapList, {
       global: {
         plugins: [i18n],
         stubs: {
           PageHeader: true,
           FilterBar: true,
-          // ErrorAlert unstubbed so the converted create-error box renders
-          // its message text.
           Button: ButtonStub,
         },
       },
@@ -973,19 +938,18 @@ describe('LifecycleMapList create dialog', () => {
     await flushPromises()
 
     await wrapper.find('[data-testid="lifecycle-map-list-empty-new"]').trigger('click')
-    await wrapper.vm.$nextTick()
-
-    // Fill in the name
-    const nameInput = wrapper.find('input[placeholder="My Delivery Lifecycle"]')
-    await nameInput.setValue('Test Map')
-
-    // Click Create
-    const createBtn = wrapper.findAll('button').find((b) => b.text().trim() === 'Create')
-    expect(createBtn).toBeDefined()
-    await createBtn!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Validation error')
+    const dialog = createDialogEl()!
+    const nameInput = dialog.querySelector<HTMLInputElement>('[data-testid="lifecycle-map-list-create-name"]')!
+    setValue(nameInput, 'Test Map')
+    await nextTick()
+
+    dialogButtonByTestId(dialog, 'lifecycle-map-list-create-submit')!.click()
+    await flushPromises()
+
+    expect(createDialogEl()!.textContent).toContain('Validation error')
+    wrapper.unmount()
   })
 })
 
@@ -1170,6 +1134,7 @@ describe('LifecycleMapList query param auto-open', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Create Lifecycle Map')
+    expect(createDialogEl()?.textContent).toContain('Create Lifecycle Map')
+    wrapper.unmount()
   })
 })

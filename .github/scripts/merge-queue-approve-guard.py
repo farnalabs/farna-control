@@ -22,8 +22,10 @@ failed OPEN on (jq saw only the first page, the count became multi-line, and the
 ``-gt 0`` test silently evaluated false) -- is handled correctly. Any
 parse/IO error returns ``stale`` (fail closed), never ``ok``.
 
-This intentionally mirrors the proven walk in ``.github/scripts/pr-review-dedup.py``
-so the logic lives in versioned, unit-tested Python rather than bash.
+This is THE staleness rule (FAR-2871): ``pr-review-dedup.py`` and
+``merge_train_admit.py`` import this module rather than carrying a copy, so the
+reviewer dispatch cannot skip a head that the merge step refuses to merge. The
+logic lives in versioned, unit-tested Python rather than bash.
 
 Unit tests: backend/tests/unit/scripts/test_merge_queue_approve_guard.py.
 """
@@ -36,7 +38,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-def _parse_iso(ts: str) -> int:
+def parse_iso(ts: str) -> int:
     """Parse a GitHub ISO-8601 timestamp (UTC, 'Z' suffix) to a unix epoch."""
     return int(datetime.fromisoformat(ts).timestamp())
 
@@ -55,6 +57,11 @@ def load_concatenated(path: str):
     # user- or model-supplied, so this S8707 taint flow is a false positive.
     with Path(path).open(encoding="utf-8") as fh:  # NOSONAR pythonsecurity:S8707
         text = fh.read()
+    return parse_concatenated(text)
+
+
+def parse_concatenated(text: str) -> list:
+    """Flatten concatenated ``gh api --paginate`` JSON documents into one list."""
     decoder = json.JSONDecoder()
     items: list = []
     idx, n = 0, len(text)
@@ -75,21 +82,28 @@ def load_concatenated(path: str):
 def _is_stale_commit(c: dict, approve_epoch: int) -> bool:
     """Return True when *c* is a non-merge commit that invalidates the approval.
 
-    Merge commits keep the approval valid.  A missing or malformed committer
-    date is unverifiable, so it fails closed (counts as stale), matching the
-    reviews side and the documented contract.
+    Merge commits keep the approval valid.
     """
     parents = c.get("parents") or []
     if len(parents) != 1:
         return False
+    return committed_after(c, approve_epoch)
+
+
+def committed_after(c: dict, epoch: int) -> bool:
+    """Return True when *c* (merge or not) was committed after *epoch*.
+
+    A missing or malformed committer date is unverifiable, so it fails closed
+    (counts as after), matching the reviews side and the documented contract.
+    """
     cd = (c.get("commit") or {}).get("committer", {}).get("date")
     if not cd:
         return True
     try:
-        ce = _parse_iso(cd)
+        ce = parse_iso(cd)
     except Exception:
         return True
-    return ce > approve_epoch
+    return ce > epoch
 
 
 def decide(reviews, commits, head_sha: str | None = None):
@@ -102,7 +116,7 @@ def decide(reviews, commits, head_sha: str | None = None):
     if not submitted:
         return "stale", "could not resolve approval timestamp - fail closed"
     try:
-        approve_epoch = _parse_iso(submitted)
+        approve_epoch = parse_iso(submitted)
     except Exception:
         return "stale", f"approval timestamp parse failed ({submitted!r}) - fail closed"
 

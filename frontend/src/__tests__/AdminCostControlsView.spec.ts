@@ -235,6 +235,29 @@ describe('AdminCostControlsView', () => {
     expect(wrapper.find('[data-testid="cc-budget-save"]').exists()).toBe(true)
   })
 
+  it('renders an empty budget input when the budget is null', async () => {
+    const wrapper = await mountView()
+
+    ;(wrapper.vm as unknown as { settings: { budget: number | null } }).settings.budget = null
+    await nextTick()
+
+    expect((wrapper.get('[data-testid="cc-budget-input"]').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('edits the budget through the Field-wrapped input and saves the number', async () => {
+    const wrapper = await mountView()
+
+    const budget = wrapper.get('[data-testid="cc-budget-input"]')
+    await budget.setValue('500')
+    await wrapper.get('[data-testid="cc-budget-save"]').trigger('click')
+    await flushPromises()
+
+    expect(mockPut).toHaveBeenCalledWith('/api/v1/admin/costs/controls', { body: { budget: 500 } })
+
+    await budget.setValue('')
+    expect((wrapper.vm as unknown as { settings: { budget: number } }).settings.budget).toBe(0)
+  })
+
   it('loads persisted alert thresholds from settings', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path === '/api/v1/admin/costs/controls') {
@@ -584,7 +607,7 @@ describe('AdminCostControlsView', () => {
 
     vm.totalSpend = 80
     await nextTick()
-    expect(vm.progressBarClass).toBe('bg-amber-500')
+    expect(vm.progressBarClass).toBe('bg-warning')
   })
 
   it('covers omitted and non-numeric cost totals without producing NaN', async () => {

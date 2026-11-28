@@ -511,13 +511,23 @@ async def dismiss_notification(
     dismiss_scope: str = "self",
     is_admin: bool = False,
 ) -> Dismissal:
-    result = await session.execute(
-        select(Notification).where(
-            Notification.organisation_id == org_id,
-            Notification.id == notification_id,
-        )
+    """File (or escalate) one account's dismissal of a notification.
+
+    The row is loaded through :func:`get_notification`'s visibility clause, not
+    on ``(org, id)`` alone: ``notifications`` is ACCOUNT-scoped (ADR 070 §1), so
+    a ``scope='user'`` row belongs to its ``target_user_id`` and a
+    ``scope='admin'`` row to the org's admins. Without the clause any member of
+    the organisation could dismiss a row they cannot even read - and, because
+    ``dismiss_scope='scope'`` hides a notification for everyone, could hide
+    another account's private notification from its owner. An invisible row
+    fails exactly like a missing one, so the refusal cannot confirm existence.
+    """
+    notification = await get_notification(
+        session,
+        org_id=org_id,
+        notification_id=notification_id,
+        user_id=user_id,
     )
-    notification = result.scalar_one_or_none()
     if notification is None:
         raise ValueError("Notification not found")
 

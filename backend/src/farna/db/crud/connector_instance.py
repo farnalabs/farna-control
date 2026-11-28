@@ -7,12 +7,13 @@ import uuid
 from collections.abc import Collection
 from typing import Any
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import ColumnElement, case, func, select, update
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.db.crud.base import PageResult, apply_updates
 from farna.db.crud.pagination import CursorPaginator
+from farna.db.crud.team_scope import team_scope_clause
 from farna.db.models.connector_instance import ConnectorInstance
 
 # Matches the hub's _SKIP_SUMMARY_LIMIT / _record_skip sanitization (FAR-495):
@@ -69,6 +70,29 @@ async def get_connector_instance(session: AsyncSession, connector_id: uuid.UUID)
     return result.scalar_one_or_none()
 
 
+def _connector_instance_filters(
+    organisation_id: uuid.UUID | None,
+    team_id: uuid.UUID | None,
+    excluded_tiers: list[str],
+) -> list[ColumnElement[bool]]:
+    """Build the WHERE predicates shared by every connector list statement.
+
+    Extracted so the cursor page, the COUNT and the offset page cannot drift:
+    each statement applies the SAME organisation clamp, team boundary and tier
+    exclusion. ADR 070 §5: the team predicate is the team-scoped credential's
+    own team boundary (the DB policy ``rls_team_isolation`` filters on the KEY
+    OWNER's memberships), and org-level rows (no owner team) stay visible.
+    """
+    filters: list[ColumnElement[bool]] = []
+    if organisation_id:
+        filters.append(ConnectorInstance.organisation_id == organisation_id)
+    if team_id is not None:
+        filters.append(team_scope_clause(ConnectorInstance.owner_team_id, team_id))
+    if excluded_tiers:
+        filters.append(~ConnectorInstance.tier.in_(excluded_tiers))
+    return filters
+
+
 async def list_connector_instances(
     session: AsyncSession,
     *,
@@ -77,18 +101,14 @@ async def list_connector_instances(
     page_size: int = 20,
     cursor: str | None = None,
     excluded_tiers: list[str] | None = None,
+    team_id: uuid.UUID | None = None,
 ) -> PageResult[ConnectorInstance]:
     if excluded_tiers is None:
         excluded_tiers = ["in_dev"]
-
-    org_filter = ConnectorInstance.organisation_id == organisation_id if organisation_id else None
+    filters = _connector_instance_filters(organisation_id, team_id, excluded_tiers)
 
     if cursor is not None:
-        stmt = select(ConnectorInstance)
-        if org_filter is not None:
-            stmt = stmt.where(org_filter)
-        if excluded_tiers:
-            stmt = stmt.where(~ConnectorInstance.tier.in_(excluded_tiers))
+        stmt = select(ConnectorInstance).where(*filters)
         paginator = CursorPaginator()
         cp = await paginator.paginate(
             session,
@@ -108,21 +128,13 @@ async def list_connector_instances(
         )
 
     offset = (page - 1) * page_size
-    total_query = select(func.count()).select_from(ConnectorInstance)
-    if org_filter is not None:
-        total_query = total_query.where(org_filter)
-    if excluded_tiers:
-        total_query = total_query.where(~ConnectorInstance.tier.in_(excluded_tiers))
+    total_query = select(func.count()).select_from(ConnectorInstance).where(*filters)
     try:
         total = (await session.execute(total_query)).scalar_one()
     except ProgrammingError:
         return PageResult(items=[], total=0, page=page, page_size=page_size)
     try:
-        items_stmt = select(ConnectorInstance).order_by(ConnectorInstance.created_at.desc()).offset(offset).limit(page_size)
-        if org_filter is not None:
-            items_stmt = items_stmt.where(org_filter)
-        if excluded_tiers:
-            items_stmt = items_stmt.where(~ConnectorInstance.tier.in_(excluded_tiers))
+        items_stmt = select(ConnectorInstance).where(*filters).order_by(ConnectorInstance.created_at.desc()).offset(offset).limit(page_size)
         items = list((await session.execute(items_stmt)).scalars())
     except ProgrammingError:
         return PageResult(items=[], total=0, page=page, page_size=page_size)

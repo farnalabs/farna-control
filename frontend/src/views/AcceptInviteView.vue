@@ -18,10 +18,12 @@
       />
 
       <form v-else-if="!success" class="mt-5 space-y-4" novalidate @submit.prevent="submit">
-        <div>
-          <label for="accept-invite-password" class="block text-sm font-medium mb-1">{{ $t('views.AcceptInviteView.password_label') }}</label>
-          <input
-            id="accept-invite-password"
+        <Field
+          id="accept-invite-password"
+          :label="$t('views.AcceptInviteView.password_label')"
+          label-class="block text-sm font-medium mb-1"
+        >
+          <Input
             v-model="password"
             type="password"
             autocomplete="new-password"
@@ -30,11 +32,13 @@
             data-testid="accept-invite-password"
             class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm"
           />
-        </div>
-        <div>
-          <label for="accept-invite-confirm" class="block text-sm font-medium mb-1">{{ $t('views.AcceptInviteView.confirm_label') }}</label>
-          <input
-            id="accept-invite-confirm"
+        </Field>
+        <Field
+          id="accept-invite-confirm"
+          :label="$t('views.AcceptInviteView.confirm_label')"
+          label-class="block text-sm font-medium mb-1"
+        >
+          <Input
             v-model="confirmPassword"
             type="password"
             autocomplete="new-password"
@@ -43,7 +47,7 @@
             data-testid="accept-invite-confirm"
             class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm"
           />
-        </div>
+        </Field>
         <ul id="accept-invite-requirements" class="space-y-1 text-xs text-muted-foreground list-disc pl-4">
           <li>{{ $t('views.AcceptInviteView.requirement_length') }}</li>
           <li>{{ $t('views.AcceptInviteView.requirement_mixed') }}</li>
@@ -69,14 +73,16 @@
         </button>
       </form>
 
-      <div
+      <Notice
         v-else
-        aria-live="polite"
+        variant="success"
+        live="polite"
+        :icon="false"
         data-testid="accept-invite-success"
-        class="mt-5 rounded-lg border border-success/50 bg-success/10 p-4 text-sm text-success-text"
+        class="mt-5 text-sm"
       >
         {{ successMessage }}
-      </div>
+      </Notice>
     </div>
   </div>
 </template>
@@ -87,6 +93,9 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '../composables/useApi'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import { passwordRuleKey, validatePasswordClient } from '../lib/passwordRules'
 
 const { t } = useI18n()

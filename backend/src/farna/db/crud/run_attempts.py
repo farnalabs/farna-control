@@ -102,17 +102,20 @@ async def _acquire_attempt_lock(session: AsyncSession, run_id: uuid.UUID) -> Non
         await session.execute(text(_ATTEMPT_LOCK_SQL), {"key": attempt_lock_key(run_id)})
 
 
-async def _run_organisation_id(session: AsyncSession, run_id: uuid.UUID) -> uuid.UUID:
-    """Read the parent run's ``organisation_id`` — the tenant anchor for the row.
+async def _run_tenant_and_owner(session: AsyncSession, run_id: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID | None]:
+    """Read the parent run's ``organisation_id`` AND ``owner_team_id`` in one query.
 
-    Derived from the run rather than accepted from the caller so an attempt can
-    never be filed under an organisation other than its run's. Raises
+    ADR 070 Phase 1A: the attempt's ``owner_team_id`` is the RUN's owner, resolved
+    from the run row itself in the same SELECT that supplies the tenant anchor -
+    never the live pipeline, which may have been reassigned since the run was
+    created. ``None`` (no owner) is a legitimate value: an org-level pipeline's
+    run, or a legacy-unowned run. Raises
     :class:`RunAttemptRunNotFoundError` when the run does not exist.
     """
-    organisation_id = (await session.execute(select(Run.organisation_id).where(Run.id == run_id))).scalar_one_or_none()
-    if organisation_id is None:
+    row = (await session.execute(select(Run.organisation_id, Run.owner_team_id).where(Run.id == run_id))).first()
+    if row is None:
         raise RunAttemptRunNotFoundError(f"run {run_id} not found; cannot start an attempt")
-    return organisation_id
+    return row.organisation_id, row.owner_team_id
 
 
 async def start_attempt(
@@ -125,14 +128,16 @@ async def start_attempt(
     """Insert the OPEN attempt row for *run_id* and return its ``attempt_index``.
 
     The index is 0-based, per run, contiguous and monotonic (the model's module
-    docstring is the contract). ``organisation_id`` is derived from the run.
-    ``started_at`` defaults to the current UTC instant; the executor may pass
-    the dispatch instant it actually observed instead.
+    docstring is the contract). ``organisation_id`` and ``owner_team_id`` are both
+    derived from the run in one read (ADR 070 Phase 1A - the owner is the RUN's,
+    never the live pipeline's). ``started_at`` defaults to the current UTC
+    instant; the executor may pass the dispatch instant it actually observed
+    instead.
 
-    Does not commit — the caller owns the transaction (and therefore the
+    Does not commit - the caller owns the transaction (and therefore the
     advisory lock's lifetime).
     """
-    organisation_id = await _run_organisation_id(session, run_id)
+    organisation_id, owner_team_id = await _run_tenant_and_owner(session, run_id)
     await _acquire_attempt_lock(session, run_id)
 
     next_index = (await session.execute(select(func.coalesce(func.max(RunAttempt.attempt_index), -1) + 1).where(RunAttempt.run_id == run_id))).scalar_one()
@@ -140,6 +145,7 @@ async def start_attempt(
     session.add(
         RunAttempt(
             organisation_id=organisation_id,
+            owner_team_id=owner_team_id,
             run_id=run_id,
             attempt_index=int(next_index),
             started_at=started_at if started_at is not None else datetime.now(UTC),

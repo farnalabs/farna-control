@@ -690,7 +690,7 @@ jobs:
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 11.29.0
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: pnpm
@@ -848,6 +848,11 @@ jobs:
           MANIFEST_SIGNING_KEY: ${{ secrets.BUNDLE_MANIFEST_SIGNING_KEY }}
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the build
+          # source), not the workflow dispatch ref, as the manifest provenance
+          # field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           if [ -z "${MANIFEST_SIGNING_KEY}" ]; then
             echo "::error::BUNDLE_MANIFEST_SIGNING_KEY is NOT set - refusing to publish an UNSIGNED release manifest."
             echo "::error::Provisioning is the ONE-TIME owner task (Duncan): generate an ed25519 keypair; add the private key's hex as the repo secret BUNDLE_MANIFEST_SIGNING_KEY; paste the public half into backend/src/farna/launcher/manifest.py (_TRUST_ROWS) and scripts/install.sh (TRUST_KEY_CURRENT_B64/NEXT_B64). Rotation per ADR 031 Decision 3."
@@ -880,7 +885,7 @@ jobs:
           manifest = manifest_module.build_release_manifest(
               release=f"bundle-v{version}",
               platform=f"linux-{arch}",
-              generated_at=os.environ.get("GITHUB_SHA", ""),
+              generated_at=os.environ["SOURCE_COMMIT"],
               components={"postgres": pg_version, "redis": redis_version, "python": "3.12"},
               artifacts=artifacts,
           )
@@ -912,7 +917,7 @@ jobs:
           PYEOF
 
       - name: Upload bundle artefacts as workflow outputs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bundle-artefacts-${{ matrix.arch }}
           path: |
@@ -954,7 +959,7 @@ jobs:
           persist-credentials: false
 
       - name: Download the freshly built bundle + signed manifest
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bundle-artefacts-${{ matrix.arch }}
           path: smoke-bundle

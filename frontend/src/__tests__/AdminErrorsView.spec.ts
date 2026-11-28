@@ -456,6 +456,28 @@ describe('AdminErrorsView', () => {
     wrapper.unmount()
   })
 
+  it('drives scope changes through the segmented control and ignores unknown values (FAR-2804)', async () => {
+    authState.isSystemAdmin = true
+    const wrapper = mountView()
+    await flushPromises()
+    await nextTick()
+
+    // Clicking the instance option runs the SegmentedControl's
+    // update:model-value handler, which validates the emitted value before
+    // routing.
+    await wrapper.find('[data-testid="admin-errors-scope-instance"]').trigger('click')
+    expect(routerMocks.push).toHaveBeenCalledWith({ path: '/admin/errors', query: { scope: 'instance' } })
+
+    const vm = wrapper.vm as unknown as { onScopeChange: (value: string) => void }
+    // Selecting the already-active scope and an unexpected value are both
+    // ignored rather than forwarded to setScope.
+    routerMocks.push.mockClear()
+    vm.onScopeChange('organisation')
+    vm.onScopeChange('unexpected')
+    expect(routerMocks.push).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('instance scope navigates to the detail view carrying the scope query (FAR-1547)', async () => {
     authState.isSystemAdmin = true
     routerMocks.query!.scope = 'instance'

@@ -1370,14 +1370,18 @@ def test_prepare_database_env_with_admin_url(monkeypatch: pytest.MonkeyPatch) ->
     # `_prepare_database_env` writes the REAL process environment, so the value
     # must be recorded for restoration: leaking it left `DATABASE_ADMIN_URL`
     # pointing at a test URL for every later test in the same pytest process
-    # (which silently retargeted the restore tests).
-    monkeypatch.delenv("DATABASE_ADMIN_URL", raising=False)
+    # (which silently retargeted the restore tests). `setenv` BEFORE the write
+    # is what registers that undo — `delenv(..., raising=False)` on an absent
+    # key registers nothing, which let the value leak into a later suite's
+    # `_resolve_url(None)` when both suites ran in one process.
+    monkeypatch.setenv("DATABASE_ADMIN_URL", "")
     entry_module._prepare_database_env({"DATABASE_ADMIN_URL": "postgresql://admin/db"})
     assert os.environ.get("DATABASE_ADMIN_URL") == "postgresql://admin/db"
 
 
 def test_prepare_database_env_with_system_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", raising=False)
+    # Same real-environment write, same restoration requirement.
+    monkeypatch.setenv("FARNA_CONTROL_SYSTEM_DATABASE_URL", "")
     entry_module._prepare_database_env({"FARNA_CONTROL_SYSTEM_DATABASE_URL": "postgresql://sys/db"})
     assert os.environ.get("FARNA_CONTROL_SYSTEM_DATABASE_URL") == "postgresql://sys/db"
 
@@ -2211,7 +2215,7 @@ def test_serve_until_shutdown_writes_readiness_handshake(tmp_path: Path) -> None
 def test_serve_until_shutdown_uses_serve_api_when_no_serve_callable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls: list[tuple[str, int]] = []
 
-    def _fake_serve_api(host: str, port: int, stop_event: threading.Event, force_exit: threading.Event) -> None:
+    def _fake_serve_api(host: str, port: int, stop_event: threading.Event, force_exit: threading.Event, *, ready_fd: int | None = None) -> None:
         calls.append((host, port))
 
     monkeypatch.setattr(entry_module, "_serve_api", _fake_serve_api)

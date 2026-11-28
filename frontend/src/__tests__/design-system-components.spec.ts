@@ -16,6 +16,7 @@ import {
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
+import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardContent from '../components/ui/CardContent.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
@@ -24,7 +25,6 @@ import CardTable from '../components/ui/CardTable.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import SummaryCard from '../components/ui/SummaryCard.vue'
 import StatCard from '../components/ui/StatCard.vue'
-import TableCard from '../components/ui/TableCard.vue'
 
 describe('useDeltaFormatting', () => {
   it.each([
@@ -238,6 +238,43 @@ describe('CardHeader and DataCard', () => {
     expect(actionOnly.find('.card-header').exists()).toBe(true)
   })
 
+  it('keeps the shared row layout contract: shrinking content and nowrap actions', () => {
+    const wrapper = mount(CardHeader, {
+      props: { title: 'Details' },
+      slots: {
+        actions: '<button>Go</button>',
+      },
+    })
+
+    const content = wrapper.find('.min-w-0.flex-1')
+    expect(content.exists()).toBe(true)
+    expect(content.classes()).toContain('min-w-0')
+    expect(content.classes()).toContain('flex-1')
+    expect(wrapper.find('.actions-nowrap').exists()).toBe(true)
+    expect(wrapper.find('.actions-nowrap').text()).toBe('Go')
+  })
+
+  it('stacks on mobile and restores the row layout at sm (FAR-2537)', () => {
+    const wrapper = mount(CardHeader, {
+      props: { title: 'Details' },
+      slots: { actions: '<button>Go</button>' },
+    })
+
+    const classes = wrapper.classes()
+    expect(classes).toContain('flex-col')
+    expect(classes).toContain('sm:flex-row')
+    expect(classes).toContain('sm:items-start')
+    expect(classes).toContain('sm:justify-between')
+
+    const actions = wrapper.get('[data-testid^="card-header-actions-"]').classes()
+    expect(actions).toContain('w-full')
+    expect(actions).toContain('flex-wrap')
+    expect(actions).toContain('sm:w-auto')
+    expect(actions).toContain('sm:shrink-0')
+    expect(actions).toContain('sm:flex-nowrap')
+    expect(actions).toContain('actions-nowrap')
+  })
+
   it('supports a leading slot and optional divider without changing the default header', () => {
     const composed = mount(CardHeader, {
       props: { title: 'Housekeeping', divider: true },
@@ -363,33 +400,27 @@ describe('CardContent, CardTable and CardSkeleton', () => {
   })
 })
 
-describe('TableCard', () => {
+describe('DataCard padding for a table body', () => {
   const tableSlot = { default: '<table><tbody><tr><td>row</td></tr></tbody></table>' }
 
-  it('renders a bare table untouched when neither heading nor table label is supplied', () => {
-    const wrapper = mount(TableCard, { slots: tableSlot })
+  // TableCard used to derive this padding. Its two callers now compose DataCard
+  // directly: a titled card keeps the inset, a bare table card is edge-to-edge
+  // (PipelineListView) or keeps the default inset (DashboardView).
+  it('defaults to the inset padding when a title is supplied', () => {
+    const wrapper = mount(DataCard, { props: { title: 'Rows' }, slots: tableSlot })
 
-    expect(wrapper.find('.overflow-x-auto').exists()).toBe(false)
+    expect(wrapper.find('.card').classes()).toContain('p-4')
+  })
+
+  it('renders an edge-to-edge body when padding is none', () => {
+    const wrapper = mount(DataCard, { props: { padding: 'none' }, slots: tableSlot })
+
+    expect(wrapper.find('.card').classes()).toContain('p-0')
     expect(wrapper.find('table').exists()).toBe(true)
   })
 
-  it('opts into the CardTable region from a table label alone', () => {
-    const wrapper = mount(TableCard, { props: { tableLabel: 'Rows table' }, slots: tableSlot })
-
-    const scroll = wrapper.find('.overflow-x-auto')
-    expect(scroll.exists()).toBe(true)
-    expect(scroll.attributes('aria-label')).toBe('Rows table')
-  })
-
-  it('opts into the CardTable region from a heading alone', () => {
-    const wrapper = mount(TableCard, { props: { heading: 'Rows' }, slots: tableSlot })
-
-    expect(wrapper.text()).toContain('Rows')
-    expect(wrapper.find('.overflow-x-auto').exists()).toBe(true)
-  })
-
-  it('honours an explicit padding over the header-derived default', () => {
-    const wrapper = mount(TableCard, { props: { title: 'Rows', padding: 'lg' }, slots: tableSlot })
+  it('honours an explicit padding over the default', () => {
+    const wrapper = mount(DataCard, { props: { title: 'Rows', padding: 'lg' }, slots: tableSlot })
 
     expect(wrapper.find('.card').classes()).toContain('p-6')
   })
@@ -898,5 +929,56 @@ describe('FormDialog width', () => {
     const dialog = mountDialog({ width: '40rem' }).find('[data-testid="dialog"]')
 
     expect(dialog.attributes('style')).toContain('width: 40rem')
+  })
+})
+
+describe('LoadingSpinner', () => {
+  it('renders the original page-level markup byte-for-byte with no props', () => {
+    const wrapper = mount(LoadingSpinner)
+
+    // No props must equal the pre-prop output exactly: a page-level py-16
+    // wrapper around the md ring.
+    expect(wrapper.attributes('class')).toBe('flex items-center justify-center py-16')
+    expect(wrapper.find('.animate-spin').attributes('class')).toBe(
+      'h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent',
+    )
+  })
+
+  it('renders the sm ring when size="sm"', () => {
+    const wrapper = mount(LoadingSpinner, { props: { size: 'sm' } })
+    const ring = wrapper.find('.animate-spin')
+
+    expect(ring.classes()).toContain('h-5')
+    expect(ring.classes()).toContain('w-5')
+    expect(ring.classes()).toContain('border-2')
+    // The md size must not leak through when the prop is set.
+    expect(ring.classes()).not.toContain('h-8')
+    expect(ring.classes()).not.toContain('border-4')
+  })
+
+  it('renders the lg ring when size="lg"', () => {
+    const wrapper = mount(LoadingSpinner, { props: { size: 'lg' } })
+    const ring = wrapper.find('.animate-spin')
+
+    expect(ring.classes()).toContain('h-12')
+    expect(ring.classes()).toContain('w-12')
+    expect(ring.classes()).toContain('border-4')
+    expect(ring.classes()).not.toContain('h-8')
+    expect(ring.classes()).not.toContain('border-2')
+  })
+
+  it('drops the vertical padding when padded is false, keeping the centring', () => {
+    const wrapper = mount(LoadingSpinner, { props: { padded: false } })
+
+    expect(wrapper.classes()).toEqual(['flex', 'items-center', 'justify-center'])
+    expect(wrapper.classes()).not.toContain('py-16')
+    expect(wrapper.find('.animate-spin').exists()).toBe(true)
+  })
+
+  it('combines the inline size and unpadded variant used by inline panels', () => {
+    const wrapper = mount(LoadingSpinner, { props: { size: 'sm', padded: false } })
+
+    expect(wrapper.attributes('class')).toBe('flex items-center justify-center')
+    expect(wrapper.find('.animate-spin').classes()).toContain('h-5')
   })
 })

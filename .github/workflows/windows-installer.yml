@@ -54,7 +54,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
@@ -110,7 +110,7 @@ jobs:
           ./scripts/test-windows-installer.ps1 -RequireIscc
       - name: Upload ISCC compiler output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: iscc-output
           path: iscc-*.log
@@ -121,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
@@ -142,7 +142,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
@@ -163,7 +163,7 @@ jobs:
     env:
       VERSION_NUM: ${{ inputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
@@ -201,7 +201,7 @@ jobs:
           '@ | Add-Content -Path $env:GITHUB_STEP_SUMMARY
       - name: Download native Windows payload
         if: ${{ inputs.mode != 'dry-run' }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-native-artifacts
           path: ${{ runner.temp }}\windows-native-artifacts
@@ -236,7 +236,7 @@ jobs:
           }
       - name: Upload unsigned Windows installer
         if: ${{ inputs.mode != 'dry-run' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-installer-unsigned-${{ inputs.version }}
           path: ${{ runner.temp }}\native-installer
@@ -254,7 +254,7 @@ jobs:
       id-token: write
     steps:
       - name: Download unsigned Windows installer
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-installer-unsigned-${{ inputs.version }}
           path: ${{ runner.temp }}\native-installer
@@ -275,7 +275,7 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
       - name: Upload signed Windows installer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-installer-signed-${{ inputs.version }}
           path: ${{ runner.temp }}\native-installer
@@ -294,7 +294,7 @@ jobs:
       attestations: write
     steps:
       - name: Download signed Windows installer
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-installer-signed-${{ inputs.version }}
           path: release-artefacts
@@ -306,11 +306,11 @@ jobs:
           installer="release-artefacts/farna-control-${VERSION}-windows-amd64.exe"
           test -s "$installer"
           sha256sum "$installer"
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: release-artefacts/farna-control-*-windows-amd64.exe
       - name: Upload attested Windows installer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-installer-${{ inputs.version }}
           path: release-artefacts/farna-control-*-windows-amd64.exe

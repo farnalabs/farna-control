@@ -122,31 +122,31 @@ const hasNodeDetails = computed(() => humanOnly.value !== null || teamName.value
   <div v-else-if="mode === 'node' && hasNodeDetails" class="mt-1 flex flex-wrap gap-1" data-testid="pipeline-node-governance">
     <span
       v-if="humanOnly === true"
-      class="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 dark:text-rose-300"
+      class="min-w-0 max-w-full rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 dark:text-rose-300"
       :aria-label="$t('views.PipelineEditorView.governance_human_only')"
       data-testid="pipeline-node-governance-human-only"
     >{{ $t('views.PipelineEditorView.governance_human_only') }}</span>
     <span
       v-else-if="humanOnly === false"
-      class="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-300"
+      class="min-w-0 max-w-full rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-300"
       :aria-label="$t('views.PipelineEditorView.governance_agent_may_approve')"
       data-testid="pipeline-node-governance-agent-approval"
     >{{ $t('views.PipelineEditorView.governance_agent_may_approve') }}</span>
     <span
       v-if="teamName || teamAssigned"
-      class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+      class="min-w-0 max-w-full rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
       :aria-label="$t('views.PipelineEditorView.governance_team_label', { team: teamName ?? $t('views.PipelineEditorView.governance_team_assigned') })"
       data-testid="pipeline-node-governance-team"
     >{{ $t('views.PipelineEditorView.governance_team', { team: teamName ?? $t('views.PipelineEditorView.governance_team_assigned') }) }}</span>
     <span
       v-if="expiryLabel"
-      class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+      class="min-w-0 max-w-full rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
       :aria-label="$t('views.PipelineEditorView.governance_expiry_label', { expiry: expiryLabel })"
       data-testid="pipeline-node-governance-expiry"
     >{{ $t('views.PipelineEditorView.governance_expiry', { expiry: expiryLabel }) }}</span>
     <span
       v-if="policyGate"
-      class="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+      class="inline-flex min-w-0 max-w-full items-center gap-1 rounded bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning-text"
       :aria-label="$t('views.PipelineEditorView.governance_guardrail')"
       :title="$t('views.PipelineEditorView.governance_guardrail_hint')"
       data-testid="pipeline-node-governance-guardrail"

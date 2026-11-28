@@ -1,0 +1,1207 @@
+name: "Merge train: validate"
+
+# Reusable FULL validation of a combined branch, for the merge train
+# (merge-queue.yml `train` path, behind the MERGE_TRAIN_ENABLED repo variable).
+#
+# Why this is a separate reusable workflow, not a step
+# ----------------------------------------------------
+# GitHub calls a reusable workflow from a JOB (`jobs.<id>.uses`), never from a
+# job step, and `secrets: inherit` is likewise job-level. So the train validates
+# the branch it just built by calling this workflow from the `validate` job.
+#
+# Reuse, not re-invention
+# -----------------------
+# Every job's commands are the ci.yml / bdd.yml job bodies lift-and-shifted onto
+# a caller-supplied ref, re-expressed as INDEPENDENT PARALLEL jobs so a pass
+# costs the SLOWEST gate, not the sum (the old single-job combined validation is
+# ~34 min). Provenance:
+#   backend-unit      ci.yml backend-test (unit suite). Unsharded with a retry:
+#                     the train runs once per pass, and ci.yml records standard-2
+#                     runner terminations on this suite at ~14 min with zero
+#                     failing tests, so a retry replaces the sharding ci.yml uses.
+#   backend-non-unit  ci.yml backend-non-unit (architecture scan + FAR-2699
+#                     ratchet, connector contracts, self-contained BDD modules).
+#   integration       deploy.yml's sharding pattern (4 shards; auth IdP files in
+#                     their own shard) - Testcontainers Postgres.
+#   tier1b            the former ci.yml tier1b-light (Testcontainers light
+#                     connector/model set).
+#   frontend          the former ci.yml "Frontend and WCAG" job's fast remainder
+#                     (lint, type-check, vitest WITH coverage, build) plus the
+#                     E2E route-coverage gate. It PRODUCES the frontend-coverage
+#                     artifact the coverage/sonar jobs download, so no Playwright
+#                     run is sequenced ahead of the coverage upload.
+#   frontend-e2e      the visual/mobile Playwright slices, the canvas @visual
+#                     snapshots, the WCAG contrast run and the Playwright
+#                     compilation gate, split out of `frontend` into a PARALLEL
+#                     job so the coverage artifact is not delayed ~6-8 min behind
+#                     them. Since the PR tier became fast-only (2026-11-27) those
+#                     slices have no per-PR home, so they run HERE, once per
+#                     train, before anything merges (FAR-1850/FAR-2017/FAR-2461).
+#                     Do not let them go unrun again.
+#   frontend-unit-parity
+#                     the FAR-1947 guard: reruns the merge queue's EXACT
+#                     `pnpm run test:unit` (4 workers) at train time, so the
+#                     non-train queue path's ordering-sensitive worker count is
+#                     validated on the composed branch too.
+#   runner-ci-harness ci.yml's runner-ci-harness job (FAR-773): boots the
+#                     runner-ci compose rig and runs the docker-marked Bundled
+#                     Runner suite. The fast-tier split removed its per-PR home,
+#                     so it runs HERE, once per train, against the composed
+#                     branch (path-filtered internally against base_ref). Do not
+#                     let backend/tests/docker/** go unrun before merge.
+#   sonar             former ci.yml sonarcloud-scan (coverage import).
+#   sonar-new-issues  former ci.yml sonar-new-issues-gate (PR-scoped; retired from
+#                     the PR tier - the train passes no PR number so it reports a
+#                     notice - see the job note).
+#   coverage          ci.yml backend-coverage thresholds + coverage-gate
+#                     (diff-cover changed lines).
+#   bdd               bdd.yml's backend pytest-bdd suite against a live app
+#                     (frontend + preview served); NOT the frontend Playwright
+#                     E2E specs.
+#   summary           folds the results into one verdict + a `failed_jobs` output
+#                     the caller posts on the PR.
+#
+# Triggers
+# --------
+#   workflow_call      the train's `validate` job (secrets: inherit).
+#   workflow_dispatch  a DRY RUN of this workflow against any branch. It cannot
+#                      be dispatched against a non-default branch that is not yet
+#                      on the default branch; after merge, dispatch it against
+#                      `main` (or a branch) from the Actions UI / gh run.
+#
+# Required secrets
+# ----------------
+#   SONAR_TOKEN       REQUIRED for `sonar`. Declared required on the call so a
+#                     caller without it fails the CALL, not after spending runners.
+#   SECRET_KEY, FERNET_KEY, POSTGRES_PASSWORD are optional (test fallbacks below).
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: >-
+          Ref every job checks out. The merge train passes the train branch it
+          built from main plus the batch's admitted PRs.
+        required: true
+        type: string
+      base_ref:
+        description: >-
+          The branch the train was built from and the comparison base for the
+          FAR-2699 ratchet guard and the changed-lines coverage gate.
+        required: false
+        type: string
+        default: main
+      pr_number:
+        description: >-
+          Optional PR number. When set, the PR-scoped Sonar new-issues gate runs.
+          The train validates a branch (no PR analysis), so it leaves this empty
+          and that gate reports a clear notice instead; the SonarCloud quality
+          gate on the scan still applies.
+        required: false
+        type: string
+        default: ""
+      full:
+        description: >-
+          true (default) runs every gate. false skips the whole-repo suites that
+          dominate wall-clock (integration, bdd, sonar, sonar-new-issues) and
+          keeps the fast gates. The train always runs full.
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      SECRET_KEY:
+        required: false
+      FERNET_KEY:
+        required: false
+      POSTGRES_PASSWORD:
+        required: false
+      SONAR_TOKEN:
+        description: Required by the `sonar` job. A caller without it fails the call.
+        required: true
+    outputs:
+      failed_jobs:
+        description: >-
+          Comma-separated `<job> (<result>)` entries for every job that did not
+          succeed (skipped excluded). Empty when validation passed. The caller
+          names the failing job(s) on the PR.
+        value: ${{ jobs.summary.outputs.failed_jobs }}
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or SHA to validate.
+        required: true
+        type: string
+      base_ref:
+        description: Comparison base (ratchet + changed-lines coverage).
+        required: false
+        type: string
+        default: main
+      pr_number:
+        description: Optional PR number for the PR-scoped Sonar new-issues gate.
+        required: false
+        type: string
+        default: ""
+      full:
+        description: Run the whole-repo suites too (default true).
+        required: false
+        type: boolean
+        default: true
+
+env:
+  # Fixed, non-production test fallbacks (same shape as ci.yml / bdd.yml): a
+  # call can arrive without secrets. FERNET_KEY must stay a valid 32-byte
+  # url-safe base64 key because cryptography.Fernet parses it at import.
+  SECRET_KEY: ${{ secrets.SECRET_KEY || 'ci-only-placeholder-secret-key-not-for-production' }}
+  FERNET_KEY: ${{ secrets.FERNET_KEY || 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }}
+  # THE single git-credential mechanism (FAR-1940): one url.<base>.insteadOf
+  # rewrite, one Authorization header. Never add a second one.
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ github.token }}@github.com/.insteadOf'
+  GIT_CONFIG_VALUE_0: "https://github.com/"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-unit:
+    # The whole unit suite on one runner (unsharded) with a retry. Runner size is
+    # standard-2; ci.yml's own comment records standard-2 terminations on this
+    # suite at ~14 min with zero failing tests, so retry the process.
+    #
+    # --cov-fail-under=0: NO threshold here. The whole-suite + per-module floors
+    # fire once, in the `coverage` job, against the report this job uploads.
+    name: "Validation: backend unit (unsharded)"
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541: the lockfile pins source-archive deps (pytest-bdd, ibm-cos-sdk); --frozen pins exact revisions so builds are deterministic.
+      - name: Run unit tests (unsharded, retried)
+        shell: bash
+        env:
+          # The shard file name `coverage combine` reads, matching ci.yml's
+          # shard convention so the coverage job combines it the same way.
+          COVERAGE_FILE: .coverage.unit-1
+          DATABASE_URL: "postgresql+asyncpg://unused:${{ secrets.POSTGRES_PASSWORD || 'unused' }}@localhost/unused"
+        run: |
+          MAX_ATTEMPTS=2
+          BACKOFF_SECONDS=30
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "--- unit tests attempt ${attempt} of ${MAX_ATTEMPTS} ---"
+            if uv run --no-build --no-sync pytest tests/unit/ \
+                 -n 2 -x -q --timeout=120 --dist worksteal \
+                 --cov=src/farna --cov-report= --cov-fail-under=0 \
+                 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings; then
+              echo "Unit tests passed on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "::warning::Unit tests did not complete on attempt ${attempt}/${MAX_ATTEMPTS}; retrying in ${BACKOFF_SECONDS}s."
+              sleep "$BACKOFF_SECONDS"
+            fi
+          done
+          echo "::error::Unit tests failed on every one of ${MAX_ATTEMPTS} attempts."
+          exit 1
+      - name: Upload unit coverage data
+        # if: always() so the coverage job can still report reached lines when the
+        # suite failed. include-hidden-files: true is LOAD-BEARING: the data file
+        # is a dotfile and upload-artifact drops hidden files by default.
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-shard-1
+          path: backend/.coverage.unit-*
+          include-hidden-files: true
+          retention-days: 7
+
+  backend-non-unit:
+    # The non-Docker suites: architecture scan, FAR-2699 shrink-only ratchet,
+    # connector contracts, and the two self-contained BDD module sets.
+    # fetch-depth: 0 is required by the ratchet guard (it reads a base revision).
+    name: "Validation: backend non-unit suites"
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541
+      - name: Run architecture tests
+        shell: bash
+        run: uv run --no-build --no-sync pytest tests/architecture/ -q --tb=short --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings -n auto
+      - name: Fail on a loosened shrink-only baseline
+        # The base is named explicitly: this runs on a train branch, so
+        # GITHUB_BASE_REF is empty and the resolver would fall through to HEAD^.
+        working-directory: .
+        shell: bash
+        env:
+          TRAIN_BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          if ! git rev-parse --verify --quiet "origin/${TRAIN_BASE_REF}" >/dev/null 2>&1; then
+            git fetch --no-tags origin "${TRAIN_BASE_REF}:refs/remotes/origin/${TRAIN_BASE_REF}"
+          fi
+          uv run --no-build --project backend --no-sync python scripts/run_check_ratchet_baseline.py --base "origin/${TRAIN_BASE_REF}"
+      - name: Run connector contract tests
+        shell: bash
+        run: uv run --no-build --no-sync pytest tests/connectors/ -q --tb=short --timeout=180 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+      - name: Run email settings BDD scenarios
+        shell: bash
+        run: >
+          uv run --no-build --no-sync pytest tests/bdd/steps/test_email_settings.py
+          tests/bdd/features/infra/test_health_steps.py
+          -q --tb=short --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+      - name: Run repaired step-rot BDD modules
+        shell: bash
+        run: |
+          uv run --no-build --no-sync pytest tests/bdd/steps/test_auth.py tests/bdd/steps/test_eval.py \
+            tests/bdd/steps/test_eval_block_steps.py tests/bdd/steps/test_hitl.py \
+            tests/bdd/steps/test_eval_scorer_gates.py \
+            -q --tb=short --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+
+  integration:
+    # Full integration suite (Testcontainers Postgres), 4 shards. deploy.yml's
+    # pattern with TOTAL_SHARDS lowered from 10 to 4; the real-IdP auth modules
+    # keep a shard of their own (their container boots are far slower).
+    name: "Validation: integration shard ${{ matrix.shard }}/4"
+    if: ${{ inputs.full }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubicloud-standard-4
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Sync deps
+        working-directory: backend
+        run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541
+      # Redis is required by test_rate_bucket_redis.py (localhost:6379).
+      - name: Start Redis
+        shell: bash
+        run: |
+          docker rm -f modulo-ci-redis 2>/dev/null || true
+          docker run -d --name modulo-ci-redis -p 6379:6379 redis:7-alpine
+          for _ in $(seq 1 60); do
+            docker exec modulo-ci-redis redis-cli ping 2>/dev/null && { echo "Redis ready"; break; }
+            sleep 2
+          done
+          docker exec modulo-ci-redis redis-cli ping 2>/dev/null \
+            || { echo "::error::Redis did not become ready within 120s"; exit 1; }
+      - name: Integration tests
+        working-directory: backend
+        shell: bash
+        run: |
+          SHARD="${{ matrix.shard }}"
+          TOTAL_SHARDS=4
+          export COVERAGE_FILE=".coverage.integration-${SHARD}"
+          SHARD_ARGS=()
+          NON_AUTH_SHARDS=(1 2 3)
+          NON_AUTH_INDEX=0
+          while IFS= read -r test_file; do
+            if [[ "$test_file" == tests/integration/auth/test_keycloak_* || \
+                  "$test_file" == tests/integration/auth/test_oidc_* || \
+                  "$test_file" == tests/integration/auth/test_saml_* || \
+                  "$test_file" == tests/integration/test_sso_licence_degradation.py ]]; then
+              TARGET_SHARD=4
+            else
+              TARGET_SHARD="${NON_AUTH_SHARDS[$((NON_AUTH_INDEX % ${#NON_AUTH_SHARDS[@]}))]}"
+              NON_AUTH_INDEX=$((NON_AUTH_INDEX + 1))
+            fi
+            if [ "$TARGET_SHARD" -ne "$SHARD" ]; then
+              SHARD_ARGS+=("--ignore=${test_file}")
+            fi
+          done < <(find tests/integration -type f -name 'test_*.py' ! -name 'test_tier1b_*.py' | LC_ALL=C sort)
+
+          echo "Running integration shard ${SHARD}/${TOTAL_SHARDS} with COVERAGE_FILE=${COVERAGE_FILE} (${#SHARD_ARGS[@]} file(s) ignored)"
+          MAX_ATTEMPTS=2
+          BACKOFF_SECONDS=30
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "--- Integration tests attempt ${attempt} of ${MAX_ATTEMPTS} ---"
+            # --timeout-method=thread: a syscall-blocked test ignores SIGALRM, so
+            # the default signal method never fires and the job dies silently.
+            if uv run --no-build --no-sync pytest tests/integration/ -m integration \
+                 --ignore-glob='tests/integration/test_tier1b_*.py' \
+                 -n 1 --dist loadgroup --timeout=300 --timeout-method=thread \
+                 --cov=src/farna --cov-report=xml --cov-fail-under=0 \
+                 -v -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings \
+                 "${SHARD_ARGS[@]}"; then
+              echo "Integration tests passed on attempt ${attempt}."
+              exit 0
+            fi
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "::warning::Integration shard ${SHARD} failed on attempt ${attempt}/${MAX_ATTEMPTS}; retrying in ${BACKOFF_SECONDS}s."
+              sleep "$BACKOFF_SECONDS"
+            fi
+          done
+          echo "::error::Integration shard ${SHARD} failed on every one of ${MAX_ATTEMPTS} attempts."
+          exit 1
+        env:
+          DATABASE_URL: "postgresql+asyncpg://farna_control_test:farna_control_test@localhost:5433/farna_control_test"
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+      - name: Stop Redis
+        if: always()
+        shell: bash
+        run: docker rm -f modulo-ci-redis 2>/dev/null || true
+
+  tier1b:
+    # Tier 1b connectors (FAR-934): container-hosted LIGHT set only. The disk
+    # cleanup is not cosmetic - the runner disk is the binding constraint and a
+    # full disk kills the shared Postgres container mid-run.
+    name: "Validation: tier1b testcontainers (light)"
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Free up disk space
+        shell: bash
+        run: |
+          echo "disk before:"; df -h / || true
+          for path in /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                      /usr/local/share/boost /usr/local/share/powershell; do
+            if [ -d "$path" ]; then
+              echo "removing $path"; sudo -n rm -rf "$path" || true
+            fi
+          done
+          sudo -n apt-get clean || true
+          echo "disk after:"; df -h / || true
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541
+      - name: Run Tier 1b light connector + model-server suites
+        run: |
+          uv run --no-build --no-sync pytest \
+            tests/integration/test_tier1b_connectors_light.py \
+            tests/integration/test_tier1b_models_light.py \
+            tests/integration/auth/test_keycloak_oidc_real_http_flow.py \
+            tests/integration/auth/test_keycloak_saml_real_http_flow.py \
+            -q --tb=short --timeout=900 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+
+  frontend:
+    # The fast remainder of the former ci.yml "Frontend and WCAG" job: lint,
+    # type-check, the vitest suite WITH coverage, the production build, and the
+    # E2E route-coverage gate. This job PRODUCES the `frontend-coverage`
+    # artifact that the `coverage` and `sonar` jobs download, so NO Playwright
+    # run is sequenced ahead of the coverage upload: bundling ~6-8 min of browser
+    # work here delayed the artifact behind the consumers' download window and
+    # let them fall through to `--allow-missing-js-report`. The Playwright
+    # slices, the WCAG contrast run and the full-spec `playwright test --list`
+    # compile check live in the parallel `frontend-e2e` job below (FAR-1850
+    # mobile nav, FAR-2017 visual/token slice, FAR-2461 canvas @visual); the
+    # FAR-1947 4-worker parity guard is its own parallel job too.
+    # `pnpm audit` is deliberately NOT re-homed anywhere in the train: npm CVEs
+    # are covered by the Trivy CRITICAL/HIGH fs scan in ci.yml `backend-lint`
+    # and by the deploy pre-deploy `pnpm audit`, so a network-dependent advisory
+    # gate on the train would add merge-blocking flake without new coverage.
+    name: "Validation: frontend"
+    runs-on: ubicloud-standard-2
+    # No Playwright in this job: lint, type-check, vitest coverage, upload,
+    # build, route-coverage. ~12-14 min with headroom.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.29.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # Lint and type-check first: cheapest, and no Playwright browsers needed.
+      - run: pnpm run lint
+      - run: pnpm run type-check
+      - name: Run unit tests (vitest, with coverage)
+        # --maxWorkers=2 matches the 2-vCPU runner (package.json's test:unit
+        # hardcodes 4, which starves setImmediate). v8+lcov produces
+        # frontend/coverage/lcov.info for the changed-lines gate and Sonar.
+        # Runs BEFORE the build so the coverage artifact is available to the
+        # coverage/sonar jobs as early as possible.
+        run: pnpm exec vitest run src --pool=threads --maxWorkers=2 --coverage --coverage.provider=v8 --coverage.reporter=lcov
+      - name: Upload frontend coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/lcov.info
+      - run: pnpm run build
+      # FAR-637: every production route must be referenced by at least one e2e
+      # spec (guards against routes rotting with zero e2e coverage, e.g.
+      # /pipelines/:id/editor, FAR-616). Known-uncovered MVP routes are tracked
+      # in FAR-638; until those specs land this gate is NON-ENFORCING on rc=1 so
+      # it cannot block every train (a permanently red gate defeats itself). The
+      # per-route table still prints to the step summary as the live tracker.
+      # rc=2 (malformed router / missing e2e dir) is a real breakage and fails
+      # closed.
+      #
+      # The job default working directory is frontend/, but the script reads the
+      # repo tree, so run it from the repo root. It was previously in the
+      # (now fast-only) ci.yml frontend job; the train owns it now.
+      - name: E2E route coverage gate
+        id: route-coverage
+        working-directory: .
+        run: |
+          set +e
+          python3 .github/scripts/check_e2e_route_coverage.py
+          rc=$?
+          echo "route_coverage_rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 1 ]; then
+            exit 0
+          fi
+          exit "$rc"
+      - name: E2E route coverage gate (fail closed)
+        # An explicit aggregate step that only runs on a real failure (rc=2),
+        # ending with `exit 1` so the check genuinely fails rather than being
+        # silently masked.
+        if: failure() && steps.route-coverage.outputs.route_coverage_rc == '2'
+        working-directory: .
+        run: |
+          echo "::error::E2E route coverage gate failed (rc=2: malformed router or missing e2e directory). See the 'E2E route coverage gate' step output." >&2
+          exit 1
+
+  frontend-e2e:
+    # The Playwright visual/mobile slices, split out of the coverage-producing
+    # `frontend` job (2026-11-28, PR #3634 review) so the `frontend-coverage`
+    # artifact is never delayed behind ~6-8 min of browser work. These slices
+    # have no per-PR home since the fast-tier split (2026-11-27), so they run
+    # HERE, once per train, before anything merges (FAR-1850 mobile nav,
+    # FAR-2017 visual/token slice, FAR-2461 canvas @visual). A SEPARATE parallel
+    # job, like `frontend-unit-parity`, keeps the train's cost the slowest job,
+    # not the sum.
+    name: "Validation: frontend e2e slices"
+    runs-on: ubicloud-standard-2
+    # The slices each boot a fresh Vite dev server and a 2-vCPU runner runs the
+    # canvas snapshot comparison slowly; keep headroom above the ~12-15 min they
+    # need on their own. A timeout here blocks merges.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.29.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install chromium
+      - name: Validate Playwright test compilation
+        # `--list` compiles EVERY spec, so a malformed spec outside the selected
+        # slices is caught here. `vue-tsc` type-checks tests/e2e but never
+        # executes the runner's collection, so a spec that throws at import or
+        # at registration would otherwise surface only in the post-deploy
+        # staging @regression run. The fast-tier split (2026-11-27) removed this
+        # from ci.yml and nothing re-homed it until now. No browser interaction
+        # - it is a cheap parse/compile check.
+        run: pnpm exec playwright test --list
+      - name: Run WCAG contrast tests
+        run: pnpm exec playwright test wcag-contrast
+      # FAR-1850: the mobile nav specs used to run only inside the staging E2E
+      # job, so a regression surfaced (at best) days later. They run against the
+      # local mock target (Playwright's webServer boots the dev server) and do
+      # not need staging, so the earliest enforcing gate that can own them is
+      # this train validation - which runs before anything merges. These came
+      # from the (now fast-only) ci.yml frontend job; keep them here.
+      - name: Run mobile nav specs (flash + usable)
+        env:
+          E2E_TARGET: local
+        run: pnpm exec playwright test mobile-nav-flash mobile-nav-usable
+      # FAR-2017: the visual/token/layout slice runs on every train validation.
+      # These specs previously ran ONLY in the post-deploy staging @regression
+      # gate, so a token/CSS regression passed every PR check, landed on main
+      # and broke the deploy train (FAR-2016 json-viewer light-mode token probe;
+      # FAR-1913/FAR-2028 mobile-layout axe contrast).
+      #
+      # The selection is deliberately UNCONDITIONAL (not changed-path gated). A
+      # path filter can miss a spec whose subject changed without a matching
+      # path (a token defined in JS, a class rename in a .vue script block), and
+      # a selector that under-selects reads as coverage. `--check` turns that
+      # into a hard failure instead: a new @regression spec asserting rendered
+      # CSS/tokens/layout must be classified in SLICE or STAGING_ONLY (with a
+      # reason) or the gate fails.
+      #
+      # Serial (--workers=1): the slice shares one cold Vite dev server, and
+      # parallel workers competing with its on-demand compile produced
+      # full-element-timeout flakes in combined local runs.
+      - name: Check the e2e visual slice classification
+        run: node scripts/e2e-visual-slice.mjs --check
+      - name: Run the visual/token e2e slice
+        env:
+          E2E_TARGET: local
+        run: |
+          read -r -a FILES <<< "$(node scripts/e2e-visual-slice.mjs --list)"
+          echo "visual/token e2e slice: ${FILES[*]}"
+          pnpm exec playwright test "${FILES[@]}" --grep "@regression" --workers=1 --reporter=line
+      # FAR-2461: the canvas visual snapshots are tagged @visual, which the
+      # @regression slice above never selects. Without this step the visual
+      # regression coverage runs in no gate at all. The baselines under
+      # tests/e2e/canvas.visual.spec.ts-snapshots/ are committed per platform,
+      # including the Linux set this runner uses.
+      - name: Run canvas visual regression snapshots
+        env:
+          E2E_TARGET: local
+        run: pnpm exec playwright test --grep "@visual" --workers=1 --reporter=line
+
+  frontend-unit-parity:
+    # FAR-1947: the `frontend` job runs the unit suite with `--maxWorkers=2` (a
+    # deliberate 2-vCPU cap), but a merge-queue pass with light validation off
+    # (and the flag-off non-train `queue` path) runs `pnpm run test:unit`, which
+    # is `vitest run src --pool=threads --maxWorkers=4`, against the MERGED
+    # state. Worker count changes file -> worker assignment, so an order-
+    # dependent spec can pass at 2 workers and fail at 4. On 2026-10-17 exactly
+    # that happened (main-bootstrap.spec.ts, since made order-independent by
+    # FAR-1943): the queue's frontend step failed, main CI stayed green, PR CI
+    # reported "Frontend and WCAG" green, and NOTHING merged for ~2.5 h.
+    #
+    # Before the fast-tier split ci.yml ran this parity job per PR. It now runs
+    # HERE, once per train, so the composed branch is validated with the queue's
+    # EXACT invocation before it merges. It is a SEPARATE parallel job (not a
+    # second step in `frontend`) so the train's cost stays the slowest job, not
+    # the sum. On the flag-off non-train path the `queue` job still runs the
+    # exact 4-worker command at merge time, so this guard only moves the signal
+    # earlier - it does not remove the guard from that path.
+    #
+    # Do NOT add flags (--coverage, a worker-count override): that would diverge
+    # from what the queue runs and defeat the point of this job.
+    name: "Validation: frontend unit parity (4 workers)"
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.29.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run unit tests (exact merge-queue invocation)
+        run: pnpm run test:unit
+
+  runner-ci-harness:
+    # FAR-773: the Bundled Runner harness (boots deploy/compose/runner-ci.yml -
+    # socket-proxy + dind + workspace network - and runs every docker-marked
+    # module in backend/tests/docker/). ci.yml ran it per PR before the
+    # fast-tier split (2026-11-27); it runs HERE now, once per train, on the
+    # composed branch, so a PR touching bundled_runner / runtime_provider /
+    # executor still fails this gate before merge instead of only on the weekly
+    # backstop. The reusable workflow path-filters internally against
+    # `base_ref`, so it boots the rig only when the Bundled Runner surface
+    # changed (FAR-528: it fails OPEN, loudly, if the filter cannot decide).
+    name: "Validation: Bundled Runner harness (compose + socket-proxy + dind)"
+    uses: ./.github/workflows/runner-ci-harness.yml
+    with:
+      ref: ${{ inputs.ref }}
+      base_ref: ${{ inputs.base_ref }}
+    secrets: inherit
+
+  sonar:
+    # SonarCloud scan with coverage import. It needs the combined backend
+    # coverage report (from `coverage`) and runs after it purely as a data
+    # dependency, not a sequencing choice.
+    name: "Validation: sonarcloud"
+    if: ${{ inputs.full }}
+    needs: [coverage]
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download backend coverage report
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-report
+          path: backend
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Download frontend coverage report (from the frontend job)
+        # A missing lcov is a NON-FATAL Sonar warning, never a job failure;
+        # `gh run download` inside an `if` keeps a missing artifact non-fatal
+        # without the banned continue-on-error setting.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh run download "$RUN_ID" --repo "$REPO" --name frontend-coverage --dir frontend/coverage; then
+            ls -l frontend/coverage/lcov.info
+          else
+            echo "::warning::frontend-coverage artifact unavailable (the frontend job failed before producing coverage, or the artifact expired); Sonar will import no JS coverage for this run."
+          fi
+      - name: Install SonarScanner CLI
+        env:
+          SONAR_SCANNER_VERSION: "8.1.0.6389"
+          SONAR_SCANNER_BINARIES_URL: https://binaries.sonarsource.com/Distribution/sonar-scanner-cli
+        run: |
+          set -euo pipefail
+          ZIP_URL="${SONAR_SCANNER_BINARIES_URL}/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64.zip"
+          INSTALL_DIR="${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}/sonar-scanner-cli/manual"
+          mkdir -p "$INSTALL_DIR"
+          curl -sSL --proto '=https' --proto-redir '=https' --retry 3 --retry-delay 5 --max-time 300 -o /tmp/sonar-cli.zip "$ZIP_URL"
+          curl -sSL --proto '=https' --proto-redir '=https' --retry 3 --retry-delay 5 --max-time 60 -o /tmp/sonar-cli.zip.asc "${ZIP_URL}.asc"
+          for attempt in 1 2 3; do
+            if gpg --batch --keyserver hkps://keyserver.ubuntu.com \
+                 --keyserver-options timeout=30 \
+                 --recv-keys 679F1EE92B19609DE816FDE81DB198F93525EC1A; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::gpg keyserver fetch failed after 3 attempts; failing closed (no unverified fallback)."
+              exit 1
+            fi
+            echo "::warning::gpg keyserver fetch failed (attempt ${attempt}/3); retrying."
+            sleep $((attempt * 5))
+          done
+          gpg --batch --verify /tmp/sonar-cli.zip.asc /tmp/sonar-cli.zip
+          unzip -q -o /tmp/sonar-cli.zip -d "$INSTALL_DIR"
+          SCANNER="$INSTALL_DIR/sonar-scanner-${SONAR_SCANNER_VERSION}-linux-x64/bin/sonar-scanner"
+          test -x "$SCANNER"
+          echo "SCANNER=$SCANNER" >> "$GITHUB_ENV"
+          "$SCANNER" --version
+      - name: SonarCloud scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+          # MAIN-branch analysis. ci.yml lost its push trigger in the fast-tier
+          # cut, and nothing dispatches this workflow with `ref: main`
+          # automatically (the merge queue dispatches ci.yml on main and calls
+          # this workflow with the TRAIN branch). So the project's main baseline
+          # and coverage badge update only on a MANUAL dispatch with `ref: main`
+          # until a scheduled/dispatch path exists. For that case the scanner is
+          # told the branch EXPLICITLY, because its own SCM detection follows the
+          # CALLER's ref (a train branch, or a detached dispatch ref) and the
+          # report would otherwise land as a feature-branch analysis that never
+          # touches the main baseline. Any other ref is left to the scanner's
+          # default (a branch analysis, never main).
+          #
+          # NOT named SONAR_*: SonarScanner maps SONAR_<NAME> environment
+          # variables onto sonar.<name> analysis properties, so a SONAR_-prefixed
+          # hint would be read as configuration itself (and an empty value would
+          # send `sonar.branch.name=`). It is passed explicitly below instead.
+          MERGE_TIER_SONAR_BRANCH: ${{ (inputs.ref == 'main' || inputs.ref == 'refs/heads/main') && 'main' || '' }}
+        run: |
+          set -uo pipefail
+          LOG="$(mktemp)"
+          trap 'rm -f "$LOG"' EXIT
+          CE_FAILURES=0
+          # Only main is named explicitly; every other ref stays a plain branch
+          # analysis, so a train-branch scan can never overwrite the main
+          # baseline.
+          SCAN_ARGS=(-Dsonar.projectBaseDir=.)
+          if [ -n "${MERGE_TIER_SONAR_BRANCH:-}" ]; then
+            echo "::notice::SonarCloud analysis is pinned to branch '${MERGE_TIER_SONAR_BRANCH}' (main-baseline update)."
+            SCAN_ARGS+=("-Dsonar.branch.name=${MERGE_TIER_SONAR_BRANCH}")
+          fi
+          for attempt in 1 2 3; do
+            : > "$LOG"
+            set +e
+            "$SCANNER" "${SCAN_ARGS[@]}" 2>&1 | tee "$LOG"
+            RC=${PIPESTATUS[0]}
+            set -e
+            if [ "$RC" -eq 0 ]; then
+              echo "::notice::SonarCloud scan succeeded on attempt ${attempt}/3."
+              exit 0
+            fi
+            if grep -qE "NoSuchFileException: .*\.git/\.probe-|attempted duplicate abstract class definition" "$LOG"; then
+              if [ "$attempt" -lt 3 ]; then
+                echo "::warning::SonarCloud scan hit a known transient scanner failure (attempt ${attempt}/3); retrying."
+                sleep $((attempt * 15))
+              else
+                echo "::warning::SonarCloud scan hit a known transient scanner failure on the final attempt (3/3); not retrying."
+              fi
+              continue
+            fi
+            if grep -qF "CE Task finished abnormally with status: FAILED" "$LOG"; then
+              CE_FAILURES=$((CE_FAILURES + 1))
+              TASK_ID="$(grep -oE 'api/ce/task\?id=[A-Za-z0-9_-]+' "$LOG" | tail -n 1 | sed 's/.*id=//')"
+              CE_REASON=""
+              if [ -n "$TASK_ID" ]; then
+                CE_REASON="$(curl -sS --max-time 30 -H "Authorization: Bearer ${SONAR_TOKEN}" "${SONAR_HOST_URL}/api/ce/task?id=${TASK_ID}" 2>/dev/null | jq -r '.task.errorMessage // .errors[0].msg // empty' 2>/dev/null || true)"
+                echo "::notice::SonarCloud CE task ${TASK_ID} failed server-side: ${CE_REASON:-<no errorMessage returned>}"
+              fi
+              if printf '%s' "$CE_REASON" | grep -qi "a newer report has already been processed"; then
+                echo "::notice::SonarCloud report for this commit was superseded by a newer commit's analysis; skipping the stale report (non-fatal)."
+                exit 0
+              fi
+              if [ "$CE_FAILURES" -lt 2 ] && [ "$attempt" -lt 3 ]; then
+                echo "::warning::SonarCloud CE task rejected the report server-side (CE attempt ${CE_FAILURES}/2); retrying once."
+                sleep 20
+                continue
+              fi
+              echo "::error::SonarCloud CE task rejected the report server-side on ${CE_FAILURES}/2 attempt(s); not retrying further. Server reason: ${CE_REASON:-<no errorMessage returned>}"
+              exit "$RC"
+            fi
+            echo "::error::SonarCloud scan failed with a non-transient error (neither the .git/.probe-* race, the security-engine duplicate-class LinkageError, nor a server-side CE task rejection); not retrying."
+            exit "$RC"
+          done
+          echo "::error::SonarCloud scan still hit a known transient scanner failure after 3 attempts."
+          exit 1
+
+  sonar-new-issues:
+    # The former ci.yml sonar-new-issues-gate, re-homed here on 2026-11-27.
+    # RETIREMENT, stated explicitly: PR CI no longer runs a SonarCloud analysis,
+    # so the automatic PR-scoped BUG/VULNERABILITY + BLOCKER/CRITICAL CODE_SMELL
+    # count gate is retired from the PR tier. The pre-merge quality signal is the
+    # SonarCloud quality gate on the `sonar` scan above (new-code ratios, which
+    # `sonar.qualitygate.wait=true` enforces). This job still runs the full count
+    # gate when a caller supplies a PR number (a manual dispatch); the train
+    # validates a BRANCH with no PR analysis, so it leaves pr_number empty and
+    # this job reports a clear notice rather than a false pass. Wiring a
+    # branch-scoped issue count is a phase-2 refinement, not a silent gap.
+    name: "Validation: new issues gate (SonarCloud)"
+    if: ${{ always() && inputs.full && needs.sonar.result == 'success' }}
+    needs: [sonar]
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Gate on new blocking SonarCloud issues (PR only)
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PR_NUMBER}" ]; then
+            echo "::notice::Sonar new-issues gate skipped: this validation targets a branch, not a PR, so there is no PR-scoped analysis to query. The SonarCloud quality gate on the scan (new-code ratios) still applies. Phase 2 can add a branch-scoped issue count."
+            exit 0
+          fi
+          if [ -z "${SONAR_TOKEN:-}" ]; then
+            echo "::error::SONAR_TOKEN secret is not available; cannot evaluate the new-issues gate (failing closed)."
+            exit 1
+          fi
+          SONAR_HOST="https://sonarcloud.io"
+          SONAR_COMPONENT="farnalabs_farna-control"
+          BODY="$(mktemp)"
+          CURL_ERR="$(mktemp)"
+          trap 'rm -f "$BODY" "$CURL_ERR"' EXIT
+          query_total() {
+            local url="$1"
+            local http code
+            set +e
+            http=$(curl -sS --max-time 30 -u "${SONAR_TOKEN}:" -o "$BODY" -w '%{http_code}' "$url" 2>"$CURL_ERR")
+            code=$?
+            set -e
+            if [ "$code" -ne 0 ]; then
+              echo "::error::SonarCloud issues API request failed (curl exit ${code}): $(cat "$CURL_ERR" 2>/dev/null || echo 'no stderr'); failing closed."
+              exit 1
+            fi
+            if [ "$http" != "200" ]; then
+              echo "::error::SonarCloud issues API returned HTTP ${http} (expected 200); failing closed. Body: $(head -c 500 "$BODY")"
+              exit 1
+            fi
+            local total
+            total=$(jq -r '.total' "$BODY" 2>/dev/null || echo "unparsed")
+            if ! [[ "$total" =~ ^[0-9]+$ ]]; then
+              echo "::error::Unexpected SonarCloud API response (no numeric .total); failing closed. Body: $(head -c 500 "$BODY")"
+              exit 1
+            fi
+            printf '%s' "$total"
+          }
+          API_BV="${SONAR_HOST}/api/issues/search?componentKeys=${SONAR_COMPONENT}&pullRequest=${PR_NUMBER}&resolved=false&types=BUG,VULNERABILITY&ps=1"
+          TOTAL_BV="$(query_total "$API_BV")"
+          API_CS="${SONAR_HOST}/api/issues/search?componentKeys=${SONAR_COMPONENT}&pullRequest=${PR_NUMBER}&resolved=false&types=CODE_SMELL&severities=BLOCKER,CRITICAL&ps=1"
+          TOTAL_CS="$(query_total "$API_CS")"
+          BLOCKING_TOTAL=$((TOTAL_BV + TOTAL_CS))
+          if [ "$BLOCKING_TOTAL" -gt 0 ]; then
+            echo "::error::PR ${PR_NUMBER} introduces ${BLOCKING_TOTAL} blocking SonarCloud issue(s) (BUG/VULNERABILITY: ${TOTAL_BV}, CODE_SMELL BLOCKER/CRITICAL: ${TOTAL_CS})."
+            exit 1
+          fi
+          echo "No blocking SonarCloud issues on PR ${PR_NUMBER}."
+
+  coverage:
+    # The single place the coverage floors fire, and the changed-lines gate.
+    # coverage-thresholds.sh `combine` enforces the 89% whole-suite floor and the
+    # per-module floors (auth 93, pipeline_engine 91, rls 95) and writes the
+    # coverage.xml both Sonar and the changed-lines gate consume.
+    name: "Validation: coverage + changed lines"
+    needs: [backend-unit]
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: bash ../scripts/uv_sync_with_retry.sh --frozen  # NOSONAR githubactions:S8541
+      - name: Download unit coverage data
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: coverage-shard-*
+          path: backend
+          merge-multiple: true
+      - name: Combine coverage and enforce thresholds
+        shell: bash
+        run: ../.github/scripts/coverage-thresholds.sh auto combine
+        env:
+          DATABASE_URL: "postgresql+asyncpg://unused:${{ secrets.POSTGRES_PASSWORD || 'unused' }}@localhost/unused"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+      - name: Fetch base branch for diff comparison
+        # actions/checkout fetches the branch but not origin/<base>: without it
+        # diff-cover fails "unknown revision origin/<base>...HEAD" (fail-closed).
+        working-directory: .
+        env:
+          TRAIN_BASE_REF: ${{ inputs.base_ref }}
+        run: git fetch --no-tags origin "${TRAIN_BASE_REF}:refs/remotes/origin/${TRAIN_BASE_REF}"
+      - name: Download frontend coverage report
+        id: fe_cov
+        shell: bash
+        # The job defaults to `working-directory: backend`; the gate reads
+        # ../frontend/coverage/lcov.info, so download at the repo root.
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh run download "$RUN_ID" --repo "$REPO" --name frontend-coverage --dir frontend/coverage; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::frontend-coverage artifact unavailable; the changed-lines gate will tolerate a missing JS report (the Python leg stays strict)."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run changed-lines coverage gate
+        shell: bash
+        env:
+          FRONTEND_PRESENT: ${{ steps.fe_cov.outputs.present }}
+          TRAIN_BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          # NO `uv venv` here: the `uv sync` step above already created
+          # backend/.venv (this job's working directory), and a second
+          # `uv venv .venv` fails closed with "A virtual environment already
+          # exists at: .venv". Install the pinned diff-cover INTO that synced
+          # environment instead - `uv venv --clear` would delete the project's
+          # dependencies that run_coverage_gate.py needs.
+          uv pip install --python .venv --no-build "diff-cover==10.5.1"
+          EXTRA_ARGS=()
+          if [ "$FRONTEND_PRESENT" != "true" ]; then
+            EXTRA_ARGS+=(--allow-missing-js-report)
+          fi
+          .venv/bin/python ../scripts/run_coverage_gate.py \
+            --compare-branch "origin/${TRAIN_BASE_REF}" \
+            --python-report coverage.xml \
+            --js-report ../frontend/coverage/lcov.info \
+            "${EXTRA_ARGS[@]}"
+
+  bdd:
+    # The full BDD/E2E suite from bdd.yml: real Postgres + Redis + a built
+    # frontend + a live backend, then pytest-bdd against the served app. The
+    # changed-path gate is deliberately NOT lifted: a train is about to land on
+    # main and the full suite is the point.
+    name: "Validation: bdd (full suite)"
+    if: ${{ inputs.full }}
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: "postgresql+asyncpg://farna_control:${{ secrets.POSTGRES_PASSWORD || 'modulo' }}@localhost:5432/farna_control"
+      REDIS_URL: "redis://localhost:6379/0"
+      FARNA_CONTROL_PUBLIC_URL: "http://localhost:8000"
+      FARNA_CONTROL_USERS: "admin:admin"
+      CORS_ORIGINS: "http://localhost:4173"
+      FARNA_CONTROL_PLUGIN_DISCOVERY: "false"
+      FARNA_CONTROL_CSRF_ENABLED: "false"
+      FARNA_CONTROL_DEV_MODE: "true"
+      FARNA_CONTROL_AUTH_RATE_LIMIT_ENABLED: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.29.0
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Start Postgres
+        shell: bash
+        run: |
+          docker rm -f modulo-bdd-pg 2>/dev/null || true
+          docker run -d --name modulo-bdd-pg \
+            -e POSTGRES_USER=farna_control \
+            -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'modulo' }} \
+            -e POSTGRES_DB=farna_control \
+            -p 5432:5432 \
+            postgres:16-alpine
+          echo "Waiting for Postgres..."
+          for i in $(seq 1 60); do
+            if docker exec modulo-bdd-pg pg_isready -U farna_control >/dev/null 2>&1; then
+              echo "Postgres ready after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres did not become ready in time"
+          docker logs modulo-bdd-pg
+          exit 1
+      - name: Start Redis
+        shell: bash
+        run: |
+          docker rm -f modulo-bdd-redis 2>/dev/null || true
+          docker run -d --name modulo-bdd-redis \
+            -p 6379:6379 \
+            redis:7-alpine
+          echo "Waiting for Redis..."
+          for i in $(seq 1 30); do
+            if docker exec modulo-bdd-redis redis-cli ping >/dev/null 2>&1; then
+              echo "Redis ready after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Redis did not become ready in time"
+          docker logs modulo-bdd-redis
+          exit 1
+      - name: Install backend deps
+        working-directory: backend
+        run: bash ../scripts/uv_sync_with_retry.sh --frozen
+      - name: Install Playwright browsers
+        working-directory: backend
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome-stable.list 2>/dev/null || true
+          install_ok=0
+          for i in 1 2 3; do
+            if uv run --no-build --no-sync playwright install --with-deps chromium; then
+              install_ok=1
+              break
+            fi
+            echo "Playwright browser install attempt $i failed, retrying..."
+            sleep 5
+          done
+          if [ "$install_ok" -ne 1 ]; then
+            echo "Playwright browser install failed after 3 attempts"
+            exit 1
+          fi
+      - name: Pre-create alembic_version table
+        shell: bash
+        run: |
+          docker exec modulo-bdd-pg psql -U farna_control -d farna_control -c "CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(255) NOT NULL PRIMARY KEY);"
+      - name: Run migrations
+        working-directory: backend
+        run: uv run --no-build --no-sync alembic upgrade heads
+      - name: Install frontend deps
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm run build
+      - name: Start backend
+        working-directory: backend
+        shell: bash
+        run: |
+          nohup uv run --no-build --no-sync uvicorn farna.api.main:app --host 0.0.0.0 --port 8000 > backend-bdd.log 2>&1 &
+      - name: Serve frontend preview
+        working-directory: frontend
+        shell: bash
+        run: |
+          nohup pnpm run preview -- --port 4173 --host 0.0.0.0 > frontend-bdd.log 2>&1 &
+      - name: Wait for backend healthz
+        shell: bash
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then
+              echo "Backend healthy after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "=== Backend log ==="
+          cat backend/backend-bdd.log 2>/dev/null || true
+          echo "=== Process check ==="
+          # shellcheck disable=SC2009
+          ps aux | grep -i uvicorn || true
+          exit 1
+      - name: Wait for frontend ready
+        shell: bash
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:4173/ >/dev/null 2>&1; then
+              echo "Frontend ready after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "=== Frontend log ==="
+          cat frontend/frontend-bdd.log 2>/dev/null || true
+          exit 1
+      - name: Run BDD tests (full suite)
+        working-directory: backend
+        timeout-minutes: 50
+        run: uv run --no-build --no-sync pytest tests/bdd/ -q --base-url http://localhost:4173 --timeout=120 -W "error::pytest.PytestUnraisableExceptionWarning" --disable-warnings
+      - name: Cleanup containers
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f modulo-bdd-pg 2>/dev/null || true
+          docker rm -f modulo-bdd-redis 2>/dev/null || true
+
+  summary:
+    # Folds the results into ONE verdict and a machine-readable `failed_jobs`
+    # value for the caller, which names the failing job(s) on the PR. Runs
+    # always() so a failed validation still names the failing job; a skipped job
+    # (full=false) is not a failure.
+    name: "Validation: summary"
+    needs: [backend-unit, backend-non-unit, integration, tier1b, frontend, frontend-e2e, frontend-unit-parity, runner-ci-harness, sonar, sonar-new-issues, coverage, bdd]
+    if: always()
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      failed_jobs: ${{ steps.report.outputs.failed_jobs }}
+    steps:
+      - name: Report failed jobs
+        id: report
+        shell: bash
+        env:
+          R_BACKEND_UNIT: ${{ needs.backend-unit.result }}
+          R_BACKEND_NON_UNIT: ${{ needs.backend-non-unit.result }}
+          R_INTEGRATION: ${{ needs.integration.result }}
+          R_TIER1B: ${{ needs.tier1b.result }}
+          R_FRONTEND: ${{ needs.frontend.result }}
+          R_FRONTEND_E2E: ${{ needs.frontend-e2e.result }}
+          R_FRONTEND_UNIT_PARITY: ${{ needs.frontend-unit-parity.result }}
+          R_RUNNER_CI_HARNESS: ${{ needs.runner-ci-harness.result }}
+          R_SONAR: ${{ needs.sonar.result }}
+          R_SONAR_NEW_ISSUES: ${{ needs.sonar-new-issues.result }}
+          R_COVERAGE: ${{ needs.coverage.result }}
+          R_BDD: ${{ needs.bdd.result }}
+        run: |
+          FAILED=""
+          record() {
+            local name="$1"
+            local status="$2"
+            if [ "$status" != "success" ] && [ "$status" != "skipped" ]; then
+              if [ -z "$FAILED" ]; then
+                FAILED="$name ($status)"
+              else
+                FAILED="${FAILED}, $name ($status)"
+              fi
+            fi
+          }
+          record backend-unit "$R_BACKEND_UNIT"
+          record backend-non-unit "$R_BACKEND_NON_UNIT"
+          record integration "$R_INTEGRATION"
+          record tier1b "$R_TIER1B"
+          record frontend "$R_FRONTEND"
+          record frontend-e2e "$R_FRONTEND_E2E"
+          record frontend-unit-parity "$R_FRONTEND_UNIT_PARITY"
+          record runner-ci-harness "$R_RUNNER_CI_HARNESS"
+          record sonar "$R_SONAR"
+          record sonar-new-issues "$R_SONAR_NEW_ISSUES"
+          record coverage "$R_COVERAGE"
+          record bdd "$R_BDD"
+          echo "failed_jobs=${FAILED}" >> "$GITHUB_OUTPUT"
+          if [ -n "$FAILED" ]; then
+            echo "::error::Merge train validation failed: ${FAILED}"
+            exit 1
+          fi

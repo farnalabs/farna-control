@@ -52,25 +52,27 @@
             </div>
             <div class="mt-3 flex items-center gap-2">
               <span class="text-xs text-muted-foreground" aria-hidden="true">—</span>
-              <button
-                type="button"
-                class="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              <Button
+                variant="secondary-text"
+                size="sm"
+                class="text-xs underline underline-offset-2"
                 data-testid="admin-model-backends-manual-entry-toggle"
                 @click="manualMode = true"
               >
                 {{ $t('views.AdminModelBackendsView.preset_manual_entry') }}
-              </button>
+              </Button>
             </div>
           </div>
           <div v-if="manualMode" class="mb-6">
-            <button
-              type="button"
-              class="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            <Button
+              variant="secondary-text"
+              size="sm"
+              class="text-xs underline underline-offset-2"
               data-testid="admin-model-backends-back-to-presets"
               @click="manualMode = false"
             >
               {{ $t('views.AdminModelBackendsView.preset_back_to_presets') }}
-            </button>
+            </Button>
           </div>
           <div v-if="selectedPreset" class="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <div class="flex items-center justify-between">
@@ -78,14 +80,15 @@
                 <span class="text-sm font-medium text-primary-text">{{ selectedPreset.display_name }}</span>
                 <span class="ml-2 text-xs text-muted-foreground">{{ selectedPreset.default_model_id }}</span>
               </div>
-              <button
-                type="button"
-                class="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              <Button
+                variant="secondary-text"
+                size="sm"
+                class="text-xs underline underline-offset-2"
                 data-testid="admin-model-backends-preset-clear"
                 @click="selectedPresetId = null"
               >
                 {{ $t('views.AdminModelBackendsView.preset_clear') }}
-              </button>
+              </Button>
             </div>
             <p class="mt-1 text-xs text-muted-foreground">{{ selectedPreset.description }}</p>
             <a
@@ -102,26 +105,24 @@
           </div>
           <form @submit.prevent="createBackend">
             <div class="space-y-4">
-              <div>
-                <label for="adminmodelbackendsview-field-14" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.name') }}</label>
-                <input id="adminmodelbackendsview-field-14"
+              <Field id="adminmodelbackendsview-field-14" :label="$t('views.AdminModelBackendsView.name')">
+                <Input
                   v-model="formData.name"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.name_placeholder')"
                   data-testid="admin-model-backends-name-input"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-13" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.display_name') }}</label>
-                <input id="adminmodelbackendsview-field-13"
+              </Field>
+              <Field id="adminmodelbackendsview-field-13" :label="$t('views.AdminModelBackendsView.display_name')">
+                <Input
                   v-model="formData.display_name"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.my_llm_backend')"
                   data-testid="admin-model-backends-display-name-input"
                 />
-              </div>
+              </Field>
               <div>
                 <label for="adminmodelbackendsview-field-12" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.provider') }}</label>
                 <Select
@@ -141,15 +142,19 @@
 </Select>
               </div>
               <div v-if="showBaseUrl">
-                <label for="adminmodelbackendsview-field-11" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.base_url') }}</label>
-                <input id="adminmodelbackendsview-field-11"
-                  v-model="formData.base_url"
-                  type="url"
-                  class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                  :placeholder="$t('views.AdminModelBackendsView.base_url_placeholder')"
-                  data-testid="admin-model-backends-base-url-input"
-                />
-                <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminModelBackendsView.base_url_help') }}</p>
+                <Field
+                  id="adminmodelbackendsview-field-11"
+                  :label="$t('views.AdminModelBackendsView.base_url')"
+                  :help="$t('views.AdminModelBackendsView.base_url_help')"
+                >
+                  <Input
+                    v-model="formData.base_url"
+                    type="url"
+                    class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    :placeholder="$t('views.AdminModelBackendsView.base_url_placeholder')"
+                    data-testid="admin-model-backends-base-url-input"
+                  />
+                </Field>
                 <label class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     v-model="formData.allow_insecure_http"
@@ -161,36 +166,33 @@
                 </label>
                 <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminModelBackendsView.allow_insecure_http_help') }}</p>
               </div>
-              <div>
-                <label for="adminmodelbackendsview-field-10" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.model_id') }}</label>
-                <input id="adminmodelbackendsview-field-10"
+              <Field id="adminmodelbackendsview-field-10" :label="$t('views.AdminModelBackendsView.model_id')">
+                <Input
                   v-model="formData.model_id"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.model_id_placeholder')"
                   data-testid="admin-model-backends-model-id-input"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-9" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.api_key') }}</label>
-                <input id="adminmodelbackendsview-field-9"
+              </Field>
+              <Field id="adminmodelbackendsview-field-9" :label="$t('views.AdminModelBackendsView.api_key')">
+                <Input
                   v-model="formData.api_key"
                   type="password"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.api_key_placeholder')"
                   data-testid="admin-model-backends-api-key-input"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-8" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.default_params_json') }}</label>
-                <textarea id="adminmodelbackendsview-field-8"
+              </Field>
+              <Field id="adminmodelbackendsview-field-8" :label="$t('views.AdminModelBackendsView.default_params_json')">
+                <Textarea
                   v-model="formData.default_params"
                   rows="4"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.default_params_placeholder')"
                   data-testid="admin-model-backends-params-input"
-                ></textarea>
-              </div>
+                />
+              </Field>
               <div>
                 <label for="adminmodelbackendsview-field-7" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.visibility') }}</label>
                 <Select
@@ -214,14 +216,13 @@
               <Button :disabled="saving || !formData.name.trim() || !formData.display_name.trim() || !formData.model_id.trim() || !formData.api_key.trim()" type="submit" data-testid="admin-model-backends-submit">
                 {{ saving ? $t('views.AdminModelBackendsView.creating') : $t('views.AdminModelBackendsView.create') }}
               </Button>
-                <button
-                  type="button"
-                  class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                <Button
+                  variant="secondary"
                   data-testid="admin-model-backends-cancel"
                   @click="closeForm"
                 >
                   {{ $t('views.AdminModelBackendsView.cancel') }}
-                </button>
+                </Button>
               </div>
             </div>
           </form>
@@ -293,13 +294,14 @@
                         <LoadingSpinner v-if="refsState[backend.id]?.loading" />
                         <div v-else-if="refsState[backend.id]?.error" class="flex items-center gap-2 text-sm text-destructive">
                           <span>{{ refsState[backend.id]?.error }}</span>
-                          <button type="button"
-                            class="rounded border border-input px-2 py-1 text-xs hover:bg-accent"
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             :data-testid="`admin-model-backends-refs-retry-${backend.id}`"
                             @click="retryRefs(backend.id)"
                           >
                             {{ $t('views.AdminModelBackendsView.retry') }}
-                          </button>
+                          </Button>
                         </div>
                         <div v-else-if="refsState[backend.id]?.data">
                           <div v-if="(refsState[backend.id]?.data?.items.length ?? 0) === 0" class="text-sm text-muted-foreground">
@@ -316,7 +318,7 @@
                                   </tr>
                                 </thead>
                                 <tbody class="divide-y divide-border">
-                                  <tr v-for="ref in refsState[backend.id]!.data!.items" :key="`${ref.pipeline_id}-${ref.agent_id ?? 'direct'}`" class="hover:bg-muted/30">
+                                  <tr v-for="ref in refsState[backend.id]?.data?.items ?? []" :key="`${ref.pipeline_id}-${ref.agent_id ?? 'direct'}`" class="hover:bg-muted/30">
                                     <td class="table-cell font-medium">{{ ref.pipeline_name }}</td>
                                     <td class="table-cell text-muted-foreground">{{ ref.agent_name || '\u2014' }}</td>
                                     <td class="table-cell">
@@ -333,22 +335,24 @@
                             </div>
                             <div v-if="refsHasPagination(backend.id)" class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                               <span>{{ $t('views.AdminModelBackendsView.refs_page_info', { page: refsPage(backend.id), total: refsTotalPages(backend.id) }) }}</span>
-                              <button type="button"
+                              <Button
                                 v-if="refsPage(backend.id) > 1"
-                                class="rounded border border-input px-2 py-1 hover:bg-accent"
+                                variant="secondary"
+                                size="sm"
                                 :data-testid="`admin-model-backends-refs-prev-${backend.id}`"
                                 @click="pageRefs(backend.id, refsPage(backend.id) - 1)"
                               >
                                 {{ $t('views.AdminModelBackendsView.previous') }}
-                              </button>
-                              <button type="button"
+                              </Button>
+                              <Button
                                 v-if="refsPage(backend.id) < refsTotalPages(backend.id)"
-                                class="rounded border border-input px-2 py-1 hover:bg-accent"
+                                variant="secondary"
+                                size="sm"
                                 :data-testid="`admin-model-backends-refs-next-${backend.id}`"
                                 @click="pageRefs(backend.id, refsPage(backend.id) + 1)"
                               >
                                 {{ $t('views.AdminModelBackendsView.next') }}
-                              </button>
+                              </Button>
                             </div>
                           </template>
                         </div>
@@ -410,43 +414,44 @@
         >
           <form @submit.prevent="updateBackend">
             <div class="space-y-4">
-              <div>
-                <label for="adminmodelbackendsview-field-6" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.name') }}</label>
-                <input id="adminmodelbackendsview-field-6"
+              <Field id="adminmodelbackendsview-field-6" :label="$t('views.AdminModelBackendsView.name')">
+                <Input
                   v-model="formData.name"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   data-testid="admin-model-backends-edit-name"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-5" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.display_name') }}</label>
-                <input id="adminmodelbackendsview-field-5"
+              </Field>
+              <Field id="adminmodelbackendsview-field-5" :label="$t('views.AdminModelBackendsView.display_name')">
+                <Input
                   v-model="formData.display_name"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   data-testid="admin-model-backends-edit-display-name"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-4" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.model_id') }}</label>
-                <input id="adminmodelbackendsview-field-4"
+              </Field>
+              <Field id="adminmodelbackendsview-field-4" :label="$t('views.AdminModelBackendsView.model_id')">
+                <Input
                   v-model="formData.model_id"
                   type="text"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   data-testid="admin-model-backends-edit-model-id"
                 />
-              </div>
+              </Field>
               <div v-if="showBaseUrl">
-                <label for="adminmodelbackendsview-field-15" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.base_url') }}</label>
-                <input id="adminmodelbackendsview-field-15"
-                  v-model="formData.base_url"
-                  type="url"
-                  class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                  :placeholder="$t('views.AdminModelBackendsView.base_url_placeholder')"
-                  data-testid="admin-model-backends-edit-base-url"
-                />
-                <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminModelBackendsView.base_url_help') }}</p>
+                <Field
+                  id="adminmodelbackendsview-field-15"
+                  :label="$t('views.AdminModelBackendsView.base_url')"
+                  :help="$t('views.AdminModelBackendsView.base_url_help')"
+                >
+                  <Input
+                    v-model="formData.base_url"
+                    type="url"
+                    class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    :placeholder="$t('views.AdminModelBackendsView.base_url_placeholder')"
+                    data-testid="admin-model-backends-edit-base-url"
+                  />
+                </Field>
                 <label class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     v-model="formData.allow_insecure_http"
@@ -458,25 +463,23 @@
                 </label>
                 <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.AdminModelBackendsView.allow_insecure_http_help') }}</p>
               </div>
-              <div>
-                <label for="adminmodelbackendsview-field-3" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.api_key_leave_blank_to_keep_existing') }}</label>
-                <input id="adminmodelbackendsview-field-3"
+              <Field id="adminmodelbackendsview-field-3" :label="$t('views.AdminModelBackendsView.api_key_leave_blank_to_keep_existing')">
+                <Input
                   v-model="formData.api_key"
                   type="password"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
                   :placeholder="$t('views.AdminModelBackendsView.enter_new_key_to_replace')"
                   data-testid="admin-model-backends-edit-api-key"
                 />
-              </div>
-              <div>
-                <label for="adminmodelbackendsview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.default_params_json') }}</label>
-                <textarea id="adminmodelbackendsview-field-2"
+              </Field>
+              <Field id="adminmodelbackendsview-field-2" :label="$t('views.AdminModelBackendsView.default_params_json')">
+                <Textarea
                   v-model="formData.default_params"
                   rows="4"
                   class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm"
                   data-testid="admin-model-backends-edit-params"
-                ></textarea>
-              </div>
+                />
+              </Field>
               <div>
                 <label for="adminmodelbackendsview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.AdminModelBackendsView.visibility') }}</label>
                 <Select
@@ -500,14 +503,13 @@
               <Button :disabled="saving || !formData.name.trim() || !formData.display_name.trim() || !formData.model_id.trim()" type="submit" data-testid="admin-model-backends-save">
                 {{ saving ? $t('views.AdminModelBackendsView.saving') : $t('views.AdminModelBackendsView.save') }}
               </Button>
-                <button
-                  type="button"
-                  class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                <Button
+                  variant="secondary"
                   data-testid="admin-model-backends-edit-cancel"
                   @click="closeEditForm"
                 >
                   {{ $t('views.AdminModelBackendsView.cancel') }}
-                </button>
+                </Button>
               </div>
             </div>
           </form>
@@ -517,17 +519,16 @@
           <p class="text-sm font-medium text-destructive-text">{{ $t('views.AdminModelBackendsView.delete_confirm', { name: deleteConfirmName }) }}</p>
           <p class="mt-1 text-sm text-destructive-text">{{ $t('views.AdminModelBackendsView.this_action_cannot_be_undone') }}</p>
           <div class="mt-3 flex items-center gap-2">
-          <Button :disabled="deleting" severity="danger" data-testid="admin-model-backends-delete-confirm" @click="deleteBackend">
+          <Button :disabled="deleting" variant="danger" data-testid="admin-model-backends-delete-confirm" @click="deleteBackend">
             {{ deleting ? $t('views.AdminModelBackendsView.deleting') : $t('views.AdminModelBackendsView.delete') }}
           </Button>
-            <button
-              type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+            <Button
+              variant="secondary"
               data-testid="admin-model-backends-cancel"
               @click="closeForm"
             >
               {{ $t('views.AdminModelBackendsView.cancel') }}
-            </button>
+            </Button>
           </div>
           <div v-if="deleteError" class="mt-2 text-sm text-destructive-text">{{ deleteError }}</div>
         </div>
@@ -547,10 +548,13 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { useProductAnalytics } from '../composables/useProductAnalytics'
 import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import TableActions from '../components/shared/TableActions.vue'
 import EmptyState from '../components/shared/EmptyState.vue'

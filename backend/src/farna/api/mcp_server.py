@@ -110,6 +110,7 @@ from farna.api.routes.triggers import (
     _validate_connector_instance_team_scope,
     _validate_trigger_config_keys,
 )
+from farna.api.run_scope import team_boundary_blocked
 from farna.auth.api_key import (
     KEY_SCOPE_ORG,
     ApiKeyGrantsUnavailableError,
@@ -263,7 +264,7 @@ from farna.db.models.run import (
     TERMINAL_STATUSES,
     Run,
 )
-from farna.db.rls import set_rls_org, set_rls_user_context
+from farna.db.rls import bootstrap_read, set_rls_org, set_rls_user_context
 from farna.db.settings_resolver import resolve_authz_enforce
 from farna.db.sqlstates import LOCK_NOT_AVAILABLE_SQLSTATE, sqlstate_of
 from farna.settings import get_settings
@@ -831,11 +832,12 @@ def _team_scoped_key_mismatch(owner_team_id: uuid.UUID | None) -> bool:
     carry no team boundary. A resource with no owning team (org-level
     pipeline) is accessible to any team-scoped credential; a resource owned
     by a different team is blocked.
+
+    ADR 070 §4: the predicate itself lives in ``api.run_scope`` so the REST
+    run-detail clamp and this MCP guard cannot drift; only the credential's
+    team source differs (a request contextvar here, a principal field there).
     """
-    key_team_id = _ctx_team_id.get(None)
-    if key_team_id is None:
-        return False
-    return owner_team_id is not None and owner_team_id != key_team_id
+    return team_boundary_blocked(_ctx_team_id.get(None), owner_team_id)
 
 
 def _team_scope_error(resource_kind: str, resource_id: str) -> dict[str, Any]:
@@ -8128,6 +8130,11 @@ async def search_library(
                 page=1,
                 page_size=limit,
                 cursor=cursor,
+                # ADR 070 §5: the DB policy on ``library_primitives`` keys on
+                # the KEY OWNER's team memberships, not the key's team, so a
+                # team-A key must be clamped here explicitly or it lists
+                # team-B's team-private primitives.
+                team_id=_ctx_team_id_val(),
             )
         return {
             "items": [
@@ -8614,7 +8621,7 @@ async def list_model_backends(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_model_backends(s, org_id=org_id, cursor=cursor, page_size=lim)
+            result = await db_list_model_backends(s, org_id=org_id, cursor=cursor, page_size=lim, team_id=_ctx_team_id_val())
 
         return {
             "data": [_model_backend_item(mb) for mb in result.items],
@@ -8659,6 +8666,9 @@ async def get_model_backend(model_backend_id: str) -> dict[str, Any]:
         # RLS were misconfigured.
         if mb is None or mb.organisation_id != org_id:
             return {"error": "not_found", "detail": f"Model backend {model_backend_id} not found"}
+        # ADR 070 §5: a team-scoped key must not read another team's backend.
+        if _team_scoped_key_mismatch(mb.owner_team_id):
+            return _team_scope_error("model_backend", model_backend_id)
 
         item = _model_backend_item(mb)
         raw_fallback_ids = getattr(mb, "fallback_backend_ids", None)
@@ -8758,6 +8768,9 @@ async def _apply_model_backend_update(
         existing = await db_get_model_backend(s, backend_id)
         if existing is None or existing.organisation_id != org_id:
             return {"error": "not_found", "detail": f"Model backend {model_backend_id} not found"}
+        # ADR 070 §5: a team-scoped key must not mutate another team's backend.
+        if _team_scoped_key_mismatch(existing.owner_team_id):
+            return _team_scope_error("model_backend", model_backend_id)
 
         # Reuse the HTTP PATCH request contract so MCP cannot bypass the
         # tier enum, the name/model_id bounds, or the team-visibility
@@ -9832,8 +9845,15 @@ async def delete_connector(
             }
 
         from farna.db.crud.connector_instance import delete_connector_instance as db_delete_connector
+        from farna.db.crud.connector_instance import get_connector_instance as db_get_connector_instance
 
         async with _session(org_id) as s:
+            # ADR 070 §5: a team-scoped key must not DELETE another team's
+            # connector. Read first (same transaction) so the boundary is
+            # applied to the row about to be removed, never to a stale lookup.
+            existing = await db_get_connector_instance(s, cid)
+            if existing is not None and _team_scoped_key_mismatch(existing.owner_team_id):
+                return _team_scope_error("connector", connector_id)
             deleted = await db_delete_connector(s, cid)
 
         if not deleted:
@@ -9898,6 +9918,7 @@ async def list_connectors(
                 organisation_id=org_id,
                 page_size=lim,
                 cursor=cursor,
+                team_id=_ctx_team_id_val(),
             )
 
         return {
@@ -9941,6 +9962,9 @@ async def get_connector(connector_id: str) -> dict[str, Any]:
         # RLS were misconfigured.
         if ci is None or ci.organisation_id != org_id:
             return {"error": "not_found", "detail": f"Connector {connector_id} not found"}
+        # ADR 070 §5: a team-scoped key must not read another team's connector.
+        if _team_scoped_key_mismatch(ci.owner_team_id):
+            return _team_scope_error("connector", connector_id)
 
         item = _connector_item(ci)
         item["degraded_at"] = ci.degraded_at.isoformat() if ci.degraded_at else None
@@ -12723,7 +12747,7 @@ async def list_environment_profiles(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_environment_profiles(s, org_id=org_id, cursor=cursor, page_size=lim)
+            result = await db_list_environment_profiles(s, org_id=org_id, cursor=cursor, page_size=lim, team_id=_ctx_team_id_val())
 
         return {
             "data": [
@@ -14490,6 +14514,10 @@ async def resource_library() -> str:
                 primitive_types=visible_primitive_types,
                 page=1,
                 page_size=50,
+                # Same team boundary as ``search_library``: the resource
+                # duplicates the tool's read (FAR-1976 shares its node-scope
+                # gate too), so it must share its team clamp.
+                team_id=_ctx_team_id_val(),
             )
         if not result.items:
             return "Library is empty."
@@ -14543,6 +14571,17 @@ async def resource_library_detail(primitive_type: str, slug: str) -> str:
             p = await get_primitive_by_slug(s, org_id, primitive_type, slug)
 
         if p is None:
+            return f"Library primitive '{slug}' of type '{primitive_type}' not found."
+
+        # ADR 070 §5: a team-scoped credential must not read another team's
+        # team-private primitive. ``get_primitive_by_slug`` filters only
+        # ``primitive_type`` + ``slug``, and ``library_primitives`` RLS keys the
+        # team policy on the key OWNER's memberships (not the key's own team),
+        # so only this explicit boundary holds. Return not-found on mismatch so
+        # the response never reveals the foreign row exists — the same
+        # indistinguishability the by-id REST read (FAR-2682
+        # ``_primitive_visible_to``) and the list resource already apply.
+        if team_boundary_blocked(_ctx_team_id_val(), p.owner_team_id):
             return f"Library primitive '{slug}' of type '{primitive_type}' not found."
 
         tags_str = ", ".join(p.tags) if p.tags else ""
@@ -14677,8 +14716,12 @@ async def _oauth_authorize(request: Request) -> JSONResponse | RedirectResponse:
     try:
         session_factory = _get_session_factory()
         async with session_factory() as s, s.begin():
-            # Look up client by globally unique client_id.
-            client = await get_oauth_client_by_client_id(s, client_id)
+            # Look up client by globally unique client_id. PRE-AUTH: the org is
+            # a COLUMN of this row, so there is no org context to scope by yet —
+            # the lookup rides the explicit bootstrap grant (ADR 070 §2), and is
+            # pinned to the unique client_id, never a table scan.
+            async with bootstrap_read(s):
+                client = await get_oauth_client_by_client_id(s, client_id)
             if client is None:
                 return JSONResponse(
                     {"error": "invalid_client", "detail": "Unknown client_id"},
@@ -14852,8 +14895,11 @@ async def _exchange_authorization_code(creds: dict[str, str], settings: Any) -> 
 
     session_factory = _get_session_factory()
     async with session_factory() as s, s.begin():
-        # Step 1: Validate client credentials to discover org_id.
-        client = await validate_client_secret(s, creds["client_id"], creds["client_secret"])
+        # Step 1: Validate client credentials to discover org_id. PRE-AUTH: the
+        # client row is the only thing that names the org, so this pinned
+        # (client_id) read rides the explicit bootstrap grant (ADR 070 §2).
+        async with bootstrap_read(s):
+            client = await validate_client_secret(s, creds["client_id"], creds["client_secret"])
 
         # Step 2: Set RLS context for the client's org.
         await set_rls_org(s, client.organisation_id)
@@ -15094,7 +15140,10 @@ async def _exchange_refresh_token(creds: dict[str, str], settings: Any) -> tuple
 
     session_factory = _get_session_factory()
     async with session_factory() as s, s.begin():
-        client = await validate_client_secret(s, creds["client_id"], creds["client_secret"])
+        # PRE-AUTH: the client row is what names the org, so this pinned
+        # (client_id) read rides the explicit bootstrap grant (ADR 070 §2).
+        async with bootstrap_read(s):
+            client = await validate_client_secret(s, creds["client_id"], creds["client_secret"])
         await set_rls_org(s, client.organisation_id)
 
         # FAR-1283: pre-auth grant — the kill switch is enforced against the

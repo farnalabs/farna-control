@@ -44,7 +44,7 @@ bdd:
   - backend/tests/bdd/steps/test_alpha_model_backends.py
 depends-on:
   - feat-auth
-status: covered
+status: partial
 ---
 
 # Model Backend Management
@@ -64,8 +64,10 @@ LangChain `BaseChatModel` internally).
       validation, list org-scoped backends, get, PATCH (name/model id/API key), delete
       (204); non-existent id 404, duplicate name 409, invalid provider / missing required
       fields / unknown fallback id 422 (`backend_crud.feature`)
+      <!-- behaviour: model-backends-01 | tests: backend/tests/bdd/features/model_backends/backend_crud.feature -->
 - [x] The API key is never echoed in responses - `has_credentials: true` with the secret
       redacted (`backend_crud.feature`)
+      <!-- behaviour: model-backends-02 | tests: backend/tests/bdd/features/model_backends/backend_crud.feature -->
 - [x] A model backend's custom endpoint (`base_url`) is endpoint configuration in the
       encrypted credential JSON, never a model parameter (FAR-2046): the write path
       validates scheme / userinfo / query / fragment, refuses cloud-metadata hosts and
@@ -82,28 +84,35 @@ LangChain `BaseChatModel` internally).
       SYSTEM-actor `model_backend.base_url_backfilled` audit event carrying only the
       outcome and host (`test_model_backend_base_url_helpers.py`,
       `test_backfill_model_backend_base_url.py`)
+      <!-- behaviour: model-backends-03 | tests: backend/tests/unit/api/test_model_backend_base_url_helpers.py, backend/tests/unit/cli/test_backfill_model_backend_base_url.py -->
 - [x] A backend referenced as another's fallback cannot be deleted (409)
       (`backend_crud.feature`)
+      <!-- behaviour: model-backends-04 | tests: backend/tests/bdd/features/model_backends/backend_crud.feature -->
 - [x] Hub resolution: a healthy primary is served; an unhealthy primary fails over to its
       configured fallback; with no healthy candidate an unavailable error is raised; an
       unregistered backend raises a not-found error; a `model_failover` audit event records
       primary/fallback (`hub.feature`)
+      <!-- behaviour: model-backends-05 | tests: backend/tests/bdd/features/model_backends/hub.feature -->
 - [x] With no configured fallback, the hub rotates across the org's registered backends
       and emits the failover audit event; encrypted credentials are decrypted exactly once
       per backend per hub initialization (`hub.feature`)
+      <!-- behaviour: model-backends-06 | tests: backend/tests/bdd/features/model_backends/hub.feature -->
 - [x] Rotation semantics at run time: a health check before each run selects the primary
       when healthy, the fallback otherwise, and an all-unhealthy assignment fails the run
       with `no_healthy_backend` (`rotation.feature`)
+      <!-- behaviour: model-backends-07 | tests: backend/tests/bdd/features/model_backends/rotation.feature -->
 - [x] Per-provider adapters (openai, anthropic, and peers) share the
       `ModelBackendBase` contract with configuration validation, health checks,
       error handling and rate limiting (`test_model_backends/*`,
       `model_backends/*.feature`)
+      <!-- behaviour: model-backends-08 | tests: none -->
 - [x] `POST /api/v1/model-backends/{backend_id}/health-check` re-runs the PRD 8.1 check on
       demand against the decrypted stored credential and persists the result - returning
       `healthy` / `unhealthy` (+ auth-failure detail) / `not_applicable` with `checked_at`,
       clearing a sticky `last_health_check_error`; a cross-org caller is 404'd before any
       check, and the deterministic stub provider always reports `healthy`
       (`model_backends/health_check.feature`, steps in `test_alpha_model_backends.py`)
+      <!-- behaviour: model-backends-09 | tests: backend/tests/bdd/steps/test_alpha_model_backends.py -->
 - [x] A pipeline graph save that pins a model backend with `visibility: team`
       from a pipeline owned by a DIFFERENT team is refused 409
       `model_backend_team_mismatch` (FAR-1515): the model-backend mirror of the
@@ -121,6 +130,7 @@ LangChain `BaseChatModel` internally).
       `backend/src/farna/core/team_visibility.py`,
       `backend/tests/unit/core/test_team_visibility.py`,
       `backend/tests/unit/api/test_pipeline_team_visibility.py`)
+      <!-- behaviour: model-backends-10 | tests: backend/tests/unit/core/test_team_visibility.py, backend/tests/unit/api/test_pipeline_team_visibility.py -->
 - [x] The management surface is also exposed over MCP (FAR-2329):
       `list_model_backends` / `get_model_backend` are metadata-only
       `model_backend.list` reads, `create_model_backend` returns a one-time
@@ -138,6 +148,7 @@ LangChain `BaseChatModel` internally).
       `backend/src/farna/core/mcp/scope_validator.py`;
       `backend/tests/unit/mcp/test_mcp_schema_tools.py`,
       `backend/tests/unit/api/test_model_backend_fallback_validation.py`)
+      <!-- behaviour: model-backends-11 | tests: backend/tests/unit/mcp/test_mcp_schema_tools.py, backend/tests/unit/api/test_model_backend_fallback_validation.py -->
 
 ## Known Gaps
 

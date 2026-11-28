@@ -33,18 +33,22 @@ overrides:
   # openapi-typescript upgrades to @redocly/openapi-core 2.x (js-yaml ^5.2.2).
   "@redocly/openapi-core>js-yaml": "4.3.2"
   "postcss>nanoid": "^6.0.0"
-  rollup: "4.68.7"
-  "@tanstack/query-core": "5.108.2"
-  "@tanstack/vue-query": "5.108.2"
+  rollup: "4.68.8"
+  "@tanstack/query-core": "5.108.4"
+  "@tanstack/vue-query": "5.108.4"
   # GHSA-mrhx-c7xc-m3w5 (CVE-2023-54404): zod <4.6.6 affected. Scoped to its
   # only consumer (mutation-server-protocol, dev-only Stryker toolchain) and
   # capped to the 4.x major. Remove once mutation-server-protocol ships zod
   # >=4.6.6.
   "mutation-server-protocol>zod": ">=4.6.6 <5"
   # GHSA-333x-w4r6-6crp / GHSA-w74x-v6f9-j3xg / GHSA-wjr9-j795-jxcr /
-  # GHSA-xhq7-xmqj-769h: fast-uri <3.1.9 affected. Scoped to ajv (dev-only
-  # Stryker toolchain) and capped to the ^3 major ajv declares; the fix floor
-  # is 3.1.9. Remove once ajv ships a patched fast-uri.
+  # GHSA-xhq7-xmqj-769h: fast-uri <3.1.9 affected; all four are fixed in the
+  # 3.x line at 3.1.9. ajv declares fast-uri ^3, so this is capped to that
+  # major with a 3.1.9 fix floor. Do NOT widen to the 4.x line: 3.1.9 already
+  # carries these fixes, so a v4 override adds no security benefit and would
+  # pin ajv outside its declared range (renovate.json holds fast-uri majors
+  # for this reason). Scoped to ajv (dev-only Stryker toolchain). Remove once
+  # ajv itself accepts fast-uri 4.x.
   "ajv>fast-uri": ">=3.1.9 <4"
   # GHSA-3g3m-2fjr-6pw4 (glob <14.0.2): affected versions vulnerable to ReDoS
   # via specially crafted patterns. Affects js-beautify@2.0.3 (Stryker HTML
@@ -403,3 +407,14 @@ minimumReleaseAgeExclude:
   - '@lucide/vue@1.79.0'
   - '@grafana/faro-core@2.15.0'
   - '@grafana/faro-web-sdk@2.15.0'
+  - '@datadog/browser-core@7.19.0'
+  - '@datadog/browser-logs@7.19.0'
+  - '@datadog/browser-rum-core@7.19.0'
+  - '@datadog/browser-rum@7.19.0'
+  - '@datadog/js-core@0.0.23'
+  - '@lucide/vue@1.80.0'
+  - '@lucide/vue@1.81.0'
+  - '@lucide/vue@1.82.0'
+  - 'vite@8.4.0'
+  - '@eslint/config-array@0.23.7'
+  - 'eslint@10.16.0'

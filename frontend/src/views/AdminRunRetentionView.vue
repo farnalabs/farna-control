@@ -7,8 +7,7 @@
       >
         <template #right>
           <Button
-            severity="secondary"
-            outlined
+            variant="secondary"
             data-testid="admin-run-retention-refresh"
             :disabled="loading"
             @click="loadCandidates"
@@ -23,7 +22,7 @@
             {{ exporting ? $t('views.AdminRunRetentionView.exporting') : $t('views.AdminRunRetentionView.export_to_file') }}
           </Button>
           <Button
-            severity="danger"
+            variant="danger"
             data-testid="admin-run-retention-purge"
             :disabled="purging || terminalCandidates.length === 0"
             @click="openPurgeConfirm"
@@ -56,33 +55,42 @@
         :message="exportIncomplete"
         :retryable="false"
       />
-      <div
+      <Notice
         v-if="exportSuccess"
-        class="mb-4 rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+        variant="success"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-run-retention-export-result"
       >
         {{ exportSuccess }}
-      </div>
+      </Notice>
       <!-- FAR-1924: the NDJSON export ends with a {"_complete":true} sentinel
            ONLY when the stream ran to exhaustion. Its absence means the body
            was truncated mid-stream (HTTP 200, no error), so warn rather than
            let a consumer treat a partial compliance artefact as complete.
            Non-blocking: the download already happened. -->
-      <div
+      <Notice
         v-if="exportWarning"
-        class="mb-4 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm text-warning-text"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-run-retention-export-warning"
-        aria-live="polite"
       >
         {{ exportWarning }}
-      </div>
-      <div
+      </Notice>
+      <Notice
         v-if="purgeResult"
-        class="mb-4 rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+        variant="success"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-run-retention-purge-result"
       >
         {{ $t('views.AdminRunRetentionView.purge_result', { runs: purgeResult.purged_runs, checkpoints: purgeResult.purged_checkpoints, bytes: formatBytes(purgeResult.freed_estimated_bytes) }) }}
-      </div>
+      </Notice>
 
       <DataCard
         heading-level="h2"
@@ -90,26 +98,30 @@
         :description="$t('views.AdminRunRetentionView.filters_subtitle')"
       >
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <label class="mb-1.5 block text-xs font-medium text-muted-foreground" for="rr-date-from">{{ $t('views.AdminRunRetentionView.from_label') }}</label>
-              <input
-                id="rr-date-from"
+            <Field
+              id="rr-date-from"
+              :label="$t('views.AdminRunRetentionView.from_label')"
+              label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+            >
+              <Input
                 v-model="dateFrom"
                 type="datetime-local"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 data-testid="admin-run-retention-date-from"
               />
-            </div>
-            <div>
-              <label class="mb-1.5 block text-xs font-medium text-muted-foreground" for="rr-date-to">{{ $t('views.AdminRunRetentionView.to_label') }}</label>
-              <input
-                id="rr-date-to"
+            </Field>
+            <Field
+              id="rr-date-to"
+              :label="$t('views.AdminRunRetentionView.to_label')"
+              label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+            >
+              <Input
                 v-model="dateTo"
                 type="datetime-local"
                 class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 data-testid="admin-run-retention-date-to"
               />
-            </div>
+            </Field>
             <div>
               <label class="mb-1.5 block text-xs font-medium text-muted-foreground" for="rr-pipeline">{{ $t('views.AdminRunRetentionView.pipeline_label') }}</label>
               <Select
@@ -182,9 +194,9 @@
           </div>
       </DataCard>
 
-      <div class="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm" data-testid="admin-run-retention-warning">
+      <Notice variant="warning" :icon="false" padding="sm" class="mb-4 text-sm" data-testid="admin-run-retention-warning">
         {{ $t('views.AdminRunRetentionView.warning_terminal_only') }}
-      </div>
+      </Notice>
 
       <DataCard
         heading-level="h2"
@@ -232,38 +244,25 @@
           </div>
       </DataCard>
 
-      <Dialog
-        :visible="showPurgeConfirm"
-        :modal="true"
-        :dismissable-mask="true"
-        data-testid="admin-run-retention-confirm-dialog"
-        @update:visible="showPurgeConfirm = $event"
+      <FormDialog
+        v-model:open="showPurgeConfirm"
+        :title="$t('views.AdminRunRetentionView.confirm_clear_down')"
+        :description="$t('views.AdminRunRetentionView.confirm_warning')"
+        :confirm-text="$t('views.AdminRunRetentionView.purge_selected')"
+        :confirm-loading-text="$t('views.AdminRunRetentionView.purging')"
+        confirm-severity="danger"
+        :loading="purging"
+        cancel-test-id="admin-run-retention-purge-cancel"
+        confirm-test-id="admin-run-retention-purge-confirm"
+        @confirm="executePurge"
       >
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ $t('views.AdminRunRetentionView.confirm_clear_down') }}</div>
-            <div class="mt-0.5 text-sm text-muted-foreground">
-              {{ $t('views.AdminRunRetentionView.confirm_warning') }}
-            </div>
-          </div>
-        </template>
-        <div class="space-y-3 text-sm">
+        <div class="space-y-3 text-sm" data-testid="admin-run-retention-confirm-dialog">
           <p>
             {{ $t('views.AdminRunRetentionView.confirm_purge_detail', { count: displayTerminalCount }) }}
           </p>
            <p class="text-muted-foreground">{{ $t('views.AdminRunRetentionView.estimated_reclaimable') }}: {{ formatBytes(displayTerminalBytes) }}.</p>
         </div>
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <Button severity="secondary" outlined data-testid="admin-run-retention-purge-cancel" @click="showPurgeConfirm = false">
-              {{ $t('views.AdminRunRetentionView.cancel') }}
-            </Button>
-            <Button severity="danger" :disabled="purging" data-testid="admin-run-retention-purge-confirm" @click="executePurge">
-              {{ purging ? $t('views.AdminRunRetentionView.purging') : $t('views.AdminRunRetentionView.purge_selected') }}
-            </Button>
-          </div>
-        </template>
-      </Dialog>
+      </FormDialog>
     </div>
   </FeatureGate>
 </template>
@@ -273,14 +272,17 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import FeatureGate from '../components/FeatureGate.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import FormDialog from '../components/shared/FormDialog.vue'
 import StatCard from '../components/ui/StatCard.vue'
 import Select from '../components/shared/AppSelect.vue'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
+import Button from '../components/ui/Button.vue'
 import { api, getAuthHeaders } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { isTerminalStatus } from '../constants/runStatuses'

@@ -73,17 +73,17 @@
           </p>
           <p v-if="deleteRefError" class="mt-1 text-sm text-destructive-text">{{ deleteRefError }}</p>
           <div class="mt-3 flex items-center gap-2">
-            <Button :disabled="deleting" severity="danger" data-testid="paramschema-delete-confirm" @click="doDelete">
+            <Button :disabled="deleting" variant="danger" data-testid="paramschema-delete-confirm" @click="doDelete">
               {{ deleting ? $t('views.ParameterSchemasView.deleting') : $t('views.ParameterSchemasView.delete') }}
             </Button>
-            <button
+            <Button
               type="button"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+              variant="secondary"
               data-testid="paramschema-delete-cancel"
               @click="deleteConfirmId = null"
             >
               {{ $t('views.ParameterSchemasView.cancel') }}
-            </button>
+            </Button>
           </div>
         </div>
       </template>
@@ -92,15 +92,17 @@
     <!-- Schema Editor -->
     <template v-else>
       <div class="mb-4">
-        <button
+        <Button
           type="button"
-          class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          variant="secondary-text"
+          size="sm"
+          class="gap-1"
           data-testid="paramschema-back"
           @click="closeEditor"
         >
           <ChevronLeft class="h-4 w-4" aria-hidden="true" />
           {{ $t('views.ParameterSchemasView.back') }}
-        </button>
+        </Button>
       </div>
 
       <!-- Schema details tabs -->
@@ -125,14 +127,14 @@
               <Button :disabled="saving || !schemaForm.name.trim()" data-testid="paramschema-save" @click="saveSchema">
                 {{ saving ? $t('views.ParameterSchemasView.saving') : (isNew ? $t('views.ParameterSchemasView.create') : $t('views.ParameterSchemasView.save_as_new_version')) }}
               </Button>
-              <button
+              <Button
                 type="button"
-                class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                variant="secondary"
                 data-testid="paramschema-cancel"
                 @click="closeEditor"
               >
                 {{ $t('views.ParameterSchemasView.cancel') }}
-              </button>
+              </Button>
             </div>
           </header>
 
@@ -141,9 +143,9 @@
             an automatic Retry could double-create, so none is offered.
           -->
           <ErrorAlert v-if="saveError" :message="saveError" :retryable="false" />
-          <div v-if="saveSuccess" class="rounded-lg border border-success/50 bg-success/10 p-4 text-sm text-success-text">
+          <Notice v-if="saveSuccess" variant="success" :icon="false" class="text-sm">
             {{ saveSuccess }}
-          </div>
+          </Notice>
 
           <div class="space-y-4">
             <div>
@@ -172,7 +174,7 @@
           <div>
             <div class="flex items-center justify-between mb-3">
               <h3 class="text-sm font-semibold">{{ $t('views.ParameterSchemasView.parameters') }}</h3>
-              <Button severity="secondary" outlined size="small" data-testid="paramschema-add-param" @click="addParameter">
+              <Button variant="secondary" size="sm" data-testid="paramschema-add-param" @click="addParameter">
                 {{ $t('views.ParameterSchemasView.add_parameter') }}
               </Button>
             </div>
@@ -308,14 +310,16 @@
                             <X class="h-3 w-3" aria-hidden="true" />
                           </button>
                         </div>
-                        <button
+                        <Button
                           type="button"
-                          class="text-xs text-primary-text hover:underline"
+                          variant="link"
+                          size="sm"
+                          class="text-xs"
                           data-testid="paramschema-add-option"
                           @click="(param.options = param.options || []).push('')"
                         >
                           {{ $t('views.ParameterSchemasView.add_option') }}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                     <div>
@@ -378,79 +382,83 @@
 
         <!-- Parameter Sets Tab -->
         <TabPanel value="sets" class="space-y-4 pt-4">
-          <DataCard :title="$t('views.ParameterSchemasView.parameter_sets')" heading-level="h2" variant="bordered" padding="md">
-            <template #headerActions>
-              <Button size="small" @click="startNewSet" data-testid="paramschema-new-set">
-                {{ $t('views.ParameterSchemasView.new_set') }}
-              </Button>
-            </template>
+          <section class="space-y-4">
+            <CardHeader heading-level="h2" header-class="mb-0!" :title="$t('views.ParameterSchemasView.parameter_sets')">
+              <template #actions>
+                <Button size="sm" @click="startNewSet" data-testid="paramschema-new-set">
+                  {{ $t('views.ParameterSchemasView.new_set') }}
+                </Button>
+              </template>
+            </CardHeader>
 
-          <div v-if="setsLoading">
-            <output class="sr-only" aria-live="polite">{{ $t('views.ParameterSchemasView.loading_sets') }}</output>
-            <div class="space-y-2" aria-busy="true">
-              <div
-                v-for="n in 4"
-                :key="`paramschema-sets-skeleton-${n}`"
-                class="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
-              >
-                <div class="space-y-2">
-                  <SkeletonBlock height-class="h-4 w-40" />
-                  <SkeletonBlock height-class="h-3 w-56" />
+            <div v-if="setsLoading">
+              <output class="sr-only" aria-live="polite">{{ $t('views.ParameterSchemasView.loading_sets') }}</output>
+              <div class="space-y-2" aria-busy="true">
+                <div
+                  v-for="n in 4"
+                  :key="`paramschema-sets-skeleton-${n}`"
+                  class="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
+                >
+                  <div class="space-y-2">
+                    <SkeletonBlock height-class="h-4 w-40" />
+                    <SkeletonBlock height-class="h-3 w-56" />
+                  </div>
+                  <SkeletonBlock height-class="h-6 w-24" />
                 </div>
-                <SkeletonBlock height-class="h-6 w-24" />
               </div>
             </div>
-          </div>
-          <ErrorAlert v-else-if="setsError" :message="setsError" :on-retry="loadSets" />
+            <ErrorAlert v-else-if="setsError" :message="setsError" :on-retry="loadSets" />
 
-          <div v-else-if="sets.length === 0" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            {{ $t('views.ParameterSchemasView.no_sets') }}
-          </div>
+            <div v-else-if="sets.length === 0" class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              {{ $t('views.ParameterSchemasView.no_sets') }}
+            </div>
 
-          <div v-else class="space-y-2">
-            <div
-              v-for="set in sets"
-              :key="set.id"
-              class="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
-              :data-testid="`paramschema-set-${set.id}`"
-            >
-              <div>
-                <p class="text-sm font-medium">{{ set.name }}</p>
-                <p class="text-xs text-muted-foreground">{{ set.description || '—' }}</p>
-              </div>
-              <div class="flex items-center gap-1">
-                <button
-                  type="button"
-                  class="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
-                  @click="editSet(set)"
-                  data-testid="paramschema-edit-set"
-                >
-                  {{ $t('views.ParameterSchemasView.edit') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
-                  @click="cloneSet(set)"
-                  data-testid="paramschema-clone-set"
-                >
-                  {{ $t('views.ParameterSchemasView.clone') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
-                  :aria-label="$t('views.ParameterSchemasView.delete')"
-                  data-testid="paramschema-delete-set"
-                  @click="confirmDeleteSet(set)"
-                >
-                  <Trash2 class="h-3 w-3" aria-hidden="true" />
-                </button>
+            <div v-else class="space-y-2">
+              <div
+                v-for="set in sets"
+                :key="set.id"
+                class="flex items-center justify-between rounded-lg border bg-card px-4 py-3"
+                :data-testid="`paramschema-set-${set.id}`"
+              >
+                <div>
+                  <p class="text-sm font-medium">{{ set.name }}</p>
+                  <p class="text-xs text-muted-foreground">{{ set.description || '—' }}</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary-text"
+                    size="sm"
+                    class="text-xs"
+                    @click="editSet(set)"
+                    data-testid="paramschema-edit-set"
+                  >
+                    {{ $t('views.ParameterSchemasView.edit') }}
+                  </Button>
+                  <button
+                    type="button"
+                    class="rounded px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
+                    @click="cloneSet(set)"
+                    data-testid="paramschema-clone-set"
+                  >
+                    {{ $t('views.ParameterSchemasView.clone') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
+                    :aria-label="$t('views.ParameterSchemasView.delete')"
+                    data-testid="paramschema-delete-set"
+                    @click="confirmDeleteSet(set)"
+                  >
+                    <Trash2 class="h-3 w-3" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-          </DataCard>
+          </section>
 
           <!-- Set Editor -->
-          <div v-if="editingSet" class="rounded-lg border bg-card p-4 space-y-4">
+          <BaseCard v-if="editingSet" padding="md" class="space-y-4">
             <h4 class="text-sm font-semibold">{{ editingSetId ? $t('views.ParameterSchemasView.edit_set') : $t('views.ParameterSchemasView.new_set') }}</h4>
 
             <div class="space-y-3">
@@ -572,15 +580,15 @@
               <Button :disabled="setSaving || !setForm.name.trim()" @click="saveSet" data-testid="paramschema-set-save">
                 {{ setSaving ? $t('views.ParameterSchemasView.saving') : $t('views.ParameterSchemasView.save') }}
               </Button>
-              <button type="button"
-                class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+              <Button type="button"
+                variant="secondary"
                 data-testid="paramschema-set-cancel"
                 @click="cancelSetEdit"
               >
                 {{ $t('views.ParameterSchemasView.cancel') }}
-              </button>
+              </Button>
             </div>
-          </div>
+          </BaseCard>
 
           <div v-if="deleteSetConfirmId" class="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
             <p class="text-sm font-medium text-destructive-text">
@@ -588,16 +596,16 @@
             </p>
             <p v-if="deleteSetError" class="mt-1 text-sm text-destructive-text">{{ deleteSetError }}</p>
             <div class="mt-3 flex items-center gap-2">
-              <Button :disabled="deletingSet" severity="danger" data-testid="paramschema-delete-set-confirm" @click="doDeleteSet">
+              <Button :disabled="deletingSet" variant="danger" data-testid="paramschema-delete-set-confirm" @click="doDeleteSet">
                 {{ deletingSet ? $t('views.ParameterSchemasView.deleting') : $t('views.ParameterSchemasView.delete') }}
               </Button>
-              <button type="button"
-                class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+              <Button type="button"
+                variant="secondary"
                 data-testid="paramschema-delete-set-cancel"
                 @click="deleteSetConfirmId = null"
               >
                 {{ $t('views.ParameterSchemasView.cancel') }}
-              </button>
+              </Button>
             </div>
           </div>
         </TabPanel>
@@ -719,9 +727,9 @@
           </div>
 
           <div v-if="validateResult !== null" class="space-y-2">
-            <div v-if="validateResult.valid" class="rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text">
+            <Notice v-if="validateResult.valid" variant="success" :icon="false" padding="sm" class="text-sm">
               {{ $t('views.ParameterSchemasView.validation_passed') }}
-            </div>
+            </Notice>
             <ErrorAlert v-else compact>
               <p class="text-sm font-medium text-destructive-text">{{ $t('views.ParameterSchemasView.validation_failed') }}</p>
               <ul v-if="validateResult.errors?.length" class="mt-1 list-inside list-disc text-sm text-destructive-text">
@@ -746,11 +754,13 @@ import { shortId } from '../utils/format'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
-import DataCard from '../components/ui/DataCard.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
+import CardHeader from '../components/ui/CardHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Tabs from 'primevue/tabs'
 import TabList from 'primevue/tablist'
 import Tab from 'primevue/tab'

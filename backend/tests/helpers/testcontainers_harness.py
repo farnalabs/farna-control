@@ -16,8 +16,9 @@ Design rules (FAR-934):
   CI in that case. This harness adds the same loud failure semantics to
   probe time-outs instead of letting a hung container look like a pass.
 - Heavy fixtures (gitlab, vllm, tgi — multi-GB images, slow boot) only run
-  in the nightly job (``ci.yml`` job ``tier1b-nightly``); the light set
-  runs per-PR (``ci.yml`` job ``tier1b-light``).
+  in the nightly job (``tier1b-nightly.yml``); the light set runs per-train
+  in ``merge-validate.yml`` job ``tier1b`` ("Validation: tier1b
+  testcontainers (light)") before anything merges.
 
 Usage in a test module::
 
@@ -48,7 +49,7 @@ SSRF_LOOPBACK_OPTIN = "127.0.0.0/8,::1/128"
 
 logger = logging.getLogger(__name__)
 
-# Image pulls hit public registries on every per-PR tier1b-light run, and a
+# Image pulls hit public registries on every per-train tier1b run, and a
 # single registry hiccup must not fail a job whose product code is untouched.
 # Three attempts with a 5s/10s backoff ride over an anonymous-pull rate limit
 # or a dropped connection without hiding a genuinely missing image: that fails

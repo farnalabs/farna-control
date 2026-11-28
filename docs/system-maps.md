@@ -1,6 +1,6 @@
 # Delivery System Maps Specification
 
-**Status:** Beta — release-gated behind developer mode until Beta ships (FAR-2638)
+**Status:** Beta - release-gated behind developer mode until Beta ships (FAR-2638)
 **Target Milestone:** Beta
 **Category:** Product & Technical Architecture Specification
 **Related:** `docs/architecture.md`, `docs/core-principles.md`
@@ -10,7 +10,7 @@
 > `/system-maps/:id` are `private_preview` routes in the product manifest, so
 > the surface is visible only when developer mode is enabled and is never
 > exposed to ordinary Alpha users. Within that dev-mode gate the existing
-> authority still applies — authoring, discovery and publish require the
+> authority still applies - authoring, discovery and publish require the
 > org-aware default-OFF `system_maps` flag, the operator/admin role and the
 > `system_maps_access` grant, and published reads stay viewer-readable
 > (`system_maps_read` + `system_maps.read`). The Beta milestone below describes

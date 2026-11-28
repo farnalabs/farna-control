@@ -164,6 +164,7 @@ describe('attemptTokenRefresh', () => {
       method: 'POST',
       credentials: 'include',
       headers: { 'X-CSRF-Token': 'csrf-value' },
+      signal: expect.any(AbortSignal),
     })
     // The body is GONE: the token never touches script-visible storage again.
     expect(fetchMock.mock.calls[0]![1]!.body).toBeUndefined()
@@ -187,6 +188,7 @@ describe('attemptTokenRefresh', () => {
       method: 'POST',
       credentials: 'include',
       headers: { 'X-CSRF-Token': 'csrf/value' },
+      signal: expect.any(AbortSignal),
     })
   })
 
@@ -261,6 +263,7 @@ describe('attemptTokenRefresh', () => {
       method: 'POST',
       credentials: 'include',
       headers: {},
+      signal: expect.any(AbortSignal),
     })
   })
 
@@ -283,6 +286,7 @@ describe('attemptTokenRefresh', () => {
       method: 'POST',
       credentials: 'include',
       headers: {},
+      signal: expect.any(AbortSignal),
     })
   })
 

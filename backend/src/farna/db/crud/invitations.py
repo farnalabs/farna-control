@@ -1,8 +1,11 @@
 """CRUD for Invitation records (FAR-461).
 
-Invitations live OUTSIDE the ``rls_org_isolation`` regime (pre-authenticated
-consumption), so every helper scopes by organisation explicitly. Token
-plaintexts are 256-bit urlsafe values minted by
+``invitations`` carries ``rls_org_isolation`` (migration 0368). Every
+post-authenticated helper runs inside the caller's org context, which the
+database now enforces as well as these ``organisation_id`` filters; the ONE
+pre-authenticated read — :func:`get_valid_by_token_hash` on the accept-invite
+route — must be made inside ``db.rls.bootstrap_read`` and pins the unique
+``token_hash``. Token plaintexts are 256-bit urlsafe values minted by
 ``farna.util.one_time_token.generate_token`` (shared with the MCP setup
 handoff); only their SHA-256 hex is persisted.
 """
@@ -122,6 +125,12 @@ async def get_valid_by_token_hash(session: AsyncSession, token_hash: str) -> Inv
 
     Rejects consumed, revoked, and expired rows. Row-locks so two concurrent
     accepts cannot both read the same still-valid row before the CAS.
+
+    This is the ONLY pre-authenticated read of ``invitations``: it runs before
+    the caller holds an organisation context, so it MUST be called inside
+    ``farna.db.rls.bootstrap_read`` (ADR 070 §2/§3, migration 0368). The
+    ``token_hash`` equality is the exact key the grant authorises — never widen
+    this to a table scan.
 
     FAR-1825: bounded because this is the accept-invite transaction's first row
     lock. A contended invitation row expires as 55P03 (the route's DB-error arm

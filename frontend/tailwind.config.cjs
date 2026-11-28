@@ -9,11 +9,11 @@ module.exports = {
       // Bundled via @fontsource-variable/inter and
       // @fontsource-variable/jetbrains-mono (FAR-1253) — keeps Tailwind's
       // preflight (html, code/kbd/samp/pre) and `font-sans`/`font-mono`
-      // stacks in line with the body/agent-theme stacks in style.css.
+      // stacks in line with the body stack in style.css.
       fontFamily: {
         sans: ['"Inter Variable"', 'Inter', ...defaultTheme.fontFamily.sans],
         mono: ['"JetBrains Mono Variable"', '"JetBrains Mono"', ...defaultTheme.fontFamily.mono],
-        // Brand monospace stack (matches json-viewer.css and the agent theme).
+        // Brand monospace stack (matches json-viewer.css).
         // Used for canvas node kind labels (FAR-1249).
         'brand-mono': ['"JetBrains Mono Variable"', '"JetBrains Mono"', '"SF Mono"', '"Cascadia Code"', 'Consolas', 'ui-monospace', 'monospace'],
       },
@@ -45,16 +45,16 @@ module.exports = {
         'destructive-foreground': 'hsl(var(--destructive-foreground))',
         // Fill-safe counterpart of `destructive` for text-bearing SOLID fills
         // (badges, destructive buttons). `--destructive` is an accent hue, so
-        // `--destructive-foreground` on it is only 3.22:1 (dark) / 3.30:1
-        // (agent) - below the WCAG AA 4.5:1 floor. Use `bg-destructive-fill`
-        // with `text-destructive-foreground` on every solid destructive
-        // surface that carries text.
+        // `--destructive-foreground` on it is only 3.22:1 - below the WCAG AA
+        // 4.5:1 floor. Use `bg-destructive-fill` with
+        // `text-destructive-foreground` on every solid destructive surface that
+        // carries text.
         'destructive-fill': 'hsl(var(--destructive-fill))',
         success: 'hsl(var(--success))',
         // FAR-1938: text-safe counterpart of `success`. `--success` is a
         // fill/accent green - as TEXT it is only 2.30:1 on white in light mode.
         // `--success-text` keeps the hue and darkens light mode; it is an exact
-        // copy of `--success` in the dark and agent themes. Use
+        // copy of `--success` in the dark theme. Use
         // `text-success-text` - never `text-success` - for success COLOURED
         // TEXT (see style.css for the measured ratios).
         'success-text': 'hsl(var(--success-text))',
@@ -63,10 +63,15 @@ module.exports = {
         // tuned as a FILL/accent hue (50% lightness), so amber text on white or
         // on a bg-warning/* tint is only ~1.8-2.1:1 in light mode (WCAG AA needs
         // 4.5:1). `--warning-text` keeps the hue, darkens light mode to 30%
-        // lightness, and is identical to `--warning` in the dark and agent
-        // themes. Use `text-warning-text` - never `text-warning` - for warning
+        // lightness, and is identical to `--warning` in the dark theme. Use `text-warning-text` - never `text-warning` - for warning
         // COLOURED TEXT (see style.css for the measured ratios).
         'warning-text': 'hsl(var(--warning-text))',
+        // FAR-1607: ink drawn ON a `bg-warning` SOLID fill (confirm buttons,
+        // banners). `--warning-foreground` is a dark ink in every theme, so a
+        // warning-filled surface that carries text clears WCAG AA; without this
+        // registration Tailwind emits no rule and the text falls back to the
+        // body colour (near-white on amber, ~2:1). See style.css for ratios.
+        'warning-foreground': 'hsl(var(--warning-foreground))',
         // FAR-1913: text-safe counterpart of `destructive`. `--destructive` is
         // tuned as a FILL/accent hue, so destructive COLOURED TEXT on a
         // bg-destructive/* tint is only 4.32:1 (dark) / 3.46:1 (light) - below
@@ -77,6 +82,50 @@ module.exports = {
         'destructive-text': 'hsl(var(--destructive-text))',
         pending: 'hsl(var(--pending))',
         preview: 'hsl(var(--preview))',
+        // FAR-2746 (workstream 7b): IDENTITY colours. These name the entity a
+        // colour identifies, never the hue, and are deliberately separate from
+        // the status tokens above - a node's colour is not a warning. Each
+        // value mirrors the palette shade the site used before the conversion
+        // (recorded in style.css), so the switch is a visual no-op. Values are
+        // registered as plain `var()` because they are OKLCH (Tailwind v4's
+        // palette space); `hsl(var(...))` would be invalid.
+        'node-router': 'var(--node-router)',
+        'node-router-text': 'var(--node-router-text)',
+        'node-router-surface': 'var(--node-router-surface)',
+        'node-dispatch': 'var(--node-dispatch)',
+        'node-dispatch-text': 'var(--node-dispatch-text)',
+        'node-dispatch-surface': 'var(--node-dispatch-surface)',
+        'node-agent': 'var(--node-agent)',
+        'node-agent-text': 'var(--node-agent-text)',
+        'node-composite': 'var(--node-composite)',
+        'node-composite-text': 'var(--node-composite-text)',
+        'node-composite-muted': 'var(--node-composite-muted)',
+        'node-composite-strong': 'var(--node-composite-strong)',
+        'node-composite-code': 'var(--node-composite-code)',
+        'node-port': 'var(--node-port)',
+        'node-port-soft': 'var(--node-port-soft)',
+        'action-build': 'var(--action-build)',
+        'action-build-hover': 'var(--action-build-hover)',
+        'action-build-border': 'var(--action-build-border)',
+        'action-link': 'var(--action-link)',
+        'action-link-hover': 'var(--action-link-hover)',
+        'library-wizard': 'var(--library-wizard)',
+        'library-wizard-soft': 'var(--library-wizard-soft)',
+        'run-dispatched': 'var(--run-dispatched)',
+        'run-dispatched-text': 'var(--run-dispatched-text)',
+        'run-dispatched-surface': 'var(--run-dispatched-surface)',
+        'eval-marker': 'var(--eval-marker)',
+        'eval-marker-text': 'var(--eval-marker-text)',
+        'edge-llm': 'var(--edge-llm)',
+        'edge-llm-text': 'var(--edge-llm-text)',
+        'eval-proposal': 'var(--eval-proposal)',
+        'eval-proposal-text': 'var(--eval-proposal-text)',
+        'redaction-marker': 'var(--redaction-marker)',
+        'redaction-marker-text': 'var(--redaction-marker-text)',
+        'diff-added': 'var(--diff-added)',
+        'diff-added-text': 'var(--diff-added-text)',
+        'diff-removed': 'var(--diff-removed)',
+        'diff-removed-text': 'var(--diff-removed-text)',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

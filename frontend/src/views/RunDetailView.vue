@@ -20,7 +20,7 @@
               v-if="isDispatchedRun(run.execution_origin)"
               data-testid="run-detail-dispatched"
               :title="$t('common.execution_origin.dispatched_hint')"
-              class="inline-flex items-center rounded-full bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300"
+              class="inline-flex items-center rounded-full bg-run-dispatched/10 px-2 py-0.5 text-xs font-medium text-run-dispatched-text dark:bg-run-dispatched-surface"
             >{{ $t('common.execution_origin.dispatched') }}</span>
         </div>
           <p class="mt-1 text-sm text-muted-foreground">
@@ -35,29 +35,31 @@
           </p>
           <p class="text-xs text-muted-foreground">
             {{ $t('views.RunDetailView.run_id_label') }} <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{{ shortId(run.run_id) }}</code>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               data-testid="run-detail-copy-run-id"
               :aria-label="$t('views.RunDetailView.copy_run_id')"
-              class="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/10"
+              class="ml-1 gap-1"
               @click="copyRunId"
             >
               {{ copied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-            </button>
+            </Button>
           </p>
         <template #right>
         <div class="text-right text-xs text-muted-foreground">
           <div v-if="run.total_cost_usd != null" class="text-base font-semibold tabular-nums text-foreground">
             {{ $t('views.RunDetailView.total_label') }} {{ formatMoney(Number(formattedCost), currencyCode, 6) }}
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             data-testid="run-detail-share-summary"
-            class="mt-2 inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-primary-text hover:bg-primary/10"
+            class="mt-2 gap-1"
             @click="copySupportReference"
           >
             {{ supportCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.support_reference') }}
-          </button>
+          </Button>
         </div>
         </template>
       </PageHeader>
@@ -65,12 +67,15 @@
       <!-- Run-level warnings summary strip: surfaces run-level issues at the
            top of the page so they are visible without scrolling to the
            dedicated detail sections below. -->
-      <div
+      <Notice
         v-if="runLevelWarnings.length > 0"
         id="warnings"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="run-detail-warnings-strip"
-        aria-live="polite"
-        class="mb-4 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm text-warning-text"
       >
         <h2 class="mb-2 flex items-center gap-2 text-sm font-semibold tracking-tight">
           <AlertTriangle aria-hidden="true" class="h-4 w-4 shrink-0" />
@@ -89,18 +94,21 @@
             </button>
           </li>
         </ul>
-      </div>
+      </Notice>
 
       <!-- Queue position banner (pending + waiting on sandbox capacity) -->
-      <output
+      <Notice
         v-if="run.status === 'pending' && run.capacity?.waiting"
-        data-testid="run-detail-queue-banner"
-        aria-live="polite"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        padding="none"
         :aria-label="queuedCapacityReason(run.capacity, t)"
-        class="mb-4 block rounded-lg border border-warning/50 bg-warning/10 px-4 py-2 text-sm text-warning-text"
+        class="mb-4 px-4 py-2 text-sm"
+        data-testid="run-detail-queue-banner"
       >
         {{ queuedCapacityReason(run.capacity, t) }}
-      </output>
+      </Notice>
       <output
         v-else-if="run.status === 'pending'"
         data-testid="run-detail-queued-starting"
@@ -213,14 +221,15 @@
       <BaseCard v-if="runIO?.input_payload" padding="md" class="mb-4" data-testid="run-detail-input-payload">
         <CardHeader heading-level="h2" :title="$t('views.RunDetailView.run_input')">
           <template #actions>
-            <button
-              type="button"
-              class="text-xs text-primary-text hover:bg-primary/10 rounded px-2 py-1"
+            <Button
+              variant="ghost"
+              size="sm"
+              class="text-xs"
               data-testid="run-detail-copy-input"
               @click="copyInputPayload"
             >
               {{ inputPayloadCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-            </button>
+            </Button>
           </template>
         </CardHeader>
         <JsonViewer :data="runIO.input_payload" :show-toolbar="true" :max-height="'16rem'" />
@@ -274,34 +283,35 @@
 
       <!-- Cancel button for non-terminal runs -->
       <div v-if="canCancel" class="my-4">
-        <button
-          type="button"
+        <Button
+          variant="danger"
+          :outlined="true"
           :disabled="cancelling"
           data-testid="run-detail-cancel"
-          class="inline-flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive-text hover:bg-destructive/20 disabled:opacity-50"
+          class="gap-2"
           @click="cancelRun"
         >
           <LoaderCircle v-if="cancelling" aria-hidden="true" class="h-4 w-4 animate-spin" />
           <CircleStop v-else aria-hidden="true" class="h-4 w-4" />
           {{ cancelling ? $t('views.RunDetailView.stopping') : $t('views.RunDetailView.stop') }}
-        </button>
+        </Button>
         <span v-if="cancelError" role="alert" class="ml-3 text-xs text-destructive">{{ cancelError }}</span>
       </div>
 
       <!-- Re-run button for terminal runs (FAR-788) -->
       <div v-if="canRerun" class="my-4" data-testid="run-detail-rerun">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="rerunning"
           data-testid="run-rerun"
           :aria-label="$t('views.RunDetailView.rerun')"
-          class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+          class="gap-2 whitespace-nowrap"
           @click="onRerunClick"
         >
           <LoaderCircle v-if="rerunning" aria-hidden="true" class="h-4 w-4 animate-spin" />
           <RotateCcw v-else class="h-4 w-4" aria-hidden="true" />
           {{ rerunning ? $t('views.RunDetailView.rerunning') : (rerunConfirming ? $t('views.RunDetailView.rerun_confirm') : $t('views.RunDetailView.rerun')) }}
-        </button>
+        </Button>
         <span v-if="rerunConfirming" role="alert" class="ml-3 text-xs text-warning-text">{{ $t('views.RunDetailView.rerun_confirm_warning') }}</span>
         <span v-if="rerunError" role="alert" class="ml-3 text-xs text-destructive">{{ rerunError }}</span>
       </div>
@@ -313,15 +323,16 @@
       <div v-if="run.trace_id" class="flex items-center gap-2">
         <span class="text-xs text-muted-foreground">{{ $t('views.RunDetailView.otel_trace_id') }}</span>
         <code class="select-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs" :title="run.trace_id">{{ shortId(run.trace_id) }}</code>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           data-testid="run-detail-copy-trace-id"
           :aria-label="$t('views.RunDetailView.copy_trace_id')"
-          class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10"
+          class="gap-1"
           @click="copyTraceId"
         >
           {{ copied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-        </button>
+        </Button>
         <a
           v-if="run.trace_url"
           :href="run.trace_url"
@@ -343,26 +354,27 @@
         heading-level="h2"
       >
         <template #headerActions>
-          <button
-            type="button"
-            class="px-3 py-1.5 text-xs font-medium rounded-lg border border-input bg-background hover:bg-accent transition-colors"
+          <Button
+            variant="secondary"
+            size="sm"
+            class="text-xs"
             @click="copyOutput"
             data-testid="run-detail-copy-output"
           >
             {{ outputCopied ? $t('views.RunDetailView.copied') : $t('views.RunDetailView.copy') }}
-          </button>
+          </Button>
         </template>
         <JsonViewer :data="lastNodeOutput" :show-toolbar="false" :max-height="'30rem'" />
       </DataCard>
 
       <!-- Capacity-blocked pending run (queued on sandbox concurrency limit) -->
-      <div v-if="run.status === 'pending' && (run.error_code === 'capacity.org' || run.error_code === 'capacity.pipeline')" data-testid="run-detail-waiting-for-capacity" class="rounded-lg border border-warning/50 bg-warning/10 p-4 mb-4">
+      <Notice v-if="run.status === 'pending' && (run.error_code === 'capacity.org' || run.error_code === 'capacity.pipeline')" variant="warning" :icon="false" class="mb-4" data-testid="run-detail-waiting-for-capacity">
         <h3 class="text-sm font-semibold text-warning-text mb-1">{{ $t('views.RunDetailView.waiting_for_capacity') }}</h3>
         <p v-if="run.error_detail" class="text-xs whitespace-pre-wrap text-warning-text">{{ run.error_detail }}</p>
-      </div>
+      </Notice>
 
       <!-- Failed Run Diagnostics -->
-      <div v-if="run.status === 'failed' && run.error_detail" class="rounded-lg border border-destructive/50 bg-destructive/10 p-4 mb-4">
+      <ErrorAlert v-if="run.status === 'failed' && run.error_detail" class="mb-4" :retryable="false">
         <div class="flex flex-wrap items-center gap-2 mb-1">
           <h3 class="text-sm font-semibold text-destructive-text">{{ $t('views.RunDetailView.run_error') }}</h3>
           <RunErrorTag
@@ -372,19 +384,21 @@
           />
         </div>
         <pre class="text-xs whitespace-pre-wrap font-mono text-destructive-text">{{ run.error_detail }}</pre>
-      </div>
+      </ErrorAlert>
 
       <!-- FAR-704: deadline-kill / cancellation triage evidence retained from
            the sandbox attempt (raw-output marker store). Rendered whenever the
            run detail carries triage entries — typically a node-deadline
            watchdog kill, where no node envelope exists to show instead. -->
-      <div
+      <BaseCard
         v-if="deadlineTriageEntries.length > 0"
+        padding="md"
+        variant="muted"
+        class="mb-4"
         data-testid="run-detail-deadline-triage"
-        class="rounded-lg border border-border bg-muted/40 p-4 mb-4"
       >
-        <h3 class="text-sm font-semibold mb-1">{{ $t('views.RunDetailView.deadline_triage_title') }}</h3>
-        <p class="text-xs text-muted-foreground mb-3">{{ $t('views.RunDetailView.deadline_triage_help') }}</p>
+        <CardHeader heading-level="h2" header-class="mb-0!" :title="$t('views.RunDetailView.deadline_triage_title')" />
+        <p class="mt-1 text-xs text-muted-foreground mb-3">{{ $t('views.RunDetailView.deadline_triage_help') }}</p>
         <div
           v-for="(entry, entryIndex) in deadlineTriageEntries"
           :key="entry.attempt_key ?? entry.node_id ?? String(entryIndex)"
@@ -410,29 +424,31 @@
             <pre class="mt-1 text-xs whitespace-pre-wrap font-mono">{{ entry.raw_output_head }}</pre>
           </details>
         </div>
-      </div>
+      </BaseCard>
 
       <!-- Cancellation reason (FAR-1233): WHY this run was cancelled.
            Rendered for every cancelled run — the reason itself degrades to a
            neutral "not recorded" message when the run predates the
            cancel-reason columns (cancelReasonMessage handles the fallback). -->
-      <div
+      <BaseCard
         v-if="run.status === 'cancelled'"
+        padding="md"
+        variant="muted"
+        class="mb-4"
         data-testid="run-detail-cancel-reason"
-        class="mb-4 rounded-lg border border-border bg-muted/40 p-4"
       >
-        <h3 class="text-sm font-semibold mb-1">{{ $t('views.RunDetailView.cancel_reason_title') }}</h3>
+        <CardHeader heading-level="h2" header-class="mb-0!" :title="$t('views.RunDetailView.cancel_reason_title')" />
         <output
           data-testid="run-detail-cancel-reason-message"
           aria-live="polite"
-          class="block text-sm text-muted-foreground"
+          class="mt-1 block text-sm text-muted-foreground"
         >{{ cancelReasonMessage }}</output>
         <p
           v-if="cancelledByLabel"
           data-testid="run-detail-cancelled-by"
           class="mt-1 text-xs text-muted-foreground"
         >{{ cancelledByLabel }}</p>
-      </div>
+      </BaseCard>
 
       <!-- FAR-706: curated known-fix entries matched against the raw error detail -->
       <KnownFixesPanel :fixes="run.known_fixes" />
@@ -482,11 +498,13 @@
       </BaseCard>
 
       <!-- Guardrail-blocked override (terminal eval_failed / eval_blocked) -->
-      <div
+      <Notice
         v-if="isGuardrailBlocked"
         id="run-detail-guardrail-override"
+        variant="warning"
+        :icon="false"
+        class="mb-4"
         data-testid="run-detail-guardrail-override-panel"
-        class="rounded-lg border border-warning/50 bg-warning/10 p-4 mb-4"
       >
         <h3 class="text-sm font-semibold text-warning-text mb-1">{{ $t('views.RunDetailGuardrailSummary.override_guardrail') }}</h3>
         <p class="text-xs text-warning-text mb-3">{{ $t('views.RunDetailGuardrailSummary.override_disclosure') }}</p>
@@ -500,7 +518,7 @@
         >
           {{ $t('views.RunDetailGuardrailSummary.override_requires_operator') }}
         </p>
-      </div>
+      </Notice>
 
       <!-- FAR-2072: worst-case wall clock for a running/failed node. The
            timeout is per attempt, so a retried timeout can consume it more
@@ -608,15 +626,16 @@
             >
               <td class="table-cell font-medium" :title="node.name">
                 <span class="select-all">{{ nodeLabel(node.name) }}</span>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   data-testid="run-detail-copy-node-id"
                   :aria-label="$t('views.RunDetailView.copy_node_id')"
-                  class="ml-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/10"
+                  class="ml-1"
                   @click="copyText(node.name)"
                 >
                   <Copy aria-hidden="true" class="h-3 w-3" />
-                </button>
+                </Button>
               </td>
               <td class="table-cell">
                 <span :class="[nodeStatusBadgeClass(node), 'capitalize']">{{ node.status }}</span>
@@ -659,39 +678,42 @@
                 <span v-else class="text-muted-foreground">—</span>
               </td>
               <td class="table-cell">
-                <button
+                <Button
                   v-if="node.io"
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   data-testid="run-detail-toggle-io"
-                  class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10"
+                  class="gap-1"
                   @click="toggleNodeIO(node.name)"
                 >
                   {{ expandedNodes.has(node.name) ? $t('views.RunDetailView.hide') : $t('views.RunDetailView.show') }}
-                </button>
+                </Button>
                 <span v-else class="text-muted-foreground">—</span>
               </td>
               <td class="table-cell">
-                <button
+                <Button
                   v-if="node.hasLogs || node.telemetry"
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   data-testid="run-detail-toggle-logs"
-                  class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10"
+                  class="gap-1"
                   @click="toggleNodeLogs(node.name)"
                 >
                   {{ expandedLogs.has(node.name) ? $t('views.RunDetailView.hide') : $t('views.RunDetailView.view') }}
-                </button>
+                </Button>
                 <span v-else class="text-muted-foreground">—</span>
               </td>
               <td class="table-cell">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   data-testid="run-detail-show-prompt"
-                  class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-text hover:bg-primary/10 disabled:opacity-50"
+                  class="gap-1"
                   :disabled="promptLoading.has(node.name)"
                   @click="revealPrompt(node.name)"
                 >
                   {{ $t('views.RunDetailView.view_prompt') }}
-                </button>
+                </Button>
               </td>
             </tr>
 
@@ -842,15 +864,16 @@
                   data-testid="run-detail-artifact-error"
                 >
                   <span>{{ $t('views.RunDetailView.artifact_load_error') }}</span>
-                  <button
-                    type="button"
-                    class="rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-primary-text hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    class="text-xs"
                     :aria-label="$t('views.RunDetailView.artifact_load_retry_aria')"
                     data-testid="run-detail-artifact-retry"
                     @click="retryNodeArtifacts(node.name)"
                   >
                     {{ $t('views.RunDetailView.artifact_load_retry') }}
-                  </button>
+                  </Button>
                 </div>
                 <div
                   v-if="!getNodeLog(node.name, 'agent_stdout') && !getNodeLog(node.name, 'agent_stderr') && !liveOutput[node.name] && !nodeArtifactMap[node.name]?.length"
@@ -1006,15 +1029,17 @@
       </Dialog>
 
       <!-- Guardrail Override Dialog -->
-      <Dialog :visible="overrideDialogOpen" :modal="true" :dismissable-mask="true" :style="{ width: '42rem' }" @update:visible="overrideDialogOpen = false">
-        <template #header>
-          <div>
-            <div class="text-lg font-semibold">{{ $t('views.RunDetailGuardrailSummary.override_guardrail') }}</div>
-            <div class="mt-0.5 text-sm text-muted-foreground">
-              {{ $t('views.RunDetailGuardrailSummary.override_guardrail_description') }}
-            </div>
-          </div>
-        </template>
+      <FormDialog
+        v-model:open="overrideDialogOpen"
+        :title="$t('views.RunDetailGuardrailSummary.override_guardrail')"
+        :description="$t('views.RunDetailGuardrailSummary.override_guardrail_description')"
+        :confirm-text="$t('views.RunDetailGuardrailSummary.override_guardrail')"
+        :confirm-loading-text="$t('views.RunDetailGuardrailSummary.override_submitting')"
+        :loading="overrideSubmitting"
+        confirm-test-id="run-detail-override-submit"
+        width="42rem"
+        @confirm="submitOverride"
+      >
         <div class="space-y-4">
           <label for="run-detail-override-input" class="mb-1 block text-sm font-medium">
             {{ $t('views.RunDetailGuardrailSummary.input_payload') }}
@@ -1038,14 +1063,7 @@
             {{ overrideMessage.text }}
           </output>
         </div>
-        <template #footer>
-          <div class="flex justify-end">
-            <Button data-testid="run-detail-override-submit" :disabled="overrideSubmitting" @click="submitOverride">
-              {{ overrideSubmitting ? $t('views.RunDetailGuardrailSummary.override_submitting') : $t('views.RunDetailGuardrailSummary.override_guardrail') }}
-            </Button>
-          </div>
-        </template>
-      </Dialog>
+      </FormDialog>
     </template>
   </div>
 </template>
@@ -1064,10 +1082,12 @@ import CardHeader from '../components/ui/CardHeader.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import RunErrorTag from '../components/shared/RunErrorTag.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import FormDialog from '../components/shared/FormDialog.vue'
 import HitlReviewCard from '../components/hitl/HitlReviewCard.vue'
 import KnownFixesPanel from '../components/shared/KnownFixesPanel.vue'
 import AnalyzeRunButton from '../components/runs/AnalyzeRunButton.vue'
@@ -1075,7 +1095,7 @@ import RunPipelineVersionLink from '../components/runs/RunPipelineVersionLink.vu
 import RunAttemptHistory from '../components/runs/RunAttemptHistory.vue'
 import { isAnalyzableFailure, type AnalyzeRunInfo } from '../components/runs/analyzeRun'
 import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { requestRunCancellation, requestRunRerun } from '../lib/api/runs'
 import { isHitlActionableStatus, isTerminalStatus } from '../constants/runStatuses'
@@ -1319,7 +1339,7 @@ function bucketClass(key: string): string {
     violated: 'bg-destructive/10 text-destructive-text',
     observed: 'bg-warning/10 text-warning-text',
     errored: 'bg-destructive/10 text-destructive-text',
-    redacted: 'bg-purple-500/10 text-purple-600',
+    redacted: 'bg-redaction-marker/10 text-redaction-marker-text',
     skipped: 'bg-muted text-muted-foreground',
   }
   return classes[key] || 'bg-muted text-muted-foreground'

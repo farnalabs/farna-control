@@ -13,12 +13,14 @@ from sqlalchemy import (
     Numeric,
     String,
     Uuid,
+    event,
     func,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from farna.db.models.base import JSONB_COL, OrgScoped, SoftDeleteMixin
+from farna.db.pipeline_ownership import stamp_owner_from_pipeline
 
 
 class Trigger(SoftDeleteMixin, OrgScoped):
@@ -65,6 +67,15 @@ class Trigger(SoftDeleteMixin, OrgScoped):
         nullable=False,
         index=True,
     )
+    # ADR 070 Phase 1A: the owning team, inherited from ``pipelines.owner_team_id``
+    # (migration 0369) so the Phase 1B team predicate can key on this row instead
+    # of joining to ``pipelines``. Unlike a run's owner - a historical fact
+    # resolved at ``created_at`` - a trigger is part of the pipeline's live
+    # definition, so it follows the pipeline's CURRENT owner: a reassignment moves
+    # the trigger with the pipeline. ``ON DELETE RESTRICT`` mirrors
+    # ``pipelines.owner_team_id``: a team that still owns triggers cannot be
+    # hard-deleted.
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), nullable=True, index=True)
     # FAR-681 slice 2 / FAR-2227: the trigger's required name; (pipeline, name)
     # is also the declarative-apply identity. Backfilled and made NOT NULL by
     # migration 0339.
@@ -99,3 +110,10 @@ class Trigger(SoftDeleteMixin, OrgScoped):
     # schedule config + model backend + scenario inputs live in ``config_json``;
     # ``pipeline_id`` remains NOT NULL as the suite's owning/placeholder pipeline.
     eval_suite_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("eval_suites.id", ondelete="RESTRICT"), nullable=True, index=True)
+
+
+# ADR 070 Phase 1A safety net: any ORM insert that did not stamp
+# ``owner_team_id`` inherits the parent pipeline's current owner in the same
+# transaction (see ``farna.db.pipeline_ownership``). Registered on the model, not
+# in a session factory, so it also covers writers that build their own session.
+event.listen(Trigger, "before_insert", stamp_owner_from_pipeline())

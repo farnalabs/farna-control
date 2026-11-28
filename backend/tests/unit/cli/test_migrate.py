@@ -30,6 +30,22 @@ from farna.cli.migrate import (
 )
 from tests.unit.cli.conftest import MockModel
 
+
+def _rls_aware_session() -> AsyncMock:
+    """An AsyncMock session whose RLS-context members are synchronous.
+
+    ``_verify_admin_access`` now calls ``set_rls_org``, which reads
+    ``in_transaction``, ``get_bind`` and ``info`` synchronously. Typing them as
+    AsyncMock would return never-awaited coroutines (the repo's error filter
+    rejects those), so mirror the real ``AsyncSession`` contract here.
+    """
+    session = AsyncMock()
+    session.in_transaction = MagicMock(return_value=True)
+    session.get_bind = MagicMock(return_value=SimpleNamespace(dialect=SimpleNamespace(name="sqlite")))
+    session.info = {}
+    return session
+
+
 # ── Pure function tests (no mocking needed) ──────────────────────────────────
 
 
@@ -443,7 +459,7 @@ class TestExportOrg:
         mock_org = MockModel(id=org_id, name="Test Org", slug="test-org", status="active")
         mock_get_org.return_value = mock_org
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
 
         class FakeResult:
             def scalars(self):
@@ -508,7 +524,7 @@ class TestExportOrg:
         mock_get_membership.return_value = MagicMock(role="admin")
         mock_get_org.return_value = None
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
         mock_session.__aenter__.return_value = mock_session
         mock_session_local.return_value.__aenter__.return_value = mock_session
 
@@ -616,7 +632,7 @@ class TestImportOrg:
         mock_get_membership.return_value = MagicMock(role="admin")
         mock_get_org.return_value = MagicMock()
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
         mock_session.execute.return_value.scalar_one_or_none.return_value = None
         mock_session.__aenter__.return_value = mock_session
         mock_session_local.return_value.__aenter__.return_value = mock_session
@@ -672,7 +688,7 @@ class TestImportOrg:
         mock_get_membership.return_value = MagicMock(role="admin")
         mock_get_org.return_value = MagicMock()
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
         mock_session.execute.return_value.scalar_one_or_none.return_value = None
         mock_session.__aenter__.return_value = mock_session
         mock_session_local.return_value.__aenter__.return_value = mock_session
@@ -927,7 +943,7 @@ class TestFlags:
         mock_org = MockModel(id=org_id)
         mock_get_org.return_value = mock_org
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
 
         class FakeResult:
             def scalars(self):
@@ -989,7 +1005,7 @@ class TestFlags:
         mock_get_membership.return_value = MagicMock(role="admin")
         mock_get_org.return_value = MagicMock()
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
         mock_session.execute.return_value.scalar_one_or_none.return_value = None
         mock_session.__aenter__.return_value = mock_session
         mock_session_local.return_value.__aenter__.return_value = mock_session
@@ -1052,7 +1068,7 @@ class TestImportHashVerification:
         mock_get_membership.return_value = MagicMock(role="admin")
         mock_get_org.return_value = MagicMock()
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
         mock_session.execute.return_value.scalar_one_or_none.return_value = None
         mock_session.__aenter__.return_value = mock_session
         mock_session_local.return_value.__aenter__.return_value = mock_session
@@ -1106,7 +1122,7 @@ class TestImportHashVerification:
         mock_get_membership.return_value = MagicMock(role="admin")
         mock_get_org.return_value = MagicMock()
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
         mock_session.execute.return_value.scalar_one_or_none.return_value = None
         mock_session.__aenter__.return_value = mock_session
         mock_session_local.return_value.__aenter__.return_value = mock_session
@@ -1154,7 +1170,7 @@ class TestAuthBeforeFileRead:
         )
         mock_get_account.return_value = None
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
         mock_session.__aenter__.return_value = mock_session
         mock_session_local.return_value.__aenter__.return_value = mock_session
 
@@ -1200,7 +1216,7 @@ class TestAdminSecretAuth:
         mock_org = MockModel(id=org_id)
         mock_get_org.return_value = mock_org
 
-        mock_session = AsyncMock()
+        mock_session = _rls_aware_session()
 
         class FakeResult:
             def scalars(self):

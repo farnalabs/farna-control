@@ -1,0 +1,116 @@
+# Bundled Runner executor overlay for the ALL-IN-ONE compose release bundle
+# (FAR-2854).
+#
+# The release asset `farna-control-<version>-compose.tar.gz` ships
+# `docker-compose.prod.yml` (and an identical `docker-compose.yml`) that define
+# exactly three services: `postgres`, `redis` and one all-in-one
+# `farna-control` (API + nginx + both SAQ workers, per
+# deploy/supervisor/supervisord.conf). This file is the executor add-on for THAT
+# stack. It is NOT the repo-checkout overlay `deploy/compose/runner.yml`, which
+# configures `backend`, `saq-runner` and `saq-system` - services the packaged
+# stack does not define - so it must never be merged into the packaged stack.
+#
+# Opt-in is this file alone: nothing here applies unless you pass it.
+#
+#   docker compose -f docker-compose.prod.yml -f runner-all-in-one.yml up -d
+#
+# Enable it with the explicit BOTH-files form above and repeat both `-f` flags on
+# every later invocation (logs, ps, pull, up for an upgrade, down). The packaged
+# compose's image line is a literal release tag, so `docker compose up -d` on the
+# base file alone starts the same stack with the executor switched off.
+#
+# What the overlay adds:
+#
+#   1. `docker-socket-proxy` - the FILTERED Docker endpoint. Same digest-pinned
+#      linuxserver/socket-proxy image and the same 13-key allowlist as
+#      deploy/compose/runner.yml (the docker-marked harness asserts the two
+#      match key-for-key). It publishes NO host ports and mounts the engine
+#      socket read-only.
+#
+#   2. `FARNA_CONTROL_DOCKER_HOST` on the all-in-one `farna-control` service
+#      ONLY. That single container runs the API and BOTH SAQ workers
+#      (`saq-runs`, `saq-system`), and supervisord hands them the container env,
+#      so one setting covers every run-creation path. It is step 2 of the
+#      endpoint chain (FARNA_CONTROL_DOCKER_HOST -> DOCKER_HOST -> local
+#      socket); the raw socket stays a documented operator override.
+#
+#   3. `runner-workspace-network-holder` - a no-op that exists only so compose
+#      materialises the workspace bridge. Workspace containers are created by
+#      the provider attached to this network at create-time (`NetworkingConfig`),
+#      and compose does not create a network no service references. The network
+#      is declared with an explicit `name:` so a Compose project prefix cannot
+#      rename it - the environment profile's `workspace_network` expects that
+#      exact engine-side name.
+#
+# Workspaces join only the workspace network. They never join the default
+# compose network and never resolve the proxy (see
+# docs/security/bundled-runner-trust-boundary.md). The proxy stays on `default`.
+#
+# CI guard scope: no `privileged: true`, no host network/pid/ipc, no
+# `cap_add`, and the proxy publishes no host ports - asserted by
+# backend/tests/unit/scripts/test_compose_runner_all_in_one_overlay.py and the
+# compose-runner-overlay workflow.
+
+services:
+  docker-socket-proxy:
+    # FILTERED Docker endpoint (linuxserver/socket-proxy). Digest-pinned to the
+    # same build deploy/compose/runner.yml and deploy/compose/runner-ci.yml
+    # ship; a digest bump must move all three files together (the harness
+    # composition guard and this overlay's sibling test both assert equality).
+    image: lscr.io/linuxserver/socket-proxy@sha256:cba12c42b1df30a6446856028f5ab726e9d8921f1ea74be509216c5e41357d42
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Same per-category allowlist as deploy/compose/runner.yml - the executor
+      # must run against the REAL production config, not a widened variant.
+      # Derived mechanically from the backend's Docker API surface in
+      # docs/security/bundled-runner-trust-boundary.md#allowlist.
+      CONTAINERS: "1"
+      EXEC: "1"
+      IMAGES: "1"
+      PING: "1"
+      VERSION: "1"
+      INFO: "1"
+      # POST gates ALL non-GETs globally (the method gate is "GET or
+      # POST-flag"); container destroy needs it.
+      POST: "1"
+      # linuxserver's strictly-better deny-refinements.
+      ALLOW_ARCHIVE: "0"
+      ALLOW_EXPORT: "0"
+      ALLOW_LOGS: "0"
+      ALLOW_TOP: "0"
+      ALLOW_CHANGE: "0"
+      LOG_LEVEL: "info"
+    networks:
+      - default
+    # No `ports:` on purpose - the proxy is reachable only by the application
+    # container on the compose network. Never publish it.
+
+  farna-control:
+    environment:
+      FARNA_CONTROL_DOCKER_HOST: tcp://docker-socket-proxy:2375
+    # Start the endpoint before the app. `service_started` only orders startup;
+    # the proxy has no healthcheck of its own and is ready immediately.
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+
+  runner-workspace-network-holder:
+    # Network-reference holder only: it starts, exits 0 and stays exited. It
+    # costs one tiny pull and guarantees the workspace network exists before
+    # the first provision-by-API workspace start.
+    image: busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+    restart: "no"
+    entrypoint: ["true"]
+    networks:
+      - modulo-runner-workspace
+
+networks:
+  modulo-runner-workspace:
+    # Explicit `name:` pins the engine-side network name regardless of the
+    # compose -p / directory-derived project name, so the environment profile's
+    # `workspace_network` and the provider's create-time attach reference one
+    # stable name.
+    driver: bridge
+    name: modulo-runner-workspace

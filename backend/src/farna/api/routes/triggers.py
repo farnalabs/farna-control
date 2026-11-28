@@ -83,7 +83,7 @@ from farna.db.capacity import StorageExhaustedError
 from farna.db.crud.pipeline_snapshot import create_snapshot_from_live_graph
 from farna.db.crud.row_lock import set_mutation_row_lock_timeout
 from farna.db.crud.run import create_run
-from farna.db.crud.team_scope import account_team_scope_clause
+from farna.db.crud.team_scope import account_team_scope_clause, team_scope_clause
 from farna.db.crud.trigger import apply_trigger_event_cursor
 from farna.db.models.organisation import Organisation
 from farna.db.models.pipeline import Pipeline
@@ -668,6 +668,16 @@ async def list_triggers(
             await set_rls_user_context(session, principal.account_id, principal.org_role)
             base_filter = Trigger.organisation_id == principal.organisation_id
             trigger_filter = _trigger_type_and_pipeline_filters(base_filter, pipeline_id, trigger_type)
+            # ADR 070 §5 / FAR-681: a team-scoped key carries a HARD team
+            # boundary of its own. ``rls_team_isolation`` on the joined
+            # ``pipelines`` row filters on the KEY OWNER's memberships, so a
+            # key scoped to team A whose owner also belongs to team B would
+            # still see team B's triggers without this explicit clamp - the
+            # same ``team_scope_clause`` the MCP list tool passes as
+            # ``team_id``. Org-level pipelines (no owner team) stay visible.
+            team_id = getattr(principal, "team_id", None)
+            if team_id is not None:
+                trigger_filter.append(team_scope_clause(Pipeline.owner_team_id, team_id))
             if principal.org_role == "viewer":
                 trigger_filter.append(account_team_scope_clause(Pipeline.owner_team_id, principal.account_id))
 
@@ -1335,6 +1345,12 @@ async def create_trigger(
             trigger = Trigger(
                 organisation_id=principal.organisation_id,
                 pipeline_id=pipeline_id,
+                # ADR 070 Phase 1A: the trigger is part of the pipeline's live
+                # definition, so it inherits the pipeline's owner as read under
+                # the team gate above. A team owner needs no second read; when
+                # this is NULL (org-level) the listener re-reads once, because it
+                # cannot tell an explicit NULL from unset.
+                owner_team_id=pipeline_row.owner_team_id,
                 name=req.name,
                 trigger_type=req.trigger_type,
                 active=req.active,

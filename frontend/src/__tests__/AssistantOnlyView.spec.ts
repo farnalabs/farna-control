@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import AssistantOnlyView from '../views/AssistantOnlyView.vue'
+import StateTabs from '../components/shared/StateTabs.vue'
 import { useAssistantStore } from '../composables/useAssistantStore'
 import { useAssistantTabsStore } from '../composables/useAssistantTabsStore'
 import { api } from '@/lib/api/client'
@@ -271,6 +272,36 @@ describe('AssistantOnlyView', () => {
     expect(fetchPlanMock).toHaveBeenCalled()
   })
 
+  it('exposes the session and sub-tab bars as StateTabs tablists', async () => {
+    localStorage.setItem('assistant-active-session', 'session-1')
+    ;(api.GET as any).mockResolvedValue({ error: null, data: { items: [makeSession('session-1', 'Alpha')] } })
+    const tabsStore = useAssistantTabsStore()
+    tabsStore.tabs.push({ tabId: 'tab-1', sessionId: 'session-1' })
+    const wrapper = mount(AssistantOnlyView)
+    await flushPromises()
+
+    const sessionBar = wrapper.get('[data-testid="assistant-only-tab-bar"]')
+    // The session tabs carry a per-tab close button, so the tablist keeps its
+    // buttons out of its own subtree and claims them with aria-owns.
+    const sessionTablist = sessionBar.get('[role="tablist"]')
+    expect(sessionTablist.attributes('aria-label')).toBeTruthy()
+    expect(sessionTablist.attributes('aria-owns')).toContain(
+      wrapper.get('[data-testid="assistant-only-tab-tab-1"]').attributes('id'),
+    )
+    expect(sessionTablist.element.contains(wrapper.get('[data-testid="assistant-only-tab-tab-1"]').element)).toBe(false)
+    expect(wrapper.get('[data-testid="assistant-only-tab-tab-1"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="assistant-only-tab-tab-1"]').attributes('tabindex')).toBe('0')
+    expect(wrapper.get('[data-testid="assistant-only-tab-tab-1"]').attributes('aria-controls')).toBe('assistant-only-panel-chat')
+
+    const subBar = wrapper.get('[data-testid="assistant-only-subtab-bar"]')
+    expect(subBar.attributes('role')).toBe('tablist')
+    expect(subBar.attributes('aria-label')).toBeTruthy()
+    expect(subBar.attributes('aria-owns')).toBeUndefined()
+    expect(wrapper.get('[data-testid="assistant-only-subtab-chat"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="assistant-only-subtab-chat"]').attributes('aria-controls')).toBe('assistant-only-panel-chat')
+    expect(wrapper.get('[data-testid="assistant-only-subtab-skills"]').attributes('tabindex')).toBe('-1')
+  })
+
   it('renders a streaming indicator on the active tab', async () => {
     localStorage.setItem('assistant-active-session', 'session-1')
     ;(api.GET as any).mockResolvedValue({ error: null, data: { items: [makeSession('session-1', 'Alpha')], total: 1 } })
@@ -297,5 +328,60 @@ describe('AssistantOnlyView', () => {
     await nextTick()
 
     expect(wrapper.find('[data-testid="assistant-only-tab-tab-1"]').text()).toContain('Session #1')
+  })
+
+  it('ignores sub-tab and session-tab ids that are not in the current state', async () => {
+    localStorage.setItem('assistant-active-session', 'session-1')
+    ;(api.GET as any).mockResolvedValue({ error: null, data: { items: [makeSession('session-1', 'Alpha')], total: 1 } })
+    const tabsStore = useAssistantTabsStore()
+    tabsStore.tabs.push({ tabId: 'tab-1', sessionId: 'session-1' })
+    const wrapper = mount(AssistantOnlyView)
+    await flushPromises()
+    await nextTick()
+
+    const resumeSpy = vi.spyOn(tabsStore, 'resumeTab').mockResolvedValue(undefined)
+    const closeSpy = vi.spyOn(tabsStore, 'closeTab')
+    const vm = wrapper.vm as unknown as { subTab: string }
+    vm.subTab = 'skills'
+    await nextTick()
+
+    const [sessionBar, subBar] = wrapper.findAllComponents(StateTabs)
+
+    // An unknown sub-tab id is not a declared key, so the selection is ignored.
+    subBar.vm.$emit('update:modelValue', 'not-a-sub-tab')
+    await nextTick()
+    expect(vm.subTab).toBe('skills')
+
+    // An unknown session-tab id matches no open tab, so nothing is resumed.
+    sessionBar.vm.$emit('update:modelValue', 'tab-unknown')
+    await nextTick()
+    expect(resumeSpy).not.toHaveBeenCalled()
+
+    // A close for a tab that has already left the store is ignored.
+    const closeButton = wrapper.get('[data-testid="assistant-only-tab-close-tab-1"]')
+    tabsStore.tabs.splice(0, tabsStore.tabs.length)
+    await closeButton.trigger('click')
+    expect(closeSpy).not.toHaveBeenCalled()
+  })
+
+  it('ignores an unknown sub-tab, session-tab or close id from a caller', async () => {
+    ;(api.GET as any).mockResolvedValue({ error: null, data: { items: [], total: 0 } })
+    const wrapper = mount(AssistantOnlyView)
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      subTab: string
+      onSubTabSelected: (id: string) => void
+      onSessionTabSelected: (id: string) => void
+      closeTabById: (id: string) => void
+    }
+
+    vm.onSubTabSelected('not-a-sub-tab')
+    expect(vm.subTab).toBe('chat')
+
+    // Unknown ids must not resume or close anything, and must not throw.
+    vm.onSessionTabSelected('not-a-tab')
+    vm.closeTabById('not-a-tab')
+    wrapper.unmount()
   })
 })

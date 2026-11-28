@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import enum
 import gc
 import json
 import logging
@@ -133,6 +134,15 @@ def pytest_terminal_summary(
             terminalreporter.write_line(f"  {nodeid}: {detail}", red=True)
         terminalreporter.write_line(
             f"  {len(_leaked_asyncpg_connections)} unclosed asyncpg connection(s) were attributed to the test that leaked them and quarantined so they cannot fail an unrelated test. Fix the leaking session/engine; set FARNA_CONTROL_INTEGRATION_STRICT_CONNECTION_LEAKS=1 to make them a hard failure.",
+            yellow=True,
+        )
+
+    if _quarantined_transport_warnings:
+        terminalreporter.section("Integration suite — unclosed asyncio transports quarantined with their connection leak")
+        for nodeid, detail in _quarantined_transport_warnings:
+            terminalreporter.write_line(f"  {nodeid}: {detail}", red=True)
+        terminalreporter.write_line(
+            f"  {len(_quarantined_transport_warnings)} unclosed asyncio transport warning(s) were quarantined as derived symptoms of a connection leak quarantined for the same test. Fix the connection leak; set FARNA_CONTROL_INTEGRATION_STRICT_CONNECTION_LEAKS=1 to make a leak a hard failure.",
             yellow=True,
         )
 
@@ -627,6 +637,19 @@ async def cron_helpers_rls_engine(non_superuser_role: str) -> Generator[None, No
 # a detected leak fail the leaking test outright (the deterministic replacement
 # for the old random-attribution failure) once the remaining sites are fixed.
 #
+# The connection is not the only object a leak releases. The asyncpg connection's
+# socket transport reports itself the same way (``BaseTransport.__del__`` warns
+# ``unclosed transport <_SelectorSocketTransport fd=N>``), and because the
+# transport was only reachable through the connection it surfaces in the SAME
+# teardown window. Left unclassified, that warning was re-raised as a
+# ``PytestUnraisableExceptionWarning`` and failed the run even though the
+# connection leak it derives from had just been quarantined — the quarantine was
+# incomplete. ``_leak_disposition`` therefore quarantines an ``unclosed
+# transport`` warning as well, but ONLY for an item that also quarantined a
+# connection leak and ONLY outside strict mode: an unrelated transport leak (a
+# client nothing closes, e.g. a process-global redis client) must still fail the
+# test that owns it.
+#
 # The summary lives on the CONTROLLER process, but under pytest-xdist (how CI
 # and the deploy gate run the integration suite) the concrete test — and this
 # hook — execute on a worker, whose ``logging``/``print`` output xdist swallows.
@@ -634,13 +657,44 @@ async def cron_helpers_rls_engine(non_superuser_role: str) -> Generator[None, No
 # carried from the worker to the controller on the item's teardown report
 # (``user_properties``, which xdist serialises), so the controller's terminal
 # summary can name the leaking test in every run mode.
-_LEAK_PROPERTY = "modulo.unclosed_asyncpg_connection"
+_LEAK_PROPERTY = "farna_control.unclosed_asyncpg_connection"
+_LEAK_TRANSPORT_PROPERTY = "farna_control.quarantined_unclosed_transport"
 _leaked_asyncpg_connections: list[tuple[str, str]] = []
+_quarantined_transport_warnings: list[tuple[str, str]] = []
 # Leaks recorded during one item's teardown, moved onto that item's report by
 # ``pytest_runtest_makereport``. Nodeid-keyed because the teardown hook and the
 # report hook are separate calls.
 _leaks_by_nodeid: dict[str, list[str]] = {}
+_transports_by_nodeid: dict[str, list[str]] = {}
 _leak_logger = logging.getLogger("farna_control.tests.integration.connection_leaks")
+
+#: asyncpg's ``Connection.__del__`` message. Matched by exact prefix so no
+#: other ``ResourceWarning`` source can be absorbed by the quarantine.
+_ASYNCPG_UNCLOSED_CONNECTION_PREFIX = "unclosed connection <asyncpg.connection.Connection"
+#: asyncio's ``BaseTransport.__del__`` message (``asyncio/transports.py``).
+#: A leaked asyncpg connection's socket transport reports itself here, so the
+#: warning is a DERIVED symptom of a connection leak, never an independent leak.
+_ASYNCIO_UNCLOSED_TRANSPORT_PREFIX = "unclosed transport <"
+
+
+class _LeakShape(enum.Enum):
+    """The two unraisable shapes the connection-leak quarantine owns."""
+
+    ASYNCPG_CONNECTION = "asyncpg_connection"
+    DERIVED_TRANSPORT = "derived_transport"
+
+
+class _LeakDisposition(enum.Enum):
+    """What one item's teardown does with an unraisable exception."""
+
+    #: Recorded against the leaking test (and, in strict mode, failed there).
+    QUARANTINE_CONNECTION = "quarantine_connection"
+    #: Recorded as a derived symptom of a connection leak already quarantined
+    #: for this item; never raised, so it cannot fail a run on its own.
+    QUARANTINE_TRANSPORT = "quarantine_transport"
+    #: Not ours: raised as a ``PytestUnraisableExceptionWarning``, exactly as
+    #: pytest would have raised it.
+    RAISE = "raise"
 
 
 def _strict_connection_leaks() -> bool:
@@ -648,16 +702,49 @@ def _strict_connection_leaks() -> bool:
     return os.environ.get("FARNA_CONTROL_INTEGRATION_STRICT_CONNECTION_LEAKS", "").strip().lower() in {"1", "true", "yes"}
 
 
-def _is_unclosed_asyncpg_connection(unraisable: Any) -> bool:
-    """True for the unraisable asyncpg raises from ``Connection.__del__``.
+def _classify_unraisable_leak(unraisable: Any) -> _LeakShape | None:
+    """Return which leak shape *unraisable* is, or None when it is unrelated.
 
     CPython reports an error raised inside ``__del__`` with the *``__del__``
     function*, not the instance, as ``object`` — the leaked instance itself is
-    unreachable from the hook (it is already being collected), so the event is
-    identified by its type and message instead.
+    unreachable from the hook (it is already being collected), so both shapes
+    are identified by their exception type and message prefix instead.
     """
     exc_value = getattr(unraisable, "exc_value", None)
-    return isinstance(exc_value, ResourceWarning) and str(exc_value).startswith("unclosed connection <asyncpg.connection.Connection")
+    if not isinstance(exc_value, ResourceWarning):
+        return None
+    message = str(exc_value)
+    if message.startswith(_ASYNCPG_UNCLOSED_CONNECTION_PREFIX):
+        return _LeakShape.ASYNCPG_CONNECTION
+    if message.startswith(_ASYNCIO_UNCLOSED_TRANSPORT_PREFIX):
+        return _LeakShape.DERIVED_TRANSPORT
+    return None
+
+
+def _leak_disposition(
+    unraisable: Any,
+    *,
+    strict: bool,
+    has_quarantined_connection: bool,
+) -> _LeakDisposition:
+    """Decide what the teardown quarantine does with *unraisable*.
+
+    A connection leak is always recorded; strict mode additionally fails the
+    item once the quarantine has finished. A derived ``unclosed transport``
+    warning is quarantined only when strict mode is off AND this item also
+    quarantined a connection leak: the transport cannot be tied to a specific
+    connection (both objects are already unreachable when the hook fires), so a
+    transport warning with no connection leak in the same teardown window is a
+    leak of its own and must still fail the test that owns it.
+
+    Every other unraisable is left untouched and raised as pytest would raise it.
+    """
+    shape = _classify_unraisable_leak(unraisable)
+    if shape is _LeakShape.ASYNCPG_CONNECTION:
+        return _LeakDisposition.QUARANTINE_CONNECTION
+    if shape is _LeakShape.DERIVED_TRANSPORT and not strict and has_quarantined_connection:
+        return _LeakDisposition.QUARANTINE_TRANSPORT
+    return _LeakDisposition.RAISE
 
 
 def _record_unclosed_asyncpg_connection(item: pytest.Item, unraisable: Any) -> None:
@@ -666,6 +753,23 @@ def _record_unclosed_asyncpg_connection(item: pytest.Item, unraisable: Any) -> N
     _leaks_by_nodeid.setdefault(item.nodeid, []).append(detail)
     _leak_logger.error(
         "Unclosed asyncpg connection surfaced in the teardown of %s: %s. Close the session/connection that owns it (per-test engines must use NullPool or be disposed on the loop that created them).",
+        item.nodeid,
+        detail,
+    )
+
+
+def _record_quarantined_transport(item: pytest.Item, unraisable: Any) -> None:
+    """Record a derived transport warning without raising it.
+
+    The actionable record is the connection leak logged by
+    ``_record_unclosed_asyncpg_connection`` for the same item; this keeps the
+    derived symptom visible in the session summary instead of dropping it
+    silently.
+    """
+    detail = str(unraisable.exc_value)
+    _transports_by_nodeid.setdefault(item.nodeid, []).append(detail)
+    _leak_logger.warning(
+        "Unclosed asyncio transport surfaced in the teardown of %s alongside a quarantined asyncpg connection leak: %s. It is a derived symptom of that leak; fix the leaking session/engine.",
         item.nodeid,
         detail,
     )
@@ -684,6 +788,8 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
         return report
     for detail in _leaks_by_nodeid.pop(item.nodeid, []):
         report.user_properties.append((_LEAK_PROPERTY, detail))
+    for detail in _transports_by_nodeid.pop(item.nodeid, []):
+        report.user_properties.append((_LEAK_TRANSPORT_PROPERTY, detail))
     return report
 
 
@@ -693,6 +799,8 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     for name, value in report.user_properties:
         if name == _LEAK_PROPERTY:
             _leaked_asyncpg_connections.append((report.nodeid, str(value)))
+        elif name == _LEAK_TRANSPORT_PROPERTY:
+            _quarantined_transport_warnings.append((report.nodeid, str(value)))
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
@@ -703,26 +811,37 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
     capture spans every fixture finaliser for the test, and the forced cyclic
     collection runs once they have all finished.
 
-    The hook is CHAINED, not replaced: only asyncpg-shaped events are captured
-    and consumed here; every other unraisable is passed straight to pytest's
-    own hook so it lands in pytest's per-session deque *before* the ``trylast``
-    ``collect_unraisable`` drains it inside THIS item's teardown. Replacing the
-    hook outright left the deque empty at the drain point and forwarded the
-    events afterwards, which made pytest raise them against the NEXT (innocent)
-    test at setup — the exact misattribution this hook exists to remove.
+    The hook is CHAINED, not replaced: only the two quarantine-owned shapes are
+    captured and consumed here; every other unraisable is passed straight to
+    pytest's own hook so it lands in pytest's per-session deque *before* the
+    ``trylast`` ``collect_unraisable`` drains it inside THIS item's teardown.
+    Replacing the hook outright left the deque empty at the drain point and
+    forwarded the events afterwards, which made pytest raise them against the
+    NEXT (innocent) test at setup — the exact misattribution this hook exists to
+    remove.
+
+    A transport warning is captured but NOT decided here: whether it is a derived
+    symptom of a connection leak can only be answered once the forced collection
+    below has finished. Captured-but-unresolved events are resolved by
+    ``_leak_disposition`` after the drain, so unavailable attribution leaves the
+    warning raised rather than swallowed.
 
     The forced ``gc.collect()`` runs after that drain point, so events it
-    surfaces are captured locally and re-emitted below: asyncpg leaks are
+    surfaces are captured locally and resolved below: quarantined shapes are
     attributed to this item, and any other unraisable is raised as a
     ``PytestUnraisableExceptionWarning`` here rather than being left in the
     deque for the next item.
     """
     leaked: list[Any] = []
+    suspect_transports: list[Any] = []
     previous_hook = sys.unraisablehook
 
     def chained(unraisable: Any) -> None:
-        if _is_unclosed_asyncpg_connection(unraisable):
+        shape = _classify_unraisable_leak(unraisable)
+        if shape is _LeakShape.ASYNCPG_CONNECTION:
             leaked.append(unraisable)
+        elif shape is _LeakShape.DERIVED_TRANSPORT:
+            suspect_transports.append(unraisable)
         else:
             previous_hook(unraisable)
 
@@ -736,8 +855,11 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
         collateral: list[Any] = []
 
         def collect_after_drain(unraisable: Any) -> None:
-            if _is_unclosed_asyncpg_connection(unraisable):
+            shape = _classify_unraisable_leak(unraisable)
+            if shape is _LeakShape.ASYNCPG_CONNECTION:
                 leaked.append(unraisable)
+            elif shape is _LeakShape.DERIVED_TRANSPORT:
+                suspect_transports.append(unraisable)
             else:
                 collateral.append(unraisable)
 
@@ -748,8 +870,20 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
         finally:
             sys.unraisablehook = previous_hook
 
-        for unraisable in leaked:
-            _record_unclosed_asyncpg_connection(item, unraisable)
+        strict = _strict_connection_leaks()
+        has_quarantined_connection = bool(leaked)
+        for unraisable in (*leaked, *suspect_transports):
+            disposition = _leak_disposition(
+                unraisable,
+                strict=strict,
+                has_quarantined_connection=has_quarantined_connection,
+            )
+            if disposition is _LeakDisposition.QUARANTINE_CONNECTION:
+                _record_unclosed_asyncpg_connection(item, unraisable)
+            elif disposition is _LeakDisposition.QUARANTINE_TRANSPORT:
+                _record_quarantined_transport(item, unraisable)
+            else:
+                collateral.append(unraisable)
         for unraisable in collateral:
             warnings.warn(
                 pytest.PytestUnraisableExceptionWarning(str(unraisable.exc_value)),
@@ -760,7 +894,7 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
         # ``teardown_completed`` is only True when the wrapped hook chain
         # returned normally, so any propagating exception (including
         # KeyboardInterrupt/SystemExit) leaves it False and keeps its failure.
-        if leaked and teardown_completed and _strict_connection_leaks():
+        if leaked and teardown_completed and strict:
             detail = str(leaked[0].exc_value)
             pytest.fail(
                 f"unclosed asyncpg connection leaked by {item.nodeid}: {detail}",
@@ -1143,6 +1277,9 @@ async def integration_client(db_url: str, app_engine: AsyncEngine) -> AsyncClien
     app.dependency_overrides.clear()
 
 
+_log = logging.getLogger(__name__)
+
+
 async def dispose_process_global_engines() -> None:
     """Dispose and clear every process-global async-engine cache.
 
@@ -1164,10 +1301,16 @@ async def dispose_process_global_engines() -> None:
     Call this from the coroutine that runs on the private loop, BEFORE the loop
     closes. Resetting each cache makes the next caller recreate an engine bound
     to the then-current loop and database URL.
+
+    The one process-global ``redis.asyncio`` client is closed here too: the SAQ
+    enqueue path (``farna.core.dispatch._enqueue_saq``) creates it lazily in a
+    module global and nothing ever closes it, so without this it leaks a socket
+    transport past the end of the suite (see the block at the end of this
+    function).
     """
     from farna.api import dependencies as api_dependencies
     from farna.cli import break_glass
-    from farna.core import cron_helpers, saq_worker
+    from farna.core import cron_helpers, dispatch, saq_worker
     from farna.core.error_tracking import saq_hooks
     from farna.core.reports import scheduler
     from farna.db import session as db_session
@@ -1215,3 +1358,34 @@ async def dispose_process_global_engines() -> None:
     break_glass._bg_engine_url = None
     break_glass._bg_factory = None
     break_glass._bg_factory_url = None
+
+    # ``farna.core.dispatch`` lazily creates ONE process-global redis client in
+    # ``_enqueue_saq`` (the real trigger/reconcile enqueue path) and never closes
+    # it. A module global keeps that client - and its open socket transport -
+    # alive until interpreter shutdown, so the session loop closes underneath a
+    # live connection and the transport's ``__del__`` emits
+    # ``ResourceWarning: unclosed transport <_SelectorSocketTransport fd=N>``.
+    # That warning has no asyncpg connection behind it, so the teardown
+    # quarantine deliberately does not absorb it (``_leak_disposition`` only
+    # quarantines a transport warning for an item that also quarantined a
+    # connection leak) - it would land on whichever item's teardown runs last
+    # and fail it. Close the client on the live loop, here, so the socket is
+    # really closed rather than leaked into the next suite or the interpreter
+    # shutdown.
+    #
+    # The lock is re-created too: ``asyncio.Lock`` binds to the first loop that
+    # acquires it, so a client created on a private ``asyncio.run`` loop would
+    # otherwise leave a lock bound to a closed loop. Failing to close is logged,
+    # never raised - this helper runs in teardown paths that must not mask a real
+    # failure - and the global is reset either way so the next caller reconnects.
+    shared_redis = dispatch._shared_redis
+    if shared_redis is not None:
+        try:
+            await shared_redis.aclose()
+        except Exception:
+            _log.warning(
+                "dispose_process_global_engines: closing the shared dispatch redis client failed; resetting it so the next caller reconnects",
+                exc_info=True,
+            )
+    dispatch._shared_redis = None
+    dispatch._shared_redis_lock = asyncio.Lock()

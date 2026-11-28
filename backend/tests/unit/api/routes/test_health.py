@@ -710,6 +710,40 @@ class TestCheckStaleRunRecovery:
         assert result.detail is not None
         assert "unavailable" in result.detail
 
+    @pytest.mark.asyncio
+    async def test_deferred_arm_reads_ok_and_names_the_deferral(self) -> None:
+        """FAR-2782: a tick that DEFERRED its SAQ zero-progress arm (the
+        backend's boot-time checkpointer DDL had not created ``checkpoints``
+        yet) ran — only one arm could not — so it is a healthy sweep reading.
+        The deferral is named in the detail, not hidden, and the missing schema
+        is the gating ``checkpointer`` check's signal to report."""
+        fake = _FakeStatsRedis(blob=_srr_payload(deferred="saq zero-progress arm not run yet (checkpointer_schema_missing)").encode())
+        with (
+            patch("farna.api.routes.health.get_settings", return_value=_make_settings()),
+            patch("farna.api.routes.health.aioredis.Redis.from_url", return_value=fake),
+        ):
+            result = await _check_stale_run_recovery()
+        assert result.status == "ok"
+        assert result.detail is not None
+        assert "recovered=2" in result.detail
+        assert "deferred: saq zero-progress arm not run yet (checkpointer_schema_missing)" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_error_still_wins_over_a_deferred_marker(self) -> None:
+        """A deferral must never soften a real failure: a payload carrying BOTH
+        stays degraded and surfaces the error (the FAR-824 doctrine — a cron
+        that runs but fails must not read like a healthy one)."""
+        fake = _FakeStatsRedis(blob=_srr_payload(error="sweep_failed (ProgrammingError: boom)", deferred="whatever").encode())
+        with (
+            patch("farna.api.routes.health.get_settings", return_value=_make_settings()),
+            patch("farna.api.routes.health.aioredis.Redis.from_url", return_value=fake),
+        ):
+            result = await _check_stale_run_recovery()
+        assert result.status == "degraded"
+        assert result.detail is not None
+        assert "sweep reported error" in result.detail
+        assert "sweep_failed" in result.detail
+
 
 def _sr_payload(**overrides: Any) -> str:
     payload: dict[str, Any] = {

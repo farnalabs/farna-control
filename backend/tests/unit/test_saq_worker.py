@@ -1618,6 +1618,74 @@ class TestSystemJobDelegates:
         assert "sweep_stats_persist_failed" in caplog.text
 
     @pytest.mark.asyncio
+    async def test_stale_run_recovery_defers_the_arm_before_the_checkpointer_schema(self) -> None:
+        """FAR-2782: on a fresh install this worker ticks before the backend's
+        boot-time checkpointer DDL has created ``checkpoints``. The wrapper must
+        hand the probe's answer to the sweep and persist a DEFERRAL — never the
+        phantom ``sweep_failed (... relation "checkpoints" does not exist)`` that
+        made a ten-minute-old install read degraded for the whole stale window."""
+        import json as _json
+
+        redis_client = AsyncMock()
+        sweep_result = {
+            "never_dispatched_swept": 0,
+            "saq_zero_progress_swept": 0,
+            "zero_progress_deferred": "checkpointer_schema_missing",
+        }
+        with (
+            patch.object(sw, "_get_async_engine", return_value=MagicMock()),
+            patch.object(sw, "get_settings", return_value=_settings()),
+            patch(
+                "farna.core.pipeline_execution.langgraph_checkpoint_schema_present",
+                new_callable=AsyncMock,
+                return_value=False,
+            ) as probe,
+            patch(
+                "farna.core.pipeline_execution.stale_run_recovery_sweep",
+                new_callable=AsyncMock,
+                return_value=sweep_result,
+            ) as sweep,
+            patch("redis.asyncio.Redis.from_url", return_value=redis_client),
+        ):
+            result = await sw.stale_run_recovery({})
+
+        assert result is sweep_result
+        probe.assert_awaited_once()
+        assert sweep.await_args.kwargs["checkpoint_schema_present"] is False
+        stats = _json.loads(redis_client.set.await_args.args[1])
+        assert "error" not in stats
+        assert stats["deferred"] == "saq zero-progress arm not run yet (checkpointer_schema_missing)"
+
+    @pytest.mark.asyncio
+    async def test_stale_run_recovery_keeps_no_deferral_once_the_schema_exists(self) -> None:
+        """The deferral is bounded by the table's existence: a tick that ran the
+        arm carries no ``deferred`` marker, so a healthy install is unchanged."""
+        import json as _json
+
+        redis_client = AsyncMock()
+        with (
+            patch.object(sw, "_get_async_engine", return_value=MagicMock()),
+            patch.object(sw, "get_settings", return_value=_settings()),
+            patch(
+                "farna.core.pipeline_execution.langgraph_checkpoint_schema_present",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "farna.core.pipeline_execution.stale_run_recovery_sweep",
+                new_callable=AsyncMock,
+                return_value={"saq_zero_progress_swept": 1, "zero_progress_deferred": None},
+            ) as sweep,
+            patch("redis.asyncio.Redis.from_url", return_value=redis_client),
+        ):
+            await sw.stale_run_recovery({})
+
+        assert sweep.await_args.kwargs["checkpoint_schema_present"] is True
+        stats = _json.loads(redis_client.set.await_args.args[1])
+        assert "deferred" not in stats
+        assert "error" not in stats
+
+    @pytest.mark.asyncio
     async def test_slot_reconciliation_delegates_and_persists_stats(self) -> None:
         """FAR-604 F6: the slot-reconciliation wrapper persists a liveness
         stats key (last_run_at + released counts + TTL) every tick so

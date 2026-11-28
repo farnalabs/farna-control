@@ -26,7 +26,9 @@ MACOS_INSTALLER_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "macos-installe
 STAPLE_HELPER = REPO_ROOT / "scripts" / "macos" / "staple-and-verify.sh"
 
 _MATRIX_START = "docker-upgrade-rollback:"
-_PEN_TEST_START = "pen-test:"
+# The fuzz leg is the job after the matrix (renamed from `pen-test` when it became
+# a two-pass matrix job in FAR-2800); it is also the boundary of the matrix text.
+_FUZZ_JOB_START = "rc-fuzz:"
 _PREDECESSOR_START = "Resolve the previous published immutable bundle tag"
 _MATRIX_RUN_START = "Run the Docker upgrade / failure / rollback matrix"
 
@@ -58,7 +60,7 @@ def _rc_validate_text() -> str:
 
 def _rc_validate_matrix_text() -> str:
     workflow = _rc_validate_text()
-    return workflow[workflow.index(_MATRIX_START) : workflow.index(_PEN_TEST_START)]
+    return workflow[workflow.index(_MATRIX_START) : workflow.index(_FUZZ_JOB_START)]
 
 
 def _rc_validate_step(step_name: str) -> dict[str, Any]:
@@ -167,21 +169,21 @@ def test_ga_release_uses_product_title_while_tag_stays_machine_facing() -> None:
     assert '--title "$GA_TAG"' not in promotion
 
 
-def test_rc_validation_runs_the_docker_acceptance_matrix_before_pen_test() -> None:
+def test_rc_validation_runs_the_docker_acceptance_matrix_before_the_fuzz_leg() -> None:
     workflow = _rc_validate_text()
     matrix_start = workflow.index(_MATRIX_START)
-    pen_test_start = workflow.index(_PEN_TEST_START)
-    matrix = workflow[matrix_start:pen_test_start]
+    fuzz_start = workflow.index(_FUZZ_JOB_START)
+    matrix = workflow[matrix_start:fuzz_start]
 
     assert "needs: [clean-host-compose]" in matrix
-    assert "needs: [clean-host-compose, docker-upgrade-rollback]" in workflow[pen_test_start:]
+    assert "needs: [clean-host-compose, docker-upgrade-rollback]" in workflow[fuzz_start:]
     assert "scripts/verify_compose_upgrade_rollback.py" in matrix
     assert '--old-tag "$OLD_TAG"' in matrix
     assert '--new-tag "$RC_TAG"' in matrix
     assert "alpha-docker-upgrade-rollback-${{ github.run_id }}" in matrix
     assert "scripts/render_validation_compose.py" in matrix
     assert "packaged compose asset is intentionally hard-pinned to RC_TAG" in matrix
-    assert matrix_start < pen_test_start
+    assert matrix_start < fuzz_start
 
 
 def test_rc_validation_renders_matrix_compose_without_a_concrete_tag() -> None:
@@ -881,7 +883,7 @@ def test_macos_staple_retry_records_and_honours_a_completion_marker() -> None:
     resolve_script = resolve["run"]
 
     # The marker is honoured in the LINUX resolve job, so a completed release
-    # never spawns a paid macOS runner on the 30-minute schedule.
+    # never spawns a paid macOS runner on the 3-hourly schedule.
     assert workflow["jobs"]["resolve-target"]["runs-on"] == "ubuntu-latest"
     assert "MACOS_STAPLED.json" in resolve_script
     assert 'completed="true"' in resolve_script
@@ -892,7 +894,7 @@ def test_macos_staple_retry_records_and_honours_a_completion_marker() -> None:
     # Regression pin for the short-circuit. `architectures="` alone is vacuous:
     # it also matches the initialiser at the top of the script, so it kept
     # passing after the completion-path reset was deleted - which silently
-    # restored the paid-macos-job-every-30-minutes behaviour. Pin the reset
+    # restored the paid-macos-job-every-3-hours behaviour. Pin the reset
     # INSIDE the completion branch, and pin the job guard that consumes it.
     completion_branch = _completion_branch(resolve_script)
     for reset in ('version=""', 'release_tag=""', 'architectures=""', 'run_id=""'):
@@ -1831,13 +1833,23 @@ def _fake_gh(
     jobs_after_dispatch: dict[str, list[dict[str, Any]]] | None = None,
     list_sequence: list[list[dict[str, Any]]] | None = None,
     list_returncode: int = 0,
+    list_exception: Exception | None = None,
     create_returncode: int = 0,
+    delete_returncode: int = 0,
+    delete_returncodes: list[int] | None = None,
+    delete_stderr: str = "",
     existing_tags: list[str] | None = None,
 ) -> Any:
     """Stand-in for the ``gh`` CLI the proof shells out to.
 
     ``list_sequence`` (when supplied) is consumed one entry per ``gh run list``
     call, which is how a test models a run that changes state between polls.
+    ``delete_returncode`` / ``delete_returncodes`` / ``delete_stderr`` model the
+    DELETE of the temporary tag: the default succeeds, while a non-zero code
+    models GitHub answering a missing ref with 404/422 or a genuine failure. A
+    ``delete_returncodes`` list supplies one code per successive attempt.
+    ``list_exception`` makes a ``gh run list`` call raise, modelling an
+    unexpected (non-``SystemExit``) failure inside the proof loop.
     """
     dispatched = [False]
     sequence = list(list_sequence) if list_sequence is not None else None
@@ -1848,6 +1860,12 @@ def _fake_gh(
             if create_returncode != 0:
                 return SimpleNamespace(returncode=create_returncode, stdout="", stderr="gh: HTTP 502")
             return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+        if args[:3] == ("api", "-X", "DELETE"):
+            returncode = delete_returncode
+            if delete_returncodes is not None:
+                returncode = delete_returncodes.pop(0) if delete_returncodes else 0
+            stderr = delete_stderr if returncode != 0 else ""
+            return SimpleNamespace(returncode=returncode, stdout="", stderr=stderr)
         if args[:2] == ("api", "-X"):
             return SimpleNamespace(returncode=0, stdout="{}", stderr="")
         if args[0] == "api" and any("matching-refs" in arg for arg in args):
@@ -1857,6 +1875,8 @@ def _fake_gh(
             dispatched[0] = True
             return SimpleNamespace(returncode=0, stdout="", stderr="")
         if args[:3] == ("run", "list", "--workflow"):
+            if list_exception is not None:
+                raise list_exception
             if list_returncode != 0:
                 return SimpleNamespace(returncode=list_returncode, stdout="", stderr="gh: API unavailable")
             if sequence is not None:
@@ -1879,19 +1899,31 @@ def _fake_gh(
     return gh
 
 
+def _configure_proof_env(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    max_wait_seconds: int = 2,
+    backoff_seconds: str = "0",
+) -> None:
+    monkeypatch.setenv("GITHUB_REPOSITORY", "farnalabs/modulo")
+    monkeypatch.setenv("GITHUB_RUN_ID", "4242")
+    monkeypatch.setenv("SCHEMA_GATE_POLL_INTERVAL_SECONDS", "1")
+    monkeypatch.setenv("SCHEMA_GATE_MAX_WAIT_SECONDS", str(max_wait_seconds))
+    # FAR-2720: no real backoff between DELETE retries unless a test asks for it.
+    monkeypatch.setenv("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", backoff_seconds)
+
+
 def _run_schema_proof(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     gh: Any,
     *,
     max_wait_seconds: int = 2,
+    backoff_seconds: str = "0",
 ) -> tuple[int, str]:
     module = _schema_proof_module(tmp_path)
     monkeypatch.setattr(module, "gh", gh)
-    monkeypatch.setenv("GITHUB_REPOSITORY", "farnalabs/modulo")
-    monkeypatch.setenv("GITHUB_RUN_ID", "4242")
-    monkeypatch.setenv("SCHEMA_GATE_POLL_INTERVAL_SECONDS", "1")
-    monkeypatch.setenv("SCHEMA_GATE_MAX_WAIT_SECONDS", str(max_wait_seconds))
+    _configure_proof_env(monkeypatch, max_wait_seconds=max_wait_seconds, backoff_seconds=backoff_seconds)
     stdout = io.StringIO()
     with redirect_stdout(stdout):
         try:
@@ -1947,12 +1979,16 @@ def test_release_schema_freshness_proof_is_wired_into_both_jobs() -> None:
 
     step = _step(workflow, "schema-gate", _SCHEMA_PROOF_STEPS["schema-gate"])
     assert step["if"] == "inputs.mode != 'dry-run'"
-    assert step["env"]["TARGET_SHA"] == "${{ github.sha }}"
+    # FAR-2752: the proof consumes the ONE resolved release target rather than
+    # github.sha, and the release job's proof consumes the same output.
+    assert workflow["jobs"]["schema-gate"]["needs"] == ["resolve-target"]
+    assert step["env"]["TARGET_SHA"] == "${{ needs.resolve-target.outputs.target_sha }}"
 
     release_step = _step(workflow, "release", _SCHEMA_PROOF_STEPS["release"])
     assert release_step["id"] == "schema-freshness"
     assert release_step["env"]["MODE"] == "${{ inputs.mode }}"
     assert release_step["env"]["CUT_SHA"] == "${{ steps.cut-commit.outputs.cut_sha }}"
+    assert release_step["env"]["TARGET_SHA"] == "${{ needs.resolve-target.outputs.target_sha }}"
 
 
 def test_release_schema_freshness_proof_dispatches_ci_for_the_exact_commit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2124,6 +2160,231 @@ def test_release_schema_freshness_proof_fails_when_the_tag_was_not_created(tmp_p
     assert code == 1
     assert "::error::Could not create the temporary CI-verification tag" in stdout
     assert not _dispatches(calls)
+
+
+def test_release_schema_freshness_proof_treats_an_absent_ref_delete_as_clean(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: GitHub answers a DELETE of a ref that never existed (or was
+    # already reclaimed by the always-run cleanup job) with 422 "Reference does
+    # not exist". That is absence, not a leak: the proof must finish cleanly
+    # with no ::warning:: and no ::error::, rather than falsely warning an
+    # operator about a tag that was already gone.
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        runs_after_dispatch=[_SCHEMA_GREEN_RUN],
+        jobs_after_dispatch=_SCHEMA_GREEN_JOBS,
+        delete_returncode=1,
+        delete_stderr="gh: Reference does not exist (HTTP 422)",
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 0, stdout
+    assert "::warning::" not in stdout
+    assert "::error::" not in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert deletes, "the proof must still attempt to delete the temporary tag"
+
+
+def test_release_schema_freshness_proof_fails_loudly_when_the_tag_survives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: a non-zero DELETE that does NOT mean "absent", with the tag
+    # still listed on origin after both attempts, is a real leak. A leaked
+    # ci-verify-* tag is not inert - an unfiltered describe could pick it as
+    # the changelog base - so the proof must fail loudly, not warn.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        runs_after_dispatch=[_SCHEMA_GREEN_RUN],
+        jobs_after_dispatch=_SCHEMA_GREEN_JOBS,
+        delete_returncode=1,
+        delete_stderr="gh: HTTP 502",
+        existing_tags=[tag],
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 1, stdout
+    assert "::error::Could not delete the temporary CI-verification tag " + tag in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) >= 2, "the proof must retry the delete before failing loudly"
+
+
+def test_release_schema_freshness_proof_treats_a_missing_tag_delete_as_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: when an existing completed run already proves the gate, no tag
+    # is created, so the finally still attempts a DELETE. GitHub reports a
+    # missing ref as 422 "Reference does not exist"; that is a benign no-op,
+    # not a leak, and must not surface as a warning or an error.
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[_SCHEMA_GREEN_RUN],
+        jobs=_SCHEMA_GREEN_JOBS,
+        existing_tags=[],
+        delete_returncodes=[1],
+        delete_stderr="gh: Reference does not exist (HTTP 422)",
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 0, stdout
+    assert "Schema freshness passed on exact target " + _SCHEMA_PROOF_TARGET in stdout
+    assert "::warning::" not in stdout
+    assert "::error::" not in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 1, "an absent ref is not retried"
+
+
+def test_release_schema_freshness_proof_fails_loudly_when_a_created_tag_survives_deletion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: when the tag exists and both DELETE attempts fail with the tag
+    # still on origin, the proof must retry once and then fail the job loudly
+    # with ::error:: instead of warning and continuing with a leaked tag.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        runs_after_dispatch=[_SCHEMA_GREEN_RUN],
+        jobs_after_dispatch=_SCHEMA_GREEN_JOBS,
+        existing_tags=[tag],
+        delete_returncodes=[1, 1],
+        delete_stderr="gh: Forbidden (HTTP 403)",
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 1, stdout
+    assert "Schema freshness passed on exact target " + _SCHEMA_PROOF_TARGET in stdout
+    assert "::error::Could not delete the temporary CI-verification tag " + tag in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 2, "a still-present tag is retried exactly once"
+
+
+def test_release_schema_freshness_proof_keeps_the_original_diagnostic_when_cleanup_also_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: a cleanup failure stays loud WITHOUT replacing the proof's own
+    # error. Here the proof times out (its diagnostic) and the tag survives
+    # deletion, so both ::error:: lines must appear and the timeout must win.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        runs_after_dispatch=[],
+        jobs_after_dispatch={},
+        existing_tags=[tag],
+        delete_returncodes=[1, 1],
+        delete_stderr="gh: Forbidden (HTTP 403)",
+    )
+
+    code, stdout = _run_schema_proof(tmp_path, monkeypatch, gh)
+
+    assert code == 1, stdout
+    assert "::error::Timed out after 2s waiting for a green Schema freshness job" in stdout
+    assert "::error::Could not delete the temporary CI-verification tag " + tag in stdout
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 2
+
+
+def test_release_schema_freshness_proof_does_not_mask_an_unexpected_error_with_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720 (prove-the-fix): a non-SystemExit failure from the proof must
+    # propagate as itself and must NOT be replaced by the cleanup's SystemExit.
+    # The old code called fail() (SystemExit) inside the finally, which masked
+    # the RuntimeError; the new code prints the cleanup ::error:: and re-raises
+    # the original exception. The tag also survives deletion, so cleanup fails.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    gh = _fake_gh(
+        calls,
+        runs=[],
+        jobs={},
+        existing_tags=[tag],
+        delete_returncodes=[1, 1],
+        delete_stderr="gh: Forbidden (HTTP 403)",
+        list_exception=RuntimeError("gh run list exploded"),
+    )
+    module = _schema_proof_module(tmp_path)
+    monkeypatch.setattr(module, "gh", gh)
+    _configure_proof_env(monkeypatch)
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout), pytest.raises(RuntimeError, match="gh run list exploded"):
+        module.main([_SCHEMA_PROOF_TARGET])
+
+    out = stdout.getvalue()
+    assert "::error::Could not delete the temporary CI-verification tag " + tag in out
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 2, "cleanup still retries the DELETE before letting the error through"
+
+
+def test_release_schema_freshness_proof_backs_off_between_delete_retries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: when SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS is positive, the
+    # proof must sleep for exactly that many seconds between the two DELETE
+    # attempts. The proof succeeds immediately, so the only sleep is the backoff.
+    tag = "ci-verify-" + _SCHEMA_PROOF_TARGET[:12] + "-4242"
+    calls: list[list[str]] = []
+    sleeps: list[float] = []
+    gh = _fake_gh(
+        calls,
+        runs=[_SCHEMA_GREEN_RUN],
+        jobs=_SCHEMA_GREEN_JOBS,
+        existing_tags=[tag],
+        delete_returncodes=[1, 1],
+        delete_stderr="gh: Forbidden (HTTP 403)",
+    )
+    module = _schema_proof_module(tmp_path)
+    monkeypatch.setattr(module, "gh", gh)
+    monkeypatch.setattr(module.time, "sleep", lambda seconds: sleeps.append(seconds))
+    _configure_proof_env(monkeypatch, backoff_seconds="3")
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout), pytest.raises(SystemExit) as excinfo:
+        module.main([_SCHEMA_PROOF_TARGET])
+
+    assert int(excinfo.value.code or 0) == 1
+    assert sleeps == [3], "the configured backoff must be slept once between DELETE attempts"
+    deletes = [call for call in calls if call[:3] == ["api", "-X", "DELETE"]]
+    assert len(deletes) == 2
+
+
+def test_release_schema_freshness_proof_rejects_a_negative_delete_backoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: a negative backoff is a loud, clean failure, not a silent clamp.
+    calls: list[list[str]] = []
+    gh = _fake_gh(calls, runs=[], jobs={})
+    module = _schema_proof_module(tmp_path)
+    monkeypatch.setattr(module, "gh", gh)
+    _configure_proof_env(monkeypatch, backoff_seconds="-1")
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout), pytest.raises(SystemExit) as excinfo:
+        module.main([_SCHEMA_PROOF_TARGET])
+
+    assert int(excinfo.value.code or 0) == 1
+    assert "::error::SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative." in stdout.getvalue()
+    assert calls == []
+
+
+def test_release_schema_freshness_proof_rejects_a_non_integer_delete_backoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # FAR-2720: a non-integer backoff must use the clean ::error:: + SystemExit
+    # style of the adjacent negative check, not an uncaught ValueError traceback.
+    calls: list[list[str]] = []
+    gh = _fake_gh(calls, runs=[], jobs={})
+    module = _schema_proof_module(tmp_path)
+    monkeypatch.setattr(module, "gh", gh)
+    _configure_proof_env(monkeypatch, backoff_seconds="abc")
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout), pytest.raises(SystemExit) as excinfo:
+        module.main([_SCHEMA_PROOF_TARGET])
+
+    assert int(excinfo.value.code or 0) == 1
+    assert "::error::SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: 'abc'." in stdout.getvalue()
+    assert calls == []
 
 
 def test_release_schema_gate_cleanup_reclaims_this_runs_tags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

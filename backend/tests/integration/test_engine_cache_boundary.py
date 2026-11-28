@@ -1,5 +1,8 @@
 """Regression coverage for mixed-suite async-engine cache isolation."""
 
+import asyncio
+import logging
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -18,6 +21,19 @@ class _PollutedSQLiteEngine:
         await self.engine.dispose()
 
 
+class _FakeAsyncRedis:
+    """Stand-in for the process-global ``dispatch._shared_redis`` client."""
+
+    def __init__(self, *, aclose_error: Exception | None = None) -> None:
+        self.aclose_calls = 0
+        self.aclose_error = aclose_error
+
+    async def aclose(self) -> None:
+        self.aclose_calls += 1
+        if self.aclose_error is not None:
+            raise self.aclose_error
+
+
 @pytest.mark.asyncio
 async def test_integration_boundary_clears_polluted_sqlite_engine_caches() -> None:
     """A SQLite engine left by an earlier suite cannot survive the boundary."""
@@ -30,6 +46,15 @@ async def test_integration_boundary_clears_polluted_sqlite_engine_caches() -> No
     from farna.db.crud import pipeline_snapshot
 
     polluted_engine = _PollutedSQLiteEngine(create_async_engine("sqlite+aiosqlite:///:memory:"))
+
+    # Dispose whatever is already cached BEFORE overwriting the caches. The
+    # caches may still hold a real asyncpg engine left by an earlier test; a
+    # bare ``setattr`` drops that engine without closing it, so its pooled
+    # connections are only reclaimed by GC and surface as an unclosed asyncpg
+    # connection attributed to THIS test (observed on merge-train integration
+    # shard 2). ``dispose_process_global_engines`` runs on the current loop, so
+    # the connections really close instead of racing a closed loop.
+    await integration_conftest.dispose_process_global_engines()
 
     single_engine_caches = (
         (db_session, "_shared_engine"),
@@ -67,3 +92,47 @@ async def test_integration_boundary_clears_polluted_sqlite_engine_caches() -> No
     assert break_glass._bg_engine_url is None
     assert break_glass._bg_factory is None
     assert break_glass._bg_factory_url is None
+
+
+@pytest.mark.asyncio
+async def test_integration_boundary_closes_and_resets_shared_dispatch_redis() -> None:
+    """The process-global dispatch redis client is closed and reset at the boundary."""
+    from farna.core import dispatch
+
+    fake_redis = _FakeAsyncRedis()
+    original_lock = dispatch._shared_redis_lock
+    dispatch._shared_redis = fake_redis  # type: ignore[assignment]
+
+    await integration_conftest.dispose_process_global_engines()
+
+    assert fake_redis.aclose_calls == 1
+    assert dispatch._shared_redis is None
+    assert isinstance(dispatch._shared_redis_lock, asyncio.Lock)
+    assert dispatch._shared_redis_lock is not original_lock
+
+
+@pytest.mark.asyncio
+async def test_integration_boundary_resets_shared_dispatch_redis_when_close_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing ``aclose`` is logged, not raised, and the global is still reset.
+
+    ``dispose_process_global_engines`` runs in teardown paths that must not mask
+    a real failure, so a redis close that raises has to stay best-effort: the
+    warning is logged, the exception does not escape, and the global is reset so
+    the next caller reconnects rather than reusing a half-closed client.
+    """
+    from farna.core import dispatch
+
+    fake_redis = _FakeAsyncRedis(aclose_error=RuntimeError("socket already gone"))
+    original_lock = dispatch._shared_redis_lock
+    dispatch._shared_redis = fake_redis  # type: ignore[assignment]
+
+    with caplog.at_level(logging.WARNING):
+        await integration_conftest.dispose_process_global_engines()
+
+    assert fake_redis.aclose_calls == 1
+    assert dispatch._shared_redis is None
+    assert isinstance(dispatch._shared_redis_lock, asyncio.Lock)
+    assert dispatch._shared_redis_lock is not original_lock
+    assert any("shared dispatch redis client failed" in record.getMessage() for record in caplog.records)

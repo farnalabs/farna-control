@@ -45,17 +45,22 @@ status: covered
 # Declarative Configuration CLI (`farna-control apply`)
 
 `farna-control apply -f <config.yaml>` applies an organization's schemas (+ versions),
-model backends, pipelines and triggers to a live deployment from one YAML file
+model backends, pipelines, triggers and System Maps to a live deployment from one YAML file
 (`api_version: farna.dev/v1`), driven by `FARNA_CONTROL_URL` +
 `FARNA_CONTROL_API_KEY` (a bearer `mk_` org key). The installed executable is
 `farna-control` (`backend/pyproject.toml` `[project.scripts]`). The API routes the CLI writes to are `/api/v1/schemas`,
 `/api/v1/model-backends`, `/api/v1/pipelines`,
-`/api/v1/pipelines/{pipeline_id}/triggers` (create) and
-`/api/v1/triggers/{trigger_id}` (update); plan-time `credential_ref` validation
+`/api/v1/pipelines/{pipeline_id}/triggers` (create),
+`/api/v1/triggers/{trigger_id}` (update), `/api/v1/system-maps` (create),
+`/api/v1/system-maps/{map_id}` (update) and
+`/api/v1/system-maps/{map_id}/revisions` (the create-only draft revision); it
+plans System Maps from the `GET /api/v1/system-maps` collection read. Every one
+of those routes accepts the same `mk_` org key (the any-credential gate,
+FAR-2748 for System Maps). Plan-time `credential_ref` validation
 also reads the org vault through the MCP `list_secrets` tool. The matching UI
 surfaces are `/admin/model-backends` and `/settings/triggers`; there is no
 dedicated CLI page in the nav. Built on the
-schemas, model-backends, pipelines and triggers features. For a copy-paste
+schemas, model-backends, pipelines, triggers and System Maps features. For a copy-paste
 Terraform-style CI loop (plan on every pull request, apply on merge to `main`),
 see the [`farna-control apply` GitHub Actions example](../../farna-control-apply-github-actions.md).
 
@@ -69,6 +74,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       pipeline declared only in a LATER document are load-time errors
       (`backend/src/farna/cli/apply/loader.py`,
       `backend/tests/unit/cli/test_apply_loader.py`)
+      <!-- behaviour: apply-01 | tests: backend/tests/unit/cli/test_apply_loader.py -->
 - [x] Secrets are refs-only: backend `api_key` / `credential_ref` and trigger
       `config_json` secret-shaped entries must be `${env:VAR}` or
       `secretref://<key>` references – inline secret literals are forbidden at
@@ -79,6 +85,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       `credential_reference_error` (422) naming the key, and `hmac_secret` /
       `signing_secret` are Fernet-encrypted server-side on write
       (`backend/src/farna/cli/apply/models.py`, `test_apply_models.py`)
+      <!-- behaviour: apply-02 | tests: backend/tests/unit/cli/test_apply_models.py -->
 - [x] A model backend credential may instead be declared as
       `credential_ref: <key>` (FAR-1216): the declarative short form naming a
       bare org-vault key. Exactly one of `api_key` / `credential_ref` is
@@ -97,6 +104,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       (`cli/apply/models.py` `credential_reference()` /
       `_exactly_one_credential`, `cli/apply/executor.py`
       `_block_missing_credential_refs`, `test_apply_credential_ref.py`)
+      <!-- behaviour: apply-03 | tests: backend/tests/unit/cli/test_apply_credential_ref.py -->
 - [x] A model backend may declare the custom endpoint FAR-2046 introduced:
       `base_url` (a self-hosted / OpenAI-compatible gateway) plus
       `allow_insecure_http` for a plain-`http` air-gapped gateway. Both follow
@@ -118,6 +126,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       the cause named instead of 422-ing halfway through an apply
       (`cli/apply/models.py`, `cli/apply/plan.py`, `cli/apply/executor.py`,
       `test_apply_base_url.py`)
+      <!-- behaviour: apply-04 | tests: backend/tests/unit/cli/test_apply_base_url.py -->
 - [x] Planning is name-based upsert scoped to the org (the HTTP transport is
       the operator's `FARNA_CONTROL_URL` + `FARNA_CONTROL_API_KEY` bearer org key):
       per-entity decisions `created` / `updated` / `unchanged` / `blocked`,
@@ -127,6 +136,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       4dp scale) – runtime state (`next_fire_at`, `streak_epoch`, ...) never
       produces drift (`backend/src/farna/cli/apply/plan.py`,
       `test_apply_plan.py`)
+      <!-- behaviour: apply-05 | tests: backend/tests/unit/cli/test_apply_plan.py -->
 - [x] Entities apply in dependency order `schemas -> model_backends ->
       pipelines -> triggers` with per-entity containment (one failure moves
       that entity to failed, the rest still apply); graphs are cached by
@@ -138,19 +148,23 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       (`backend/src/farna/cli/apply/executor.py`,
       `test_apply_executor.py`, `test_apply_pipeline.py`,
       `test_apply_trigger.py`)
+      <!-- behaviour: apply-06 | tests: backend/tests/unit/cli/test_apply_executor.py, backend/tests/unit/cli/test_apply_pipeline.py, backend/tests/unit/cli/test_apply_trigger.py -->
 - [x] Backend writes are verified: the server-side health-check endpoint
       re-runs after each create/update and an unhealthy result moves the entity
       to `failed` (exit 1) – a stored-but-broken credential is never reported
       as plain success (`test_apply_executor.py`)
+      <!-- behaviour: apply-07 | tests: backend/tests/unit/cli/test_apply_executor.py -->
 - [x] `--refresh-secrets` re-sends trigger configs whose secrets rotated,
       because the server masks stored secrets and cannot tell a rotated value
       from an unchanged one (`backend/src/farna/cli/apply/__init__.py`,
       `test_apply_executor.py`)
+      <!-- behaviour: apply-08 | tests: backend/tests/unit/cli/test_apply_executor.py -->
 - [x] Exit codes: `--dry-run`/`--plan` always exits 0; real apply exits 1 when
       any entity was blocked or failed (including backend health-check
       failures); `--diff` exits 0 when the org matches the config and 1 when
       drift is detected (created/updated/blocked) so CI can gate on config
       drift (`test_apply_cli.py`)
+      <!-- behaviour: apply-09 | tests: backend/tests/unit/cli/test_apply_cli.py -->
 - [x] `--diff` (drift mode) is read-only: it fetches the live org state and
       reports the plan-shaped report explicitly labelled `mode=drift` WITHOUT
       writing anything (the run returns after the plan phase – no
@@ -162,6 +176,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       and the table output prefixes verbs (`drift create` / `drift update`)
       plus per-entity drift detail lines (`backend/src/farna/cli/apply/drift.py`,
       `test_apply_drift.py`)
+      <!-- behaviour: apply-10 | tests: backend/tests/unit/cli/test_apply_drift.py -->
 - [x] Git-sourced content (FAR-220): a sandbox_agent node's `agent_prompt` /
       `agent_commands` items / `script_command` may be a whole-field
       `git+<repo-url>[@<ref>]#<path>` ref instead of inline content;
@@ -177,6 +192,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       `core/graph_validator`, `test_apply_git_content.py`,
       `test_git_content.py`, `test_sandbox_git_content.py`,
       `test_edges_and_sandbox_validation.py`)
+      <!-- behaviour: apply-11 | tests: backend/tests/unit/cli/test_apply_git_content.py, backend/tests/unit/core/test_git_content.py, backend/tests/unit/pipeline_engine/test_sandbox_git_content.py, backend/tests/unit/graph_validator/test_edges_and_sandbox_validation.py -->
 - [x] `--diff` covers git-sourced content: the resolved pin is hashed into
       the desired view, so a moved branch/tag, a changed spec, or an
       unpinned deployed graph reports `updated` (exit 1); `drift_detail`
@@ -185,6 +201,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       as `drift detail git-content ...` lines, showing the actual commit
       transition before `farna-control apply` converges the pin
       (`drift._diff_git_content`, `test_apply_git_content.py`)
+      <!-- behaviour: apply-12 | tests: backend/tests/unit/cli/test_apply_git_content.py -->
 - [x] At run time the agent-command rendering point replaces a whole-field
       pinned ref with the file content fetched at exactly that commit
       (host-side `git clone --no-checkout` + `git show <sha>:<path>`,
@@ -192,6 +209,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       failures raise typed errors so the node fails closed instead of
       dispatching the raw ref string (`node_runner._resolve_sandbox_git_content_config`,
       `test_sandbox_git_content.py`)
+      <!-- behaviour: apply-13 | tests: backend/tests/unit/pipeline_engine/test_sandbox_git_content.py -->
 - [x] Output: human-friendly table (`render_table`: create/update/block/fail/
       unchanged lines + summary counts, or drift-prefixed variants) or
       `--output json` / `--json` (the full report); 401 surfaces "check
@@ -199,9 +217,11 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       does not expose endpoint ... / older
       version", network errors surface as "apply failed: ..."
       (`test_apply_cli.py`)
+      <!-- behaviour: apply-14 | tests: backend/tests/unit/cli/test_apply_cli.py -->
 - [x] The API-key transport is org-scoped and operator-role gated; an
       unauthenticated or wrong-role key is rejected before any write
       (`backend/tests/unit/api/test_apply_api_key_auth.py`)
+      <!-- behaviour: apply-15 | tests: backend/tests/unit/api/test_apply_api_key_auth.py -->
 - [x] Pipeline runtime limits (FAR-1294): `farna-control apply` manages
       `node_timeout_seconds` (per-node timeout, >= 1, platform default 300)
       and `max_duration_seconds` (wall-clock run-duration cap, >= 1, platform
@@ -220,6 +240,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       (`backend/src/farna/cli/apply/models.py`,
       `backend/src/farna/cli/apply/pipeline_apply.py`,
       `backend/tests/unit/cli/test_apply_models.py`)
+      <!-- behaviour: apply-16 | tests: backend/tests/unit/cli/test_apply_models.py -->
 - [x] Pipeline Paused execution state (FAR-1530): `farna-control apply` can PAUSE a
       pipeline declaratively with a declared `run_enabled: false` - an opt-in,
       one-way management. `run_enabled: true` and an explicit `null` are rejected
@@ -236,6 +257,7 @@ see the [`farna-control apply` GitHub Actions example](../../farna-control-apply
       `_run_enabled_may_only_pause` / `manages_run_enabled`,
       `backend/src/farna/cli/apply/pipeline_apply.py`,
       `backend/tests/unit/cli/test_apply_run_enabled.py`)
+      <!-- behaviour: apply-17 | tests: backend/tests/unit/cli/test_apply_run_enabled.py -->
 
 ## Known Gaps
 

@@ -33,6 +33,10 @@ name: "Release: Unified Pipeline"
         description: "Release version in X.Y.Z form (e.g. 0.1.0). Required for recut/promote; for cut it's the target version."
         type: string
         required: false
+      target_sha:
+        description: "Optional commit SHA to pin the release to (recut/dry-run only). Must be reachable from origin/main. Empty = origin/main, resolved once and shared by the schema gate and every publishing job. Refused for cut and promote."
+        type: string
+        required: false
       freeze:
         description: "Establish release-freeze branch to pause merge queue (default false while testing pipeline)"
         type: boolean
@@ -40,6 +44,11 @@ name: "Release: Unified Pipeline"
         default: false
       include_windows:
         description: "Beta scope: opt in to the signed Windows native installer in the release (Beta-only, not part of Alpha)"
+        type: boolean
+        required: false
+        default: false
+      resume:
+        description: "Resume a promote that failed after the GA tag was pushed. Requires mode=promote; re-derives the release identity from the frozen GA tag and the validated RC marker."
         type: boolean
         required: false
         default: false
@@ -52,6 +61,182 @@ permissions:
   contents: read
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Single release target resolution (FAR-2752)
+  # A recut validates one commit and publishes one commit. Resolving the target
+  # more than once lets main move in between, so a green schema proof could
+  # describe a commit that was never tagged - the observed failure was three
+  # recuts in one session each targeting a different commit, so neither a green
+  # validation could be reused nor a red one avoided. The target is resolved
+  # here ONCE, and the schema gate and every publishing job consume the same
+  # job output. An explicit `target_sha` pins it to a chosen commit; empty keeps
+  # today's origin/main sampling, but sampled exactly once.
+  # ---------------------------------------------------------------------------
+  resolve-target:
+    name: Resolve the release target commit
+    runs-on: ubicloud-standard-2
+    # A local git query plus a fetch of main; nothing here is slow.
+    timeout-minutes: 10
+    permissions:
+      # Read-only: resolution never writes a ref.
+      contents: read
+    outputs:
+      target_sha: ${{ steps.resolve.outputs.target_sha }}
+      target_pinned: ${{ steps.resolve.outputs.target_pinned }}
+    steps:
+      # fetch-depth 0 so an ancestor pin is already present locally, and
+      # persist-credentials: false because resolution never pushes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: main
+          persist-credentials: false
+      - name: Resolve the target commit (pin or origin/main)
+        id: resolve
+        shell: bash
+        env:
+          # Mapped through the step env block (S7630): GitHub expressions
+          # inside a run block are interpolated before the shell parses the
+          # script, so values are data, never code.
+          MODE: ${{ inputs.mode }}
+          REQUESTED_SHA: ${{ inputs.target_sha }}
+          VERSION: ${{ inputs.version }}
+          RESUME: ${{ inputs.resume }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::[$1] $2"
+            exit 1
+          }
+
+          # ---------------------------------------------------------------------
+          # FAR-2802 resume path: a promote that already pushed the GA tag has
+          # no origin/main target - main has moved past the RC and the GA tag is
+          # the frozen release identity. Resolve the target from that tag so the
+          # schema gate, SBOM and attestation jobs inspect the GA commit itself,
+          # never a later main. This is also the earliest input-validation point,
+          # so a resume against any other mode is refused here.
+          # ---------------------------------------------------------------------
+          if [ "${RESUME:-false}" = "true" ]; then
+            if [ "$MODE" != "promote" ]; then
+              fail "resume_unsupported_mode" "resume=true is only valid with mode=promote (got mode '${MODE}'). cut/recut re-cut from main and must never resume a promote."
+            fi
+            if [ -z "${VERSION:-}" ]; then
+              fail "resume_version_required" "resume=true requires the version input so the frozen GA tag v<VERSION> can be resolved."
+            fi
+            GA_TAG="v${VERSION}"
+            resume_tag_rc=0
+            git ls-remote --exit-code origin "refs/tags/${GA_TAG}" >/dev/null 2>/dev/null || resume_tag_rc=$?
+            case "$resume_tag_rc" in
+              0) ;;
+              2)
+                fail "resume_tag_missing" "resume=true requires the frozen GA tag ${GA_TAG} to exist on origin; it is absent. A first promote (no GA tag yet) must run without resume."
+                ;;
+              *)
+                fail "resume_tag_query_failed" "Could not query the GA tag ${GA_TAG} (git ls-remote rc=${resume_tag_rc}); refusing to resolve a release target from an unknown tag state."
+                ;;
+            esac
+            if ! git fetch --quiet --force --tags origin; then
+              fail "resume_tag_fetch_failed" "Could not fetch tags from origin; refusing to resolve the GA tag from an unfetched ref."
+            fi
+            if ! RESUME_TARGET="$(git rev-parse --verify "${GA_TAG}^{commit}" 2>/dev/null)"; then
+              fail "resume_tag_unresolvable" "The GA tag ${GA_TAG} exists on origin but does not resolve to a commit locally."
+            fi
+            echo "Resume: resolved the release target from the frozen GA tag ${GA_TAG} at ${RESUME_TARGET}."
+            echo "target_sha=${RESUME_TARGET}" >> "$GITHUB_OUTPUT"
+            echo "target_pinned=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A pin is coherent only for the modes that publish exactly one chosen
+          # commit. `cut` creates and merges a version-bump PR on main and tags
+          # the resulting merge commit, which does not exist at dispatch time,
+          # so pinning it would tag a commit without the version bump. `promote`
+          # retags an existing RC and publishes no new commit at all.
+          if [ -n "${REQUESTED_SHA:-}" ]; then
+            case "$MODE" in
+              recut|dry-run)
+                ;;
+              cut)
+                fail "target_sha_unsupported_mode" "target_sha is not supported for mode 'cut': cut creates and merges a version-bump PR on main and tags the resulting merge commit, which does not exist at dispatch time. Dispatch a recut to pin a commit."
+                ;;
+              promote)
+                fail "target_sha_unsupported_mode" "target_sha is not supported for mode 'promote': promote retags an existing RC tag and publishes no new commit. Re-run without target_sha."
+                ;;
+              *)
+                fail "target_sha_unsupported_mode" "target_sha is not supported for mode '${MODE}'."
+                ;;
+            esac
+          fi
+
+          if ! git fetch --quiet origin main; then
+            fail "target_fetch_failed" "Could not fetch origin/main; refusing to resolve a release target from an unfetched ref."
+          fi
+
+          if [ -z "${REQUESTED_SHA:-}" ]; then
+            target="$(git rev-parse origin/main)"
+            pinned=false
+            echo "No target_sha supplied; resolved origin/main once to ${target}."
+          else
+            # A tag is refused even when its name looks like a SHA: pinning must
+            # name an immutable commit, not a ref that can be moved or re-pointed.
+            if git show-ref --verify --quiet "refs/tags/${REQUESTED_SHA}"; then
+              fail "target_sha_is_tag" "target_sha '${REQUESTED_SHA}' names a git tag, not a commit. Pass the full 40-character commit SHA."
+            fi
+            if ! printf '%s' "$REQUESTED_SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+              fail "target_sha_not_a_sha" "target_sha '${REQUESTED_SHA}' is not a commit SHA (expected 7-40 hexadecimal characters). Branch names, tags and arbitrary revisions are refused so the pin cannot track a moving ref."
+            fi
+            if ! git cat-file -e "${REQUESTED_SHA}^{commit}" 2>/dev/null; then
+              if git cat-file -e "${REQUESTED_SHA}" 2>/dev/null; then
+                fail "target_sha_not_a_commit" "target_sha '${REQUESTED_SHA}' exists in this repository but is not a commit."
+              fi
+              fail "target_sha_missing" "target_sha '${REQUESTED_SHA}' does not exist in this repository."
+            fi
+            target="$(git rev-parse --verify "${REQUESTED_SHA}^{commit}")"
+            if ! printf '%s' "$target" | grep -Eq '^[0-9a-f]{40}$'; then
+              fail "target_sha_not_a_sha" "target_sha '${REQUESTED_SHA}' did not resolve to a full 40-character commit SHA (got '${target}')."
+            fi
+            if git merge-base --is-ancestor "$target" origin/main; then
+              :
+            elif git merge-base --is-ancestor origin/main "$target"; then
+              fail "target_sha_newer_than_main" "target_sha '${REQUESTED_SHA}' (${target}) is newer than origin/main. A release can only pin a commit that is already on main."
+            else
+              fail "target_sha_not_on_main" "target_sha '${REQUESTED_SHA}' (${target}) is not on main's history. Only a commit reachable from origin/main can be released."
+            fi
+            pinned=true
+            echo "Pinned the release target to ${target} (from '${REQUESTED_SHA}')."
+          fi
+
+          echo "target_sha=${target}" >> "$GITHUB_OUTPUT"
+          echo "target_pinned=${pinned}" >> "$GITHUB_OUTPUT"
+      - name: Record the release target in the run summary
+        env:
+          MODE: ${{ inputs.mode }}
+          RESUME: ${{ inputs.resume }}
+          VERSION: ${{ inputs.version }}
+          TARGET_SHA: ${{ steps.resolve.outputs.target_sha }}
+          TARGET_PINNED: ${{ steps.resolve.outputs.target_pinned }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${RESUME:-false}" = "true" ]; then
+            source="the frozen GA tag v${VERSION} (resume)"
+          elif [ "$TARGET_PINNED" = "true" ]; then
+            source="pinned via the target_sha workflow input"
+          else
+            source="resolved once from origin/main"
+          fi
+          {
+            echo "## Release target"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Mode | \`${MODE}\` |"
+            echo "| Target commit | \`${TARGET_SHA}\` |"
+            echo "| Source | ${source} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # ---------------------------------------------------------------------------
   # Schema-freshness proof for the exact commit (FAR-2484)
   # A release samples a main commit that may be seconds old, and merges land
@@ -70,6 +255,12 @@ jobs:
   # ---------------------------------------------------------------------------
   schema-gate:
     name: Schema freshness proof (exact commit)
+    needs: [resolve-target]
+    # Re-export the single resolved target so the discovery gate can inspect
+    # the same commit without resolving (and possibly re-sampling) it again.
+    outputs:
+      target_sha: ${{ needs.resolve-target.outputs.target_sha }}
+      target_pinned: ${{ needs.resolve-target.outputs.target_pinned }}
     runs-on: ubicloud-standard-2
     # Covers the bounded schema-freshness proof: when no completed ci.yml run
     # proves the gate on the exact commit, the job dispatches one against a
@@ -88,7 +279,7 @@ jobs:
       # Checkout only provides a git remote for `gh` repo inference; the proof
       # talks to the GitHub API and `gh` authenticates via GH_TOKEN, so no
       # repository credentials may be persisted on disk.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Ensure schema freshness CI on the exact commit
@@ -96,11 +287,14 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ github.sha }}
+          # The ONE resolved release target (FAR-2752): a pin or origin/main
+          # sampled once. Never re-resolve here - a second resolution is what
+          # let the proof and the tag disagree.
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
         run: |
           set -euo pipefail
           if [ -z "${TARGET_SHA:-}" ]; then
-            echo "::error::No exact target commit SHA to prove schema freshness for; refusing to run the preflight gate."
+            echo "::error::No resolved target commit SHA to prove schema freshness for; refusing to run the preflight gate."
             exit 1
           fi
           python3 - "$TARGET_SHA" <<'PY'
@@ -154,6 +348,16 @@ jobs:
               if not repo:
                   fail("GITHUB_REPOSITORY is unset; refusing to look for CI runs in an unknown repository.")
               max_attempts = max(1, -(-max_wait_seconds // poll_seconds))
+              raw_backoff = os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2")
+              try:
+                  delete_retry_backoff_seconds = int(raw_backoff)
+              except ValueError:
+                  fail(
+                      "SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: "
+                      + repr(raw_backoff) + "."
+                  )
+              if delete_retry_backoff_seconds < 0:
+                  fail("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative.")
 
               def list_tags(prefix):
                   listing = gh("api", "--paginate", "--slurp", "repos/" + repo + "/git/matching-refs/tags/" + prefix)
@@ -161,11 +365,41 @@ jobs:
                       return None
                   return tag_names(listing.stdout)
 
+              def tag_is_absent(detail):
+                  # GitHub reports a missing ref as 404 "Not Found" or 422
+                  # "Reference does not exist" (observed via the git/refs DELETE
+                  # endpoint). Both mean there is nothing to delete - never a
+                  # leaked tag and never a reason to warn an operator.
+                  return "Not Found" in detail or "404" in detail or "Reference does not exist" in detail
+
+
               def delete_tag(name):
-                  result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
-                  detail = (result.stderr or "") + (result.stdout or "")
-                  if result.returncode != 0 and "Not Found" not in detail and "404" not in detail:
-                      print("::warning::Could not delete the temporary CI-verification tag " + name + "; delete it manually.")
+                  # Delete-and-verify. A non-zero DELETE is benign only when the
+                  # ref is genuinely absent; otherwise the tag may still be on
+                  # origin, and a leaked ci-verify-* tag is not inert: an
+                  # unfiltered tag lookup could pick it as the changelog base.
+                  # Re-read the remote after a failed attempt, back off briefly,
+                  # retry once, and RETURN a loud diagnostic if it survives (the
+                  # caller decides whether that replaces an original error).
+                  for attempt in (1, 2):
+                      result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
+                      if result.returncode == 0:
+                          return None
+                      detail = (result.stderr or "") + (result.stdout or "")
+                      if tag_is_absent(detail):
+                          return None
+                      remaining = list_tags(tag_prefix)
+                      if remaining is not None and name not in remaining:
+                          return None
+                      if attempt == 1 and delete_retry_backoff_seconds > 0:
+                          time.sleep(delete_retry_backoff_seconds)
+                  return (
+                      "Could not delete the temporary CI-verification tag " + name
+                      + " from origin after a retry; it is still present. A leaked "
+                      + "ci-verify-* tag can be mistaken for the changelog base by an "
+                      + "unfiltered tag lookup, so refusing to continue. Remove it with: "
+                      + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
+                  )
 
               def sweep_stale_tags():
                   # A tag leaked by an earlier attempt for this exact commit (a
@@ -179,14 +413,17 @@ jobs:
                       return
                   for name in names:
                       if name != tag:
-                          delete_tag(name)
+                          problem = delete_tag(name)
+                          if problem:
+                              fail(problem)
 
               def delete_temporary_tag():
                   # Always attempt deletion, even when no create response was
                   # observed: a POST whose response was lost still creates the
-                  # tag server-side.
-                  delete_tag(tag)
+                  # tag server-side. Returns a diagnostic when it survives.
+                  return delete_tag(tag)
 
+              proof_succeeded = False
               try:
                   sweep_stale_tags()
                   deadline = time.monotonic() + max_wait_seconds
@@ -352,8 +589,21 @@ jobs:
                           + str(max_wait_seconds) + "s): " + last_state + "."
                       )
                       time.sleep(min(poll_seconds, remaining))
+              except SystemExit as exc:
+                  # A clean proof exit is remembered so a cleanup failure below
+                  # can fail the job; a failing exit keeps its own diagnostic.
+                  if exc.code in (0, None):
+                      proof_succeeded = True
+                  raise
               finally:
-                  delete_temporary_tag()
+                  cleanup_problem = delete_temporary_tag()
+                  if cleanup_problem:
+                      # Always loud, but never replace a diagnostic that is
+                      # already propagating: print the cleanup error and only
+                      # raise when the proof itself had succeeded.
+                      print("::error::" + cleanup_problem)
+                      if proof_succeeded:
+                          raise SystemExit(1)
 
 
           if __name__ == "__main__":
@@ -399,6 +649,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REGISTRY_USER: ${{ github.actor }}
+          # FAR-2752: inspect the same single resolved target the schema gate
+          # and the publishing jobs use. scripts/run_release_preflight.py reads
+          # CUT_SHA as its target and only falls back to GITHUB_SHA when unset.
+          CUT_SHA: ${{ needs.schema-gate.outputs.target_sha }}
           RELEASE_MODE: ${{ inputs.mode }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_FREEZE: ${{ inputs.freeze }}
@@ -509,7 +763,7 @@ jobs:
   # ---------------------------------------------------------------------------
   dry-run:
     name: Dry-run rehearsal (${{ inputs.version || 'auto' }})
-    needs: [preflight]
+    needs: [preflight, resolve-target]
     if: inputs.mode == 'dry-run'
     runs-on: ubicloud-standard-2
     # Builds every container image (no push) and then verifies and uploads the
@@ -523,7 +777,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: main
+          # FAR-2752: rehearse the single resolved target (a pin or origin/main),
+          # so a pinned dry-run builds the commit a pinned recut would publish.
+          ref: ${{ needs.resolve-target.outputs.target_sha }}
 
       - name: Validate version input
         shell: bash
@@ -540,7 +796,7 @@ jobs:
           fi
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build all images (no push)
         # Mapped through the step env block (S7630): GitHub expressions inside a
@@ -608,7 +864,7 @@ jobs:
           PY
 
       - name: Upload SBOM as artefact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-cyclonedx
           path: sbom.json
@@ -616,9 +872,20 @@ jobs:
           retention-days: 30
 
       - name: Dry-run summary
+        env:
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
+          TARGET_PINNED: ${{ needs.resolve-target.outputs.target_pinned }}
         run: |
+          set -euo pipefail
+          if [ "$TARGET_PINNED" = "true" ]; then
+            target_source="pinned via target_sha"
+          else
+            target_source="resolved once from origin/main"
+          fi
           {
             echo "## Dry-run rehearsal - nothing was published"
+            echo ""
+            echo "Release target: \`${TARGET_SHA}\` (${target_source})."
             echo ""
             echo "| Step | Status |"
             echo "|---|---|"
@@ -632,15 +899,16 @@ jobs:
 
   dry-run-bundle:
     name: Rehearse bundle build (no publish)
-    needs: [preflight]
+    needs: [preflight, resolve-target]
     if: inputs.mode == 'dry-run'
     uses: ./.github/workflows/bundle-release.yml
     with:
       version: ${{ inputs.version }}
       # A rehearsal tag that is never created or pushed. It only lands in the
-      # throwaway bundle's RC_TAG file; the checkout below uses main.
+      # throwaway bundle's RC_TAG file; the checkout below uses the single
+      # resolved target (a pin or origin/main).
       rc_tag: v${{ inputs.version }}-dry-run
-      ref: main
+      ref: ${{ needs.resolve-target.outputs.target_sha }}
     secrets:
       BUNDLE_MANIFEST_SIGNING_KEY: ${{ secrets.BUNDLE_MANIFEST_SIGNING_KEY }}
       GH_TOKEN: ${{ github.token }}
@@ -662,7 +930,9 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: Release (${{ inputs.mode }})
-    needs: [preflight]
+    # resolve-target is a direct need so this job can read the single resolved
+    # target (FAR-2752) from its output, not re-resolve origin/main itself.
+    needs: [preflight, resolve-target]
     if: inputs.mode != 'dry-run'
     runs-on: ubicloud-standard-2
     # Covers the bounded 90-minute merge-queue wait plus the bounded 60-minute
@@ -683,6 +953,10 @@ jobs:
       # bundle received the correct one; the explicit step makes the value
       # single-sourced and observable in the job log.
       rc_tag: ${{ steps.rc-output.outputs.rc_tag }}
+      # FAR-2752: re-export the single resolved target so publication records
+      # the commit that was actually validated and tagged.
+      target_sha: ${{ steps.rc-output.outputs.target_sha }}
+      target_pinned: ${{ steps.rc-output.outputs.target_pinned }}
       ga_tag: ${{ steps.promote.outputs.ga_tag }}
       all_in_one_digest: ${{ steps.publish_images.outputs.all_in_one_digest || steps.retag_images.outputs.all_in_one_digest }}
       backend_digest: ${{ steps.publish_images.outputs.backend_digest || steps.retag_images.outputs.backend_digest }}
@@ -1003,18 +1277,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           MODE: ${{ inputs.mode }}
           CUT_SHA: ${{ steps.cut-commit.outputs.cut_sha }}
+          # FAR-2752: the single resolved target. `cut` proves its own merged
+          # bump commit (CUT_SHA); a recut proves exactly the commit it will
+          # tag, resolved once by resolve-target. This step never re-resolves
+          # origin/main, so the proof and the tag cannot disagree.
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
         shell: bash
         run: |
           set -euo pipefail
           if [ "$MODE" = "cut" ]; then
-            TARGET_SHA="$CUT_SHA"
+            TARGET_SHA="${CUT_SHA:-}"
             if [ -z "$TARGET_SHA" ]; then
               echo "::error::Cut preparation produced no exact merged commit SHA."
               exit 1
             fi
-          else
-            git fetch origin main
-            TARGET_SHA="$(git rev-parse origin/main)"
+          elif [ -z "${TARGET_SHA:-}" ]; then
+            echo "::error::No resolved release target to prove schema freshness for; refusing to validate an unspecified commit."
+            exit 1
           fi
           echo "Checking schema-freshness on exact target ${TARGET_SHA}..."
           # FAR-2484: a release samples a HEAD that may be only seconds old,
@@ -1082,6 +1361,16 @@ jobs:
               if not repo:
                   fail("GITHUB_REPOSITORY is unset; refusing to look for CI runs in an unknown repository.")
               max_attempts = max(1, -(-max_wait_seconds // poll_seconds))
+              raw_backoff = os.environ.get("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS", "2")
+              try:
+                  delete_retry_backoff_seconds = int(raw_backoff)
+              except ValueError:
+                  fail(
+                      "SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must be an integer, got: "
+                      + repr(raw_backoff) + "."
+                  )
+              if delete_retry_backoff_seconds < 0:
+                  fail("SCHEMA_GATE_DELETE_RETRY_BACKOFF_SECONDS must not be negative.")
 
               def list_tags(prefix):
                   listing = gh("api", "--paginate", "--slurp", "repos/" + repo + "/git/matching-refs/tags/" + prefix)
@@ -1089,11 +1378,41 @@ jobs:
                       return None
                   return tag_names(listing.stdout)
 
+              def tag_is_absent(detail):
+                  # GitHub reports a missing ref as 404 "Not Found" or 422
+                  # "Reference does not exist" (observed via the git/refs DELETE
+                  # endpoint). Both mean there is nothing to delete - never a
+                  # leaked tag and never a reason to warn an operator.
+                  return "Not Found" in detail or "404" in detail or "Reference does not exist" in detail
+
+
               def delete_tag(name):
-                  result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
-                  detail = (result.stderr or "") + (result.stdout or "")
-                  if result.returncode != 0 and "Not Found" not in detail and "404" not in detail:
-                      print("::warning::Could not delete the temporary CI-verification tag " + name + "; delete it manually.")
+                  # Delete-and-verify. A non-zero DELETE is benign only when the
+                  # ref is genuinely absent; otherwise the tag may still be on
+                  # origin, and a leaked ci-verify-* tag is not inert: an
+                  # unfiltered tag lookup could pick it as the changelog base.
+                  # Re-read the remote after a failed attempt, back off briefly,
+                  # retry once, and RETURN a loud diagnostic if it survives (the
+                  # caller decides whether that replaces an original error).
+                  for attempt in (1, 2):
+                      result = gh("api", "-X", "DELETE", "repos/" + repo + "/git/refs/tags/" + name)
+                      if result.returncode == 0:
+                          return None
+                      detail = (result.stderr or "") + (result.stdout or "")
+                      if tag_is_absent(detail):
+                          return None
+                      remaining = list_tags(tag_prefix)
+                      if remaining is not None and name not in remaining:
+                          return None
+                      if attempt == 1 and delete_retry_backoff_seconds > 0:
+                          time.sleep(delete_retry_backoff_seconds)
+                  return (
+                      "Could not delete the temporary CI-verification tag " + name
+                      + " from origin after a retry; it is still present. A leaked "
+                      + "ci-verify-* tag can be mistaken for the changelog base by an "
+                      + "unfiltered tag lookup, so refusing to continue. Remove it with: "
+                      + "gh api -X DELETE repos/" + repo + "/git/refs/tags/" + name
+                  )
 
               def sweep_stale_tags():
                   # A tag leaked by an earlier attempt for this exact commit (a
@@ -1107,14 +1426,17 @@ jobs:
                       return
                   for name in names:
                       if name != tag:
-                          delete_tag(name)
+                          problem = delete_tag(name)
+                          if problem:
+                              fail(problem)
 
               def delete_temporary_tag():
                   # Always attempt deletion, even when no create response was
                   # observed: a POST whose response was lost still creates the
-                  # tag server-side.
-                  delete_tag(tag)
+                  # tag server-side. Returns a diagnostic when it survives.
+                  return delete_tag(tag)
 
+              proof_succeeded = False
               try:
                   sweep_stale_tags()
                   deadline = time.monotonic() + max_wait_seconds
@@ -1280,8 +1602,21 @@ jobs:
                           + str(max_wait_seconds) + "s): " + last_state + "."
                       )
                       time.sleep(min(poll_seconds, remaining))
+              except SystemExit as exc:
+                  # A clean proof exit is remembered so a cleanup failure below
+                  # can fail the job; a failing exit keeps its own diagnostic.
+                  if exc.code in (0, None):
+                      proof_succeeded = True
+                  raise
               finally:
-                  delete_temporary_tag()
+                  cleanup_problem = delete_temporary_tag()
+                  if cleanup_problem:
+                      # Always loud, but never replace a diagnostic that is
+                      # already propagating: print the cleanup error and only
+                      # raise when the proof itself had succeeded.
+                      print("::error::" + cleanup_problem)
+                      if proof_succeeded:
+                          raise SystemExit(1)
 
 
           if __name__ == "__main__":
@@ -1445,7 +1780,10 @@ jobs:
           esac
 
       # -----------------------------------------------------------------------
-      # RECUT: tag current main as the next RC (no version bump)
+      # RECUT: tag the single resolved target as the next RC (no version bump).
+      # The target is origin/main sampled once by resolve-target, or an explicit
+      # target_sha pin. This step must NOT re-resolve origin/main: the schema
+      # proof above and this tag must be the same commit (FAR-2752).
       # -----------------------------------------------------------------------
       - name: Recut from current main
         id: recut
@@ -1454,6 +1792,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
+          TARGET_PINNED: ${{ needs.resolve-target.outputs.target_pinned }}
         shell: bash
         run: |
           set -euo pipefail
@@ -1474,13 +1814,26 @@ jobs:
           done
           RC_TAG="${BASE}-rc${N}"
 
-          # Refresh from the live main ref so the new RC always captures the
-          # fix that was merged before this recut dispatch started.
-          git fetch origin main
-          git checkout --detach origin/main
+          # Tag exactly the commit resolve-target resolved - never a fresh
+          # origin/main read, which could have moved since the schema proof.
+          if [ -z "${TARGET_SHA:-}" ]; then
+            echo "::error::No resolved release target; refusing to tag a recut."
+            exit 1
+          fi
+          if ! git cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null; then
+            git fetch origin "$TARGET_SHA"
+          fi
+          git checkout --detach "$TARGET_SHA"
           RC_SHA="$(git rev-parse HEAD)"
-
-          echo "Tagging recut RC: $RC_TAG at $RC_SHA"
+          if [ "$RC_SHA" != "$TARGET_SHA" ]; then
+            echo "::error::Recut checked out ${RC_SHA} but the resolved target is ${TARGET_SHA}; refusing to tag the wrong commit."
+            exit 1
+          fi
+          if [ "$TARGET_PINNED" = "true" ]; then
+            echo "Tagging recut RC pinned to ${TARGET_SHA}; main is not re-sampled."
+          else
+            echo "Tagging recut RC at the single resolved origin/main commit ${TARGET_SHA}."
+          fi
           git tag -a "$RC_TAG" -m "Release candidate $RC_TAG"
           git push origin "$RC_TAG"
 
@@ -1524,6 +1877,7 @@ jobs:
           GH_TOKEN: ${{ secrets.FARNA_CONTROL_RELEASE_PR_TOKEN }}
           RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
+          RESUME: ${{ inputs.resume }}
         shell: bash
         run: |
           set -euo pipefail
@@ -1550,6 +1904,149 @@ jobs:
           }
           GA_TAG="v${VERSION}"
           BRANCH="release/promote-${VERSION}"
+
+          # ---------------------------------------------------------------------
+          # FAR-2802 RESUME: a promote that already pushed the GA tag but failed
+          # before the publication chain finished cannot be completed by a plain
+          # promote - safety 2 refuses because the tag exists and safety 4
+          # requires origin/main to equal the RC commit, which is false once the
+          # promote PR squash-merged. Re-derive the release identity from the
+          # frozen state instead: the GA tag is the release commit, the freeze
+          # must still point at it, and the single parent of that squash merge is
+          # the validated RC. Everything that mutates release identity (safety 2,
+          # safety 4, the freeze/hold swap, the promote PR, the tag push) is
+          # skipped: this path creates, moves and deletes nothing.
+          # ---------------------------------------------------------------------
+          if [ "${RESUME:-false}" = "true" ]; then
+            # 1. Refresh refs so the frozen GA tag, the RC marker and the live
+            #    release-freeze branch are all read from origin, not a stale clone.
+            if ! git fetch --tags --force origin; then
+              echo "::error::Could not fetch tags from origin; refusing to resume from stale refs."
+              exit 1
+            fi
+
+            # 2. The GA tag must exist. rc 2 from ls-remote is a proven absence;
+            #    any other failure is an unknown state and fails closed.
+            ga_tag_rc=0
+            ga_tag_listing="$(git ls-remote --exit-code origin "refs/tags/${GA_TAG}")" || ga_tag_rc=$?
+            case "$ga_tag_rc" in
+              0) ;;
+              2)
+                echo "::error::Cannot resume: the GA tag ${GA_TAG} does not exist on origin. A resume is only for a promote that already pushed the tag; run a first promote without resume."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not query the GA tag ${GA_TAG} (git ls-remote rc=${ga_tag_rc}); refusing to resume on an unknown tag state."
+                exit 1
+                ;;
+            esac
+            if [ -z "$ga_tag_listing" ]; then
+              echo "::error::The GA tag ${GA_TAG} query returned no ref; refusing to resume."
+              exit 1
+            fi
+            if ! GA_SHA="$(git rev-parse --verify "${GA_TAG}^{commit}" 2>/dev/null)"; then
+              echo "::error::The GA tag ${GA_TAG} does not resolve to a commit; refusing to resume."
+              exit 1
+            fi
+
+            # 3. release-freeze must still sit at the GA commit. A missing
+            #    freeze and a query error both fail closed: resume never treats
+            #    unknown as absent and never lifts or moves the freeze itself.
+            freeze_rc=0
+            freeze_listing="$(git ls-remote --exit-code origin refs/heads/release-freeze)" || freeze_rc=$?
+            case "$freeze_rc" in
+              0) ;;
+              2)
+                echo "::error::Cannot resume: release-freeze is absent on origin, so it cannot be proven to point at the GA commit ${GA_SHA}."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not query release-freeze (git ls-remote rc=${freeze_rc}); refusing to resume on an unknown freeze state."
+                exit 1
+                ;;
+            esac
+            FREEZE_SHA="$(printf '%s\n' "$freeze_listing" | awk 'NF >= 1 { print $1; exit }')"
+            if [ -z "$FREEZE_SHA" ]; then
+              echo "::error::The release-freeze listing produced no SHA; refusing to resume."
+              exit 1
+            fi
+            if [ "$FREEZE_SHA" != "$GA_SHA" ]; then
+              echo "::error::release-freeze is at ${FREEZE_SHA}, not the GA commit ${GA_SHA}; refusing to resume a release whose freeze has moved."
+              exit 1
+            fi
+
+            # 4. The GA commit must be the squash merge of the promote PR: a
+            #    merge commit, a root commit or an unreadable result all fail.
+            if ! parent_line="$(git rev-list --parents -n1 "$GA_SHA" 2>/dev/null)"; then
+              echo "::error::Could not read the parents of the GA commit ${GA_SHA}; refusing to resume."
+              exit 1
+            fi
+            if [ -z "$parent_line" ]; then
+              echo "::error::Empty parent listing for the GA commit ${GA_SHA}; refusing to resume."
+              exit 1
+            fi
+            parent_count="$(printf '%s\n' "$parent_line" | awk '{ print NF - 1 }')"
+            if [ "$parent_count" != "1" ]; then
+              echo "::error::The GA commit ${GA_SHA} has ${parent_count} parent(s); a resumed promote requires the single-parent squash merge of the promote PR."
+              exit 1
+            fi
+
+            # 5. The RC candidate is that single parent and the validation
+            #    marker must point at it. Several rc tags may share the commit;
+            #    the version sort picks the highest rc spelling.
+            RC_SHA="$(git rev-parse "${GA_SHA}^")"
+            RC_TAG=""
+            while IFS= read -r candidate; do
+              [ -n "$candidate" ] || continue
+              if [ "$(git rev-parse "${candidate}^{commit}")" = "$RC_SHA" ]; then
+                RC_TAG="$candidate"
+                break
+              fi
+            done < <(git tag --list "${GA_TAG}-rc*" --sort=-v:refname)
+            if [ -z "$RC_TAG" ]; then
+              echo "::error::No ${GA_TAG}-rc* tag points at the RC parent ${RC_SHA} of the GA commit ${GA_SHA}; refusing to resume."
+              exit 1
+            fi
+            VALIDATED_TAG="validated/${RC_TAG}"
+            validated_rc=0
+            git ls-remote --exit-code origin "refs/tags/${VALIDATED_TAG}" >/dev/null || validated_rc=$?
+            case "$validated_rc" in
+              0) ;;
+              2)
+                echo "::error::Cannot resume: no validation marker ${VALIDATED_TAG} exists on origin; ${RC_TAG} was never validated."
+                exit 1
+                ;;
+              *)
+                echo "::error::Could not query the validation marker ${VALIDATED_TAG} (git ls-remote rc=${validated_rc}); refusing to resume on an unknown validation state."
+                exit 1
+                ;;
+            esac
+            if ! VAL_SHA="$(git rev-parse --verify "${VALIDATED_TAG}^{commit}" 2>/dev/null)"; then
+              echo "::error::The validation marker ${VALIDATED_TAG} does not resolve to a commit; refusing to resume."
+              exit 1
+            fi
+            if [ "$VAL_SHA" != "$RC_SHA" ]; then
+              echo "::error::Validation marker ${VALIDATED_TAG} points at ${VAL_SHA}, not the RC parent ${RC_SHA}; refusing to resume."
+              exit 1
+            fi
+
+            # 6. Publish from the exact GA commit, never from a moved main.
+            git checkout --detach "$GA_SHA"
+            if [ "$(git rev-parse HEAD)" != "$GA_SHA" ]; then
+              echo "::error::Could not check out the GA commit ${GA_SHA}; refusing to publish."
+              exit 1
+            fi
+
+            # 9. One clear line naming the re-derived release identity.
+            echo "::notice::Resume ${GA_TAG}: GA ${GA_SHA}, RC ${RC_TAG} @ ${RC_SHA}, freeze ${FREEZE_SHA} == GA. Publication only; no tag or freeze mutation."
+
+            {
+              echo "ga_tag=$GA_TAG"
+              echo "rc_tag=$RC_TAG"
+              echo "promote_sha=$GA_SHA"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Safety 1: only promote OUT of an active freeze.
           if ! git ls-remote --exit-code origin refs/heads/release-freeze >/dev/null 2>&1; then
@@ -1852,7 +2349,8 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # RECUT: publish from the new RC tag, which was created at current main.
+      # RECUT: publish from the new RC tag, which was created at the single
+      # resolved target commit (origin/main sampled once, or an explicit pin).
       # -----------------------------------------------------------------------
       - name: Check out the RC commit for publishing (recut only)
         if: inputs.mode == 'recut'
@@ -2011,12 +2509,13 @@ jobs:
             -f release_ref="${RC_TAG}" \
             -f release_sha="${RC_SHA}"
 
-
-          # Dispatch validation only after GitHub has accepted the deploy
-          # dispatch. rc-validate waits for /api/v1/deployment to report the RC
-          # commit, then owns the validated/${RC_TAG} marker on success.
-          echo "Dispatching rc-validate.yml for ${RC_TAG}."
-          gh workflow run rc-validate.yml --ref "${RC_TAG}" -f rc_tag="${RC_TAG}"
+          # FAR-2800: validation is independent of any deployment. rc-validate
+          # boots the RC's own disposable stack and fuzzes that, so it takes
+          # nothing but the tag. Dispatched from main so the CURRENT validation
+          # definition runs; every job checks out `inputs.rc_tag` for the
+          # artefact under test, which is what lets an already-cut RC be
+          # re-validated after a validation-only fix.
+          gh workflow run rc-validate.yml --ref main -f rc_tag="${RC_TAG}"
 
           echo "Dispatched Deploy (force) and rc-validate for ${RC_TAG}."
 
@@ -2127,9 +2626,41 @@ jobs:
         run: |
           set -euo pipefail
           VERSION_NUM="${VERSION}"
+          CHART_REF="oci://ghcr.io/${IMAGE_NAMESPACE}/charts/farna-control"
 
           # Log in to GHCR for Helm
           echo "${GH_TOKEN}" | helm registry login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+          # FAR-2802: a resumed promote re-runs this step, so it must never
+          # overwrite an existing chart version. Ask the registry first: a
+          # successful pull proves the version exists and its Chart.yaml must
+          # name the version and appVersion we would publish. Only a not-found
+          # error means "safe to push"; any other pull failure cannot prove
+          # either state and is a hard failure.
+          PULL_DIR="$(mktemp -d)"
+          PULL_LOG="$(mktemp)"
+          if helm pull "$CHART_REF" --version "$VERSION_NUM" --destination "$PULL_DIR" > "$PULL_LOG" 2>&1; then
+            PULLED_CHART="$PULL_DIR/farna-control-${VERSION_NUM}.tgz"
+            if [ ! -f "$PULLED_CHART" ]; then
+              echo "::error::helm pull reported success but ${PULLED_CHART} is missing; refusing to guess the published chart state."
+              exit 1
+            fi
+            tar -xzf "$PULLED_CHART" -C "$PULL_DIR"
+            PUBLISHED_VERSION="$(awk '/^version:[[:space:]]*/ { print $2; exit }' "$PULL_DIR/farna-control/Chart.yaml" | tr -d '"')"
+            PUBLISHED_APP_VERSION="$(awk '/^appVersion:[[:space:]]*/ { print $2; exit }' "$PULL_DIR/farna-control/Chart.yaml" | tr -d '"')"
+            if [ "$PUBLISHED_VERSION" != "$VERSION_NUM" ] || [ "$PUBLISHED_APP_VERSION" != "$VERSION_NUM" ]; then
+              echo "::error::Published chart farna-control reports version='${PUBLISHED_VERSION}' appVersion='${PUBLISHED_APP_VERSION}', expected both to be ${VERSION_NUM}; refusing to overwrite an existing chart version."
+              exit 1
+            fi
+            echo "::notice::Helm chart farna-control ${VERSION_NUM} is already published at ${CHART_REF} with matching version and appVersion; skipping the push and never overwriting an existing chart version."
+            exit 0
+          fi
+          if ! grep -qiE 'not found|manifest unknown|no such manifest' "$PULL_LOG"; then
+            echo "::error::helm pull of farna-control ${VERSION_NUM} failed for a reason other than an absent version; refusing to push without knowing the registry state."
+            cat "$PULL_LOG"
+            exit 1
+          fi
+          echo "Helm chart farna-control ${VERSION_NUM} is not published yet; pushing it."
 
           # Package and push chart
           helm package deploy/helm/farna-control --destination /tmp/helm-pkg --version "$VERSION_NUM" --app-version "$VERSION_NUM"
@@ -2183,11 +2714,18 @@ jobs:
             --version "$VERSION" --output CHANGELOG.md > "$NOTES_FILE"
 
           RELEASE_TITLE="Farna Control ${GA_TAG}"
+          # FAR-2822: the GA release is the release record, never Latest.
+          # /releases/latest must always resolve to the bundle-v<VERSION>
+          # release, which scripts/install.sh and the marketing website's
+          # fetch-release.mjs consume (they reject a non-bundle tag). Without an
+          # explicit --latest=false, `gh release create` defaults to automatic
+          # latest selection, so a GA release created after the bundle release
+          # would take the Latest pointer and break both consumers.
           if gh release view "$GA_TAG" >/dev/null 2>&1; then
-            gh release edit "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
+            gh release edit "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" --latest=false
             echo "GitHub Release updated for ${GA_TAG} with title ${RELEASE_TITLE}."
           else
-            gh release create "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE"
+            gh release create "$GA_TAG" --target "$MERGED_SHA" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" --latest=false
 
             echo "GitHub Release created for ${GA_TAG} with title ${RELEASE_TITLE}."
           fi
@@ -2198,6 +2736,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_MARKER_TOKEN: ${{ secrets.RELEASE_MARKER_TOKEN }}
           VERSION: ${{ inputs.version }}
+          RESUME: ${{ inputs.resume }}
         shell: bash
         run: |
           set -euo pipefail
@@ -2219,7 +2758,13 @@ jobs:
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
           }
           GA_TAG="v${VERSION}"
-          if git rev-parse -q --verify "refs/tags/${GA_TAG}" >/dev/null 2>&1; then
+          if [ "${RESUME:-false}" = "true" ]; then
+            # FAR-2802: a resumed promote must never move or delete
+            # release-freeze. It is the anchor the next resume verifies against,
+            # and the resume path may have failed before checking out the GA
+            # commit, so HEAD is not a safe value to point the freeze at.
+            echo "Resume: leaving release-freeze untouched after a failed resumed promote."
+          elif git rev-parse -q --verify "refs/tags/${GA_TAG}" >/dev/null 2>&1; then
             git branch -f release-freeze HEAD
             marker_git push "$MARKER_REMOTE" refs/heads/release-freeze:refs/heads/release-freeze --force
             echo "Re-established release-freeze after failed GA publication."
@@ -2283,10 +2828,23 @@ jobs:
           marker_git() {
             GIT_TERMINAL_PROMPT=0 git -c 'http.https://github.com/.extraheader=' "$@"
           }
-          if ! git ls-remote --exit-code origin refs/heads/release-freeze >/dev/null 2>&1; then
-            echo "::error::release-freeze is missing at final GA publication step; refusing to lift an unknown hold."
-            exit 1
-          fi
+          # FAR-2802: a resumed promote may reach this step after a manual or
+          # partial lift, so an absent freeze is tolerated. A query error is NOT
+          # absence and still fails closed - unknown is never lifted.
+          freeze_rc=0
+          git ls-remote --exit-code origin refs/heads/release-freeze >/dev/null 2>/tmp/release-freeze-lift-error || freeze_rc=$?
+          case "$freeze_rc" in
+            0) ;;
+            2)
+              echo "::notice::release-freeze is already absent; nothing to lift (idempotent GA finalisation)."
+              exit 0
+              ;;
+            *)
+              echo "::error::Could not query release-freeze (git ls-remote rc=${freeze_rc}) at the final GA publication step; refusing to lift an unknown hold."
+              cat /tmp/release-freeze-lift-error
+              exit 1
+              ;;
+          esac
           marker_git push "$MARKER_REMOTE" --delete refs/heads/release-freeze
           echo "All GA publication steps succeeded; freeze lifted and merge queue resumes."
 
@@ -2304,13 +2862,38 @@ jobs:
         if: always()
         shell: bash
         env:
+          MODE: ${{ inputs.mode }}
           CUT_RC_TAG: ${{ steps.cut.outputs.rc_tag }}
           RECUT_RC_TAG: ${{ steps.recut.outputs.rc_tag }}
+          CUT_SHA: ${{ steps.cut.outputs.cut_sha }}
+          TARGET_SHA: ${{ needs.resolve-target.outputs.target_sha }}
+          TARGET_PINNED: ${{ needs.resolve-target.outputs.target_pinned }}
         run: |
           set -euo pipefail
           rc_tag="${CUT_RC_TAG:-}${RECUT_RC_TAG:-}"
           echo "rc_tag=${rc_tag}" >> "$GITHUB_OUTPUT"
-          echo "Release candidate tag exposed to dependent jobs: '${rc_tag}'"
+          # FAR-2752: the published target must be the commit the RC tag actually
+          # points at. `cut` tags the merge commit of its version-bump PR - a
+          # commit that did not exist when resolve-target sampled origin/main - so
+          # for cut the target is the cut step's own merged commit, never the
+          # origin/main sample. A recut (and only a recut) publishes the single
+          # resolved target it validated, which may be pinned.
+          if [ "${MODE:-}" = "cut" ]; then
+            if [ -z "${CUT_SHA:-}" ]; then
+              echo "::error::cut produced no exact merged commit SHA to record as the release target."
+              exit 1
+            fi
+            target_sha="${CUT_SHA}"
+            target_pinned="false"
+          else
+            target_sha="${TARGET_SHA:-}"
+            target_pinned="${TARGET_PINNED:-}"
+          fi
+          {
+            echo "target_sha=${target_sha}"
+            echo "target_pinned=${target_pinned}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Release candidate tag exposed to dependent jobs: '${rc_tag}' (target ${target_sha}, pinned=${target_pinned})"
 
   # ---------------------------------------------------------------------------
 
@@ -2462,19 +3045,19 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.rc_tag }}
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bundle-artefacts-amd64
           path: release-artefacts
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-installer-${{ inputs.version }}-arm64
           path: release-artefacts
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-installer-${{ inputs.version }}-x86_64
           path: release-artefacts
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: inputs.include_windows
         with:
           name: windows-installer-${{ inputs.version }}
@@ -2482,7 +3065,7 @@ jobs:
       # FAR-2579 - the validated .deb. Downloaded beside (not into)
       # release-artefacts so only the package itself joins the release set; its
       # own .sha256 is checked here and the release SHA256SUMS below covers it.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.linux-deb.outputs.deb_artifact }}
           path: deb-artefacts
@@ -2541,6 +3124,11 @@ jobs:
           INCLUDE_WINDOWS: ${{ inputs.include_windows }}
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the build
+          # source), not the workflow dispatch ref, as the manifest provenance
+          # field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required'; exit 1; }
           cd release-artefacts
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
@@ -2577,7 +3165,7 @@ jobs:
               # a single chunk regardless of how large the installers are.
               with path.open("rb") as handle:
                   return hashlib.file_digest(handle, "sha256").hexdigest()
-          body = m.build_release_manifest(release=f"bundle-v{version}", platform="multi-platform", generated_at=os.environ.get("GITHUB_SHA", ""), components=components, artifacts=[{"name": n, "sha256": digest(root / n), "version": version} for n in names])
+          body = m.build_release_manifest(release=f"bundle-v{version}", platform="multi-platform", generated_at=os.environ["SOURCE_COMMIT"], components=components, artifacts=[{"name": n, "sha256": digest(root / n), "version": version} for n in names])
           payload = json.dumps(body, indent=2, sort_keys=True).encode()
           signing_key = os.environ["MANIFEST_SIGNING_KEY"]
           if len(signing_key) != 64:
@@ -2602,7 +3190,7 @@ jobs:
 
           PY
           (cd release-artefacts && sha256sum --check SHA256SUMS)
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: final-release-artefacts-${{ inputs.version }}
           path: release-artefacts
@@ -2654,7 +3242,7 @@ jobs:
       arm64_sha256: ${{ steps.verify.outputs.arm64_sha256 }}
       x86_64_sha256: ${{ steps.verify.outputs.x86_64_sha256 }}
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: final-release-artefacts-${{ inputs.version }}
           path: release-artefacts
@@ -2788,7 +3376,7 @@ jobs:
           ref: ${{ needs.release.outputs.rc_tag }}
 
       - name: Download final Linux + macOS release artefacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: final-release-artefacts-${{ inputs.version }}
           path: release-artefacts
@@ -2957,9 +3545,26 @@ jobs:
           TAG: bundle-v${{ inputs.version }}
           RC_TAG: ${{ needs.release.outputs.rc_tag }}
           INCLUDE_WINDOWS: ${{ inputs.include_windows }}
+          MODE: ${{ inputs.mode }}
+          # The release job re-exports the commit the RC tag actually points at
+          # (FAR-2752): for cut that is the version-bump merge commit, for a recut
+          # the pinned/resolved target. So the notes trace exactly the commit the
+          # schema gate proved and the tag published.
+          TARGET_SHA: ${{ needs.release.outputs.target_sha }}
+          TARGET_PINNED: ${{ needs.release.outputs.target_pinned }}
         shell: bash
         run: |
           set -euo pipefail
+
+          # FAR-2752: prove the recorded target is the commit the RC tag points
+          # at before it is published. `cut` tags its version-bump merge commit
+          # and a recut tags the resolved/pinned target; either way the note must
+          # name the tagged commit, never the origin/main sample taken at dispatch.
+          TAGGED_SHA="$(git rev-parse "${RC_TAG}^{commit}")"
+          if [ "${TARGET_SHA:-}" != "$TAGGED_SHA" ]; then
+            echo "::error::Release notes target '${TARGET_SHA}' does not match the RC tag ${RC_TAG} commit ${TAGGED_SHA}; refusing to publish a wrong target."
+            exit 1
+          fi
 
           # Generate changelog and release notes
           NOTES_FILE="$(mktemp)"
@@ -2975,15 +3580,38 @@ jobs:
             --version "$VERSION" \
             --output CHANGELOG.md > "$NOTES_FILE"
 
+          # FAR-2752: record the commit this RC was tagged at. The pinned/resolved
+          # wording applies to a recut only; a cut publishes the merge commit of
+          # its version-bump PR, which is neither pinned nor the origin/main sample.
+          {
+            echo ""
+            echo "---"
+            echo ""
+            if [ "${TARGET_PINNED:-false}" = "true" ]; then
+              echo "Target commit: \`${TARGET_SHA}\` (pinned via the \`target_sha\` workflow input)."
+            elif [ "${MODE:-}" = "cut" ]; then
+              echo "Target commit: \`${TARGET_SHA}\` (the version-bump merge commit tagged as this release candidate)."
+            else
+              echo "Target commit: \`${TARGET_SHA}\` (resolved once from \`origin/main\` at dispatch)."
+            fi
+          } >> "$NOTES_FILE"
+
+          # Two inventories, and the split is the replacement order for a recut:
+          # ASSETS holds every portable/binary artefact (openapi.json included),
+          # MANIFEST_ASSETS holds the checksum + manifest + signature trio, so
+          # the trio is written LAST: the manifest after every artefact it
+          # covers and its signature after the manifest, so a VERIFIABLE
+          # manifest can only exist once the replacement of every covered asset
+          # has landed. RELEASE_MANIFEST.json is built before this step and
+          # excludes openapi.json (generated later in the publish job), so
+          # openapi.json is covered by neither the manifest nor SHA256SUMS; the
+          # verification step proves it by published byte size only.
           ASSETS=(
               "release-artefacts/farna-control-${VERSION}-linux-amd64.tar.gz"
              "release-artefacts/FarnaControl-${VERSION}-macos-arm64.dmg"
              "release-artefacts/FarnaControl-${VERSION}-macos-x86_64.dmg"
              "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
             "release-artefacts/farna-control_${VERSION}_amd64.deb"
-            "release-artefacts/SHA256SUMS"
-            "release-artefacts/RELEASE_MANIFEST.json"
-            "release-artefacts/RELEASE_MANIFEST.json.sig"
             "release-artefacts/openapi.json"
           )
           # RELEASE_MANIFEST.json + .sig are required by native-release-smoke.yml
@@ -2991,7 +3619,20 @@ jobs:
           if [ "$INCLUDE_WINDOWS" = "true" ]; then
             ASSETS+=("release-artefacts/farna-control-${VERSION}-windows-amd64.exe")
           fi
-          for asset in "${ASSETS[@]}"; do
+          MANIFEST_ASSETS=(
+            "release-artefacts/SHA256SUMS"
+            "release-artefacts/RELEASE_MANIFEST.json"
+            "release-artefacts/RELEASE_MANIFEST.json.sig"
+          )
+          # The post-upload verification reads this exact inventory, so it proves
+          # what THIS run uploaded rather than a second, hand-maintained list
+          # that could drift away from the upload.
+          EXPECTED_ASSETS_FILE="${RUNNER_TEMP}/expected-release-assets.txt"
+          : > "$EXPECTED_ASSETS_FILE"
+          for asset in "${ASSETS[@]}" "${MANIFEST_ASSETS[@]}"; do
+            basename "$asset" >> "$EXPECTED_ASSETS_FILE"
+          done
+          for asset in "${ASSETS[@]}" "${MANIFEST_ASSETS[@]}"; do
             if [ ! -f "$asset" ]; then
               echo "::error::Expected release asset ${asset} is missing - refusing to publish an incomplete release."
               exit 1
@@ -3023,15 +3664,51 @@ jobs:
             PUBLISH_ARGS=(--prerelease=false --latest=false)
           fi
 
-          # NEVER --clobber an existing asset: a replaced release artifact
-          # invalidates every verify-against-the-manifest already downloaded.
-          # An existing release gets an upload (which fails loudly on an
-          # existing asset); a new one is created with its assets atomically.
+          # A first publish never clobbers: `gh release create` writes every
+          # asset exactly once, atomically, so there is no window where the
+          # public artefact is missing or stale.
+          #
+          # A recut of a version that already published a bundle must REPLACE
+          # its assets instead of refusing (FAR-2789): publication is idempotent
+          # so the documented recovery path needs no manual deletion. The
+          # release is never deleted or hidden - the public artefact stays
+          # visible throughout - and assets are replaced in the same order the
+          # create uploads them: the portable/binary set, then SHA256SUMS, then
+          # RELEASE_MANIFEST.json, then its signature LAST. The manifest covers
+          # every asset except openapi.json (which it predates and which the
+          # verification step checks by byte size only), and the signature
+          # covers the manifest, so a verifiable manifest can only exist once
+          # the replacement of every manifest-covered asset has landed - an
+          # interrupted recut fails verification rather than certifying a
+          # half-replaced release - and the verification step after this one
+          # proves the published assets and signature before the job passes.
+          #
+          # The replaced comment ("NEVER --clobber an existing asset") was right
+          # for a first publish and wrong for a same-version recut, where
+          # refusing left deleting the published release as the only way out.
           RELEASE_TITLE="Farna Control ${RC_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::warning::release ${TAG} already exists - uploading assets without clobbering"
-            gh release edit "$TAG" --title "$RELEASE_TITLE" "${PUBLISH_ARGS[@]}"
-            gh release upload "$TAG" "${ASSETS[@]}"
+            echo "::warning::release ${TAG} already exists - replacing its assets in place (idempotent recut)"
+            gh release edit "$TAG" --title "$RELEASE_TITLE" --notes-file "$NOTES_FILE" "${PUBLISH_ARGS[@]}"
+            # A recut can SHRINK the inventory: the Windows installer is the
+            # only conditional asset, so a recut with INCLUDE_WINDOWS=false of a
+            # version first published with Windows support would otherwise leave
+            # the stale .exe behind and fail the post-upload "unexpected asset"
+            # check with no way forward. Reconcile the one known-dropped asset
+            # explicitly by removing it before the replacement upload. Any other
+            # asset not in this run's inventory stays a hard failure.
+            WINDOWS_ASSET="farna-control-${VERSION}-windows-amd64.exe"
+            if [ "$INCLUDE_WINDOWS" != "true" ] \
+              && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' \
+                | grep -qxF "$WINDOWS_ASSET"; then
+              gh release delete-asset "$TAG" "$WINDOWS_ASSET" --repo "$GITHUB_REPOSITORY" --yes
+              echo "::warning::removed ${WINDOWS_ASSET} from ${TAG}: this recut was built without Windows support"
+            fi
+            gh release upload "$TAG" "${ASSETS[@]}" \
+              --clobber
+            for manifest_asset in "${MANIFEST_ASSETS[@]}"; do
+              gh release upload "$TAG" "$manifest_asset" --clobber
+            done
           else
             # --target pins the tag to the checked-out RC commit instead of
             # relying on the repository default branch happening to be there.
@@ -3040,7 +3717,125 @@ jobs:
               --notes-file "$NOTES_FILE" \
               --target "$(git rev-parse HEAD)" \
               "${PUBLISH_ARGS[@]}" \
-              "${ASSETS[@]}"
+              "${ASSETS[@]}" \
+              "${MANIFEST_ASSETS[@]}"
+          fi
+
+      - name: Verify the published release assets and manifest signature
+        # FAR-2789: a recut replaces assets in place, so the publication must be
+        # proven, not assumed. Every asset this run intended to publish must be
+        # on the release with the local byte size, and the PUBLISHED manifest
+        # and signature must verify under the checked-in trust store against
+        # those local bytes. This runs for a first publish too: the check that
+        # makes a recut safe also proves a create dropped nothing.
+        # Every asset this run uploaded must be present. The published set is
+        # also checked for assets that are NOT in this run's inventory: a stale
+        # extra asset left by an older naming scheme is a loud failure rather
+        # than something an installer or /releases/latest could pick up. The one
+        # asset whose inventory legitimately shrinks - the conditional Windows
+        # installer - is removed by the publication step when this recut sets
+        # INCLUDE_WINDOWS=false, so it never reaches this check as unexpected.
+        #
+        # One auxiliary asset is expected and must NOT fail the check:
+        # MACOS_STAPLED.json is a staple marker WRITTEN BY macos-staple-retry.yml
+        # (its check_staple_marker records each DMG's sha256), never uploaded by
+        # this step. On a recut it is already on the release, so an exact-count
+        # equality would reject a perfectly valid release on a N-vs-(N+1)
+        # difference. The marker is safe to leave in place: macos-staple-retry.yml
+        # treats it as stale when a DMG digest no longer matches and re-staples.
+        # The exact basename is permitted; any OTHER unexpected asset is fatal.
+        if: steps.ticket-gate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          TAG: bundle-v${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED_ASSETS_FILE="${RUNNER_TEMP}/expected-release-assets.txt"
+          if [ ! -s "$EXPECTED_ASSETS_FILE" ]; then
+            echo "::error::The publication step recorded no expected asset set - refusing to accept ${TAG} as complete."
+            exit 1
+          fi
+
+          PUBLISHED_ASSETS="${RUNNER_TEMP}/published-release-assets.txt"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[] | "\(.name) \(.size)"' > "$PUBLISHED_ASSETS"
+
+          while IFS= read -r asset; do
+            [ -n "$asset" ] || continue
+            published_size="$(awk -v name="$asset" '$1 == name {print $2}' "$PUBLISHED_ASSETS")"
+            if [ -z "$published_size" ]; then
+              echo "::error::Expected asset ${asset} is missing from release ${TAG}."
+              exit 1
+            fi
+            local_size="$(stat -c %s "release-artefacts/${asset}")"
+            if [ "$published_size" != "$local_size" ]; then
+              echo "::error::Asset ${asset} is ${published_size} bytes on release ${TAG}, but the local file is ${local_size} bytes."
+              exit 1
+            fi
+          done < "$EXPECTED_ASSETS_FILE"
+          echo "Every published asset is present on ${TAG} with its local byte size."
+
+          # Reject anything on the release that this run did not upload, except
+          # the single known auxiliary staple marker. The comparison is on the
+          # exact basename, so a name that merely CONTAINS MACOS_STAPLED is not
+          # excused.
+          STAPLE_MARKER="MACOS_STAPLED.json"
+          unexpected_asset=0
+          while IFS= read -r published_name; do
+            [ -n "$published_name" ] || continue
+            if grep -qxF "$published_name" "$EXPECTED_ASSETS_FILE"; then
+              continue
+            fi
+            if [ "$published_name" = "$STAPLE_MARKER" ]; then
+              echo "::notice::${TAG} carries ${STAPLE_MARKER}, the staple marker owned by macos-staple-retry.yml; it is re-validated by DMG digest there and is not part of this run's inventory."
+              continue
+            fi
+            echo "::error::release ${TAG} publishes unexpected asset ${published_name}, which this run did not upload - refusing to leave an unexplained asset on the release."
+            unexpected_asset=1
+          done < <(awk '{print $1}' "$PUBLISHED_ASSETS")
+          if [ "$unexpected_asset" -ne 0 ]; then
+            exit 1
+          fi
+
+          MANIFEST_DIR="${RUNNER_TEMP}/published-manifest"
+          mkdir -p "$MANIFEST_DIR"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'RELEASE_MANIFEST.json' \
+            --pattern 'RELEASE_MANIFEST.json.sig' \
+            --dir "$MANIFEST_DIR" --clobber
+
+          if ! uv run --project backend --no-build --no-sync python - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "backend/src")
+          from farna.launcher import manifest as m
+
+          published = Path(os.environ["RUNNER_TEMP"]) / "published-manifest"
+          signature = m.read_signature_file(published / "RELEASE_MANIFEST.json.sig")
+          expected_key_id = m._KEY_ID_CURRENT
+          if signature["key_id"] != expected_key_id:
+              raise SystemExit(
+                  f"published manifest signature key_id {signature['key_id']!r} does not match expected {expected_key_id!r}"
+              )
+          verified_manifest = m.verify_release_from_files(
+              manifest_path=published / "RELEASE_MANIFEST.json",
+              signature_path=published / "RELEASE_MANIFEST.json.sig",
+              artifacts_root=Path("release-artefacts"),
+          )
+          if verified_manifest.release != f"bundle-v{os.environ['VERSION']}":
+              raise SystemExit(
+                  f"published manifest release is {verified_manifest.release!r}, not the requested version"
+              )
+          print(f"published manifest signature verified under checked-in key_id {signature['key_id']}")
+          PY
+          then
+            echo "::error::The RELEASE_MANIFEST.json / RELEASE_MANIFEST.json.sig pair published on ${TAG} does not verify against the checked-in trust store."
+            exit 1
           fi
 
       - name: Push the bundle tag
@@ -3048,6 +3843,7 @@ jobs:
         # downloads the GitHub Release assets, so the release must already exist.
         if: steps.ticket-gate.outputs.publish == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         shell: bash
         run: |
@@ -3055,12 +3851,26 @@ jobs:
           BUNDLE_TAG="bundle-v${VERSION}"
           RELEASE_SHA="$(git rev-parse HEAD)"
 
-          # gh release create publishes the tag itself. Treat an existing remote
-          # tag as success only when it resolves to this exact release checkout;
-          # never overwrite a published tag or collapse an unknown query failure
-          # into "absent".
-          # The peel/rc-2 discrimination below is mirrored by the post-push
+          # gh release create publishes the tag itself, so this step is the one
+          # place a bundle tag is created; a recut only replaces the release
+          # assets. The bundle tag is IMMUTABLE: the repository ruleset
+          # `release-tag-protection` (refs/tags/bundle-v*, deletion + update
+          # rules, enforcement active) forbids moving or deleting it, so this
+          # step never does either.
+          #
+          # Remote-tag states:
+          #   0 + SHA == this checkout  -> already published, nothing to push
+          #   0 + SHA != this checkout  -> a recut of an already-published
+          #       version: converge on the protected tag (proved below to be an
+          #       ancestor of this checkout, and refused once the version is
+          #       promoted), emit a notice, and leave the tag where it is
+          #   2 (absent)                -> create and push the tag
+          #   anything else             -> UNKNOWN, fail closed
+          #
+          # The peel/rc-2 discrimination is mirrored by the post-push
           # verification at the end of this step; keep the two in sync.
+          tag_action=""
+          expected_tag_sha=""
           remote_tag_line=""
           tag_rc=0
           remote_tag_line="$(git ls-remote --exit-code origin "refs/tags/${BUNDLE_TAG}")" || tag_rc=$?
@@ -3080,20 +3890,73 @@ jobs:
               esac
               if [ "$remote_tag_sha" = "$RELEASE_SHA" ]; then
                 echo "${BUNDLE_TAG} already published by the release step at ${RELEASE_SHA}; nothing to push."
-                exit 0
+                tag_action="existing"
+                expected_tag_sha="$RELEASE_SHA"
+              else
+                # FAR-2789: a recut of a version whose bundle tag is immutable.
+                # Converge only when the version is not yet promoted AND the
+                # existing tag commit is an ancestor of this release checkout;
+                # otherwise fail closed.
+                ga_rc=0
+                git ls-remote --exit-code origin "refs/tags/v${VERSION}" >/dev/null 2>&1 || ga_rc=$?
+                case "$ga_rc" in
+                  0)
+                    echo "::error::version ${VERSION} is already promoted (tag v${VERSION} exists); refusing to republish its bundle"
+                    echo "refusing to overwrite the published ${BUNDLE_TAG} tag; a promoted version's bundle is immutable."
+                    exit 1
+                    ;;
+                  2) : ;; # the GA tag is absent, so this version is not promoted
+                  *)
+                    echo "::error::Could not confirm whether v${VERSION} already exists (git ls-remote exit ${ga_rc}) - state UNKNOWN, refusing to republish."
+                    exit 1
+                    ;;
+                esac
+
+                # The release job's checkout may be shallow, so prove ancestry
+                # with the compare API rather than local history. `ahead` means
+                # RELEASE_SHA is ahead of the tag commit (the tag is an ancestor);
+                # `identical` means they are the same commit. `behind`/`diverged`
+                # mean the tag points at a commit unrelated to this release.
+                compare_status=""
+                compare_rc=0
+                compare_status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${remote_tag_sha}...${RELEASE_SHA}" --jq '.status')" || compare_rc=$?
+                if [ "$compare_rc" -ne 0 ]; then
+                  echo "::error::Could not compare ${remote_tag_sha} to ${RELEASE_SHA} (gh api exit ${compare_rc}) - state UNKNOWN, refusing to republish."
+                  exit 1
+                fi
+                case "$compare_status" in
+                  ahead|identical) : ;;
+                  behind|diverged)
+                    echo "::error::bundle tag points at a commit unrelated to this release target"
+                    exit 1
+                    ;;
+                  *)
+                    echo "::error::Unexpected compare status '${compare_status}' for ${remote_tag_sha}...${RELEASE_SHA} - state UNKNOWN, refusing to republish."
+                    exit 1
+                    ;;
+                esac
+
+                echo "::notice::${BUNDLE_TAG} stays at ${remote_tag_sha} (the first published commit for this version) because the release-tag-protection ruleset forbids updating it; this recut published its assets and its signed manifest, which name the exact built commit ${RELEASE_SHA}."
+                tag_action="converged"
+                expected_tag_sha="$remote_tag_sha"
               fi
-              echo "::error::${BUNDLE_TAG} already exists and points at ${remote_tag_sha}, not release target ${RELEASE_SHA} - refusing to overwrite."
-              exit 1
               ;;
             2)
               git tag -a "$BUNDLE_TAG" -m "Bundle release $BUNDLE_TAG"
               git push origin "$BUNDLE_TAG"
+              tag_action="pushed"
+              expected_tag_sha="$RELEASE_SHA"
               ;;
             *)
               echo "::error::Could not query remote tag ${BUNDLE_TAG} (git ls-remote exit ${tag_rc}) - state UNKNOWN, refusing to publish."
               exit 1
               ;;
           esac
+
+          if [ -z "$expected_tag_sha" ]; then
+            echo "::error::Internal error: no expected ${BUNDLE_TAG} SHA was recorded for the ${tag_action:-unknown} path - refusing to verify blindly."
+            exit 1
+          fi
 
           verified_line=""
           verify_rc=0
@@ -3110,11 +3973,19 @@ jobs:
             exit 1
           fi
           verified_sha="${verified_line%%$'\t'*}"
-          if [ "$verified_sha" != "$RELEASE_SHA" ]; then
-            echo "::error::${BUNDLE_TAG} resolved to ${verified_sha} after push, not release target ${RELEASE_SHA}."
+          if [ "$verified_sha" != "$expected_tag_sha" ]; then
+            if [ "$tag_action" = "pushed" ]; then
+              echo "::error::${BUNDLE_TAG} resolved to ${verified_sha} after push, not release target ${expected_tag_sha}."
+            else
+              echo "::error::${BUNDLE_TAG} resolved to ${verified_sha}, not the expected immutable tag SHA ${expected_tag_sha}."
+            fi
             exit 1
           fi
-          echo "Pushed and verified $BUNDLE_TAG at $RELEASE_SHA"
+          if [ "$tag_action" = "pushed" ]; then
+            echo "Pushed and verified $BUNDLE_TAG at $expected_tag_sha"
+          else
+            echo "Verified $BUNDLE_TAG at $expected_tag_sha (${tag_action} tag)"
+          fi
 
       # ---------------------------------------------------------------------
       # FAR-2573: no verified ticket, no publication. Nothing has been created
@@ -3468,6 +4339,11 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          # FAR-2795: record the exact commit THIS job checked out (the GA tag
+          # commit = the built source), not the workflow dispatch ref, as the
+          # manifest provenance field. Capture it in the repo root before any cd.
+          SOURCE_COMMIT="$(git rev-parse HEAD)"
+          export SOURCE_COMMIT
           [[ -n "$MANIFEST_SIGNING_KEY" ]] || { echo '::error::manifest signing key is required'; exit 1; }
           cd release-artefacts
           sha256sum "farna-control-${VERSION}-compose.tar.gz" > SHA256SUMS
@@ -3484,7 +4360,7 @@ jobs:
           body = m.build_release_manifest(
               release=f"bundle-v{version}",
               platform="compose",
-              generated_at=os.environ.get("GITHUB_SHA", ""),
+              generated_at=os.environ["SOURCE_COMMIT"],
               components={"compose": "production"},
               artifacts=[{"name": name, "sha256": hashlib.sha256((root / name).read_bytes()).hexdigest(), "version": version}],
           )
@@ -3507,13 +4383,20 @@ jobs:
           PY
           (cd release-artefacts && sha256sum --check SHA256SUMS)
 
-      - name: Replace GA compose assets without clobbering
+      # The behaviour is idempotent: a job-level retry of this promote run
+      # converges instead of failing on an existing asset.
+      - name: Publish the GA compose assets (idempotent, verified)
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           TAG="v${VERSION}"
+          # Publication ORDER is fixed and load-bearing: the compose tarball
+          # first, then SHA256SUMS, then the manifest, then the manifest
+          # signature LAST. Uploading the manifest + signature last means a
+          # partial upload is detectable: a present manifest whose covered
+          # artifact is missing or stale fails the verification step below.
           ASSETS=(
             "release-artefacts/farna-control-${VERSION}-compose.tar.gz"
             "release-artefacts/SHA256SUMS"
@@ -3523,17 +4406,97 @@ jobs:
           for asset in "${ASSETS[@]}"; do
             test -s "$asset"
           done
+          # Snapshot the exact asset inventory (name + local byte size) THIS step
+          # uploads into RUNNER_TEMP, so the verification step checks the same
+          # four assets with the same sizes and cannot drift from what was
+          # published.
+          inventory="$RUNNER_TEMP/ga-compose-assets.tsv"
+          : > "$inventory"
+          for asset in "${ASSETS[@]}"; do
+            printf '%s\t%s\n' "$(basename "$asset")" "$(wc -c < "$asset")" >> "$inventory"
+          done
           # The GA release is created by the promotion step (without assets).
-          # Read it back first: a missing release is a real failure, and an
-          # existing compose asset means a previous promote partially published,
-          # which must be repaired by hand rather than silently clobbered -
-          # replacing an asset invalidates every download already checked
-          # against its manifest.
+          # A missing release is a real failure. The GA release stays public
+          # throughout and is never deleted.
           if ! gh release view "$TAG" --json tagName >/dev/null; then
             echo "::error::GA release ${TAG} does not exist - refusing to upload the compose bundle to an unpublished release."
             exit 1
           fi
-          gh release upload "$TAG" "${ASSETS[@]}"
+          # A completed promote is still immutable, but a JOB-LEVEL RETRY inside
+          # the same promote run must converge rather than fail on an
+          # already-present asset: --clobber replaces it instead of erroring.
+          # The manifest and signature are written LAST, so a retry that dies
+          # mid-way leaves a detectable partial upload rather than silently
+          # mixing old and new assets. Never delete the release.
+          for asset in "${ASSETS[@]}"; do
+            gh release upload "$TAG" "$asset" --clobber
+          done
+
+      - name: Verify the published GA compose assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          inventory="$RUNNER_TEMP/ga-compose-assets.tsv"
+          if [ ! -s "$inventory" ]; then
+            echo "::error::expected-asset inventory ${inventory} is missing - the upload step did not run."
+            exit 1
+          fi
+          # 1. Every uploaded asset is present on the release with its local byte
+          # size. `gh release view --json assets` is the release's own record.
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)\t\(.size)"' > "$RUNNER_TEMP/published-assets.tsv"
+          while IFS=$'\t' read -r name expected_size; do
+            [ -n "$name" ] || continue
+            actual_size="$(awk -F'\t' -v n="$name" '$1==n {print $2}' "$RUNNER_TEMP/published-assets.tsv")"
+            if [ -z "$actual_size" ]; then
+              echo "::error::asset ${name} is missing from GA release ${TAG}."
+              exit 1
+            fi
+            if [ "$actual_size" != "$expected_size" ]; then
+              echo "::error::asset ${name} on ${TAG} is ${actual_size} bytes, expected ${expected_size}."
+              exit 1
+            fi
+          done < "$inventory"
+          # 2. The PUBLISHED manifest + signature verify against the checked-in
+          # trust store. Download the published bytes (compose tarball, manifest,
+          # signature) and verify them exactly as an offline operator would.
+          dest="$RUNNER_TEMP/ga-published"
+          mkdir -p "$dest"
+          gh release download "$TAG" --clobber --dir "$dest" \
+            --pattern "farna-control-${VERSION}-compose.tar.gz" \
+            --pattern RELEASE_MANIFEST.json \
+            --pattern RELEASE_MANIFEST.json.sig
+          uv run --no-project --no-sync --no-build python - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, "backend/src")
+          from farna.launcher import manifest as m
+
+          dest = Path(os.environ["RUNNER_TEMP"]) / "ga-published"
+          # Source the expected key id from the trust store's single CURRENT
+          # constant the installer verifies against, rather than duplicating the
+          # literal: the published manifest must verify under the provisioned
+          # key, and any other id (including the reserved next slot) is a failure.
+          expected_key_id = m._KEY_ID_CURRENT
+          try:
+              sig = m.read_signature_file(dest / m.SIGNATURE_NAME)
+              if sig["key_id"] != expected_key_id:
+                  raise m.ManifestSecurityError(
+                      f"published GA manifest is signed under {sig['key_id']!r}, expected {expected_key_id!r}"
+                  )
+              m.verify_release_from_files(
+                  manifest_path=dest / m.MANIFEST_NAME,
+                  signature_path=dest / m.SIGNATURE_NAME,
+                  artifacts_root=dest,
+              )
+          except m.ManifestSecurityError as exc:
+              sys.exit(f"::error::published GA manifest failed verification: {exc}")
+          print(f"published GA manifest on v{os.environ['VERSION']} verifies under {expected_key_id}")
+          PY
 
   # ---------------------------------------------------------------------------
   # PyPI package publish (promote only). This is the repository's sole live
@@ -3604,9 +4567,61 @@ jobs:
           /tmp/modulo-pypi-smoke/bin/python -m pip install --disable-pip-version-check --no-cache-dir dist/*.whl
           /tmp/modulo-pypi-smoke/bin/farna-control apply --help
 
+      - name: Check whether this version is already published on PyPI
+        id: pypi-state
+        working-directory: backend
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # FAR-2802: this is a downstream job (needs: release), which lifts
+          # release-freeze on success, so a resume dispatch cannot reach it - a
+          # failed publish is recovered by re-running the failed jobs. Re-running
+          # must therefore be idempotent. Read the publication state rather than
+          # re-uploading: 404 -> not published (publish); 200 -> published, and
+          # the file set must match this build exactly (skip); anything else
+          # fails closed.
+          JSON_FILE="$(mktemp)"
+          STATUS="$(curl --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --output "$JSON_FILE" --write-out '%{http_code}' \
+            "https://pypi.org/pypi/farna-control/${VERSION}/json")"
+          case "$STATUS" in
+            200)
+              LOCAL_FILES="$(find dist -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -printf '%f\n' | sort)"
+              if [ -z "$LOCAL_FILES" ]; then
+                echo "::error::No local distributions in backend/dist; refusing to compare the PyPI publication state."
+                exit 1
+              fi
+              PUBLISHED_FILES="$(jq -r '.urls[]?.filename' "$JSON_FILE" | sort)"
+              if [ "$LOCAL_FILES" != "$PUBLISHED_FILES" ]; then
+                echo "::error::PyPI already has farna-control ${VERSION} with a different file set than this build; refusing to publish and never overwriting a published version."
+                echo "--- local backend/dist"
+                printf '%s\n' "$LOCAL_FILES"
+                echo "--- published on PyPI"
+                printf '%s\n' "$PUBLISHED_FILES"
+                exit 1
+              fi
+              echo "::notice::farna-control ${VERSION} is already published on PyPI with the same file set; skipping the upload."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "farna-control ${VERSION} is not published on PyPI yet; the publish step will upload it."
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Unexpected PyPI response ${STATUS} for farna-control ${VERSION}; refusing to guess the publication state."
+              exit 1
+              ;;
+          esac
+
       - name: Publish farna-control via Trusted Publishing
         # PyPI Trusted Publisher must be registered by a human for this
         # repository, workflow and `pypi` environment before promote can upload.
+        # FAR-2802: skip when the check above proved this exact version is
+        # already published from this GA tag.
+        if: steps.pypi-state.outputs.publish == 'true'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: backend/dist
@@ -3617,7 +4632,7 @@ jobs:
   # ---------------------------------------------------------------------------
   produce-sbom:
     name: Produce CycloneDX SBOM
-    needs: [preflight]
+    needs: [preflight, resolve-target]
     runs-on: ubicloud-standard-2
     # Generates and uploads the CycloneDX SBOM artefact. The payload is tiny and
     # the work is quick, but attest-artefacts and therefore publication depend
@@ -3630,7 +4645,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          # FAR-2752: attest the SBOM of the same commit the release publishes.
+          ref: ${{ needs.resolve-target.outputs.target_sha }}
           persist-credentials: false
 
       - name: Set up Python 3.12
@@ -3660,7 +4676,7 @@ jobs:
           PY
 
       - name: Upload the SBOM artefact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-cyclonedx
           path: sbom.json
@@ -3691,35 +4707,35 @@ jobs:
       attestations: write
     steps:
       - name: Download the SBOM artefact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sbom-cyclonedx
           path: release-artefacts
 
       - name: Download the final cross-platform release artefact
         if: inputs.mode == 'cut' || inputs.mode == 'recut'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: final-release-artefacts-${{ inputs.version }}
           path: release-artefacts
 
       - name: Download the macOS arm64 installer artefact
         if: inputs.mode == 'cut' || inputs.mode == 'recut'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-installer-${{ inputs.version }}-arm64
           path: release-artefacts
 
       - name: Download the macOS x86_64 installer artefact
         if: inputs.mode == 'cut' || inputs.mode == 'recut'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos-installer-${{ inputs.version }}-x86_64
           path: release-artefacts
 
       - name: Download the Windows installer artefact
         if: (inputs.mode == 'cut' || inputs.mode == 'recut') && inputs.include_windows
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-installer-${{ inputs.version }}
           path: release-artefacts

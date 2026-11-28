@@ -306,11 +306,11 @@ async def test_seed_demo_eval_results_anchor_to_most_recent_runs(session: AsyncS
         return set(result.scalars())
 
     # Results are selected by the current three-day fixture window, not by run
-    # number: PR Review has the day-1/day-2 samples, while governance has today's
-    # two samples. Older historical runs stay available as run history but do not
+    # number: PR Review has the day-1 samples, while governance has today's two
+    # samples plus the day-2 run waiting at its review gate. Older historical runs stay available as run history but do not
     # make the dashboard's rolling eval card appear current.
-    assert await eval_run_numbers("Review completeness") == {3, 4, 6}
-    assert await eval_run_numbers("PR risk quality") == {1, 2}
+    assert await eval_run_numbers("Review completeness") == {3, 4}
+    assert await eval_run_numbers("PR risk quality") == {1, 2, 6}
 
 
 async def test_seed_converges_demo_eval_results_to_current_fixture_time(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -421,6 +421,11 @@ async def test_seed_fixture_ids_are_deterministic_and_org_scoped(session: AsyncS
     assert [row.id for row in variants] == [seed_demo_module.demo_fixture_id(org.id, "variant-group:demo-review-strategies")]
     assert [row.id for row in feedback] == [seed_demo_module.demo_fixture_id(org.id, "feedback:demo-review-1")]
     assert [row.id for row in evidence] == [seed_demo_module.demo_fixture_id(org.id, "evidence:risk.demo_review_score")]
+    # The run-subject evidence row must carry its subject run's team: it bypasses
+    # append_evidence, so nothing else would ever stamp it.
+    subjects = {str(run.id): run.owner_team_id for run in (await session.execute(select(Run))).scalars()}
+    assert evidence[0].owner_team_id is not None
+    assert evidence[0].owner_team_id == subjects[evidence[0].subject_id]
     assert seed_demo_module.demo_fixture_id(org.id, "model-backend:Demo Stub Fast") != seed_demo_module.demo_fixture_id(uuid.uuid4(), "model-backend:Demo Stub Fast")
 
 
@@ -2251,6 +2256,112 @@ async def test_human_review_run_records_the_approval(session: AsyncSession, monk
 
     assert (blobs.outputs or {})[review_id]["decision"] == "approved"
     assert review_id not in (run.node_token_usage or {})
+
+
+async def test_every_awaiting_run_is_on_a_pipeline_that_has_its_gate(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An approval can only wait on a pipeline with an approval step (FAR-2856)."""
+    await _run_seed(session, monkeypatch, _demo_settings())
+    awaiting_numbers = {spec[0] for spec in seed_demo_module._DEMO_RUN_SPECS if spec[1] == "awaiting_human"}
+    runs = list((await session.execute(select(Run).where(Run.status == "awaiting_human"))).scalars())
+    assert awaiting_numbers, "the demo declares no awaiting run - this check would be vacuous"
+    assert {run.run_number for run in runs} == awaiting_numbers
+
+    for run in runs:
+        snapshot = (await session.execute(select(PipelineSnapshot).where(PipelineSnapshot.id == run.snapshot_id))).scalar_one()
+        claim = (await session.execute(select(HitlClaim).where(HitlClaim.run_id == run.id, HitlClaim.decision.is_(None)))).scalar_one()
+        assert snapshot.pipeline_id == run.pipeline_id
+        assert claim.pipeline_id == run.pipeline_id
+
+        nodes = {node["id"]: node for node in snapshot.graph_json["nodes"]}
+        gate_edges = {f"hitl_review_{edge['source']}_{edge['target']}": edge for edge in snapshot.graph_json["edges"]}
+        assert claim.review_id in gate_edges, f"run {run.run_number} waits on a gate its pipeline does not have"
+        assert nodes[gate_edges[claim.review_id]["source"]]["node_type"] == "hitl"
+
+        # Steps before the gate ran; the gate is pending and nothing follows it.
+        blobs = await read_run_node_outputs_raw(session, run_id=run.id, organisation_id=run.organisation_id)
+        telemetry = blobs.telemetry or {}
+        assert {nodes[node_id]["label"] for node_id in telemetry} == {"Implement", "PR risk level"}
+        assert set(blobs.outputs or {}) == set(telemetry)
+        assert set(run.node_token_usage or {}) == set(telemetry)
+        assert {entry["status"] for entry in telemetry.values()} == {"complete"}
+        risk_id = seed_demo_module.demo_node_id(seed_demo_module.DEMO_PIPELINE_NAME, "risk")
+        assert (blobs.outputs or {})[risk_id]["risk_score"] > float(seed_demo_module._RISK_THRESHOLD)
+        assert run.completed_at is None
+
+
+async def test_reseed_corrects_awaiting_run_seeded_on_a_gateless_pipeline(session: AsyncSession, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """A database seeded by the old specs is corrected in place by the next seed (FAR-2856)."""
+    current_specs = seed_demo_module._DEMO_RUN_SPECS
+    legacy_specs = [(*spec[:3], seed_demo_module.PR_REVIEW_PIPELINE_NAME, *spec[4:]) if spec[0] == 6 else spec for spec in current_specs]
+    monkeypatch.setattr(seed_demo_module, "_DEMO_RUN_SPECS", legacy_specs)
+    await _run_seed(session, monkeypatch, _demo_settings())
+
+    run = (await session.execute(select(Run).where(Run.run_number == 6))).scalar_one()
+    run_id = run.id
+    claim = (await session.execute(select(HitlClaim).where(HitlClaim.run_id == run_id))).scalar_one()
+    claim_id = claim.id
+    review_id = claim.review_id
+    assert claim.pipeline_id == run.pipeline_id
+    legacy_result = (await session.execute(select(EvalResult).where(EvalResult.run_id == run_id))).scalar_one()
+    legacy_result_id = legacy_result.id
+    # A result the seed did not write, on the same eval and run, must survive.
+    foreign_result = EvalResult(
+        organisation_id=legacy_result.organisation_id,
+        eval_id=legacy_result.eval_id,
+        run_id=run_id,
+        node_id=None,
+        eval_definition_version=legacy_result.eval_definition_version,
+        passed=True,
+        outcome="pass",
+        score=1.0,
+        judge_result_json={"source": "operator"},
+        detail="Recorded outside the demo seed.",
+        observed=True,
+        evaluated_at=_DEMO_FIXTURE_NOW,
+        resolution="accepted",
+    )
+    session.add(foreign_result)
+    await session.commit()
+    foreign_result_id = foreign_result.id
+
+    monkeypatch.setattr(seed_demo_module, "_DEMO_RUN_SPECS", current_specs)
+    await _run_seed(session, monkeypatch, _demo_settings())
+    session.expire_all()
+
+    governance = await _pipeline_by_name(session, seed_demo_module.DEMO_PIPELINE_NAME)
+    snapshot = await _snapshot_for(session, governance)
+    corrected = (await session.execute(select(Run).where(Run.run_number == 6))).scalar_one()
+    assert corrected.id == run_id
+    assert (corrected.pipeline_id, corrected.snapshot_id) == (governance.id, snapshot.id)
+    fact = (await session.execute(select(RunDailyFact).where(RunDailyFact.run_id == run_id))).scalar_one()
+    assert (fact.pipeline_id, fact.pipeline_name) == (governance.id, governance.name)
+
+    corrected_claim = (await session.execute(select(HitlClaim).where(HitlClaim.run_id == run_id))).scalar_one()
+    assert (corrected_claim.id, corrected_claim.review_id) == (claim_id, review_id)
+    assert corrected_claim.pipeline_id == governance.id
+    assert corrected_claim.decision is None
+
+    blobs = await read_run_node_outputs_raw(session, run_id=run_id, organisation_id=corrected.organisation_id)
+    node_ids = {node["id"] for node in snapshot.graph_json["nodes"]}
+    assert set(blobs.telemetry or {}) <= node_ids
+    assert set(blobs.outputs or {}) <= node_ids
+    assert set(corrected.node_token_usage or {}) <= node_ids
+
+    # The old eval's synthetic result is gone; the only cross-pipeline row left is the one the seed did not write.
+    mismatch_query = select(EvalResult.id).join(Eval, Eval.id == EvalResult.eval_id).where(EvalResult.run_id == run_id, Eval.pipeline_id != governance.id)
+    assert list((await session.execute(mismatch_query)).scalars()) == [foreign_result_id]
+    all_results_query = select(EvalResult.id).where(EvalResult.run_id == run_id)
+    remaining_ids = set((await session.execute(all_results_query)).scalars())
+    assert legacy_result_id not in remaining_ids
+
+    # Idempotent: a further seed neither moves nor retires anything again.
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="farna.db.seed_demo"):
+        await _run_seed(session, monkeypatch, _demo_settings())
+    messages = {record.getMessage() for record in caplog.records}
+    assert "demo_seed.hitl_claim_pipeline_converged" not in messages
+    assert "demo_seed.eval_result_retired" not in messages
+    assert set((await session.execute(all_results_query)).scalars()) == remaining_ids
 
 
 async def test_second_seed_rewrites_no_run_trace(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:

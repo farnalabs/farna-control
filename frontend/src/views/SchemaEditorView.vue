@@ -66,9 +66,9 @@
           -->
           <ErrorAlert v-if="saveError" :message="saveError" :retryable="false" />
 
-          <div v-if="saveSuccess" class="rounded-lg border border-success/50 bg-success/10 p-4 text-sm text-success-text">
+          <Notice v-if="saveSuccess" variant="success" :icon="false" class="text-sm">
             {{ saveSuccess }}
-          </div>
+          </Notice>
 
           <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <SchemaEditorForm
@@ -109,8 +109,9 @@ import { buildJsonSchema, parseDefinitionToFields, type SchemaField } from '../u
 import FeatureGate from '../components/FeatureGate.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import SchemaEditorSidebar, { type SchemaItem } from '../components/schema/SchemaEditorSidebar.vue'
 import SchemaEditorForm from '../components/schema/SchemaEditorForm.vue'
 import SchemaVersionHistory, { type SchemaVersion } from '../components/schema/SchemaVersionHistory.vue'

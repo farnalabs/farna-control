@@ -17,7 +17,8 @@ name: "Native: release smoke + canary (bundle-v*)"
 #    plus the N-1 upgrade leg (previous release -> seed -> upgrade ->
 #    data intact + doctor green). Failures land on ONE per-day tracking
 #    issue (deduped by issue key across re-runs); a green canary
-#    auto-closes that issue.
+#    auto-closes EVERY open [canary] issue, including the historical
+#    backlog a long failure streak leaves behind.
 #    FAR-1736: while NO bundle-v* release has ever been published,
 #    releases/latest 404s and the scheduled canary had nothing to verify
 #    (8/8 nightly failures). The canary gate step now skips that case
@@ -221,16 +222,47 @@ jobs:
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
           farna-control start --detach
+          # Resolve the API port through the SUPPORTED CLI surface. Do NOT read
+          # the data dir's state.json directly: that file is an HMAC envelope
+          # ({"payload": {...}, "mac": "..."}), so a top-level `api_port` key
+          # never exists and a raw read reports "no port" for ever on a
+          # perfectly healthy boot. `farna-control status --json` publishes
+          # api_port at the TOP level (launcher.supervisor.collect_status), and
+          # it is the interface the launcher actually keeps stable.
+          # `|| true` keeps a failing `status` (or unparseable JSON) from
+          # killing the poll under `set -euo pipefail` - an empty value just
+          # means "not ready yet, try again".
+          api_port=""
           for _ in $(seq 1 30); do
-            state_ready="$(python3 -c "import json, pathlib; p = pathlib.Path.home() / '.local' / 'share' / 'modulo' / 'data' / 'state.json'; print(json.loads(p.read_text()).get('api_port', '') if p.is_file() else '')")"
-            if [ -n "${state_ready}" ]; then
-              echo "BASE=http://127.0.0.1:${state_ready}" >> "$GITHUB_ENV"
+            api_port="$(farna-control status --json 2>/dev/null | jq -r '.api_port // empty' || true)"
+            if [ -n "${api_port}" ]; then
+              echo "BASE=http://127.0.0.1:${api_port}" >> "$GITHUB_ENV"
               break
             fi
             sleep 2
           done
-          if [ -z "${BASE:-}" ]; then
-            echo "::error::state.json never appeared - boot failed"; exit 1
+          if [ -z "${api_port}" ]; then
+            # Genuine failure. Dump the evidence and name only what we actually
+            # observed - a missing api_port is NOT proof that the boot failed
+            # (the port could be absent because the status surface, jq, or this
+            # very step is at fault). The boot's own log says which.
+            echo "::group::Boot diagnostics (no api_port after 60s)"
+            echo "-- farna-control status --json --"
+            farna-control status --json 2>&1 || true
+            echo "-- farna-control status --"
+            farna-control status 2>&1 || true
+            echo "-- farna-control logs app (last 200 lines) --"
+            farna-control logs app 2>&1 | tail -n 200 || true
+            echo "-- data dir listing (${DATA_DIR}) --"
+            ls -la "${DATA_DIR}" 2>&1 || true
+            for child_log in "${DATA_DIR}"/logs/*; do
+              [ -f "${child_log}" ] || continue
+              echo "-- ${child_log} (last 100 lines) --"
+              tail -n 100 "${child_log}" 2>&1 || true
+            done
+            echo "::endgroup::"
+            echo "::error::'farna-control status --json' published no api_port for 60s after 'farna-control start --detach' exited 0 - see the boot diagnostics group above to tell a failed boot from a failed port discovery; do not assume either"
+            exit 1
           fi
           farna-control status
 
@@ -561,16 +593,47 @@ jobs:
           set -euo pipefail
           export PATH="${HOME}/.local/bin:${PATH}"
           farna-control start --detach
+          # Resolve the API port through the SUPPORTED CLI surface. Do NOT read
+          # the data dir's state.json directly: that file is an HMAC envelope
+          # ({"payload": {...}, "mac": "..."}), so a top-level `api_port` key
+          # never exists and a raw read reports "no port" for ever on a
+          # perfectly healthy boot. `farna-control status --json` publishes
+          # api_port at the TOP level (launcher.supervisor.collect_status), and
+          # it is the interface the launcher actually keeps stable.
+          # `|| true` keeps a failing `status` (or unparseable JSON) from
+          # killing the poll under `set -euo pipefail` - an empty value just
+          # means "not ready yet, try again".
+          api_port=""
           for _ in $(seq 1 30); do
-            state_ready="$(python3 -c "import json, pathlib; p = pathlib.Path.home() / '.local' / 'share' / 'modulo' / 'data' / 'state.json'; print(json.loads(p.read_text()).get('api_port', '') if p.is_file() else '')")"
-            if [ -n "${state_ready}" ]; then
-              echo "BASE=http://127.0.0.1:${state_ready}" >> "$GITHUB_ENV"
+            api_port="$(farna-control status --json 2>/dev/null | jq -r '.api_port // empty' || true)"
+            if [ -n "${api_port}" ]; then
+              echo "BASE=http://127.0.0.1:${api_port}" >> "$GITHUB_ENV"
               break
             fi
             sleep 2
           done
-          if [ -z "${BASE:-}" ]; then
-            echo "::error::state.json never appeared - boot failed"; exit 1
+          if [ -z "${api_port}" ]; then
+            # Genuine failure. Dump the evidence and name only what we actually
+            # observed - a missing api_port is NOT proof that the boot failed
+            # (the port could be absent because the status surface, jq, or this
+            # very step is at fault). The boot's own log says which.
+            echo "::group::Boot diagnostics (no api_port after 60s)"
+            echo "-- farna-control status --json --"
+            farna-control status --json 2>&1 || true
+            echo "-- farna-control status --"
+            farna-control status 2>&1 || true
+            echo "-- farna-control logs app (last 200 lines) --"
+            farna-control logs app 2>&1 | tail -n 200 || true
+            echo "-- data dir listing (${DATA_DIR}) --"
+            ls -la "${DATA_DIR}" 2>&1 || true
+            for child_log in "${DATA_DIR}"/logs/*; do
+              [ -f "${child_log}" ] || continue
+              echo "-- ${child_log} (last 100 lines) --"
+              tail -n 100 "${child_log}" 2>&1 || true
+            done
+            echo "::endgroup::"
+            echo "::error::'farna-control status --json' published no api_port for 60s after 'farna-control start --detach' exited 0 - see the boot diagnostics group above to tell a failed boot from a failed port discovery; do not assume either"
+            exit 1
           fi
           farna-control status
 
@@ -800,19 +863,32 @@ jobs:
             echo "opened tracking issue (dedupe key: ${issue_key})"
           fi
 
-      - name: Auto-close the tracking issue on green
+      - name: Auto-close the tracking issues on green
         if: needs.canary.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          issue_key="[canary] $(date -u +%F)"
-          existing="$(gh issue list --search "in:title \"${issue_key}\"" --state open --json number --jq '.[0].number // ""')"
-          if [ -n "${existing}" ]; then
-            gh issue close "${existing}" --comment "green canary - auto-closed on pass"
+          # A green canary closes EVERY open [canary] tracking issue, not only
+          # today's. The per-day key bounds the FAILURE side (one issue per
+          # failing day); on the green side it would strand the whole historical
+          # backlog, because a past day's key never comes round again - 22 open
+          # issues accumulated that way while the canary could never pass.
+          # Selection is by title prefix, applied in jq so no issue is missed to
+          # a search-syntax quirk on the bracketed literal.
+          numbers="$(gh issue list --search 'in:title "canary"' --state open --limit 200 \
+            --json number,title --jq '.[] | select(.title | startswith("[canary]")) | .number')"
+          closed=0
+          while IFS= read -r number; do
+            [ -n "${number}" ] || continue
+            gh issue close "${number}" --comment "green canary - auto-closed on pass"
+            closed=$((closed + 1))
+          done <<< "${numbers}"
+          if [ "${closed}" -eq 0 ]; then
+            echo "nothing to auto-close (no open [canary] tracking issue)"
           else
-            echo "nothing to auto-close"
+            echo "auto-closed ${closed} [canary] tracking issue(s)"
           fi
 
   rollback-verify:

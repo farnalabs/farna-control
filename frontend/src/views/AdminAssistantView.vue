@@ -1,9 +1,9 @@
 <template>
   <FeatureGate feature-name="assistant" show-disabled>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader :title="$t('views.AdminAssistantView.assistant_configuration')" :subtitle="$t('views.AdminAssistantView.configure_assistant_ai_assistant_behaviour_access_and_skills')" />
     <template v-if="loading">
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4">
+      <BaseCard padding="lg" class="space-y-4">
         <div class="h-5 w-48 animate-pulse rounded bg-muted" />
         <div class="h-3 w-96 animate-pulse rounded bg-muted" />
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 mt-4">
@@ -13,31 +13,31 @@
             <div class="h-3 w-16 animate-pulse rounded bg-muted" />
           </div>
         </div>
-      </div>
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4 mt-6">
+      </BaseCard>
+      <BaseCard padding="lg" class="space-y-4 mt-6">
         <div class="h-5 w-40 animate-pulse rounded bg-muted" />
         <div class="h-3 w-80 animate-pulse rounded bg-muted" />
         <div class="h-24 w-full animate-pulse rounded bg-muted mt-4" />
-      </div>
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4 mt-6">
+      </BaseCard>
+      <BaseCard padding="lg" class="space-y-4 mt-6">
         <div class="h-5 w-36 animate-pulse rounded bg-muted" />
         <div class="h-3 w-72 animate-pulse rounded bg-muted" />
         <div class="space-y-3 mt-4">
           <div v-for="n in 3" :key="n" class="h-12 w-full animate-pulse rounded bg-muted" />
         </div>
-      </div>
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4 mt-6">
+      </BaseCard>
+      <BaseCard padding="lg" class="space-y-4 mt-6">
         <div class="h-5 w-36 animate-pulse rounded bg-muted" />
         <div class="h-3 w-64 animate-pulse rounded bg-muted" />
         <div class="h-32 w-full animate-pulse rounded bg-muted mt-4" />
-      </div>
-      <div class="rounded-xl border border-border bg-card p-6 space-y-4 mt-6">
+      </BaseCard>
+      <BaseCard padding="lg" class="space-y-4 mt-6">
         <div class="h-5 w-28 animate-pulse rounded bg-muted" />
         <div class="h-3 w-56 animate-pulse rounded bg-muted" />
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
           <div v-for="n in 6" :key="n" class="h-20 w-full animate-pulse rounded bg-muted" />
         </div>
-      </div>
+      </BaseCard>
     </template>
     <template v-else>
       <!-- Configured Providers -->
@@ -56,7 +56,7 @@
                 v-for="p in providerStatus"
                 :key="p.id"
                 class="flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-all cursor-help"
-                :class="p.configured ? 'border-success/40 bg-success/5' : 'border-muted bg-muted/20 opacity-60'"
+                :class="p.configured ? 'border-success/40 bg-success/5' : 'border-muted bg-muted/20'"
                 v-tooltip.top="providerTooltip(p)">
                 <span
                   class="flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold"
@@ -162,16 +162,17 @@
               <label
                   v-for="role in orgRoles"
                   :key="role"
-                  for="adminassistantview-field-13"
+                  :for="`adminassistantview-role-${role}`"
                   class="flex items-center gap-2 text-sm cursor-pointer"
                   v-tooltip.top="role === 'admin' ? $t('views.AdminAssistantView.full_access_to_all_settings_and_assistant_configuration') : role === 'operator' ? $t('views.AdminAssistantView.can_create_and_manage_pipelines_use_assistant') : role === 'runner' ? $t('views.AdminAssistantView.can_execute_pipeline_runs_use_assistant') : $t('views.AdminAssistantView.readonly_access_can_view_but_not_edit_use_assistant')"
                 >
-                    <input id="adminassistantview-field-13"
-                      type="checkbox"
+                    <Checkbox
+                      bare
+                      :id="`adminassistantview-role-${role}`"
+                      :model-value="accessList.selectedRoles.includes(role)"
                       :value="role"
-                      :checked="accessList.selectedRoles.includes(role)"
-                      class="rounded border-input"
-                      @change="toggleRole(role)"
+                      control-class="rounded border-input"
+                      @update:model-value="toggleRole(role)"
                     />
                     {{ role }}
                   </label>
@@ -209,19 +210,17 @@
                 :placeholder="$t('views.AdminAssistantView.select_provider')"
               />
           </div>
-          <div>
-            <label for="adminassistantview-field-11" class="mb-1 block text-sm font-medium">{{ $t('views.AdminAssistantView.default_model') }}</label>
-            <input id="adminassistantview-field-11"
+          <Field id="adminassistantview-field-11" :label="$t('views.AdminAssistantView.default_model')">
+            <Input
               v-model="modelConfig.defaultModel"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               :placeholder="$t('views.AdminAssistantView.model_name_placeholder')"
               data-testid="assistant-model-name"
             />
-          </div>
-          <div>
-            <label for="adminassistantview-field-10" class="mb-1 block text-sm font-medium">{{ $t('views.AdminAssistantView.default_context_window_size') }}</label>
-            <input id="adminassistantview-field-10"
+          </Field>
+          <Field id="adminassistantview-field-10" :label="$t('views.AdminAssistantView.default_context_window_size')">
+            <Input
               v-model.number="modelConfig.contextWindow"
               type="number"
               min="1024"
@@ -230,7 +229,7 @@
               :placeholder="$t('views.AdminAssistantView.context_window_placeholder')"
               data-testid="assistant-model-context"
             />
-          </div>
+          </Field>
           <div>
             <span class="mb-1 block text-sm font-medium">{{ $t('views.AdminAssistantView.allowed_providers') }}</span>
             <div class="flex flex-wrap gap-2" data-testid="assistant-allowed-providers">
@@ -248,16 +247,15 @@
               </button>
             </div>
           </div>
-          <div>
-            <label for="adminassistantview-field-9" class="mb-1 block text-sm font-medium">{{ $t('views.AdminAssistantView.allowed_models') }}</label>
-            <input id="adminassistantview-field-9"
+          <Field id="adminassistantview-field-9" :label="$t('views.AdminAssistantView.allowed_models')">
+            <Input
               v-model="modelConfig.allowedModels"
               type="text"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
               :placeholder="$t('views.AdminAssistantView.claudesonnet420250514_gpt4o_gemini25pro')"
               data-testid="assistant-allowed-models"
             />
-          </div>
+          </Field>
             <ErrorAlert v-if="modelError" compact :message="modelError" :retryable="false" />
             <Button
                   :disabled="modelSaving"
@@ -277,7 +275,7 @@
       >
         <div class="space-y-4">
           <div>
-            <textarea
+            <Textarea
               v-model="systemPrompt"
               rows="8"
               :aria-label="$t('views.AdminAssistantView.system_prompt')"
@@ -305,7 +303,7 @@
       >
         <div class="space-y-4">
           <div>
-            <textarea
+            <Textarea
               v-model="guidance"
               rows="5"
               :aria-label="$t('views.AdminAssistantView.additional_guidance')"
@@ -520,7 +518,11 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import { ref, reactive, computed, watch } from 'vue'
 import { Check, X, Pencil, Trash2 } from '@lucide/vue'
@@ -530,7 +532,8 @@ import { formatApiError } from '../lib/api/formatError'
 import FeatureGate from '../components/FeatureGate.vue'
 import AssistantSkillDialog from '../components/assistant/AssistantSkillDialog.vue'
 import AccessEntitySelector from '../components/assistant/AccessEntitySelector.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import Select from '../components/shared/AppSelect.vue'
 import type { SkillItem } from '../types/assistant'
 import { useI18n } from 'vue-i18n'

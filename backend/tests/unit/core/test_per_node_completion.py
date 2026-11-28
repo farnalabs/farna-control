@@ -26,6 +26,7 @@ from farna.core.pipeline_execution import (
 from farna.db.crud.run_node_outputs import attempt_key_for_node, has_completed_nodes_in_attempt
 from farna.db.models.base import Base
 from farna.db.models.organisation import Organisation
+from farna.db.models.run import Run
 from farna.db.models.run_node_outputs import FINAL_ATTEMPT_KEY, META_NODE_ID, RunNodeOutput
 
 _ORG = uuid.uuid4()
@@ -43,7 +44,9 @@ async def sqlite_engine() -> AsyncGenerator[AsyncEngine, None]:
         await connection.run_sync(
             lambda sync: Base.metadata.create_all(
                 sync,
-                tables=(Organisation.__table__, RunNodeOutput.__table__),  # type: ignore[arg-type]
+                # ADR 070 Phase 1A: the completion writer stamps the parent run's
+                # team, so ``runs`` must exist in this minimal schema.
+                tables=(Organisation.__table__, RunNodeOutput.__table__, Run.__table__),  # type: ignore[arg-type]
             )
         )
     yield engine

@@ -28,6 +28,7 @@ from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 
 import pytest
+import yaml
 
 for parent in Path(__file__).resolve().parents:
     script_path = parent / "scripts" / "run_check_ratchet_baseline.py"
@@ -35,6 +36,9 @@ for parent in Path(__file__).resolve().parents:
         break
 else:
     raise RuntimeError("Could not find repo root (scripts/run_check_ratchet_baseline.py)")
+
+REPO_ROOT = script_path.parent.parent
+VALIDATE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "merge-validate.yml"
 
 _loader = SourceFileLoader("run_check_ratchet_baseline", str(script_path))
 mod = module_from_spec(spec_from_loader("run_check_ratchet_baseline", _loader))
@@ -669,6 +673,21 @@ def test_end_to_end_baseline_introduced_here_passes_with_notice(tmp_path):
     assert "introduces the baseline" in proc.stderr
 
 
+def test_end_to_end_counted_mode_malformed_base_is_skipped(tmp_path):
+    """The legacy counted mode tolerates an unreadable BASE the same way."""
+    repo = _make_repo(tmp_path)
+    _write_baseline(repo, "a.py\tmany\n")
+    _commit_all(repo, "malformed baseline on the base")
+    _write_baseline(repo, "a.py\t1\nb.py\t2\n")
+    _commit_all(repo, "restore the baseline in the working tree")
+
+    proc = _run_counted(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 0, proc.stderr
+    assert "SKIPPING" in proc.stderr
+    assert "not an integer" in proc.stderr
+
+
 def test_end_to_end_head_parent_fallback_catches_a_raise(tmp_path):
     repo = _make_repo(tmp_path)
     _write_baseline(repo, "a.py\t9\nb.py\t2\n")
@@ -711,6 +730,139 @@ def test_end_to_end_pr_merge_commit_uses_first_parent(tmp_path):
     assert base_sha == _git(repo, "rev-parse", "HEAD^").stdout.strip()
 
 
+def test_end_to_end_pr_context_prefers_origin_base_over_head_parent(tmp_path):
+    """A PR base is the target branch, never the branch's own previous commit.
+
+    The raise is in the branch's FIRST commit, then an unrelated commit sits on
+    top, so ``HEAD^`` (the branch's previous commit) already carries the raise.
+    A guard comparing against ``HEAD^`` passes; only the actual base branch
+    (``origin/main``) catches the loosening. This is the FAR-2699 follow-up:
+    ``github.event.before`` on a pull_request synchronize names the branch's
+    previous head, which the old chain preferred over the base branch.
+
+    Both env vars are set to the values a real ``pull_request`` run supplies:
+    ``GITHUB_BASE_REF=main`` AND ``RATCHET_BASE_REV`` = the branch's previous head.
+    Setting ``RATCHET_BASE_REV`` is what makes this fail against a guard that
+    prefers the push hint; only making ``GITHUB_BASE_REF`` authoritative passes.
+    """
+    repo = _make_repo(tmp_path)
+    origin_main = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _write_baseline(repo, "a.py\t9\nb.py\t2\n")
+    branch_previous_head = _commit_all(repo, "raise a.py on the feature branch")
+    (repo / "unrelated.txt").write_text("later\n", encoding="utf-8")
+    _commit_all(repo, "unrelated tip commit so HEAD^ is not the base")
+    _git(repo, "update-ref", "refs/remotes/origin/main", origin_main)
+
+    proc = _run_counted(
+        repo,
+        extra_env={"GITHUB_BASE_REF": "main", "RATCHET_BASE_REV": branch_previous_head},
+    )
+
+    assert proc.returncode == 1, proc.stderr
+    assert "origin/main" in proc.stderr
+    assert "9 > 1" in proc.stderr
+
+
+def test_end_to_end_origin_base_beats_the_merge_ref_first_parent(tmp_path):
+    """A merge-ref PR checkout compares against the target branch, not HEAD^.
+
+    Simulates ``actions/checkout``'s pull_request merge commit (two parents)
+    where main advanced after the PR branched. ``fetch-depth: 0`` fetches
+    ``origin/main``, which names the target branch; the merge ref's first parent
+    is only a snapshot taken when GitHub minted that commit. The old chain
+    preferred ``HEAD^``, so the failure named the wrong base. No local ``main``
+    branch is left, so ``origin/main`` is the only route to the base.
+    """
+    repo = _make_repo(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "feature")
+    _write_baseline(repo, "a.py\t9\nb.py\t2\n")
+    _commit_all(repo, "raise a.py on the feature branch")
+    _git(repo, "checkout", "-q", "main")
+    (repo / "main-only.txt").write_text("advanced\n", encoding="utf-8")
+    advanced_main = _commit_all(repo, "advance main after the PR branched")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "merge feature", "feature")
+    _git(repo, "update-ref", "refs/remotes/origin/main", advanced_main)
+    _git(repo, "checkout", "-q", "--detach")
+    _git(repo, "branch", "-D", "main")
+
+    proc = _run_counted(repo, extra_env={"GITHUB_BASE_REF": "main"})
+
+    assert proc.returncode == 1, proc.stderr
+    assert "origin/main" in proc.stderr
+    assert "HEAD^ (first parent" not in proc.stderr
+    assert "9 > 1" in proc.stderr
+
+
+def test_resolve_base_ignores_the_push_hint_when_github_base_ref_is_set(tmp_path, monkeypatch):
+    """``GITHUB_BASE_REF`` is authoritative; the push hint never overrides it.
+
+    On a pull_request event both env vars can be present, and the hint names the
+    branch's own previous head - not a base. The guard must ignore it whenever
+    ``GITHUB_BASE_REF`` is set, so correctness does not depend on the workflow
+    blanking the hint.
+    """
+    repo = _make_repo(tmp_path)
+    (repo / "later.txt").write_text("later\n", encoding="utf-8")
+    _commit_all(repo, "a second commit so HEAD^ exists")
+    _git(repo, "branch", "release")
+    monkeypatch.setenv("GITHUB_BASE_REF", "release")
+    monkeypatch.setenv("RATCHET_BASE_REV", "HEAD")
+
+    rev, why = mod._resolve_base(repo, None)
+
+    assert rev == "release"
+    assert "GITHUB_BASE_REF" in why
+
+
+def test_resolve_base_uses_a_local_base_ref_when_origin_is_absent(tmp_path, monkeypatch):
+    """A fetched ``origin/<base>`` is preferred, but a local ``<base>`` still works."""
+    repo = _make_repo(tmp_path)
+    _git(repo, "branch", "release")
+    (repo / "later.txt").write_text("later\n", encoding="utf-8")
+    _commit_all(repo, "a second commit so HEAD^ exists")
+    monkeypatch.delenv("RATCHET_BASE_REV", raising=False)
+    monkeypatch.setenv("GITHUB_BASE_REF", "release")
+
+    rev, why = mod._resolve_base(repo, None)
+
+    assert rev == "release"
+    assert "GITHUB_BASE_REF" in why
+
+
+def test_resolve_base_falls_through_an_unfetched_base_ref_to_head_parent(tmp_path, monkeypatch):
+    """An unfetched base ref falls through to HEAD^, never the push hint.
+
+    ``actions/checkout`` at the default depth does not always create
+    ``origin/<base>``; aborting here would turn a fetch gap into a red PR. It
+    must fall through to ``HEAD^`` and, crucially, NOT back to
+    ``RATCHET_BASE_REV``: on a pull_request event that hint is the branch's own
+    previous head, so using it would silently compare the PR against itself.
+    """
+    repo = _make_repo(tmp_path)
+    (repo / "later.txt").write_text("later\n", encoding="utf-8")
+    _commit_all(repo, "a second commit so HEAD^ exists")
+    tip = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    monkeypatch.setenv("RATCHET_BASE_REV", tip)  # resolves, but must be ignored
+    monkeypatch.setenv("GITHUB_BASE_REF", "release")  # never fetched
+
+    rev, why = mod._resolve_base(repo, None)
+
+    assert rev == "HEAD^"
+    assert "previous commit" in why
+
+
+def test_end_to_end_no_resolvable_base_fails_closed(tmp_path):
+    """Nothing resolvable (no base, no PR context, no parent) still fails closed."""
+    repo = _make_repo(tmp_path)
+
+    proc = _run_script(repo)
+
+    assert proc.returncode == 1, proc.stderr
+    assert "FAILED CLOSED" in proc.stderr
+    assert "no base revision could be resolved" in proc.stderr
+
+
 # --- all-ratchets (default) mode ------------------------------------------
 def test_end_to_end_all_ratchets_unchanged_passes(tmp_path):
     repo = _make_all_ratchets_repo(tmp_path)
@@ -718,7 +870,7 @@ def test_end_to_end_all_ratchets_unchanged_passes(tmp_path):
     proc = _run_script(repo, "--base", "HEAD")
 
     assert proc.returncode == 0, proc.stderr
-    assert "none of the 18 ratchets is loosened" in proc.stderr
+    assert "none of the checked ratchets is loosened" in proc.stderr
 
 
 def test_end_to_end_all_ratchets_new_file_brand_entry_passes(tmp_path):
@@ -730,7 +882,7 @@ def test_end_to_end_all_ratchets_new_file_brand_entry_passes(tmp_path):
     proc = _run_script(repo, "--base", "HEAD^")
 
     assert proc.returncode == 0, proc.stderr
-    assert "none of the 18 ratchets is loosened" in proc.stderr
+    assert "none of the checked ratchets is loosened" in proc.stderr
 
 
 def test_end_to_end_all_ratchets_existing_file_brand_entry_fails(tmp_path):
@@ -818,7 +970,7 @@ def test_end_to_end_read_credential_removed_route_passes(tmp_path):
     proc = _run_script(repo, "--base", "HEAD^")
 
     assert proc.returncode == 0, proc.stderr
-    assert "none of the 18 ratchets is loosened" in proc.stderr
+    assert "none of the checked ratchets is loosened" in proc.stderr
 
 
 def test_end_to_end_read_credential_kind_change_fails(tmp_path):
@@ -843,3 +995,77 @@ def test_end_to_end_read_credential_header_drift_fails_closed(tmp_path):
     assert proc.returncode == 1, proc.stderr
     assert "FAILED CLOSED" in proc.stderr
     assert "[read-credential-allowlist]" in proc.stderr
+
+
+def test_end_to_end_malformed_base_file_is_skipped_with_a_loud_warning(tmp_path):
+    """An unreadable BASE is not this change's defect: warn, skip, pass.
+
+    The base header claims 1 jwt_only entry but the file declares 2 - exactly
+    the shape that blocked PR #3461. The working tree at the tip is valid, so
+    the only unreadable file is the base's, and the run must succeed with a
+    warning that names the ratchet and the base revision.
+    """
+    repo = _make_all_ratchets_repo(tmp_path)
+    _write_file(repo, READ_CREDENTIAL_ALLOWLIST, _READ_CREDENTIAL_STALE_HEADER)
+    bad_base = _commit_all(repo, "commit a malformed allowlist header (the base)")
+    _write_file(repo, READ_CREDENTIAL_ALLOWLIST, _READ_CREDENTIAL_BASE)
+    _commit_all(repo, "restore the allowlist in the working tree")
+
+    proc = _run_script(repo, "--base", bad_base)
+
+    assert proc.returncode == 0, proc.stderr
+    assert "FAILED CLOSED" not in proc.stderr
+    assert "WARNING" in proc.stderr
+    assert "[read-credential-allowlist]" in proc.stderr
+    assert bad_base in proc.stderr
+    assert "SKIPPED" in proc.stderr
+    assert "none of the checked ratchets is loosened" in proc.stderr
+    assert "1 skipped: unreadable base" in proc.stderr
+
+
+def test_end_to_end_malformed_working_tree_fails_closed_even_when_the_base_is_also_malformed(tmp_path):
+    """The base tolerance must never swallow a working-tree defect."""
+    repo = _make_all_ratchets_repo(tmp_path)
+    _write_file(repo, READ_CREDENTIAL_ALLOWLIST, _READ_CREDENTIAL_STALE_HEADER)
+    _commit_all(repo, "commit a malformed allowlist header (the base)")
+    _write_file(repo, READ_CREDENTIAL_ALLOWLIST, _READ_CREDENTIAL_BAD_ARITHMETIC)
+    _commit_all(repo, "introduce a differently malformed working-tree allowlist")
+
+    proc = _run_script(repo, "--base", "HEAD^")
+
+    assert proc.returncode == 1, proc.stderr
+    assert "FAILED CLOSED" in proc.stderr
+    assert "[read-credential-allowlist]" in proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# merge-validate.yml workflow contract: the wiring that feeds the resolver
+# ---------------------------------------------------------------------------
+def _ratchet_guard_step() -> dict:
+    """The merge train step that runs the FAR-2699 ratchet guard."""
+    workflow = yaml.safe_load(VALIDATE_WORKFLOW.read_text(encoding="utf-8"))
+    for job in workflow["jobs"].values():
+        for step in job.get("steps") or []:
+            if "run_check_ratchet_baseline.py" in (step.get("run") or ""):
+                return step
+    raise AssertionError("merge-validate.yml has no step that runs scripts/run_check_ratchet_baseline.py")
+
+
+def test_merge_train_feeds_the_ratchet_guard_the_train_base():
+    """The guard must compare against the train's base, never the branch's HEAD^.
+
+    The merge train validates a branch composed of squash commits of admitted
+    PRs, so ``HEAD^`` is another PR's tree rather than the comparison base -
+    exactly the FAR-2699 failure in which a loosened shrink-only baseline still
+    passes. The step therefore names the base explicitly with
+    ``--base "origin/${TRAIN_BASE_REF}"`` (the ``base_ref`` input) and fetches
+    it first, because a fresh checkout of the train branch need not have an
+    ``origin/main`` remote-tracking ref.
+    """
+    step = _ratchet_guard_step()
+    env = step.get("env")
+    assert isinstance(env, dict), "the ratchet guard step has no env mapping"
+    assert env.get("TRAIN_BASE_REF") == "${{ inputs.base_ref }}"
+    run = step.get("run") or ""
+    assert '--base "origin/${TRAIN_BASE_REF}"' in run
+    assert "git fetch" in run

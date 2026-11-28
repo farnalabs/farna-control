@@ -1,7 +1,7 @@
 <template>
   <FeatureGate feature-name="webhook_trigger" show-disabled>
 
-    <div data-theme="agent" class="page-wide">
+    <div class="page-wide">
     <PageHeader :title="$t('views.SettingsTriggersView.title')" :subtitle="$t('views.SettingsTriggersView.subtitle')">
       <template #right>
          <Button v-if="isOrgOperator" data-testid="settings-triggers-create" class="border-primary/30 hover:border-primary/60" @click="openCreateDialog">
@@ -10,19 +10,21 @@
       </template>
     </PageHeader>
 
-    <div
+    <Notice
       v-if="orgTriggersPaused"
-      data-testid="settings-triggers-paused-banner"
-      aria-live="polite"
+      variant="warning"
+      live="polite"
+      :icon="false"
       :aria-label="$t('views.SettingsTriggersView.paused_banner_title')"
-      class="mb-4 block rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+      class="mb-4"
+      data-testid="settings-triggers-paused-banner"
     >
       <p class="text-sm font-medium">{{ $t('views.SettingsTriggersView.paused_banner_title') }}</p>
       <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.SettingsTriggersView.paused_banner_body') }}</p>
       <p v-if="orgPausedAt" class="mt-1 text-xs text-muted-foreground">
         {{ $t('views.SettingsTriggersView.paused_at_label', { at: formatTimestamp(orgPausedAt) }) }}
       </p>
-    </div>
+    </Notice>
 
     <DataCard
       v-if="isOrgAdmin"
@@ -34,7 +36,7 @@
       :description="$t('views.SettingsTriggersView.pause_all_triggers_description')"
     >
       <template #headerActions>
-        <Button data-testid="settings-triggers-pause-all" :severity="orgTriggersPaused ? 'secondary' : 'primary'" :outlined="orgTriggersPaused" :disabled="pauseToggling" :aria-pressed="orgTriggersPaused" @click="togglePauseAll">
+        <Button data-testid="settings-triggers-pause-all" :variant="orgTriggersPaused ? 'secondary' : 'primary'" :outlined="orgTriggersPaused" :disabled="pauseToggling" :aria-pressed="orgTriggersPaused" @click="togglePauseAll">
           {{ orgTriggersPaused ? $t('views.SettingsTriggersView.resume_triggers') : $t('views.SettingsTriggersView.pause_all_triggers_action') }}
         </Button>
       </template>
@@ -144,7 +146,7 @@
                     <span v-else class="text-xs text-muted-foreground">
                       {{ t.active ? $t('views.SettingsTriggersView.active') : $t('views.SettingsTriggersView.inactive') }}
                     </span>
-                    <Button v-if="isStreakDeactivated(t) && isOrgOperator" data-testid="settings-triggers-reenable" size="small" severity="secondary" outlined :disabled="triggerToggling[t.id]" @click="toggleActive(t)">
+                    <Button v-if="isStreakDeactivated(t) && isOrgOperator" data-testid="settings-triggers-reenable" size="sm" variant="secondary" :disabled="triggerToggling[t.id]" @click="toggleActive(t)">
                       {{ $t('views.SettingsTriggersView.re_enable') }}
                     </Button>
                   </div>
@@ -258,10 +260,8 @@
       @confirm="saveTrigger"
     >
       <form @submit.prevent="saveTrigger" class="space-y-4">
-        <div>
-          <label for="settingstriggersview-name" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.name') }}</label>
-          <input
-            id="settingstriggersview-name"
+        <Field id="settingstriggersview-name" :label="$t('views.SettingsTriggersView.name')">
+          <Input
             v-model="form.name"
             type="text"
             maxlength="255"
@@ -270,7 +270,7 @@
             :placeholder="$t('views.SettingsTriggersView.name_placeholder')"
             data-testid="settings-triggers-form-name"
           />
-        </div>
+        </Field>
 
         <div>
           <label for="settingstriggersview-pipeline" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.pipeline') }}</label>
@@ -315,16 +315,15 @@
 
         <!-- Webhook config -->
         <template v-if="form.trigger_type === 'webhook'">
-          <div>
-            <label for="settingstriggersview-field-13" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.url') }}</label>
-            <input id="settingstriggersview-field-13"
+          <Field id="settingstriggersview-field-13" :label="$t('views.SettingsTriggersView.url')">
+            <Input
               v-model="form.webhook_url"
               type="url"
               class="input-base"
               :placeholder="$t('views.SettingsTriggersView.url_placeholder')"
               data-testid="settings-triggers-form-webhook-url"
             />
-          </div>
+          </Field>
           <div>
             <label for="settingstriggersview-http-method" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.http_method') }}</label>
             <Select
@@ -343,77 +342,74 @@
   </template>
 </Select>
           </div>
-          <div>
-            <label for="settingstriggersview-field-11" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.headers_json') }}</label>
-            <textarea id="settingstriggersview-field-11"
+          <Field id="settingstriggersview-field-11" :label="$t('views.SettingsTriggersView.headers_json')">
+            <Textarea
               v-model="form.webhook_headers"
               rows="3"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.headers_placeholder')"
               data-testid="settings-triggers-form-webhook-headers"
             />
-          </div>
+          </Field>
         </template>
 
         <!-- Cron config -->
         <template v-if="form.trigger_type === 'cron'">
-          <div>
-            <label for="settingstriggersview-field-10" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.cron_expression') }}</label>
-            <input id="settingstriggersview-field-10"
+          <Field id="settingstriggersview-field-10" :label="$t('views.SettingsTriggersView.cron_expression')">
+            <Input
               v-model="form.cron_expression"
               type="text"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.cron_expression_placeholder')"
               data-testid="settings-triggers-form-cron-expr"
             />
-          </div>
-          <div>
-            <label for="settingstriggersview-field-9" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.timezone') }}</label>
-            <input id="settingstriggersview-field-9"
+          </Field>
+          <Field id="settingstriggersview-field-9" :label="$t('views.SettingsTriggersView.timezone')">
+            <Input
               v-model="form.cron_timezone"
               type="text"
               class="input-base"
               :placeholder="$t('views.SettingsTriggersView.timezone_placeholder')"
               data-testid="settings-triggers-form-cron-tz"
             />
-          </div>
-          <div>
-            <label for="settingstriggersview-field-8" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.input_template_json') }}</label>
-            <textarea id="settingstriggersview-field-8"
+          </Field>
+          <Field id="settingstriggersview-field-8" :label="$t('views.SettingsTriggersView.input_template_json')">
+            <Textarea
               v-model="form.input_template"
               rows="3"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.input_template_placeholder')"
               data-testid="settings-triggers-form-cron-input"
             />
-          </div>
+          </Field>
         </template>
 
         <!-- Polling config -->
         <template v-if="form.trigger_type === 'polling'">
-          <div>
-            <label for="settingstriggersview-field-7" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.connector_instance_id') }}</label>
-            <input id="settingstriggersview-field-7"
+          <Field id="settingstriggersview-field-7" :label="$t('views.SettingsTriggersView.connector_instance_id')">
+            <Input
               v-model="form.connector_instance_id"
               type="text"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.connector_instance_id_placeholder')"
               data-testid="settings-triggers-form-polling-connector"
             />
-          </div>
-          <div>
-            <label for="settingstriggersview-field-6" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.query') }}</label>
-            <textarea id="settingstriggersview-field-6"
+          </Field>
+          <Field id="settingstriggersview-field-6" :label="$t('views.SettingsTriggersView.query')">
+            <Textarea
               v-model="form.poll_query"
               rows="3"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.query_placeholder')"
               data-testid="settings-triggers-form-polling-query"
             />
-          </div>
-          <div>
-            <label for="settingstriggersview-field-5" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.poll_interval_seconds') }}</label>
-            <input id="settingstriggersview-field-5"
+          </Field>
+          <Field
+            id="settingstriggersview-field-5"
+            :label="$t('views.SettingsTriggersView.poll_interval_seconds')"
+            :help="$t('views.SettingsTriggersView.poll_interval_seconds_hint')"
+          >
+            <Input
               v-model="form.poll_interval"
               type="number"
               min="60"
@@ -421,18 +417,16 @@
               :placeholder="$t('views.SettingsTriggersView.poll_interval_placeholder')"
               data-testid="settings-triggers-form-polling-interval"
             />
-            <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.SettingsTriggersView.poll_interval_seconds_hint') }}</p>
-          </div>
-          <div>
-            <label for="settingstriggersview-field-4" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.condition_expression') }}</label>
-            <input id="settingstriggersview-field-4"
+          </Field>
+          <Field id="settingstriggersview-field-4" :label="$t('views.SettingsTriggersView.condition_expression')">
+            <Input
               v-model="form.condition_expression"
               type="text"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.condition_expression_placeholder')"
               data-testid="settings-triggers-form-polling-condition"
             />
-          </div>
+          </Field>
         </template>
 
         <!-- Agent Signal config -->
@@ -455,24 +449,22 @@
   </template>
 </Select>
           </div>
-          <div>
-            <label for="settingstriggersview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.source_node_id') }}</label>
-            <input id="settingstriggersview-field-2"
+          <Field id="settingstriggersview-field-2" :label="$t('views.SettingsTriggersView.source_node_id')">
+            <Input
               v-model="form.signal_source_node"
               type="text"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.source_node_id_placeholder')"
               data-testid="settings-triggers-form-signal-node"
             />
-          </div>
+          </Field>
         </template>
 
         <!-- Ongoing config -->
         <template v-if="form.trigger_type === 'ongoing'">
           <p class="text-sm text-muted-foreground">{{ $t('views.SettingsTriggersView.ongoing_description') }}</p>
-          <div>
-            <label for="settingstriggersview-ongoing-target" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.target_runs') }}</label>
-            <input id="settingstriggersview-ongoing-target"
+          <Field id="settingstriggersview-ongoing-target" :label="$t('views.SettingsTriggersView.target_runs')">
+            <Input
               v-model.number="form.max_concurrent_runs"
               type="number"
               min="1"
@@ -481,10 +473,9 @@
               :placeholder="$t('views.SettingsTriggersView.target_runs_placeholder')"
               data-testid="settings-triggers-form-ongoing-target"
             />
-          </div>
-          <div>
-            <label for="settingstriggersview-ongoing-interval" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.scan_interval') }}</label>
-            <input id="settingstriggersview-ongoing-interval"
+          </Field>
+          <Field id="settingstriggersview-ongoing-interval" :label="$t('views.SettingsTriggersView.scan_interval')">
+            <Input
               v-model.number="form.ongoing_scan_interval"
               type="number"
               min="60"
@@ -492,20 +483,23 @@
               :placeholder="$t('views.SettingsTriggersView.scan_interval_placeholder')"
               data-testid="settings-triggers-form-ongoing-interval"
             />
-          </div>
-          <div>
-            <label for="settingstriggersview-ongoing-template" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.input_template_json') }}</label>
-            <textarea id="settingstriggersview-ongoing-template"
+          </Field>
+          <Field id="settingstriggersview-ongoing-template" :label="$t('views.SettingsTriggersView.input_template_json')">
+            <Textarea
               v-model="form.input_template"
               rows="3"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.input_template_placeholder')"
               data-testid="settings-triggers-form-ongoing-template"
             />
-          </div>
-          <div>
-            <label for="settingstriggersview-ongoing-spend" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.daily_spend_limit') }} <span class="text-destructive">*</span></label>
-            <input id="settingstriggersview-ongoing-spend"
+          </Field>
+          <Field
+            id="settingstriggersview-ongoing-spend"
+            :label="$t('views.SettingsTriggersView.daily_spend_limit')"
+            required
+            :help="$t('views.SettingsTriggersView.daily_spend_limit_required')"
+          >
+            <Input
               v-model="form.daily_spend_limit"
               type="number"
               min="0.01"
@@ -514,18 +508,16 @@
               :placeholder="$t('views.SettingsTriggersView.daily_spend_limit_placeholder')"
               data-testid="settings-triggers-form-ongoing-spend"
             />
-            <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.SettingsTriggersView.daily_spend_limit_required') }}</p>
-          </div>
-          <div>
-            <label for="settingstriggersview-ongoing-snapshot" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsTriggersView.snapshot_id') }}</label>
-            <input id="settingstriggersview-ongoing-snapshot"
+          </Field>
+          <Field id="settingstriggersview-ongoing-snapshot" :label="$t('views.SettingsTriggersView.snapshot_id')">
+            <Input
               v-model="form.snapshot_id"
               type="text"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsTriggersView.snapshot_id_placeholder')"
               data-testid="settings-triggers-form-ongoing-snapshot"
             />
-          </div>
+          </Field>
         </template>
 
         <div class="flex items-center gap-2">
@@ -571,7 +563,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDataFetch } from '../composables/useDataFetch'
 import { useApi } from '../composables/useApi'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Dialog from 'primevue/dialog'
 import { api } from '../lib/api/client'
 import { useCurrentUser } from '../composables/useCurrentUser'
@@ -581,9 +573,13 @@ import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import TableActions from '../components/shared/TableActions.vue'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import { usePlanStore } from '../stores/planStore'
@@ -902,7 +898,7 @@ function streakBadgeClass(trigger: TriggerItem): string {
   }
   if (s.enabled && threshold > 0 && streak > 0 && streak >= threshold - 1) {
     if (streak >= threshold) return 'bg-destructive/10 text-destructive-text'
-    return 'bg-amber-500/10 text-amber-600'
+    return 'bg-warning/10 text-warning-text'
   }
   return 'bg-muted text-muted-foreground'
 }
@@ -946,7 +942,7 @@ const agentReportedConfidenceDetail = computed(() =>
 
 function outcomeBadgeClass(classification: string | null | undefined): string {
   if (classification === OUTCOME_DELIVERED) return 'bg-success/10 text-success-text'
-  if (classification === 'no_delivery') return 'bg-amber-500/10 text-amber-600'
+  if (classification === 'no_delivery') return 'bg-warning/10 text-warning-text'
   return 'bg-muted text-muted-foreground'
 }
 

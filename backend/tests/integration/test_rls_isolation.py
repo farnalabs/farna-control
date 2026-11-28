@@ -163,28 +163,17 @@ async def test_rls_policies_exist_on_all_org_scoped_tables(
     # The LangGraph checkpoint tables are runtime-managed by
     # ``ModuloPostgresSaver.setup()`` (no migration, no RLS policy — the saver
     # app-scopes its own queries by organisation_id) — excluded here too.
-    expected = (
-        org_scoped
-        - {"organisations"}
-        - team_scoped
-        - {
-            "checkpoints",
-            "checkpoint_blobs",
-            "checkpoint_writes",
-            # FAR-461 in-app invitations (main's 0177) is deliberately OUTSIDE
-            # the ``rls_org_isolation`` regime: consumption happens on the
-            # unauthenticated accept-invite route BEFORE any principal (and
-            # thus before any caller org context) exists, so no RLS predicate
-            # could be satisfied; every access path scopes by organisation
-            # explicitly instead (see the 0177 docstring's RLS NOTE).
-            "invitations",
-            # Ops/remediation evidence table (FAR-583, migration 0192): written
-            # by migrations and read by ops SQL only — no app-role grant and
-            # deliberately NO RLS policy, so quarantined sentinel rows stay
-            # visible for remediation regardless of org context.
-            "run_node_outputs_quarantine",
-        }
-    )
+    # Migration 0368 brought the last two application-owned tenant tables into
+    # the regime, so they are asserted like every sibling now:
+    #   * ``invitations`` carries ``rls_org_isolation`` PLUS the scoped pre-auth
+    #     bootstrap grant (0367's ``app.bootstrap_context``); the accept-invite
+    #     read happens before any principal exists and pins the unique
+    #     token_hash inside ``bootstrap_read``.
+    #   * ``run_node_outputs_quarantine`` carries the plain org predicate, so the
+    #     retention purge's delete is org-bounded by the database instead of only
+    #     by its caller.
+    # Only the three runtime-managed LangGraph checkpoint tables remain outside.
+    expected = org_scoped - {"organisations"} - team_scoped - {"checkpoints", "checkpoint_blobs", "checkpoint_writes"}
     missing = expected - tables_with_policy
     assert not missing, f"Tables missing rls_org_isolation policy: {sorted(missing)}"
 

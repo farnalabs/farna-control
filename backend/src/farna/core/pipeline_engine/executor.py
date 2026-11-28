@@ -317,6 +317,7 @@ from .executor_parts.support import (
     RunNotFoundError,
     SandboxCapacityExceededError,
     _CapacitySnapshot,
+    _failure_reason,
     _is_finalize_lock_retryable,
     _RunScope,
     _safe_pipeline_name,
@@ -324,7 +325,6 @@ from .executor_parts.support import (
     _StreamConfig,
     _StreamContext,
     _StreamState,
-    _traceback_detail,
 )
 from .executor_parts.telemetry import TelemetryMixin as _TelemetryMixin
 
@@ -378,6 +378,7 @@ __all__ = [
     "_connector_scope_agent_ids",
     "_extract_chat_model_token_usage",
     "_extract_llm_token_usage",
+    "_failure_reason",
     "_frozen_eval_mode_entries",
     "_governed_evaluation_mode",
     "_graph_is_idempotent",
@@ -418,7 +419,6 @@ __all__ = [
     "_streamed_interrupts",
     "_teardown_hub",
     "_terminal_failure",
-    "_traceback_detail",
     "_try_agent_failure_elevation",
     "compute_retry_aware_topology_hash",
     "org_sandbox_capacity_free",

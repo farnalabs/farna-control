@@ -238,20 +238,20 @@ describe('LibraryPrimitiveCard', () => {
     expect(onWrapper.find('[data-testid="auto-update-toggle-prim-1"]').attributes('aria-checked')).toBe('true')
   })
 
-  it('renders toggle with correct translate-x class based on auto_update state', () => {
+  it('renders the shared ToggleSwitch thumb position based on auto_update state', () => {
     const offWrapper = mountCard({
       showAutoUpdate: true,
       prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: false },
     })
     const offToggle = offWrapper.find('[data-testid="auto-update-toggle-prim-1"] span')
-    expect(offToggle.classes()).toContain('translate-x-[2px]')
+    expect(offToggle.classes()).toContain('translate-x-0.5')
 
     const onWrapper = mountCard({
       showAutoUpdate: true,
       prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'workflow', name: 'Test', description: null, tags: [], forked_from: 'parent-1', auto_update: true },
     })
     const onToggle = onWrapper.find('[data-testid="auto-update-toggle-prim-1"] span')
-    expect(onToggle.classes()).toContain('translate-x-[18px]')
+    expect(onToggle.classes()).toContain('translate-x-3.5')
   })
 
   it('handles empty description gracefully', () => {

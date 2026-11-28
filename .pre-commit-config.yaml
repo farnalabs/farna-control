@@ -1,4 +1,8 @@
-﻿repos:
+﻿# Hooks without an explicit `stages` run at the commit stage only; the pre-push
+# stage is reserved for hooks explicitly tagged `stages: [pre-push]`. This keeps
+# the commit gate broad and the push gate targeted.
+default_stages: [pre-commit]
+repos:
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.3
     hooks:
@@ -96,8 +100,13 @@
         exclude: ^deploy/helm/farna-control/templates/
       - id: check-toml
       - id: check-json
+      # A file-rewriting fixer at pre-push rewrites the tree AFTER the commit, so
+      # the rewrite is never in the pushed commit and the working tree is dirty.
+      # They belong at commit time only.
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: trailing-whitespace
+        stages: [pre-commit]
       - id: no-commit-to-branch
         args: [--branch, main]
 
@@ -132,10 +141,13 @@
         entry: uv run --project backend --no-sync --frozen python scripts/run_frontend_npm.py lint
         language: system
         # Match the CI lint command's scope (frontend/package.json):
-        # `eslint src tests/visual-baseline`.  A repo-wide pattern would also
-        # match docs examples and the rest of frontend/tests, whose pre-existing
-        # no-console violations the CI lint gate does not enforce.
-        files: ^frontend/(src/.*\.(vue|ts|js)|tests/visual-baseline/.*\.mjs)$
+        # `eslint src tests/visual-baseline tests/e2e`. tests/e2e is included so
+        # the e2e specs are actually gated (they carry a scoped `no-console`
+        # override in eslint.config.mjs; without this scope that override would
+        # enforce nothing and violations silently accumulate - FAR-2761). The
+        # pattern stays narrowed to those three roots rather than repo-wide, so
+        # generated/doc examples outside them are not swept in.
+        files: ^frontend/(src/.*\.(vue|ts|js)|tests/visual-baseline/.*\.mjs|tests/e2e/.*\.ts)$
         pass_filenames: true
       - id: vue-tsc
         name: vue-tsc type check
@@ -268,7 +280,7 @@
         pass_filenames: false
         stages: [pre-push]
       # EXACT frontend type-check invocation (ci.yml frontend job):
-      #   pnpm run type-check    (frontend/package.json: "vue-tsc --noEmit")
+      #   pnpm run type-check    (frontend/package.json: cross-env NODE_OPTIONS=--max-old-space-size=3072 vue-tsc --noEmit)
       # run_frontend_npm.py runs `pnpm run type-check` in frontend/ — same command.
       - id: prepush-vue-tsc
         name: prepush vue-tsc (exact CI type-check command)

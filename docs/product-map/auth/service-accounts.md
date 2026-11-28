@@ -48,10 +48,12 @@ in-product admin page, so it is tracked here rather than in the manifest
       `::test_create_with_blank_name_is_rejected`,
       `::test_create_non_admin_is_403`,
       `test_account.py::test_create_service_account_shape`).
+      <!-- behaviour: service-accounts-01 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_create_returns_201_and_stamps_kind, backend/tests/unit/db/crud/test_account.py::test_create_service_account_shape -->
 - [x] Creation emits a `service_account_created` audit event fail-open (a
       failed audit write never rolls back the account), and the audit payload
       names the display name and granted org role
       (`test_service_accounts_endpoint.py::test_create_emits_service_account_created_audit`).
+      <!-- behaviour: service-accounts-02 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_create_emits_service_account_created_audit -->
 - [x] The role ceiling is `operator` and `admin` is refused rather than
       silently clamped: the request vocabulary is the org-role set, an `admin`
       grant is 422, an unknown role is 422, and `core/principals.py` is the
@@ -66,6 +68,7 @@ in-product admin page, so it is tracked here rather than in the manifest
       `test_service_accounts_endpoint.py::test_create_with_admin_role_is_rejected_structurally`,
       `test_principals.py::test_ceiling_is_operator`,
       `test_service_accounts_lifecycle.py::test_admin_role_grant_is_structurally_refused`).
+      <!-- behaviour: service-accounts-03 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_create_with_admin_role_is_rejected_structurally, backend/tests/unit/core/test_principals.py::test_ceiling_is_operator, backend/tests/integration/api/test_service_accounts_lifecycle.py::test_admin_role_grant_is_structurally_refused -->
 - [x] Listing and reads are admin-only and org-scoped: the list is paginated
       (`page` >= 1, `page_size` 1..100, optional display-name search) and
       returns the org's `kind='service'` memberships; a missing id, a human
@@ -75,6 +78,7 @@ in-product admin page, so it is tracked here rather than in the manifest
       `test_service_accounts_endpoint.py::test_list_returns_service_accounts`,
       `::test_get_human_account_is_404`,
       `::test_get_service_account_without_org_membership_is_404`).
+      <!-- behaviour: service-accounts-04 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_list_returns_service_accounts -->
 - [x] Rename and role reassignment go through one PATCH: at least one of
       `name` / `role` is required (neither is 422), the same `operator` ceiling
       applies to a role change, and a decommissioned principal is 409. The
@@ -82,6 +86,7 @@ in-product admin page, so it is tracked here rather than in the manifest
       (`test_service_accounts_endpoint.py::test_patch_rename`,
       `::test_patch_without_fields_is_422`,
       `::test_patch_decommissioned_is_409`).
+      <!-- behaviour: service-accounts-05 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_patch_rename -->
 - [x] Decommission is explicit and one-way: `POST
       /api/v1/service-accounts/{id}/decommission` stamps
       `accounts.decommissioned_at`, flips `active` off, tombstones the org
@@ -97,6 +102,7 @@ in-product admin page, so it is tracked here rather than in the manifest
       `test_service_accounts_lifecycle.py::test_provision_mint_decommission_end_to_end`,
       `::test_human_user_admin_surface_rejects_service_target`,
       `::test_cross_org_service_target_is_404_not_422`).
+      <!-- behaviour: service-accounts-06 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_decommission_revokes_keys_and_tombstones, backend/tests/integration/api/test_service_accounts_lifecycle.py::test_provision_mint_decommission_end_to_end -->
 - [x] Keys minted for a service principal are OWNED by it: `POST
       /api/v1/service-accounts/{id}/keys` returns 201 and stamps
       `org_api_keys.account_id` with the service account, never the human who
@@ -108,6 +114,7 @@ in-product admin page, so it is tracked here rather than in the manifest
       `::test_service_principal_mints_its_own_key`,
       `::test_api_key_cannot_mint_for_another_principal`,
       `::test_non_admin_jwt_cannot_mint_for_a_service_account`).
+      <!-- behaviour: service-accounts-07 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_admin_bootstrap_mint_owns_the_service_principal -->
 - [x] Key shape is constrained at the surface: the role is `operator` or
       `runner` only (`admin` is 422), the scope is immutable org scope (any
       other scope is 422), and the minted role may never exceed the target's
@@ -122,6 +129,7 @@ in-product admin page, so it is tracked here rather than in the manifest
       `::test_mint_with_no_live_role_is_403`,
       `::test_grants_with_flag_off_are_rejected`,
       `::test_grants_flag_read_failure_is_503`).
+      <!-- behaviour: service-accounts-08 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_admin_key_role_is_422 -->
 - [x] The 365-day service TTL is enforced at both key choke points: an explicit
       expiry beyond 365 days is 422 on mint AND on `PUT /api/v1/api-keys/{id}`
       extension (never a silent clamp) and exactly 365 days is accepted, both
@@ -133,11 +141,13 @@ in-product admin page, so it is tracked here rather than in the manifest
       `::test_naive_expires_at_is_accepted_as_utc`,
       `::test_past_expires_at_is_422`,
       `test_service_accounts_lifecycle.py::test_provision_mint_decommission_end_to_end`).
+      <!-- behaviour: service-accounts-09 | tests: backend/tests/unit/api/test_service_accounts_endpoint.py::test_ttl_ceiling_maps_to_422, backend/tests/integration/api/test_service_accounts_lifecycle.py::test_provision_mint_decommission_end_to_end -->
 - [x] A service principal can never authenticate through the human login path:
       the email-based login lookup refuses it with 401 byte-identically to a
       wrong password, so the denial never reveals that the row exists, and the
       stealth demo-login answers its plain 404 (`api/routes/auth.py`;
       `test_login_endpoint.py::test_login_rejects_service_principal`).
+      <!-- behaviour: service-accounts-10 | tests: backend/tests/unit/auth/test_login_endpoint.py::test_login_rejects_service_principal -->
 - [x] Human-only read surfaces that load an account by primary key call
       `is_service_account` and answer 404: `/me` and SCIM return not-found
       exactly as they would for an unknown id, so a service principal can never
@@ -148,10 +158,12 @@ in-product admin page, so it is tracked here rather than in the manifest
       `::TestScimHumanGuard::test_service_user_is_404`,
       `test_login_endpoint.py::test_me_returns_404_for_a_service_principal`,
       `test_account_model.py::test_account_service_identity_check_forbids_human_shaped_columns`).
+      <!-- behaviour: service-accounts-11 | tests: backend/tests/unit/api/test_service_principal_exclusion.py, backend/tests/unit/auth/test_login_endpoint.py::test_me_returns_404_for_a_service_principal, backend/tests/unit/db/test_account_model.py::test_account_service_identity_check_forbids_human_shaped_columns -->
 - [x] A service account holds ordinary team memberships through the existing
       team surface, and the team role CHECK still excludes `admin`. Decommission
       removes those memberships in the same act
       (`test_service_accounts_lifecycle.py::test_service_account_holds_a_team_membership`).
+      <!-- behaviour: service-accounts-12 | tests: backend/tests/integration/api/test_service_accounts_lifecycle.py::test_service_account_holds_a_team_membership -->
 
 ## Known Gaps
 

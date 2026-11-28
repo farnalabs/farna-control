@@ -834,6 +834,12 @@ async def _existing_account_or_conflict(
     inline (extracted to keep the route's control flow shallow, S3776).
     """
     async with session.begin():
+        # Migration 0367 fail-closes ``org_memberships`` with no org GUC: its
+        # ``FOR ALL USING`` clause is also the INSERT WITH CHECK, and a read
+        # without the scope sees zero rows. Bind the org BEFORE the membership
+        # lookup so the conflict check is correct (``accounts`` is global and
+        # carries no RLS policy, so scoping here is strictly narrower).
+        await set_rls_org(session, org_id)
         existing = await get_account_by_email(session, req.email)
         if existing is not None:
             membership = await get_membership_by_account_and_org(session, existing.id, org_id)
@@ -866,6 +872,11 @@ async def _create_or_adopt_account(
     (SonarQube S3776). Returns ``(account, membership)``.
     """
     async with session.begin():
+        # Migration 0367 fail-closes ``org_memberships`` with no org GUC (the
+        # ``FOR ALL USING`` clause doubles as the INSERT WITH CHECK). set_config
+        # is transaction-local, so bind the org at the START of this transaction,
+        # before the membership INSERT.
+        await set_rls_org(session, current_user.organisation_id)
         if existing is not None:
             account = existing
             # SECURITY (#1185): only allow password hash overwrite for
@@ -899,9 +910,11 @@ async def _create_or_adopt_account(
 
         # Audit is fail-open-with-alert (mirrors me.change_password): the
         # user creation ALWAYS commits; a failed audit write is loudly
-        # logged and never rolls back the change.
+        # logged and never rolls back the change. The org GUC was bound at the
+        # start of this same transaction, and ``set_config(..., is_local=true)``
+        # survives to COMMIT, so the audit write is already org-scoped - no
+        # second binding is needed here.
         try:
-            await set_rls_org(session, current_user.organisation_id)
             await append_audit_event(
                 session,
                 org_id=current_user.organisation_id,
@@ -1720,8 +1733,13 @@ async def admin_deactivate_user(
     # expire_on_commit off) a plain re-SELECT would return the same stale
     # identity-map instance. is_active must reflect the caller's-org tombstone
     # (gh-1794/FAR-533). With autobegin=False (production session config),
-    # explicitly begin a transaction for the refresh.
+    # explicitly begin a transaction for the refresh. That new transaction
+    # starts WITHOUT the org GUC (set_config is transaction-local), and 0367
+    # fail-closes org_memberships with no context — so re-establish the org
+    # scope or the refresh SELECT matches zero rows and raises
+    # InvalidRequestError.
     async with session.begin():
+        await set_rls_org(session, current_user.organisation_id)
         await session.refresh(membership)
     return _to_user_list_item(account, org_role, org_membership=membership)
 
@@ -1823,8 +1841,13 @@ async def admin_reactivate_user(
     # UPDATE does not refresh the in-session ORM object (same identity-map
     # caveat as the deactivate route). is_active must reflect the caller's-org
     # state (gh-1794/FAR-533). With autobegin=False (production session config),
-    # explicitly begin a transaction for the refresh.
+    # explicitly begin a transaction for the refresh. That new transaction
+    # starts WITHOUT the org GUC (set_config is transaction-local), and 0367
+    # fail-closes org_memberships with no context — so re-establish the org
+    # scope or the refresh SELECT matches zero rows and raises
+    # InvalidRequestError.
     async with session.begin():
+        await set_rls_org(session, current_user.organisation_id)
         await session.refresh(membership)
     return _to_user_list_item(account, org_role, org_membership=membership)
 

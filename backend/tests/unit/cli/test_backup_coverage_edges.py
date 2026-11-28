@@ -358,12 +358,139 @@ class TestStopIdentifiedPid:
         assert backup_mod._stop_identified_pid(4242) is False
 
 
+def _write_window_record(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    pid: int = 4321,
+    start_epoch: float = 1_000.0,
+) -> Path:
+    """Write the restore-window record through the REAL writer, pinning its start time."""
+    from farna.launcher import supervisor as supervisor_module
+
+    monkeypatch.setattr(supervisor_module, "_pid_starttime_epoch", lambda _pid: start_epoch)
+    return supervisor_module.write_restore_window_pidfile(data_dir, pid)
+
+
 class TestReapLeftoverWindowPostmaster:
-    def test_a_leftover_that_survives_the_stop_is_refused_loudly(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2753: signal a process ONLY when its recorded identity is verified.
+
+    The consequence this pins: a reused pid that now belongs to any live
+    postgres must never be fast-shutdown / SIGTERMed / SIGKILLed by a restore,
+    and a record that cannot be identified is reported (file, pid, what to do)
+    instead of killed.
+    """
+
+    @staticmethod
+    def _identity(
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        alive: bool = True,
+        start_epoch: float = 1_000.0,
+        is_postgres: bool = True,
+    ) -> None:
         from farna.launcher import supervisor as supervisor_module
 
-        monkeypatch.setattr(supervisor_module, "live_restore_window_pid", lambda _data_dir: 4321)
-        monkeypatch.setattr(backup_mod, "_stop_identified_pid", lambda _pid, **_kwargs: False)
+        monkeypatch.setattr(supervisor_module, "_pid_alive", lambda _pid: alive)
+        monkeypatch.setattr(supervisor_module, "_pid_starttime_epoch", lambda _pid: start_epoch)
+        monkeypatch.setattr(supervisor_module, "_is_postgres_process", lambda _pid: is_postgres)
+
+    @staticmethod
+    def _recorded_stops(monkeypatch: pytest.MonkeyPatch, *, stopped: bool = True) -> list[int]:
+        stopped_pids: list[int] = []
+
+        def _stop(pid: int, **_kwargs: object) -> bool:
+            stopped_pids.append(pid)
+            return stopped
+
+        monkeypatch.setattr(backup_mod, "_stop_identified_pid", _stop)
+        return stopped_pids
+
+    def test_a_genuine_record_is_reaped(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+        from farna.launcher import supervisor as supervisor_module
+
+        _write_window_record(tmp_path, monkeypatch)
+        self._identity(monkeypatch)
+        stopped = self._recorded_stops(monkeypatch)
+
+        backup_mod._reap_leftover_window_postmaster(tmp_path)
+
+        assert stopped == [4321]
+        assert "PID 4321" in capsys.readouterr().out
+        assert not (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).exists()
+
+    def test_a_reused_pid_belonging_to_another_postgres_is_not_killed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The defect: the number is alive and postgres, but it is NOT ours."""
+        from farna.launcher import supervisor as supervisor_module
+
+        _write_window_record(tmp_path, monkeypatch)  # recorded when the pid started at 1000.0
+        self._identity(monkeypatch, start_epoch=9_000.0)  # a different postgres now owns the pid
+        stopped = self._recorded_stops(monkeypatch)
+
+        backup_mod._reap_leftover_window_postmaster(tmp_path)
+
+        assert stopped == [], "a reused pid must never be signalled"
+        assert not (tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE).exists(), "a provably different process is stale debris"
+
+    def test_a_legacy_bare_pid_record_is_reported_and_not_killed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.launcher import supervisor as supervisor_module
+
+        record = tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE
+        record.write_text("4321\n", encoding="ascii")
+        self._identity(monkeypatch)
+        stopped = self._recorded_stops(monkeypatch)
+
+        with pytest.raises(click.ClickException) as caught:
+            backup_mod._reap_leftover_window_postmaster(tmp_path)
+
+        message = str(caught.value)
+        assert stopped == []
+        assert str(record) in message
+        assert "4321" in message
+        assert "cannot be verified" in message
+        assert record.exists(), "the only handle on that process is kept"
+
+    def test_a_record_written_for_another_data_dir_is_not_acted_on(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.launcher import supervisor as supervisor_module
+
+        other = tmp_path / "another-install"
+        other.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        copied = _write_window_record(other, monkeypatch).read_text(encoding="ascii")
+        (data_dir / supervisor_module.RESTORE_WINDOW_PIDFILE).write_text(copied, encoding="ascii")
+        self._identity(monkeypatch)
+        stopped = self._recorded_stops(monkeypatch)
+
+        with pytest.raises(click.ClickException) as caught:
+            backup_mod._reap_leftover_window_postmaster(data_dir)
+
+        message = str(caught.value)
+        assert stopped == []
+        assert "another-install" in message
+        assert (data_dir / supervisor_module.RESTORE_WINDOW_PIDFILE).exists()
+
+    def test_a_truncated_record_is_reported(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from farna.launcher import supervisor as supervisor_module
+
+        record = tmp_path / supervisor_module.RESTORE_WINDOW_PIDFILE
+        record.write_text('{"version": 1, "pid": 4321, "start_ep', encoding="ascii")
+        self._identity(monkeypatch)
+        stopped = self._recorded_stops(monkeypatch)
+
+        with pytest.raises(click.ClickException) as caught:
+            backup_mod._reap_leftover_window_postmaster(tmp_path)
+
+        message = str(caught.value)
+        assert stopped == []
+        assert str(record) in message
+        assert "no readable PID" in message
+        assert record.exists()
+
+    def test_a_leftover_that_survives_the_stop_is_refused_loudly(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_window_record(tmp_path, monkeypatch)
+        self._identity(monkeypatch)
+        self._recorded_stops(monkeypatch, stopped=False)
 
         with pytest.raises(click.ClickException, match="cannot stop it"):
             backup_mod._reap_leftover_window_postmaster(tmp_path)

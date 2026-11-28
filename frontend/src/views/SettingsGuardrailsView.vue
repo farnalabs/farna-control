@@ -1,12 +1,13 @@
 <template>
-    <div data-theme="agent" class="page-wide">
+    <div class="page-wide">
       <PageHeader :title="$t('views.SettingsGuardrailsView.title')" :subtitle="$t('views.SettingsGuardrailsView.subtitle')">
         <template #right>
           <div class="flex items-center gap-2">
             <Button
               v-if="isAdmin"
               data-testid="settings-guardrails-import"
-              severity="secondary"
+              variant="secondary"
+              :outlined="false"
               class="border-primary/30 hover:border-primary/60"
               @click="openImportDialog"
             >
@@ -19,15 +20,17 @@
         </template>
       </PageHeader>
 
-      <div
+      <Notice
         v-if="killSwitchEnabled"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        class="mb-4"
         data-testid="settings-guardrails-kill-switch-banner"
-        aria-live="polite"
-        class="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
       >
         <p class="text-sm font-medium">{{ $t('views.SettingsGuardrailsView.kill_switch_banner') }}</p>
         <p class="mt-1 text-sm text-muted-foreground">{{ $t('views.SettingsGuardrailsView.kill_switch_banner_body') }}</p>
-      </div>
+      </Notice>
 
       <LoadingSpinner v-if="!loaded" />
 
@@ -87,17 +90,15 @@
         @confirm="saveGuardrail"
       >
         <form @submit.prevent="saveGuardrail" class="space-y-4">
-          <div>
-            <label for="settingsguardrailsview-name" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsGuardrailsView.guardrail_name') }}</label>
-            <input
-              id="settingsguardrailsview-name"
+          <Field id="settingsguardrailsview-name" :label="$t('views.SettingsGuardrailsView.guardrail_name')">
+            <Input
               v-model="form.name"
               type="text"
               class="input-base"
               :placeholder="$t('views.SettingsGuardrailsView.guardrail_name_placeholder')"
               data-testid="settings-guardrails-form-name"
             />
-          </div>
+          </Field>
 
           <div>
             <label for="settingsguardrailsview-pipeline" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsGuardrailsView.pipeline') }}</label>
@@ -156,41 +157,39 @@
 </Select>
           </div>
 
-          <div>
-            <label for="settingsguardrailsview-field" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsGuardrailsView.field_path') }}</label>
-            <input
-              id="settingsguardrailsview-field"
+          <Field id="settingsguardrailsview-field" :label="$t('views.SettingsGuardrailsView.field_path')">
+            <Input
               v-model="form.field"
               type="text"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsGuardrailsView.field_path_placeholder')"
               data-testid="settings-guardrails-form-field"
             />
-          </div>
+          </Field>
 
-          <div v-if="form.detectionType === 'regex'">
-            <label for="settingsguardrailsview-pattern" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsGuardrailsView.pattern') }}</label>
-            <textarea
-              id="settingsguardrailsview-pattern"
+          <Field
+            v-if="form.detectionType === 'regex'"
+            id="settingsguardrailsview-pattern"
+            :label="$t('views.SettingsGuardrailsView.pattern')"
+          >
+            <Textarea
               v-model="form.pattern"
               rows="3"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsGuardrailsView.pattern_placeholder')"
               data-testid="settings-guardrails-form-pattern"
             />
-          </div>
+          </Field>
 
-          <div v-else>
-            <label for="settingsguardrailsview-schema" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsGuardrailsView.json_schema') }}</label>
-            <textarea
-              id="settingsguardrailsview-schema"
+          <Field v-else id="settingsguardrailsview-schema" :label="$t('views.SettingsGuardrailsView.json_schema')">
+            <Textarea
               v-model="form.schema"
               rows="6"
               class="input-base font-mono"
               :placeholder="$t('views.SettingsGuardrailsView.json_schema_placeholder')"
               data-testid="settings-guardrails-form-schema"
             />
-          </div>
+          </Field>
 
           <div
             data-testid="settings-guardrails-form-disclosure"
@@ -224,10 +223,11 @@
         @confirm="importConfig"
       >
         <div data-testid="settings-guardrails-import-dialog" class="space-y-2">
-          <div>
-            <label for="settingsguardrailsview-import-yaml" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsGuardrailsView.import_config_yaml') }}</label>
-            <textarea
-              id="settingsguardrailsview-import-yaml"
+          <Field
+            id="settingsguardrailsview-import-yaml"
+            :label="$t('views.SettingsGuardrailsView.import_config_yaml')"
+          >
+            <Textarea
               v-model="importYaml"
               rows="12"
               spellcheck="false"
@@ -235,7 +235,7 @@
               :placeholder="$t('views.SettingsGuardrailsView.import_placeholder')"
               data-testid="settings-guardrails-import-textarea"
             />
-          </div>
+          </Field>
 
           <p data-testid="settings-guardrails-import-hint" class="text-xs text-muted-foreground">
             {{ $t('views.SettingsGuardrailsView.import_hint') }}
@@ -267,12 +267,16 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDataFetch } from '../composables/useDataFetch'
 import { useApi } from '../composables/useApi'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
 import { api } from '../lib/api/client'
 import { useCurrentUser } from '../composables/useCurrentUser'
 import { formatApiError } from '../lib/api/formatError'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
+import Notice from '../components/shared/Notice.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import EmptyState from '../components/shared/EmptyState.vue'

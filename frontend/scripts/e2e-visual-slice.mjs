@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * FAR-2017 — the visual/token e2e slice that runs on every frontend PR.
+ * FAR-2017 — the visual/token e2e slice, run once per merge train (it ran on
+ * every frontend PR until the PR tier was made fast on 2026-11-27).
  *
  * Why this exists
  * ---------------
@@ -14,7 +15,8 @@
  * The whole suite is not affordable per PR (~313 tests, ~11 min against a
  * deployed target, plus provisioning). This module selects a narrow,
  * unconditional slice of the token/CSS/geometry specs that are cheap and
- * deterministic against the LOCAL target, so they run on every frontend PR.
+ * deterministic against the LOCAL target, so the merge train can run them
+ * before anything merges.
  *
  * Why unconditional rather than changed-path based
  * ------------------------------------------------
@@ -47,9 +49,9 @@ const FRONTEND_ROOT = resolve(HERE, '..')
 const E2E_ROOT = join(FRONTEND_ROOT, 'tests', 'e2e')
 
 /**
- * Specs that run on every frontend PR. Each entry is here because it asserts
+ * Specs that run on every merge train. Each entry is here because it asserts
  * rendered CSS, design tokens or layout, runs against the local mock target,
- * and is cheap/deterministic enough for a per-PR gate.
+ * and is cheap/deterministic enough for a pre-merge gate.
  */
 const SLICE = [
   // FAR-2538: mobile layout of the MCP server-status row, the Triggers pause-all card and the Environment Profiles toolbar (390px stack, 1280px unchanged).
@@ -94,13 +96,13 @@ const SLICE = [
  */
 const STAGING_ONLY = {
   'tests/e2e/wcag-contrast.spec.ts':
-    'Already runs in this same frontend job as a dedicated, earlier step — not duplicated here.',
+    'Already runs in this same frontend e2e job as a dedicated, earlier step — not duplicated here.',
   'tests/e2e/mobile-layout.spec.ts':
-    'Measured 8.1 min locally (82-route sweep + axe + CLS + screenshots), and its axe findings can need seeded deployment data (the FAR-2028 unread-badge contrast node only renders with unread notifications, which the local mock does not seed). Too expensive and not data-realistic per PR; stays in the staging gate.',
+    'Measured 8.1 min locally (82-route sweep + axe + CLS + screenshots), and its axe findings can need seeded deployment data (the FAR-2028 unread-badge contrast node only renders with unread notifications, which the local mock does not seed). Too expensive and not data-realistic per train; stays in the staging gate.',
   'tests/e2e/pipeline-editor.spec.ts':
     'Layout-fit assertions interleaved with multi-step editor interactions (12 tests, ~1.1 min); flaked once in a combined local run under host contention. Broader interaction surface than the token/geometry slice, so it stays in the staging gate.',
   'tests/e2e/run-detail-metadata.spec.ts':
-    'Layout alignment is cheap alone (~35 s) but depends on run-detail mock/loading sequencing; flaked once in a combined slice run. Left in the staging gate rather than adding a flake source to a required PR check.',
+    'Layout alignment is cheap alone (~35 s) but depends on run-detail mock/loading sequencing; flaked once in a combined slice run. Left in the staging gate rather than adding a flake source to a required pre-merge check.',
   'tests/e2e/notifications.spec.ts':
     'Bell-dropdown viewport anchoring is layout, but the file is dominated by interaction/state tests (9 tests, ~47 s) that are not the token/CSS offender class. Left in the staging gate.',
   'tests/e2e/dialog-select-overlay.spec.ts':

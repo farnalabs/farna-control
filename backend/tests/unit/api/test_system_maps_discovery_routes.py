@@ -12,7 +12,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Select
 from sqlalchemy.exc import IntegrityError, ProgrammingError, SQLAlchemyError
 
-from farna.api.dependencies import _get_engine, get_db_session, get_plan_context, get_settings
+from farna.api.dependencies import (
+    _get_engine,
+    get_db_session,
+    get_plan_context,
+    get_plan_context_any_credential,
+    get_settings,
+)
 from farna.api.main import app
 from farna.api.routes.system_maps import router
 from farna.auth.dependencies import get_current_tenant_user, get_current_tenant_user_or_api_key, get_current_user
@@ -117,6 +123,9 @@ def route_client() -> Generator[tuple[TestClient, AsyncMock], None, None]:
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_plan_context] = lambda: _Plan(True)
+    # FAR-2748: the system_maps feature gate resolves through the
+    # any-credential plan context now, so stub it too.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: _Plan(True)
     app.dependency_overrides[get_current_user] = lambda: auth_user
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal
@@ -154,6 +163,9 @@ def test_discovery_denies_when_feature_is_disabled() -> None:
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_plan_context] = lambda: _Plan(False)
+    # FAR-2748: the system_maps feature gate resolves through the
+    # any-credential plan context now, so stub it too.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: _Plan(False)
     app.dependency_overrides[get_current_user] = lambda: auth_user
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal
@@ -190,6 +202,9 @@ def test_discovery_denies_without_system_maps_grant() -> None:
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_plan_context] = lambda: _Plan(True)
+    # FAR-2748: the system_maps feature gate resolves through the
+    # any-credential plan context now, so stub it too.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: _Plan(True)
     app.dependency_overrides[get_current_user] = lambda: auth_user
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal
@@ -231,6 +246,9 @@ def test_discovery_allows_operator_without_dev_mode() -> None:
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_plan_context] = lambda: _Plan(True)
+    # FAR-2748: the system_maps feature gate resolves through the
+    # any-credential plan context now, so stub it too.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: _Plan(True)
     app.dependency_overrides[get_current_user] = lambda: auth_user
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal
@@ -292,6 +310,9 @@ def test_discovery_operator_role_boundary(org_role: str, expected_status: int) -
     app.dependency_overrides[get_db_session] = override_session
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[get_plan_context] = lambda: _Plan(True)
+    # FAR-2748: the system_maps feature gate resolves through the
+    # any-credential plan context now, so stub it too.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: _Plan(True)
     app.dependency_overrides[get_current_user] = lambda: auth_user
     app.dependency_overrides[get_current_tenant_user] = lambda: principal
     app.dependency_overrides[get_current_tenant_user_or_api_key] = lambda: principal

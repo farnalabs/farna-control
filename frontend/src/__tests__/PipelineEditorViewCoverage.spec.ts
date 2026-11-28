@@ -60,6 +60,18 @@ import { api } from '../lib/api/client'
 import PipelineEditorView from '../views/PipelineEditorView.vue'
 import { usePlanStore } from '../stores/planStore'
 
+// The geometry Vue Flow hands an edge slot. These stubs call the slot by name;
+// PipelineEditorViewEdgeRendering.spec.ts proves the real Vue Flow picks it.
+const EDGE_GEOMETRY = {
+  id: 'edge-1',
+  sourceX: 0,
+  sourceY: 0,
+  targetX: 0,
+  targetY: 100,
+  sourcePosition: 'bottom',
+  targetPosition: 'top',
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -119,7 +131,7 @@ describe('PipelineEditorView — coverage: script logic branches', () => {
     const vm = wrapper.vm as any
 
     expect(vm.nodeTypeBadgeClass('manual')).toContain('warning')
-    expect(vm.nodeTypeBadgeClass('router')).toContain('indigo')
+    expect(vm.nodeTypeBadgeClass('router')).toContain('node-router')
     expect(vm.nodeTypeBadgeClass('hitl')).toContain('rose')
     expect(vm.nodeTypeBadgeClass('agent')).toContain('primary')
     expect(vm.nodeTypeBadgeClass('sandbox_agent')).toContain('primary')
@@ -1764,7 +1776,7 @@ describe('PipelineEditorView — coverage: edge slot + non-selected edge mapping
     useApiFns.post.mockResolvedValue({})
   })
 
-  it('renders the edge-default slot with and without a HITL gate config', async () => {
+  it('renders the edge-smoothstep slot with and without a HITL gate config', async () => {
     // The default mount stub renders only the unnamed slot, so the edge
     // template (and its v-if on edgeProps.data.hitl_review_config) never ran.
     // Invoke the scoped slot twice — once with a gate config, once without —
@@ -1782,10 +1794,10 @@ describe('PipelineEditorView — coverage: edge slot + non-selected edge mapping
         stubs: {
           VueFlow: {
             render(this: { $slots: Record<string, any> }) {
-              const slot = this.$slots['edge-default']
+              const slot = this.$slots['edge-smoothstep']
               return h('div', [
-                slot?.({ data: { hitl_review_config: { label: 'Gate' }, edge_type: 'normal' } }),
-                slot?.({ data: { hitl_review_config: null, edge_type: 'normal' } }),
+                slot?.({ ...EDGE_GEOMETRY, data: { hitl_review_config: { label: 'Gate' }, edge_type: 'normal' } }),
+                slot?.({ ...EDGE_GEOMETRY, data: { hitl_review_config: null, edge_type: 'normal' } }),
               ])
             },
           },
@@ -1823,9 +1835,10 @@ describe('PipelineEditorView — coverage: edge slot + non-selected edge mapping
         stubs: {
           VueFlow: {
             render(this: { $slots: Record<string, any> }) {
-              const slot = this.$slots['edge-default']
+              const slot = this.$slots['edge-smoothstep']
               return h('div', [
                 slot?.({
+                  ...EDGE_GEOMETRY,
                   data: {
                     hitl_review_config: {
                       label: 'Gate',

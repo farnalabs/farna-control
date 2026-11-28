@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader
       :title="$t('views.AdminOrgSettingsView.title')"
       :subtitle="$t('views.AdminOrgSettingsView.subtitle')"
@@ -20,8 +20,8 @@
       :description="$t('views.AdminOrgSettingsView.hitl_review_window_description')"
     >
       <div v-if="hitlWindowLoading" class="space-y-2" aria-hidden="true" data-testid="org-hitl-review-window-skeleton">
-        <div class="h-4 w-32 animate-pulse rounded bg-muted" />
-        <div class="h-10 w-full animate-pulse rounded bg-muted" />
+        <SkeletonBlock height-class="h-4 w-32" />
+        <SkeletonBlock height-class="h-10 w-full" />
       </div>
 
       <div v-else-if="hitlWindowLoadError" class="space-y-2">
@@ -38,12 +38,13 @@
 
       <template v-else>
         <div class="flex flex-wrap items-end gap-3">
-          <div class="w-32">
-            <label for="org-hitl-review-window-value" class="mb-1.5 block text-xs font-medium text-muted-foreground">
-              {{ $t('views.AdminOrgSettingsView.hitl_review_window_value') }}
-            </label>
-            <input
-              id="org-hitl-review-window-value"
+          <Field
+            id="org-hitl-review-window-value"
+            :label="$t('views.AdminOrgSettingsView.hitl_review_window_value')"
+            label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+            class="w-32"
+          >
+            <Input
               v-model="hitlWindowValue"
               type="number"
               min="1"
@@ -54,7 +55,7 @@
               aria-describedby="org-hitl-review-window-hint"
               data-testid="org-hitl-review-window-value"
             />
-          </div>
+          </Field>
           <div class="w-36">
             <label for="org-hitl-review-window-unit" class="mb-1.5 block text-xs font-medium text-muted-foreground">
               {{ $t('views.AdminOrgSettingsView.hitl_review_window_unit') }}
@@ -114,8 +115,8 @@
       :description="$t('views.AdminOrgSettingsView.mcp_authority_description')"
     >
       <div v-if="mcpAuthorityLoading" class="space-y-2" aria-hidden="true" data-testid="org-mcp-authority-skeleton">
-        <div class="h-4 w-48 animate-pulse rounded bg-muted" />
-        <div class="h-10 w-full animate-pulse rounded bg-muted" />
+        <SkeletonBlock height-class="h-4 w-48" />
+        <SkeletonBlock height-class="h-10 w-full" />
       </div>
 
       <div v-else-if="mcpAuthorityLoadError" class="space-y-2">
@@ -292,8 +293,8 @@
         </div>
 
         <div v-else-if="exportStatus === 'loading'" class="space-y-2" aria-hidden="true" data-testid="org-export-skeleton">
-          <div class="h-4 w-40 animate-pulse rounded bg-muted" />
-          <div class="h-8 w-32 animate-pulse rounded bg-muted" />
+          <SkeletonBlock height-class="h-4 w-40" />
+          <SkeletonBlock height-class="h-8 w-32" />
         </div>
 
         <div v-else-if="exportStatus === 'error'" class="flex items-center gap-3">
@@ -311,7 +312,7 @@
         </div>
 
         <div v-else-if="exportStatus === 'complete'" class="flex items-center gap-3">
-          <span class="badge badge-status-success">{{ $t('views.AdminOrgSettingsView.export_ready') }}</span>
+          <Badge variant="success">{{ $t('views.AdminOrgSettingsView.export_ready') }}</Badge>
           <span class="text-sm text-muted-foreground" data-testid="org-export-exported-at">
             {{ $t('views.AdminOrgSettingsView.exported_at', { date: formatDate(exportData.exportedAt) }) }}
           </span>
@@ -347,13 +348,17 @@
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
+import Badge from '../components/ui/Badge.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import { ref, computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
+import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import ProductAnalyticsSettings from '../components/product-analytics/ProductAnalyticsSettings.vue'

@@ -8,6 +8,7 @@ code:
   - backend/src/farna/api/routes/product_analytics_transparency.py
   - backend/src/farna/api/routes/metrics_ingest.py
   - backend/src/farna/core/product_analytics
+  - backend/src/farna/core/health_alerts.py
   - frontend/src/composables/useProductAnalytics.ts
   - frontend/src/composables/productAnalyticsEvents.ts
   - frontend/src/stores/productAnalyticsStore.ts
@@ -21,6 +22,7 @@ unit-tests:
   - backend/tests/unit/product_analytics/test_metrics_staging_consumer.py
   - backend/tests/unit/product_analytics/test_routes.py
   - backend/tests/unit/api/routes/test_product_analytics_transparency.py
+  - backend/tests/unit/core/test_health_alerts.py
   - backend/tests/unit/api/test_product_analytics_identity_hardening.py
   - backend/tests/integration/test_product_analytics_identity.py
   - frontend/src/__tests__/composables/useProductAnalytics.spec.ts
@@ -48,29 +50,35 @@ organization's plan or tier.
 - [x] Usage metrics are collected and dumped per reporting window under explicit
       consent (`core/product_analytics/consent.py`, `metrics_dump.py`,
       `tests/unit/product_analytics/test_consent.py`, `test_metrics_dump.py`)
+      <!-- behaviour: product-analytics-01 | tests: backend/tests/unit/product_analytics/test_consent.py, backend/tests/unit/product_analytics/test_metrics_dump.py -->
 - [x] Metrics are delivered to the vendor ingest endpoint and verified by HMAC
       (`core/product_analytics/hmac_verify.py`, `vendor_client.py`,
       `test_metrics_ingest.py`, `tests/bdd/features/product_analytics/metrics_ingest.feature`)
+      <!-- behaviour: product-analytics-02 | tests: backend/tests/unit/product_analytics/test_metrics_ingest.py, backend/tests/bdd/features/product_analytics/metrics_ingest.feature -->
 - [x] The outbound batch request carries its HMAC signature, timestamp and sequence in
       `X-Farna-Signature`, `X-Farna-Timestamp` and `X-Farna-Sequence` headers, plus
       `X-Farna-Secret` on every attempt (the receiver requires it on first contact to
       bootstrap an unknown instance, so the endpoint must be `https` and is refused
       before any request otherwise; no `X-Farna-Control-` headers are sent;
       `vendor_client.py`, `test_vendor_client_coverage_batch_14.py`)
+      <!-- behaviour: product-analytics-03 | tests: backend/tests/unit/product_analytics/test_vendor_client_coverage_batch_14.py -->
 - [x] A stable instance identity is generated and persisted per install
       (`core/product_analytics/instance_identity.py`, `test_instance_identity.py`)
+      <!-- behaviour: product-analytics-04 | tests: backend/tests/unit/product_analytics/test_instance_identity.py -->
 - [x] The system-admin surface at `/admin/product-analytics` reads the transparency
       endpoint (`GET /api/v1/product-analytics/transparency` -
       `api/routes/product_analytics_transparency.py`,
       `tests/unit/api/routes/test_product_analytics_transparency.py`; frontend
       `frontend/src/views/AdminProductAnalyticsView.vue`,
       `frontend/src/stores/productAnalyticsStore.ts`)
+      <!-- behaviour: product-analytics-05 | tests: backend/tests/unit/api/routes/test_product_analytics_transparency.py -->
 - [x] Reporting is gated by the instance-level master switch, which the dump
       gate shares with the consent surface
       (`core/product_analytics/metrics_dump.py` `_check_instance_switch` delegates to
       `consent.is_instance_analytics_enabled`, `core/product_analytics/consent.py`;
       the transparency endpoint now delegates to the same helper, so the reported
       switch and the dump gate cannot disagree)
+      <!-- behaviour: product-analytics-06 | tests: none -->
 - [x] The instance switch is operator-writable and license-defaulted
       (FAR-2063): a system admin writes/clears
       `system_config["product_analytics_enabled"]` through
@@ -90,6 +98,7 @@ organization's plan or tier.
       `tests/unit/product_analytics/test_license_enforcement.py`,
       `tests/unit/api/routes/test_product_analytics_transparency.py`,
       `frontend/src/views/AdminProductAnalyticsView.vue`)
+      <!-- behaviour: product-analytics-07 | tests: backend/tests/unit/product_analytics/test_license_enforcement.py, backend/tests/unit/api/routes/test_product_analytics_transparency.py -->
 - [x] Analytics never degrades an organization's plan or tier. A partner
       license carrying `product_analytics_required` *expects* analytics to be
       on, but that expectation is contractual, not a software control: the
@@ -100,8 +109,10 @@ organization's plan or tier.
       `tests/unit/product_analytics/test_metrics_dump.py`
       `TestGetConsentingOrgsIsConsentOnly`). The former "degrade to Community"
       machinery was deleted as unreachable.
+      <!-- behaviour: product-analytics-08 | tests: backend/tests/unit/product_analytics/test_metrics_dump.py -->
 - [x] Identity and transparency endpoints disclose collection state and allow opt-out
       (`api/routes/product_analytics_identity.py`, `product_analytics_transparency.py`)
+      <!-- behaviour: product-analytics-09 | tests: none -->
 - [x] The transparency endpoint reports the instance's REAL product-analytics
       posture, every field sourced from state a feature actually writes:
       `instance_enabled` / `instance_switch_source` / `licence_requires_analytics`
@@ -120,6 +131,7 @@ organization's plan or tier.
       successful (non-skipped) dump in the same transaction that advances the
       watermark (`api/routes/product_analytics_transparency.py`,
       `tests/unit/api/routes/test_product_analytics_transparency.py`)
+      <!-- behaviour: product-analytics-10 | tests: backend/tests/unit/api/routes/test_product_analytics_transparency.py -->
 - [x] The transparency endpoint derives the instance's data-residency posture:
       `egress_allowed` is true ONLY when the instance-level master switch AND an
       explicit `all` consent are BOTH on (`core/product_analytics/consent.py`),
@@ -128,6 +140,7 @@ organization's plan or tier.
       transparency surface (`personas/marcus-ciso.feature`,
       `api/routes/product_analytics_transparency.py`,
       `tests/unit/api/routes/test_product_analytics_transparency.py`)
+      <!-- behaviour: product-analytics-11 | tests: backend/tests/bdd/features/personas/marcus-ciso.feature, backend/tests/unit/api/routes/test_product_analytics_transparency.py -->
 - [x] The event-ingest endpoint `POST /api/v1/metrics/events` stages consent-gated
       curated frontend events into `metrics_staging`: an org-scoped insert with
       `UNIQUE(organisation_id, event_id)` dedup (`ON CONFLICT DO NOTHING`), an
@@ -147,6 +160,7 @@ organization's plan or tier.
       `tests/unit/product_analytics/test_metrics_ingest.py`,
       `tests/integration/test_metrics_ingest.py`,
       `tests/bdd/features/product_analytics/metrics_ingest.feature`)
+      <!-- behaviour: product-analytics-12 | tests: backend/tests/unit/product_analytics/test_metrics_ingest.py, backend/tests/bdd/features/product_analytics/metrics_ingest.feature -->
 
 - [x] Staged frontend events are consumed and purged end to end (FAR-1717): the
       daily dump's `_aggregate_staged_events` folds each UTC day's
@@ -161,6 +175,38 @@ organization's plan or tier.
       transaction (`api/routes/product_analytics.py`)
       (`tests/unit/product_analytics/test_metrics_staging_consumer.py`,
       `test_routes.py`)
+      <!-- behaviour: product-analytics-13 | tests: backend/tests/unit/product_analytics/test_metrics_staging_consumer.py, backend/tests/unit/product_analytics/test_routes.py -->
+- [x] A failed dump is durable and alertable (FAR-2740): the attempt writes
+      `product_analytics_last_dump_failure_at` plus a truncated
+      `product_analytics_last_dump_failure_summary` into `system_config` (status
+      code and the vendor error text, with the instance secret redacted before
+      it is persisted, logged, returned by the transparency API or emailed) and
+      raises `core.health_alerts.send_operator_alert` on the shared readiness
+      channel - the same SMTP config, recipients, `ALERT_ENVIRONMENTS` allowlist
+      and deployment-context footer. The next fully successful dump deletes the
+      record; a partial-success run still records the failure because the
+      watermark and dump count already cover the days it delivered, and a
+      missing vendor endpoint/secret is recorded as a fixed-reason failure and
+      alerted too (it previously recorded and alerted nothing)
+      (`core/product_analytics/metrics_dump.py`, `core/health_alerts.py`,
+      `tests/unit/product_analytics/test_metrics_dump.py`,
+      `tests/unit/core/test_health_alerts.py`)
+      <!-- behaviour: product-analytics-15 | tests: backend/tests/unit/product_analytics/test_metrics_dump.py, backend/tests/unit/core/test_health_alerts.py -->
+- [x] `/admin/product-analytics` warns when an opted-in instance is not
+      delivering (FAR-2740): `never_reached_farnalabs` when the instance switch
+      is ON, consent is `all`, no successful dump exists and the consent has been
+      in place longer than the 3-day stale threshold - the consent timestamp is a
+      grace window so a freshly enabled instance is not alarmed before its first
+      daily dump; `not_reaching_farnalabs` when the last success is stale. BOTH
+      are silenced when the instance switch is OFF, so turning analytics off
+      does not leave a warning forever. The page renders the recorded failure
+      timestamp and summary under the warning
+      (`api/routes/product_analytics_transparency.py`,
+      `frontend/src/views/AdminProductAnalyticsView.vue`,
+      `frontend/src/stores/productAnalyticsStore.ts`,
+      `tests/unit/api/routes/test_product_analytics_transparency.py`,
+      `frontend/src/__tests__/AdminProductAnalyticsView.spec.ts`)
+      <!-- behaviour: product-analytics-16 | tests: backend/tests/unit/api/routes/test_product_analytics_transparency.py -->
 - [x] The frontend event-capture composable is initialized in the app root
       (FAR-1718): `App.vue` calls `initProductAnalytics` with
       `productAnalyticsStore.isOptedIn` as the live consent function, and
@@ -171,6 +217,17 @@ organization's plan or tier.
       per-route data is captured, client or server side
       (`frontend/src/App.vue`,
       `frontend/src/composables/useProductAnalytics.ts`)
+      <!-- behaviour: product-analytics-14 | tests: none -->
+- [ ] The `/admin/product-analytics` page does not yet show in-product usage or
+      adoption metrics for system administrators; it renders only the
+      transparency endpoint's delivery, consent and switch fields (unshipped
+      deferral; see Known Gaps).
+      <!-- behaviour: product-analytics-17 | tests: none -->
+- [ ] An in-product analytics export or administration surface (self-serve
+      downloadable org metrics, a configurable reporting schedule, or an
+      in-app analytics warehouse) is not shipped; warehouse scope sits under
+      `feat-analytics` (unshipped deferral; see Known Gaps).
+      <!-- behaviour: product-analytics-18 | tests: none -->
 
 ## Consent scoping (FAR-1635)
 
@@ -276,8 +333,8 @@ intentional, not an open question:
   tracked as the remaining unchecked behavior.
 - 2026-10-12: **FAR-1717 + FAR-1718 (staging consumer + capture init)** - closed
   both unwired halves of the frontend ingest path. Backend: `_build_payload`
-  now folds `metrics_staging` into the payload (`_aggregate_staged_events` →
-  the new `event_counts` section; `SCHEMA_VERSION` bumped 1 → 2 per the module
+  now folds `metrics_staging` into the payload (`_aggregate_staged_events` â†’
+  the new `event_counts` section; `SCHEMA_VERSION` bumped 1 â†’ 2 per the module
   contract that it changes when the payload shape changes); every
   `metrics_dump` tick purges consumed + expired staging rows (`_purge_staging`,
   bounded by the watermark and a 30-day retention cap) with the supporting
@@ -295,7 +352,7 @@ intentional, not an open question:
   both fail against the pre-change code (missing functions / no DELETE executed).
 - 2026-10-12: **Improve Architecture product-map walk** - documented the
   event-ingest path and found its two unwired halves (both feature completion, not
-  QA fixes). (1) `POST /api/v1/metrics/events` → `metrics_staging` has no consumer
+  QA fixes). (1) `POST /api/v1/metrics/events` â†’ `metrics_staging` has no consumer
   and no purge: `metrics_dump._build_payload` reads only aggregate tables
   (`RunDailyFact`, `ErrorGroup`, entity counts) and never `MetricsStaging`, while
   `db/models/metrics_staging.py` and migration 0121 both claim the dump consumes

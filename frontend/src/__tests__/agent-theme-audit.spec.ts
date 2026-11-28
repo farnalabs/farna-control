@@ -114,12 +114,6 @@ const viewModules: Record<string, Component> = {
   VariantCompareView,
 }
 
-const viewsWithAgentTheme = [
-  'AdminSpendLimitsView',
-  'AdminFeatureFlagsView',
-  'SettingsRateLimitsView',
-]
-
 function globalStubs() {
   return {
     stubs: {
@@ -149,6 +143,9 @@ describe('agent-theme-audit', () => {
     vi.clearAllMocks()
   })
 
+  // FAR-2756: no view opts into a per-view theme - every page inherits the
+  // app's single `.light` / `:root` palette - so this spec audits rendering and
+  // testid coverage only.
   for (const [name, component] of Object.entries(viewModules)) {
     describe(name, () => {
       it('renders without crashing', async () => {
@@ -172,13 +169,6 @@ describe('agent-theme-audit', () => {
           }
         }
       })
-
-      if (viewsWithAgentTheme.includes(name)) {
-        it('has data-theme="agent" on root element', () => {
-          const wrapper = mount(component, { global: globalStubs() })
-          expect(wrapper.find('[data-theme="agent"]').exists()).toBe(true)
-        })
-      }
     })
   }
 })

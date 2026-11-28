@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" data-loading="false" class="page-wide">
+  <div data-loading="false" class="page-wide">
     <PageHeader title="License" data-testid="license-title" :subtitle="$t('views.SettingsLicenseView.manage_your_modulo_team_license_key_and_view_plan_details')" />
 
     <LoadingSpinner v-if="loading" />
@@ -22,8 +22,8 @@
         :title="licenseInfo.tier === 'team' ? $t('views.SettingsLicenseView.team') : $t('views.SettingsLicenseView.community')"
       >
         <template #headerActions>
-          <Badge v-if="licenseInfo.tier === 'team'" severity="info">{{ $t('common.active') }}</Badge>
-          <Badge v-else severity="secondary" class="border border-border">{{ $t('views.SettingsLicenseView.community') }}</Badge>
+          <Badge v-if="licenseInfo.tier === 'team'" variant="info">{{ $t('common.active') }}</Badge>
+          <Badge v-else variant="neutral" class="border border-border">{{ $t('views.SettingsLicenseView.community') }}</Badge>
         </template>
         <div v-if="licenseInfo.tier === 'team'">
           <p v-if="licenseInfo.org_id" class="text-sm text-muted-foreground">
@@ -83,7 +83,7 @@
               <Button data-testid="license-apply-btn" :disabled="!newLicenseKey.trim() || applying" @click="openApplyDialog">
                 {{ applying ? $t('views.SettingsLicenseView.applying') : $t('views.SettingsLicenseView.apply_key') }}
               </Button>
-              <Button v-if="licenseInfo.has_license" data-testid="license-remove-btn" severity="danger" :disabled="removing" @click="openRemoveDialog('org')">
+              <Button v-if="licenseInfo.has_license" data-testid="license-remove-btn" variant="danger" :disabled="removing" @click="openRemoveDialog('org')">
                 {{ removing ? $t('views.SettingsLicenseView.removing') : $t('views.SettingsLicenseView.remove_license') }}
               </Button>
             </div>
@@ -130,7 +130,7 @@
                 {{ applying ? $t('views.SettingsLicenseView.applying') : $t('views.SettingsLicenseView.install_system_license') }}
               </Button>
               <!-- FAR-2110: remove the INSTANCE-WIDE licence (system scope). -->
-              <Button v-if="licenseInfo.has_license" data-testid="license-remove-btn-system" severity="danger" :disabled="removing" @click="openRemoveDialog('system')">
+              <Button v-if="licenseInfo.has_license" data-testid="license-remove-btn-system" variant="danger" :disabled="removing" @click="openRemoveDialog('system')">
                 {{ removing ? $t('views.SettingsLicenseView.removing') : $t('views.SettingsLicenseView.remove_license') }}
               </Button>
             </div>
@@ -200,7 +200,7 @@ import { useI18n } from 'vue-i18n'
 import { useDataFetch } from '../composables/useDataFetch'
 import { useLicenceAccess } from '../composables/useLicenceAccess'
 import { useCurrentUser } from '../composables/useCurrentUser'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'
 import { decodeBase64Url } from '../lib/jwt'
@@ -209,7 +209,7 @@ import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import Badge from 'primevue/badge'
+import Badge from '../components/ui/Badge.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import { ExternalLink } from '@lucide/vue'
 import { format } from 'date-fns'

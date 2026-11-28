@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader
       :title="$t('views.AdminCostBreakdownView.spend_limits')"
       :subtitle="$t('views.AdminSpendLimitsView.configure_daily_spend_limits_at_the_org_and_team_level')"
@@ -146,7 +146,7 @@
                       <p v-if="team.saveError" class="mt-1 text-xs text-destructive">{{ team.saveError }}</p>
                     </td>
                     <td class="table-cell-numeric">
-                      <Button size="small" :disabled="team.saving" :data-testid="'admin-spend-limits-team-save-' + team.id" @click="saveTeamLimit(team)">
+                      <Button size="sm" :disabled="team.saving" :data-testid="'admin-spend-limits-team-save-' + team.id" @click="saveTeamLimit(team)">
                         {{ team.saving ? $t('views.AdminSpendLimitsView.saving') : $t('views.AdminSpendLimitsView.save') }}
                       </Button>
                     </td>
@@ -217,7 +217,7 @@ import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import CardSkeleton from '../components/ui/CardSkeleton.vue'
 import InputText from 'primevue/inputtext'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { formatMoney } from '../lib/money'
 import { useOrgCurrency } from '../composables/useOrgCurrency'
 import type { components } from '../lib/api/schema'

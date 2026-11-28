@@ -182,7 +182,7 @@
                 {{ formatDateShort(inv.expires_at) }}
               </td>
               <td class="table-cell-numeric">
-                <Button severity="danger" outlined :disabled="actionLoading[inv.id]" data-testid="admin-invitations-revoke" @click="openRevoke(inv)">
+                <Button variant="danger" :outlined="true" :disabled="actionLoading[inv.id]" data-testid="admin-invitations-revoke" @click="openRevoke(inv)">
                   {{ $t('views.AdminUsersView.revoke_invitation') }}
                 </Button>
               </td>
@@ -192,9 +192,16 @@
       </div>
     </DataCard>
 
-    <div v-if="flashMessage" :class="['rounded-lg border px-4 py-3 text-sm', flashMessage.type === 'success' ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text']">
+    <Notice
+      v-if="flashMessage"
+      :variant="flashMessage.type === 'success' ? 'success' : 'danger'"
+      :icon="false"
+      padding="none"
+      live="polite"
+      class="px-4 py-3 text-sm"
+    >
       {{ flashMessage.text }}
-    </div>
+    </Notice>
 
     <FormDialog
       :open="showCreate"
@@ -206,45 +213,44 @@
       @confirm="submitCreate"
     >
         <form class="space-y-4" @submit.prevent="submitCreate">
-          <div class="flex gap-2" role="tablist" :aria-label="$t('views.AdminUsersView.add_user_mode')">
-          <button
-            type="button"
-            role="tab"
-            data-testid="admin-users-mode-create"
-            :aria-selected="createMode === 'password'"
-            :class="['px-3 py-1.5 rounded-lg text-sm border transition-colors', createMode === 'password' ? 'bg-primary text-primary-foreground border-primary' : 'border-input hover:bg-accent']"
-            @click="createMode = 'password'"
-          >
-            {{ $t('views.AdminUsersView.mode_password') }}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            data-testid="admin-users-mode-invite"
-            :aria-selected="createMode === 'invite'"
-            :class="['px-3 py-1.5 rounded-lg text-sm border transition-colors', createMode === 'invite' ? 'bg-primary text-primary-foreground border-primary' : 'border-input hover:bg-accent']"
-            @click="createMode = 'invite'"
-          >
-            {{ $t('views.AdminUsersView.mode_invite') }}
-          </button>
-        </div>
-        <div>
-          <label for="adminusersview-field-4" class="block text-sm font-medium mb-1">{{ $t('common.email') }}</label>
-          <input id="adminusersview-field-4" v-model="newUser.email" data-testid="admin-users-create-email" type="email" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
-        </div>
-        <div>
-          <label for="adminusersview-field-3" class="block text-sm font-medium mb-1">{{ $t('views.AdminModelBackendsView.display_name') }}</label>
-          <input id="adminusersview-field-3" v-model="newUser.display_name" data-testid="admin-users-create-display-name" type="text" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
-        </div>
-        <div v-if="createMode === 'password'">
-          <label for="adminusersview-field-2" class="block text-sm font-medium mb-1">{{ $t('common.password') }}</label>
+        <!-- StateTabs composes these stable tab test IDs from testid-prefix:
+             :data-testid="'admin-users-mode-create'" and :data-testid="'admin-users-mode-invite'". -->
+        <StateTabs
+          :ariaLabel="$t('views.AdminUsersView.add_user_mode')"
+          :model-value="createModeTabId"
+          :tabs="createModeTabs"
+          id-prefix="admin-users-mode"
+          size="compact"
+          testid-prefix="admin-users-mode"
+          @update:model-value="onCreateModeSelected"
+        />
+        <Field
+          id="adminusersview-field-4"
+          :label="$t('common.email')"
+          label-class="block text-sm font-medium mb-1"
+        >
+          <Input v-model="newUser.email" data-testid="admin-users-create-email" type="email" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
+        </Field>
+        <Field
+          id="adminusersview-field-3"
+          :label="$t('views.AdminModelBackendsView.display_name')"
+          label-class="block text-sm font-medium mb-1"
+        >
+          <Input v-model="newUser.display_name" data-testid="admin-users-create-display-name" type="text" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" required />
+        </Field>
+        <Field
+          v-if="createMode === 'password'"
+          id="adminusersview-field-2"
+          :label="$t('common.password')"
+          label-class="block text-sm font-medium mb-1"
+        >
           <div class="flex gap-2">
-            <input id="adminusersview-field-2" v-model="newUser.password" data-testid="admin-users-create-password" type="password" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" minlength="8" required />
-            <Button type="button" severity="secondary" outlined class="shrink-0 border-primary/30" data-testid="admin-users-generate-password" @click="generatePassword">
+            <Input v-model="newUser.password" data-testid="admin-users-create-password" type="password" class="w-full px-3 py-2 border border-input bg-background rounded-lg text-sm" minlength="8" required />
+            <Button type="button" variant="secondary" class="shrink-0 border-primary/30" data-testid="admin-users-generate-password" @click="generatePassword">
               {{ $t('views.AdminUsersView.generate_password') }}
             </Button>
           </div>
-        </div>
+        </Field>
         <p v-if="createMode === 'invite'" class="mt-2 text-xs text-muted-foreground">
           {{ $t('views.AdminUsersView.invite_mode_hint') }}
         </p>
@@ -313,8 +319,7 @@
         <code class="flex-1 text-sm font-mono break-all select-all" data-testid="admin-users-credential-value">{{ credentialKind === 'password' && !credentialRevealed ? maskedCredential : credentialValue }}</code>
         <Button
           v-if="credentialKind === 'password'"
-          severity="secondary"
-          outlined
+          variant="secondary"
           class="shrink-0"
           data-testid="admin-users-reveal-password"
           :aria-label="credentialRevealed ? $t('views.AdminUsersView.hide_password') : $t('views.AdminUsersView.reveal_password')"
@@ -359,30 +364,24 @@
     </Dialog>
 
     <!-- Revoke invitation confirmation -->
-    <Dialog
-      :visible="showRevokeDialog"
-      :modal="true"
-      :dismissable-mask="true"
-      :style="{ width: '24rem' }"
-      @update:visible="showRevokeDialog = false"
-    >
-      <template #header>
-        <div class="text-lg font-semibold">{{ $t('views.AdminUsersView.revoke_invitation') }}</div>
-      </template>
-      <p class="text-sm text-muted-foreground">{{ $t('views.AdminUsersView.confirm_revoke_invitation', { email: revokeTarget?.email ?? '' }) }}</p>
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <Button severity="secondary" outlined data-testid="admin-invitations-cancel-revoke" @click="showRevokeDialog = false">{{ $t('common.cancel') }}</Button>
-          <Button severity="danger" data-testid="admin-invitations-confirm-revoke" @click="revokeInvitation">{{ $t('common.confirm') }}</Button>
-        </div>
-      </template>
-    </Dialog>
+    <FormDialog
+      v-model:open="showRevokeDialog"
+      :title="$t('views.AdminUsersView.revoke_invitation')"
+      :description="$t('views.AdminUsersView.confirm_revoke_invitation', { email: revokeTarget?.email ?? '' })"
+      :confirm-text="$t('common.confirm')"
+      confirm-severity="danger"
+      width="24rem"
+      cancel-test-id="admin-invitations-cancel-revoke"
+      confirm-test-id="admin-invitations-confirm-revoke"
+      @confirm="revokeInvitation"
+    />
   </div>
   </FeatureGate>
 </template>
 
 <script setup lang="ts">
 import PageHeader from '../components/shared/PageHeader.vue'
+import StateTabs, { type StateTab } from '../components/shared/StateTabs.vue'
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import QRCode from 'qrcode'
@@ -390,8 +389,11 @@ import { useApi } from '../composables/useApi'
 import { useDataFetch } from '../composables/useDataFetch'
 import TableSkeleton from '../components/shared/TableSkeleton.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
-import Button from 'primevue/button'
+import Notice from '../components/shared/Notice.vue'
+import Button from '../components/ui/Button.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import Dialog from 'primevue/dialog'
@@ -451,6 +453,21 @@ const pendingInvitations = computed(() => invitationsResp.value?.items ?? [])
 
 const showCreate = ref(false)
 const createMode = ref<'password' | 'invite'>('password')
+
+const createModeTabs = computed<StateTab[]>(() => [
+  { id: 'create', label: t('views.AdminUsersView.mode_password') },
+  { id: 'invite', label: t('views.AdminUsersView.mode_invite') },
+])
+
+/** The create tab carries the password mode; only the invite tab differs. */
+const createModeTabId = computed(() => (createMode.value === 'invite' ? 'invite' : 'create'))
+
+/** Only the two declared modes are selectable, whatever a caller sends. */
+function onCreateModeSelected(id: string) {
+  if (id === 'create') createMode.value = 'password'
+  else if (id === 'invite') createMode.value = 'invite'
+}
+
 const createError = ref('')
 const createLoading = ref(false)
 const newUser = ref({ email: '', display_name: '', password: '', org_role: 'runner' })

@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 
-from farna.api.dependencies import _get_engine, get_db_session, get_plan_context
+from farna.api.dependencies import _get_engine, get_db_session, get_plan_context, get_plan_context_any_credential
 from farna.api.main import app
 from farna.auth.dependencies import get_current_tenant_user_or_api_key, get_current_user
 from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
@@ -103,6 +103,9 @@ def client() -> Generator[TestClient, None, None]:
     mock_plan = MagicMock()
     mock_plan.feature_enabled.return_value = True
     app.dependency_overrides[get_plan_context] = lambda: mock_plan
+    # FAR-2729: the schema-version routes gate features through the
+    # any-credential plan context; override it to the same plan stub.
+    app.dependency_overrides[get_plan_context_any_credential] = lambda: mock_plan
     yield TestClient(app)
     app.dependency_overrides.clear()
 

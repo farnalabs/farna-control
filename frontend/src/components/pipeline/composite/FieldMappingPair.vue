@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { SchemaField } from '../../../types/pipeline'
-import Button from 'primevue/button'
+import Button from '../../ui/Button.vue'
 import Select from '../../shared/AppSelect.vue'
 
 const props = defineProps<{
@@ -89,11 +89,11 @@ function removeMapping(sourceKey: string) {
 
 <template>
   <div class="space-y-3">
-    <div v-if="isPassthrough" class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400" aria-hidden="true" focusable="false">
+    <div v-if="isPassthrough" class="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-success-text" aria-hidden="true" focusable="false">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
       </svg>
-      <span class="text-xs font-medium text-emerald-400">{{ $t('components.pipeline.composite.FieldMappingPair.passthrough') }}</span>
+      <span class="text-xs font-medium text-success-text">{{ $t('components.pipeline.composite.FieldMappingPair.passthrough') }}</span>
       <span class="text-xs text-muted-foreground">{{ $t('components.pipeline.composite.FieldMappingPair.schemas_identical_no_mapping') }}</span>
     </div>
 
@@ -103,10 +103,10 @@ function removeMapping(sourceKey: string) {
           {{ Object.keys(mappings).length }} field{{ Object.keys(mappings).length !== 1 ? 's' : '' }} mapped
         </span>
         <div class="flex gap-1">
-          <Button severity="secondary" outlined size="small" @click="autoMap">
+          <Button variant="secondary" size="sm" @click="autoMap">
             Auto-map
           </Button>
-          <Button v-if="Object.keys(mappings).length > 0" severity="secondary" outlined size="small" @click="clearMapping">
+          <Button v-if="Object.keys(mappings).length > 0" variant="secondary" size="sm" @click="clearMapping">
             Clear
           </Button>
         </div>
@@ -143,7 +143,7 @@ function removeMapping(sourceKey: string) {
             {{ unmappedSource.length }} unmapped source,
             {{ unmappedTarget.length }} unmapped target
           </span>
-          <Button severity="secondary" size="small" @click="showPicker = true">
+          <Button variant="secondary" :outlined="false" size="sm" @click="showPicker = true">
             Add mapping
           </Button>
         </div>
@@ -186,10 +186,10 @@ function removeMapping(sourceKey: string) {
             </div>
           </div>
           <div class="flex justify-end gap-1">
-            <Button severity="secondary" outlined size="small" @click="showPicker = false">
+            <Button variant="secondary" size="sm" @click="showPicker = false">
               Cancel
             </Button>
-            <Button size="small" :disabled="!selectedSource || !selectedTarget" @click="addMapping">
+            <Button size="sm" :disabled="!selectedSource || !selectedTarget" @click="addMapping">
               Add
             </Button>
           </div>
