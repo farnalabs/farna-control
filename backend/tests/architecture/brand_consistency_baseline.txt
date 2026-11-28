@@ -600,6 +600,7 @@ backend/tests/unit/scripts/test_backup_prune_classify_one.py	1
 backend/tests/unit/scripts/test_branch_fixer_dispatch_retry.py	3
 backend/tests/unit/scripts/test_bump_version.py	18
 backend/tests/unit/scripts/test_bundle_release_security.py	1
+backend/tests/unit/scripts/test_compose_runner_all_in_one_overlay.py	1
 backend/tests/unit/scripts/test_copy_consistency.py	45
 backend/tests/unit/scripts/test_deploy_health.py	3
 backend/tests/unit/scripts/test_deploy_run_attempts.py	1
@@ -656,6 +657,7 @@ configs/otel-collector.yml	1
 deploy/caddy/Caddyfile	1
 deploy/caddy/README.md	1
 deploy/compose/.env.prod.example	1
+deploy/compose/runner-all-in-one.yml	3
 deploy/compose/runner.yml	4
 deploy/docker/runner-opencode.Dockerfile	1
 deploy/fly/entrypoint.sh	2

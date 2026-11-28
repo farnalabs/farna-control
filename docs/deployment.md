@@ -516,6 +516,44 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 # 401 = no such user (create one - step 1), or a wrong password
 ```
 
+**3c. Enable the Bundled Runner executor (optional).** The stack above runs
+pipelines without a local executor. To run `sandbox_agent` nodes on this host's
+Docker engine, apply the executor overlay shipped in the release bundle
+(`runner-all-in-one.yml`, also at
+[`deploy/compose/runner-all-in-one.yml`](../deploy/compose/runner-all-in-one.yml)
+in this repository):
+
+```bash
+docker compose -f docker-compose.prod.yml -f runner-all-in-one.yml up -d
+```
+
+(In a repository checkout, prepend `deploy/compose/` to both file names.)
+
+The overlay adds a filtered, digest-pinned Docker socket proxy (no published
+host ports; the engine socket is mounted read-only) and points the all-in-one
+`farna-control` container - the API and both SAQ workers - at it through
+`FARNA_CONTROL_DOCKER_HOST`. It also declares a dedicated workspace bridge under
+a fixed engine-side name, so provisioned workspaces attach to it and never join
+the stack's default network.
+
+The overlay is opt-in: without the second `-f` file the stack is exactly as
+before. Once enabled, repeat BOTH `-f` flags on every compose invocation against
+this stack (logs, ps, pull, up, down) and on an upgrade. The bundled
+`compose-rollback.sh` starts the previous application image from the base file
+only; if you enabled the executor and need to keep it across a rollback, start
+the rollback through both files with the same one-off image override the helper
+writes (the helper's own comment documents the override shape).
+
+**Pull requests on this tier.** The shipped runner image does not include the
+`gh` CLI, so the one-PR-per-run `gh` guard is inert here and `gh pr create`
+fails. A pipeline on this tier opens a pull request with the GitHub REST API
+from the agent (`curl` with the run-scoped `GITHUB_TOKEN`, which is scoped to
+github.com), or - preferably - by pushing its branch and opening the PR through
+a separate connector or API step. The post-run check that flags a run reporting
+more than one pull request still applies. See
+[`docs/security/bundled-runner-trust-boundary.md`](./security/bundled-runner-trust-boundary.md)
+for the endpoint allowlist and the container hardening defaults.
+
 **What runs.** The `farna-control` service runs the **all-in-one image**: one
 container whose `supervisord` starts the API (`uvicorn`), `nginx`, and **both
 SAQ queue workers** - `saq-runs` executes pipeline runs and `saq-system` owns

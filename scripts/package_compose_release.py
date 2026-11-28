@@ -4,6 +4,7 @@
 Bundles:
 - docker-compose.prod.yml (with hard-pinned immutable tag ghcr.io/farnalabs/farna-control:<TAG>)
 - docker-compose.yml (identical copy for direct `docker compose up -d`)
+- runner-all-in-one.yml (opt-in Bundled Runner executor overlay for the all-in-one stack)
 - .env.example (working evaluation environment configuration)
 - quickstart.md (getting started instructions)
 - init-env.sh (generates the required secrets)
@@ -32,6 +33,7 @@ _SEMVER_PATTERN = re.compile(r"^v?\d+\.\d+\.\d+(-[a-zA-Z\d.]+)?$", re.ASCII)
 _COMPOSE_FILENAME = "docker-compose.prod.yml"
 _COMPOSE_RESTORE_FILENAME = "compose-restore.sh"
 _COMPOSE_ROLLBACK_FILENAME = "compose-rollback.sh"
+_BUNDLED_OVERLAY_FILENAME = "runner-all-in-one.yml"
 
 
 def validate_release_tag(tag: str) -> str:
@@ -110,6 +112,49 @@ def transform_compose_content(content: str, tag: str) -> str:
     return transformed
 
 
+def validate_runner_overlay(content: str) -> str:
+    """Re-parse the Bundled Runner overlay and assert its packaged contract.
+
+    The overlay is shipped verbatim from ``deploy/compose/runner-all-in-one.yml``
+    (it carries the reasoning for the executor posture), so this is a re-parse
+    assertion, not a rewrite. A bundle whose overlay drifted - a published proxy
+    port, a missing app endpoint, an unpinned workspace network name - would
+    still extract cleanly, so fail the package build instead.
+    """
+    data = yaml.safe_load(content)
+    if not isinstance(data, dict):
+        raise ValueError("Bundled Runner overlay did not parse as a YAML mapping")
+
+    services = data.get("services", {})
+    if "docker-socket-proxy" not in services:
+        raise ValueError("Bundled Runner overlay is missing the 'docker-socket-proxy' service")
+    if "farna-control" not in services:
+        raise ValueError("Bundled Runner overlay does not target the packaged 'farna-control' service")
+
+    proxy = services["docker-socket-proxy"]
+    if proxy.get("ports"):
+        raise ValueError("Bundled Runner overlay publishes a proxy port; the filtered endpoint must stay private")
+    proxy_env = proxy.get("environment") or {}
+    if proxy_env.get("LOG_LEVEL") != "info":
+        raise ValueError("Bundled Runner overlay must keep the filtered proxy at LOG_LEVEL=info")
+
+    app_env = services["farna-control"].get("environment") or {}
+    expected_endpoint = "tcp://docker-socket-proxy:2375"
+    if app_env.get("FARNA_CONTROL_DOCKER_HOST") != expected_endpoint:
+        raise ValueError(f"Bundled Runner overlay must set FARNA_CONTROL_DOCKER_HOST={expected_endpoint} on 'farna-control'")
+
+    networks = data.get("networks") or {}
+    pinned = [key for key, value in networks.items() if isinstance(value, dict) and value.get("name") == key]
+    if not pinned:
+        raise ValueError("Bundled Runner overlay must declare its workspace network with an explicit 'name:' pin")
+
+    workspace_networks = {key for key, value in services.items() if any(name in (value.get("networks") or []) for name in pinned)}
+    if not workspace_networks:
+        raise ValueError("Bundled Runner overlay declares a workspace network no service references (compose will not create it)")
+
+    return content
+
+
 def generate_quickstart_md(version: str, tag: str) -> str:
     """Generate quickstart instructions for the compose release bundle."""
     return f"""# Farna Control Self-Hosted Production Quickstart (v{version})
@@ -157,6 +202,43 @@ Once that returns 200, open [http://localhost](http://localhost).
 - **postgres** - PostgreSQL 16, persisted in the `postgres_data` volume
 - **redis** - Redis 8, persisted in the `redis_data` volume
 
+`runner-all-in-one.yml` is an opt-in compose overlay, not a service. Leave it
+unused for the stack above, or apply it to enable the Bundled Runner executor
+(next section).
+
+## Optional: enable the Bundled Runner executor
+
+To run `sandbox_agent` nodes on THIS host's Docker engine, enable the Bundled
+Runner executor with the shipped overlay:
+
+```bash
+docker compose -f docker-compose.prod.yml -f runner-all-in-one.yml up -d
+```
+
+The overlay adds a filtered, digest-pinned Docker socket proxy (no published
+ports; the engine socket is mounted read-only) and points the all-in-one
+`farna-control` container - the API and both SAQ workers - at it. It also
+declares the dedicated workspace bridge under a fixed engine-side name, so
+workspace containers are provisioned on that network and never join the stack's
+default network.
+
+It is off by default: without `-f runner-all-in-one.yml` the stack behaves
+exactly as before. Once enabled, repeat BOTH `-f` flags on every compose
+command you run against this directory (logs, ps, pull, up, down). To turn the
+executor back off, start the base file alone again:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+**Pull requests on this tier.** The shipped runner image has no `gh` command, so
+the one-PR-per-run `gh` guard does not take effect here and `gh pr create` fails
+with "not found". A pipeline on this tier opens a pull request either by calling
+the GitHub REST API from the agent (`curl` with the run-scoped `GITHUB_TOKEN`,
+which is scoped to github.com), or - preferably - by pushing its branch and
+letting a separate connector or API step open the PR. The post-run check that
+flags a run reporting more than one pull request still applies.
+
 ## Operations
 
 - Follow logs: `docker compose logs -f farna-control`
@@ -177,6 +259,13 @@ kept), then start it from there:
 
 ```bash
 docker compose up -d
+```
+
+If you enabled the Bundled Runner executor, start the upgrade with both files
+instead:
+
+```bash
+docker compose -f docker-compose.prod.yml -f runner-all-in-one.yml up -d
 ```
 
 The farna-control container is recreated on the new release's image and its
@@ -200,6 +289,19 @@ the previous release:
 `compose-rollback.sh` starts the previous release through a one-off compose
 override for the version you name, leaving this bundle's pinned
 `docker-compose.prod.yml` and its checksum untouched.
+
+If you enabled the executor, the rollback helper starts the previous
+application image from the base compose file only - it does not carry the
+overlay, so the executor is off on the rolled-back release. To keep it on, use
+the same one-off image override the helper writes, together with both compose
+files:
+
+```bash
+previous=v0.3.0
+override="$(mktemp).yml"
+printf 'services:\n  farna-control:\n    image: ghcr.io/farnalabs/farna-control:%s\n' "$previous" > "$override"
+docker compose -f docker-compose.prod.yml -f runner-all-in-one.yml -f "$override" up -d
+```
 
 `compose-restore.sh` requires the explicit `--confirm` argument. It then
 verifies the snapshot's manifest and checksums in a one-off container, refuses
@@ -393,10 +495,22 @@ def build_compose_release(
         kind="Compose rollback helper",
     )
 
+    # FAR-2854: the executor overlay ships with the package. The release bundle's
+    # all-in-one stack has no executor wiring on its own, and the repo-checkout
+    # overlay (deploy/compose/runner.yml) targets backend/saq-* services this
+    # stack does not define. Ship the all-in-one overlay verbatim; without it an
+    # operator starting from the package alone cannot enable the Bundled Runner.
+    overlay_source = _require_repo_file(
+        repo_root / "deploy" / "compose" / _BUNDLED_OVERLAY_FILENAME,
+        kind="Bundled Runner all-in-one overlay",
+    )
+    overlay_content = validate_runner_overlay(overlay_source.read_text(encoding="utf-8"))
+
     # Prepare file bytes map for tarball
     files_to_pack: dict[str, bytes] = {
         _COMPOSE_FILENAME: compose_transformed.encode("utf-8"),
         "docker-compose.yml": compose_transformed.encode("utf-8"),
+        _BUNDLED_OVERLAY_FILENAME: overlay_content.encode("utf-8"),
         ".env.example": env_content.encode("utf-8"),
         "quickstart.md": quickstart_content.encode("utf-8"),
         "init-env.sh": _INIT_ENV_SH.encode("utf-8"),
