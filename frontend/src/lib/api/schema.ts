@@ -12088,9 +12088,16 @@ export interface components {
         };
         /**
          * AnalyticsStatus
+         * @description The closed run-status vocabulary as an enum for the analytics API.
+         *
+         *     FAR-2705: membership must equal ``farna.lifecycle.ALL_RUN_STATUSES`` — a
+         *     status added to the lifecycle table without a member here would be
+         *     unfilterable on the analytics surface, and one removed would be rejected by
+         *     the DB constraint. Pinned by
+         *     ``tests/unit/core/test_run_lifecycle.py::test_analytics_status_matches_the_vocabulary``.
          * @enum {string}
          */
-        AnalyticsStatus: "pending" | "running" | "awaiting_human" | "claimed" | "hitl_parked" | "complete" | "failed" | "cancelled" | "eval_failed" | "stalled" | "budget_exceeded" | "router_no_match" | "rejected";
+        AnalyticsStatus: "pending" | "running" | "awaiting_human" | "claimed" | "unknown" | "hitl_parked" | "complete" | "failed" | "cancelled" | "eval_failed" | "stalled" | "budget_exceeded" | "router_no_match" | "cost_ceiling_exceeded" | "compensation_failed" | "rejected";
         /**
          * AnalyticsTriggerType
          * @enum {string}
