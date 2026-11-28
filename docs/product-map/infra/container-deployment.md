@@ -230,9 +230,9 @@ route and no in-product UI, so it is tracked here rather than in the manifest
       tears the stack down afterwards.
       (`.github/workflows/publish-images.yml`, `.github/workflows/rc-validate.yml`,
       `scripts/render_validation_compose.py`;
-      `test_release_workflow_contract.py::test_rc_validation_runs_the_docker_acceptance_matrix_before_pen_test`,
+      `test_release_workflow_contract.py::test_rc_validation_runs_the_docker_acceptance_matrix_before_the_fuzz_leg`,
       `::test_rc_validation_renders_matrix_compose_without_a_concrete_tag`).
-      <!-- behaviour: container-deployment-15 | tests: backend/tests/unit/test_release_workflow_contract.py::test_rc_validation_runs_the_docker_acceptance_matrix_before_pen_test -->
+      <!-- behaviour: container-deployment-15 | tests: backend/tests/unit/test_release_workflow_contract.py::test_rc_validation_runs_the_docker_acceptance_matrix_before_the_fuzz_leg -->
 - [x] The Helm chart deploys the backend API, both SAQ workers, the frontend
       SPA, and (optionally) an in-cluster Redis. PostgreSQL is always external.
       It refuses to render without `SECRET_KEY` and `FERNET_KEY`, and the
