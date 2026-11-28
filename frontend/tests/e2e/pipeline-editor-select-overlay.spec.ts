@@ -178,8 +178,21 @@ test.describe('Pipeline editor Select overlays escape their clipping ancestors (
     await openEditor(page)
 
     // Open the edge inspector by clicking the rendered edge (its wide
-    // interaction path is the pointer target).
-    await page.locator('.vue-flow__edge-interaction').first().click()
+    // interaction path is the pointer target). FAR-2855 makes edges attach to
+    // a card's right/left handles, so two cards on the same row render a
+    // perfectly horizontal edge: its interaction path has a zero-height
+    // bounding box, which Playwright's actionability check reports as "not
+    // visible" even though the wide stroke is still a valid pointer target.
+    // Click a real point on the path's geometry instead of its bounding-box
+    // centre so the click is independent of that visibility heuristic.
+    const edgeInteraction = page.locator('.vue-flow__edge-interaction').first()
+    const edgePoint = await edgeInteraction.evaluate((el) => {
+      const path = el as SVGPathElement
+      const point = path.getPointAtLength(path.getTotalLength() / 2)
+      const screenPoint = new DOMPoint(point.x, point.y).matrixTransform(path.getScreenCTM()!)
+      return { x: screenPoint.x, y: screenPoint.y }
+    })
+    await page.mouse.click(edgePoint.x, edgePoint.y)
     await expect(page.getByText('Edge Properties')).toBeVisible()
 
     const panel = page.locator('aside').filter({ hasText: 'Edge Properties' })
