@@ -8,6 +8,7 @@ output), plus the `fast_tier_state` head-narrowing behaviour. No network, no git
 
 from __future__ import annotations
 
+import json
 import sys
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
@@ -125,3 +126,41 @@ def test_fast_tier_state_waits_when_no_runs_object(monkeypatch) -> None:
     monkeypatch.setattr(admit, "_gh_json", lambda _args: None)
     state, _detail = admit.fast_tier_state("feature", "abc123")
     assert state == "waiting"
+
+
+def _evaluate_approved_pr(monkeypatch, *, commit_date: str, api_error: bool = False) -> tuple[str, str]:
+    """Run ``evaluate`` for an approved, green PR whose head was committed at ``commit_date``."""
+    reviews = [{"state": "APPROVED", "submitted_at": "2026-11-28T07:51:11Z", "commit_id": "abc123"}]
+    commits = [{"sha": "abc123", "parents": [{"sha": "p"}], "commit": {"committer": {"date": commit_date}}}]
+
+    def fake_run(argv, **_kwargs):
+        if api_error:
+            raise RuntimeError("HTTP 502")
+        return json.dumps(reviews if "/reviews?" in argv[-1] else commits)
+
+    detail = {"reviewDecision": "APPROVED", "headRefOid": "abc123", "reviews": [{"state": "APPROVED", "author": {"login": "farna-reviewbot"}}]}
+    monkeypatch.setattr(admit, "_run", fake_run)
+    monkeypatch.setattr(admit, "_gh_json", lambda _args: detail)
+    monkeypatch.setattr(admit, "same_repo_ok", lambda _repo, _number: (True, ""))
+    monkeypatch.setattr(admit, "dropped_within_hour", lambda _repo, _number, _now: (False, ""))
+    monkeypatch.setattr(admit, "fast_tier_state", lambda _branch, _sha: ("green", ""))
+    return admit.evaluate("owner/name", {"number": 3648, "baseRefName": "main", "labels": []}, admit._utc_now())
+
+
+def test_evaluate_admits_a_covering_approval(monkeypatch) -> None:
+    state, _detail = _evaluate_approved_pr(monkeypatch, commit_date="2026-11-28T07:00:00Z")
+    assert state == "admit"
+
+
+def test_evaluate_skips_a_stale_approval_even_when_commit_id_equals_head(monkeypatch, capsys) -> None:
+    """FAR-2871: the merge step would refuse it, so it must not take a train slot."""
+    state, detail = _evaluate_approved_pr(monkeypatch, commit_date="2026-11-28T09:11:43Z")
+    assert state == "skip"
+    assert "approval stale" in detail
+    assert "::warning::PR #3648 is NOT admitted" in capsys.readouterr().out
+
+
+def test_evaluate_fails_closed_when_the_approval_cannot_be_verified(monkeypatch) -> None:
+    state, detail = _evaluate_approved_pr(monkeypatch, commit_date="2026-11-28T07:00:00Z", api_error=True)
+    assert state == "skip"
+    assert "could not verify" in detail

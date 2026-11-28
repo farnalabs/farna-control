@@ -468,7 +468,7 @@ jobs:
           # (farna-reviewbot is the reviewer identity after the FAR rebrand).
           APPROVED_COUNT=0
           echo "[]" > /tmp/prs.json
-          rm -f /tmp/ci_pending_prs.txt
+          rm -f /tmp/ci_pending_prs.txt /tmp/stale_approval_prs.txt
 
           jq -c '.[]' /tmp/all_prs.json | while IFS= read -r pr; do
             NUM=$(echo "$pr" | jq -r '.number')
@@ -513,11 +513,29 @@ jobs:
             fi
 
             # Check for approval reviews
-            APPROVERS=$(gh pr view "$NUM" --json reviews --jq '.reviews[]? | select(.state == "APPROVED") | .author.login' 2>/dev/null | sort -u)
+            # `|| APPROVERS=""`: under -eo pipefail one PR's API error would
+            # otherwise end the whole step; it reads as "not approved".
+            APPROVERS=$(gh pr view "$NUM" --json reviews --jq '.reviews[]? | select(.state == "APPROVED") | .author.login' 2>/dev/null | sort -u) || APPROVERS=""
 
             MERGEABLE=false
             if echo "$APPROVERS" | grep -qE '^(farnalabs|farna-reviewbot)$'; then
               echo "approved by $APPROVERS"
+              # FAR-2871: apply the merge step's SHA-pin guard HERE too. A stale
+              # approval is refused there, so collecting it only burns the batch
+              # slot, and oldest-first then starves every later PR (#3648).
+              REVIEWS_FILE=$(mktemp)
+              COMMITS_FILE=$(mktemp)
+              GUARD_OUT="stale|could not fetch reviews/commits - fail closed"
+              if gh api --paginate "repos/${{ github.repository }}/pulls/$NUM/reviews?per_page=100" > "$REVIEWS_FILE" 2>/dev/null \
+                && gh api --paginate "repos/${{ github.repository }}/pulls/$NUM/commits?per_page=100" > "$COMMITS_FILE" 2>/dev/null; then
+                GUARD_OUT=$(python3 .github/scripts/merge-queue-approve-guard.py "$REVIEWS_FILE" "$COMMITS_FILE" 2>/dev/null) || true
+              fi
+              rm -f "$REVIEWS_FILE" "$COMMITS_FILE"
+              if [ "${GUARD_OUT%%|*}" != "ok" ]; then
+                echo "::warning::PR #$NUM is NOT ready (no batch slot) - approval check: ${GUARD_OUT#*|}"
+                echo "$NUM" >> /tmp/stale_approval_prs.txt
+                continue
+              fi
               MERGEABLE=true
             fi
 
@@ -613,6 +631,10 @@ jobs:
             CI_PENDING=$(sort -u /tmp/ci_pending_prs.txt | grep -c . || true)
           fi
           echo "Approved PRs still waiting on CI: $CI_PENDING"
+
+          if [ -f /tmp/stale_approval_prs.txt ]; then
+            echo "Held back, NOT merged - approval stale or unverifiable (see warnings): PR(s) $(xargs < /tmp/stale_approval_prs.txt)" | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          fi
 
           # Combine approved PRs into the prs.json file
           if [ -f /tmp/approved_prs.json ]; then
@@ -1180,7 +1202,7 @@ jobs:
                 fi
               else
                 git commit -m "squash! Merge PR #$NUM: $TITLE"
-                echo "PR #$NUM merged successfully."
+                echo "PR #$NUM: TRIAL squash-merge into the local merge-queue branch succeeded - NOT yet merged to main."
                 merged_prs="$merged_prs $NUM"
               fi
             else
@@ -2298,6 +2320,12 @@ jobs:
           # step consumes this; guard-skipped PRs must never have tickets closed).
           GH_MERGED=""
           FAILED=""
+          # FAR-2871: the earlier trial merge is not a landing - say so when a
+          # merge-time gate skips a PR.
+          not_landed() {
+            echo "::warning::PR #$1 did NOT land on main: $2"
+            echo "PR #$1 did NOT land on main: $2" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          }
           for NUM in $PR_NUMS; do
             echo "  Merging PR #$NUM..."
 
@@ -2305,6 +2333,7 @@ jobs:
             REVIEW_DECISION=$(gh pr view "$NUM" --json reviewDecision --jq '.reviewDecision' 2>/dev/null || echo "unknown")
             if [ "$REVIEW_DECISION" != "APPROVED" ]; then
               echo "  PR #$NUM reviewDecision is '$REVIEW_DECISION' -- skipping merge (stays open for next queue cycle)"
+              not_landed "$NUM" "reviewDecision is '$REVIEW_DECISION'"
               continue
             fi
 
@@ -2323,6 +2352,7 @@ jobs:
             rm -f "$AUTHOR_FILE"
             if [ "${AUTHOR_OUT%%|*}" != "ok" ]; then
               echo "  PR #$NUM same-repo author gate: ${AUTHOR_OUT#*|} -- skipping merge (fail closed)"
+              not_landed "$NUM" "same-repo author gate"
               continue
             fi
 
@@ -2349,6 +2379,7 @@ jobs:
              HEAD_OID=$(gh pr view "$NUM" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
              if [ -z "$HEAD_OID" ]; then
                echo "  PR #$NUM could not resolve head oid -- skipping merge (fail closed)"
+               not_landed "$NUM" "could not resolve the head SHA"
                continue
              fi
              # SHA-pin TOCTOU guard. The decision is delegated to a versioned, unit-tested
@@ -2374,6 +2405,7 @@ jobs:
              GUARD_VERDICT="${GUARD_OUT%%|*}"
              if [ "$GUARD_VERDICT" != "ok" ]; then
                echo "  PR #$NUM SHA-pin guard: ${GUARD_OUT#*|} -- skipping merge (fail closed)"
+               not_landed "$NUM" "SHA-pin guard: ${GUARD_OUT#*|}"
                continue
              fi
              # No post-approval non-merge code (merge-only head moves keep approval valid).
@@ -3677,7 +3709,7 @@ jobs:
               GUARD_OUT="stale|guard script produced no output - fail closed"
             fi
             if [ "${GUARD_OUT%%|*}" != "ok" ]; then
-              echo "  PR #$NUM SHA-pin guard: ${GUARD_OUT#*|} -- skipping merge (fail closed)"
+              echo "::warning::PR #$NUM did NOT land on main - SHA-pin guard: ${GUARD_OUT#*|} -- skipping merge (fail closed)"
               continue
             fi
             # Workflow-scoped merge credential per PR (Wall A / Wall B).
