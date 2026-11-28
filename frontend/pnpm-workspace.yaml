@@ -42,9 +42,13 @@ overrides:
   # >=4.6.6.
   "mutation-server-protocol>zod": ">=4.6.6 <5"
   # GHSA-333x-w4r6-6crp / GHSA-w74x-v6f9-j3xg / GHSA-wjr9-j795-jxcr /
-  # GHSA-xhq7-xmqj-769h: fast-uri <3.1.9 affected. Scoped to ajv (dev-only
-  # Stryker toolchain) and capped to the ^3 major ajv declares; the fix floor
-  # is 3.1.9. Remove once ajv ships a patched fast-uri.
+  # GHSA-xhq7-xmqj-769h: fast-uri <3.1.9 affected; all four are fixed in the
+  # 3.x line at 3.1.9. ajv declares fast-uri ^3, so this is capped to that
+  # major with a 3.1.9 fix floor. Do NOT widen to the 4.x line: 3.1.9 already
+  # carries these fixes, so a v4 override adds no security benefit and would
+  # pin ajv outside its declared range (renovate.json holds fast-uri majors
+  # for this reason). Scoped to ajv (dev-only Stryker toolchain). Remove once
+  # ajv itself accepts fast-uri 4.x.
   "ajv>fast-uri": ">=3.1.9 <4"
   # GHSA-3g3m-2fjr-6pw4 (glob <14.0.2): affected versions vulnerable to ReDoS
   # via specially crafted patterns. Affects js-beautify@2.0.3 (Stryker HTML

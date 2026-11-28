@@ -112,6 +112,16 @@
       "enabled": false
     },
     {
+      "description": "Hold fast-uri on the 3.x line. ajv@8.20.0 declares fast-uri ^3.0.1 and the frontend pnpm override caps it at >=3.1.9 <4; 3.1.9 already carries every published fast-uri advisory (GHSA-333x-w4r6-6crp, GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h), so a v4 bump adds no security benefit and would pin ajv outside its declared range. Remove once ajv itself accepts fast-uri 4.x.",
+      "matchPackageNames": [
+        "fast-uri"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Hold pytest below 9.2. pytest 9.2 renamed FixtureManager._arg2fixturedefs, which the pinned pytest-bdd commit (60f6625b) still reads, so all BDD scenarios fail with AttributeError. Keep backend/pyproject.toml's pytest constraint at >=9.1.1,<9.2.0 until a pytest-bdd release supports the rename. Remove this once the pytest-bdd pin is bumped to a compatible release.",
       "matchManagers": [
         "pep621"
