@@ -10,8 +10,9 @@ complete without blocking``) and fail a CI step with no test named - the
 ERROR from ``tests/conftest.py::pytest_runtest_setup``, and every workflow
 command that NAMES a gated-suite path carries the matching ``-W`` flag for
 defence in depth. The one command that runs gated tests without naming them -
-``ci.yml`` integration-changed, which expands a computed file list - is pinned
-explicitly by its ``${TEST_FILES[@]}`` needle; a command that names no gated
+the merge-train validation's integration shard, which expands a computed
+``--ignore`` list - is pinned explicitly by the selection it runs
+(``pytest tests/integration/ -m integration``); a command that names no gated
 path cannot be identified statically and inherits the in-process hook only.
 
 The hook is per-ITEM (``pytest_runtest_setup``), not ``pytest_configure``: the
@@ -39,8 +40,9 @@ A gate that can be deleted silently is not a gate. These tests pin:
 - every workflow command that names a gated-suite path still carries the
   byte-identical escalation and no longer disables the warnings plugin (BDD
   workflow, main-integration workflow, deploy pre-deploy unit and integration
-  steps, CI email-settings/step-rot BDD steps, CI integration-changed, CI
-  tier1b-light, CI architecture and connector-contract steps, merge-queue unit
+  steps, the merge-train validation's unit / architecture / connector-contract /
+  BDD-module / Tier-1b-light / integration runs, CI's break-glass and
+  product-map steps, merge-queue unit
   run, schemathesis and Tier 1b nightly runs, both conformance-suite commands
   in the k8s-conformance workflow, and the runner-ci docker harness suite);
 - the runner-ci harness command runs EVERY module in ``tests/docker`` (a gated
@@ -51,8 +53,8 @@ A gate that can be deleted silently is not a gate. These tests pin:
   command itself and checks the flag per invocation, so a future split that
   drops the flag on one shard fails too - and that single run covers the whole
   suite from that root;
-- the ``backend-test`` job in ``.github/workflows/ci.yml`` still invokes that
-  script.
+- the ``coverage`` job in ``.github/workflows/merge-validate.yml`` still invokes
+  that script, so the coverage floors keep one definition.
 
 Prove-it-fails: deleting the ``warnings.filterwarnings(...)`` line from
 ``tests/conftest.py`` makes the escalation tests fail; deleting a suite from
@@ -81,6 +83,12 @@ BACKEND = Path(__file__).resolve().parent.parent.parent
 REPO = BACKEND.parent
 TESTS = BACKEND / "tests"
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
+#: The merge-train validation workflow. Since 2026-11-27 the whole-repo suites
+#: (unsharded unit, architecture, connectors, the self-contained BDD modules,
+#: integration shards, Tier 1b light) run there once per train instead of on
+#: every PR, so the per-command pins below follow the commands to it. ci.yml
+#: keeps only the commands whose jobs remain in the fast tier.
+VALIDATE_WORKFLOW = REPO / ".github" / "workflows" / "merge-validate.yml"
 BDD_WORKFLOW = REPO / ".github" / "workflows" / "bdd.yml"
 MAIN_INTEGRATION_WORKFLOW = REPO / ".github" / "workflows" / "main-integration.yml"
 DEPLOY_WORKFLOW = REPO / ".github" / "workflows" / "deploy.yml"
@@ -246,15 +254,16 @@ def _workflow_run_commands(path: Path) -> Iterator[str]:
         (DEPLOY_WORKFLOW, "pytest tests/integration/ -m integration"),
         (DEPLOY_WORKFLOW, "pytest tests/unit/"),
         (CI_WORKFLOW, "pytest tests/integration/test_break_glass_gate.py"),
-        (CI_WORKFLOW, "pytest tests/bdd/steps/test_email_settings.py"),
-        (CI_WORKFLOW, "pytest tests/bdd/steps/test_auth.py"),
-        (CI_WORKFLOW, "tests/integration/test_tier1b_connectors_light.py"),
         (CI_WORKFLOW, "pytest tests/architecture/test_product_map_consistency.py"),
-        (CI_WORKFLOW, "pytest tests/architecture/ -q"),
-        (CI_WORKFLOW, "pytest tests/connectors/"),
-        # integration-changed expands a computed file list, so it names no
-        # gated path - pin it by the expansion itself.
-        (CI_WORKFLOW, 'pytest "${TEST_FILES[@]}"'),
+        (VALIDATE_WORKFLOW, "pytest tests/unit/"),
+        (VALIDATE_WORKFLOW, "pytest tests/architecture/ -q"),
+        (VALIDATE_WORKFLOW, "pytest tests/connectors/"),
+        (VALIDATE_WORKFLOW, "pytest tests/bdd/steps/test_email_settings.py"),
+        (VALIDATE_WORKFLOW, "pytest tests/bdd/steps/test_auth.py"),
+        (VALIDATE_WORKFLOW, "tests/integration/test_tier1b_connectors_light.py"),
+        # The integration shard expands a computed --ignore list, so pin it by
+        # the selection it runs rather than a file name.
+        (VALIDATE_WORKFLOW, "pytest tests/integration/ -m integration"),
         (MERGE_QUEUE_WORKFLOW, "pytest tests/unit/"),
         (SCHEMATHESIS_WORKFLOW, "pytest tests/integration/test_schemathesis.py"),
         (TIER1B_NIGHTLY_WORKFLOW, "tests/integration/test_tier1b_connectors_heavy.py"),
@@ -269,13 +278,14 @@ def _workflow_run_commands(path: Path) -> Iterator[str]:
         "deploy-integration",
         "deploy-unit",
         "ci-break-glass",
-        "ci-bdd-email-settings",
-        "ci-bdd-step-rot",
-        "ci-tier1b-light",
         "ci-product-map-consistency",
-        "ci-architecture",
-        "ci-connectors",
-        "ci-integration-changed",
+        "validate-unit",
+        "validate-architecture",
+        "validate-connectors",
+        "validate-bdd-email-settings",
+        "validate-bdd-step-rot",
+        "validate-tier1b-light",
+        "validate-integration",
         "merge-queue-unit",
         "schemathesis-nightly",
         "tier1b-nightly",
@@ -391,10 +401,18 @@ def test_ci_unit_run_covers_the_whole_suite() -> None:
     assert _UNIT_ROOT.search(invocations[0]), f"the unit pytest invocation no longer covers the whole tests/unit suite: {invocations[0]}"
 
 
-def test_ci_backend_test_job_runs_the_unit_coverage_script() -> None:
-    """The ``backend-test`` job still delegates the unit run to the pinned script."""
-    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+def test_merge_validate_coverage_job_runs_the_pinned_threshold_script() -> None:
+    """The coverage floors still come from the pinned script, not an inline copy.
+
+    ``.github/scripts/coverage-thresholds.sh`` is the single definition of the
+    per-module and whole-suite floors. Before 2026-11-27 the PR-tier
+    ``backend-test`` job delegated its unit run to it; that job is gone (the
+    whole-repo suites run once per merge train), so the pin follows the script
+    to the job that now enforces the floors: an inline re-implementation of the
+    thresholds would silently diverge from every local and pre-push run.
+    """
+    workflow = yaml.safe_load(VALIDATE_WORKFLOW.read_text(encoding="utf-8"))
     jobs = workflow["jobs"]
-    assert "backend-test" in jobs
-    runs = [step.get("run", "") for step in jobs["backend-test"]["steps"] if isinstance(step, dict)]
+    assert "coverage" in jobs
+    runs = [step.get("run", "") for step in jobs["coverage"]["steps"] if isinstance(step, dict)]
     assert any("coverage-thresholds.sh" in run for run in runs)
