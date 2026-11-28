@@ -151,6 +151,18 @@ def _group_by_suite(test_paths: list[str]) -> dict[str, list[str]]:
     return dict(sorted(groups.items()))
 
 
+def _is_collectable_test(name: str) -> bool:
+    """True when pytest's default discovery collects *name* as a test module.
+
+    Only ``test_*.py`` and ``*_test.py`` are collected.  A support module under
+    ``backend/tests/`` (e.g. ``tests/helpers/testcontainers_harness.py``) is not
+    a test module: running pytest on it directly collects nothing and exits 5,
+    which the gate would report as a failure.  Such files are mapped to their
+    stem's real tests instead, exactly like a source module.
+    """
+    return name.startswith("test_") or name.endswith("_test.py")
+
+
 def _select_test_files(changed: list[str]) -> list[str]:
     """Derive the set of test file paths (repo-relative) to run."""
     selected: set[str] = set()
@@ -163,11 +175,11 @@ def _select_test_files(changed: list[str]) -> list[str]:
         if name in EXCLUDE_NAMES:
             continue
 
-        if f.startswith("backend/tests/") and f.endswith(".py"):
+        if f.startswith("backend/tests/") and f.endswith(".py") and _is_collectable_test(name):
             selected.add(f)
             continue
 
-        if f.startswith("backend/src/") and f.endswith(".py"):
+        if f.startswith(("backend/tests/", "backend/src/")) and f.endswith(".py"):
             stem = _stem(f)
             pattern = str(backend_root / "tests" / "**" / f"test_{stem}*.py")
             for match in sorted(backend_root.parent.glob(pattern)):
