@@ -25,7 +25,11 @@ See [Deployment](deployment.md) for production deployment.
 PrimeVue is pinned to the MIT-licensed v4 line (`primevue@4.5.5`), so no license
 key, banner or build-arg is involved in local development, e2e or production.
 An old PrimeVue license entry in a workspace `.env` is inert and can be
-removed.
+removed. PrimeVue 5 cannot be packaged for self-hosters because of its
+licensing, so the stack was deliberately kept on v4 and Renovate holds
+`primevue` / `@primevue/themes` below 5 and `@primeuix/styled` below 1 (its v1
+ships with the PrimeVue 5 line). Do not raise these caps without a licensing
+decision that supports self-hosted redistribution.
 
 ## E2E visual/token slice on the merge train (FAR-2017)
 
