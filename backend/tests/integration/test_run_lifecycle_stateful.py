@@ -61,7 +61,7 @@ from farna import lifecycle
 from farna.core import cron_helpers
 from farna.core.hitl_manager import AlreadyClaimedError, GateAlreadyDecidedError, GateNotFoundError, HITLManager
 from farna.core.pipeline_engine.executor import PipelineExecutor, SandboxCapacityExceededError
-from farna.core.pipeline_execution import claim_resume_run_async, claim_run_async, mark_complete
+from farna.core.pipeline_execution import ClaimSupersededError, claim_resume_run_async, claim_run_async, heartbeat_once, mark_complete
 from farna.core.run_admission import evaluate_gate_claim_admission, park_expired_hitl_runs, reconcile_pipeline_slots
 from farna.db.crud.run import create_run, request_cancellation, transition_run
 from farna.db.rls import set_rls_org
@@ -592,7 +592,10 @@ class RunLifecycleMachine(RuleBasedStateMachine):
     def claim_gate_again_as_another_account(self, gate: tuple[uuid.UUID, str]) -> None:
         """Illegal sequence: a second account must never acquire the same gate."""
         run, review_id = gate
-        if (run, review_id) not in self._claimed_by or (run, review_id) in self._tokens:
+        # The illegal sequence is meaningful exactly WHILE the gate is held and
+        # undecided. Guarding on "no token" inverted this: a held gate always has
+        # one, so the rule never fired (and the coverage test falsely passed).
+        if (run, review_id) not in self._claimed_by or self._run(self._gate_decision(run, review_id)) is not None:
             return
 
         async def _reclaim() -> None:
@@ -846,6 +849,21 @@ class RunLifecycleMachine(RuleBasedStateMachine):
             )
             return {str(row[0]) for row in rows.fetchall()}
 
+    def assert_invariants(self) -> None:
+        """Run every invariant explicitly (deterministic rule-coverage test).
+
+        Hypothesis calls the ``@invariant`` methods after each generated step;
+        the deterministic coverage test invokes rules directly, so it must call
+        them itself — otherwise a legal-looking prelude could satisfy coverage
+        while leaving an invariant violation unnoticed.
+        """
+        self.capacity_is_never_exceeded()
+        self.a_gate_is_never_claimed_twice()
+        self.no_terminal_run_has_an_open_gate()
+        self.every_non_terminal_run_is_in_exactly_one_class()
+        self.a_decided_gate_leaves_the_run_unparked()
+        self.the_foreign_tenant_is_untouched()
+
     # -- invariants (checked after every step) ---------------------------
     @invariant()
     def capacity_is_never_exceeded(self) -> None:
@@ -957,65 +975,108 @@ def test_run_lifecycle_state_machine(lifecycle_runtime: tuple[_LoopRunner, Async
     assert "admit" in observed, "the state machine never admitted a run"
 
 
+#: Every rule on the machine mapped to the observation label(s) it must record.
+#: The coverage assertion reads THIS, so a rule that silently early-returns can
+#: no longer pass as "covered": its label never appears and the difference is
+#: named in the failure.
+_RULE_OBSERVATIONS: dict[str, frozenset[str]] = {
+    "admit": frozenset({"admit"}),
+    "claim_run": frozenset({"claim_run"}),
+    "request_hitl": frozenset({"request_hitl"}),
+    "claim_gate": frozenset({"claim_gate"}),
+    "claim_gate_again_as_another_account": frozenset({"claim_gate_again"}),
+    "decide_gate": frozenset({"decide_approved", "decide_rejected"}),
+    "decide_twice": frozenset({"decide_twice"}),
+    "park_expired_review": frozenset({"park_expired_review"}),
+    "reconcile_stale_running": frozenset({"reconcile_stale_running"}),
+    "resume_after_decision": frozenset({"resume_after_decision"}),
+    "complete_run": frozenset({"complete_run"}),
+    "cancel_without_open_gate": frozenset({"cancel_without_open_gate"}),
+    "cross_tenant_claim_is_refused": frozenset({"cross_tenant_claim"}),
+    "cross_tenant_transition_is_refused": frozenset({"cross_tenant_transition"}),
+    "cross_tenant_read_is_refused": frozenset({"cross_tenant_read"}),
+    "cross_tenant_decide_is_refused": frozenset({"cross_tenant_decide"}),
+}
+
+
 def test_every_rule_fires_on_the_machine(lifecycle_runtime: tuple[_LoopRunner, AsyncEngine]) -> None:
     """Coverage from the MACHINE's own rule firings (there is no prelude).
 
-    Each call below is a real rule invocation on a real machine, each with its own
+    Each call below is a real rule invocation on a real machine, with its own
     isolated org, so the assertion cannot be satisfied by a fixture that merely
-    seeds rows before Hypothesis starts.
+    seeds rows before Hypothesis starts. Invariants are asserted after EVERY
+    step: rule coverage and invariant safety are separate claims, and neither
+    may be inferred from the other.
     """
     runner, engine = lifecycle_runtime
     observed: set[str] = set()
     machine = RunLifecycleMachine(runner, engine, observed)
+    steps = 0
+
+    def step() -> None:
+        nonlocal steps
+        steps += 1
+        machine.assert_invariants()
 
     first = machine.admit()
+    step()
     machine.claim_run(first)
+    step()
     first_gate = machine.request_hitl(first)
+    step()
     machine.claim_gate(first_gate)
+    step()
     machine.claim_gate_again_as_another_account(first_gate)
+    step()
     machine.decide_gate(first_gate, "approved")
+    step()
     machine.decide_twice(first_gate)
+    step()
 
     second = machine.admit()
+    step()
     machine.claim_run(second)
+    step()
     second_gate = machine.request_hitl(second)
+    step()
     machine.park_expired_review(second)
+    step()
     machine.claim_gate(second_gate)
+    step()
     machine.decide_gate(second_gate, "rejected")
+    step()
     machine.resume_after_decision(second)
+    step()
     machine.complete_run(second)
+    step()
 
     third = machine.admit()
+    step()
     machine.claim_run(third)
+    step()
     machine.cancel_without_open_gate(third)
+    step()
 
     fourth = machine.admit()
+    step()
     machine.claim_run(fourth)
+    step()
     machine.reconcile_stale_running(fourth)
+    step()
 
     machine.cross_tenant_claim_is_refused()
+    step()
     machine.cross_tenant_transition_is_refused()
+    step()
     machine.cross_tenant_read_is_refused()
+    step()
     machine.cross_tenant_decide_is_refused()
+    step()
 
-    required = {
-        "admit",
-        "claim_run",
-        "request_hitl",
-        "claim_gate",
-        "decide_approved",
-        "decide_rejected",
-        "park_expired_review",
-        "reconcile_stale_running",
-        "resume_after_decision",
-        "complete_run",
-        "cancel_without_open_gate",
-        "cross_tenant_claim",
-        "cross_tenant_transition",
-        "cross_tenant_read",
-        "cross_tenant_decide",
-    }
-    assert required <= observed, f"the machine never exercised: {sorted(required - observed)}"
+    missing = {rule: labels - observed for rule, labels in _RULE_OBSERVATIONS.items() if not labels <= observed}
+    assert not missing, f"rules that never fired (or early-returned): {missing}"
+    # A vacuous pass would be a run with two steps: demand real depth.
+    assert steps >= len(_RULE_OBSERVATIONS), steps
 
 
 def test_a_capacity_leak_trips_the_invariant(
@@ -1219,6 +1280,51 @@ def test_global_slot_sweep_reaches_the_foreign_org_but_never_moves_a_live_run(
 
     assert runner.run(machine._foreign_stale_status()) == lifecycle.STATUS_PENDING, "the global slot sweep must reach the other organisation's stale run — otherwise the cross-tenant invariant proves nothing"
     assert runner.run(machine._foreign_status()) == lifecycle.STATUS_RUNNING, "a live run with a fresh heartbeat must never be swept"
+
+
+def test_a_foreign_org_heartbeat_cannot_touch_the_other_tenants_run(
+    lifecycle_runtime: tuple[_LoopRunner, AsyncEngine],
+) -> None:
+    """A heartbeat is tenant-scoped by the session GUC, not just by run id.
+
+    ``heartbeat_once`` binds ``app.organisation_id`` from its caller. This calls
+    it with THIS machine's org for the OTHER org's live run — with the foreign
+    run's own claim token, so only the tenant scope can refuse it. RLS must hide
+    the row (rowcount 0) and the claim-fenced form must report supersession,
+    while the foreign ``heartbeat_at`` and the SAQ job hash stay untouched.
+    """
+    runner, engine = lifecycle_runtime
+    observed: set[str] = set()
+    machine = RunLifecycleMachine(runner, engine, observed)
+
+    async def _foreign_heartbeat() -> Any:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT set_config('app.organisation_id', :val, true)"), {"val": str(machine.foreign_org_id)})
+            return (await conn.execute(text("SELECT heartbeat_at, claim_token FROM runs WHERE id = :rid AND organisation_id = :oid"), {"rid": str(machine.foreign_run_id), "oid": str(machine.foreign_org_id)})).one()
+
+    before = runner.run(_foreign_heartbeat())
+    job = MagicMock()
+    job.update = AsyncMock()
+    runner.run(_age_run_heartbeat(engine, machine.foreign_org_id, machine.foreign_run_id))
+
+    # Claim-fenced: a foreign scoped heartbeat sees no row and aborts.
+    with pytest.raises(ClaimSupersededError):
+        runner.run(
+            heartbeat_once(
+                engine,
+                str(machine.foreign_run_id),
+                str(machine.org_id),
+                job=job,
+                claim_token=str(before.claim_token),
+            )
+        )
+    # Unfenced: still no write, and no job-hash touch.
+    runner.run(heartbeat_once(engine, str(machine.foreign_run_id), str(machine.org_id), job=job))
+
+    after = runner.run(_foreign_heartbeat())
+    assert after.heartbeat_at < before.heartbeat_at, "a foreign heartbeat must not touch the other org's row (the test aged it)"
+    assert after.claim_token == before.claim_token
+    job.update.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

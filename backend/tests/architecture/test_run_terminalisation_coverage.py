@@ -260,7 +260,7 @@ _STATUS_COVERAGE: dict[str, StatusCoverage] = {
             _path(
                 "expire_stale_claims",
                 _EXPIRY,
-                'Run.status == "claimed"',
+                "Run.status == lifecycle.STATUS_CLAIMED",
                 kind=_RECOVERS,
             ),
         ),

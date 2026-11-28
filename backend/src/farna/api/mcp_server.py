@@ -7541,6 +7541,7 @@ async def _dispatch_hitl_deliver_manual(
     output: dict[str, Any] | None,
     answer: dict[str, Any] | None,
     client_type: str,
+    resume_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The ``deliver_manual`` branch of ``_dispatch_hitl_action`` (FAR-860 answer validation)."""
     # FAR-860: validate choice answer before the manager call. The error is
@@ -7565,6 +7566,9 @@ async def _dispatch_hitl_deliver_manual(
         client_type=client_type,
         answer=validated_answer,
     )
+    if resume_payload is not None:
+        resume_payload.clear()
+        resume_payload.update(manual_payload)
     return {"status": "delivered_manual", "review_id": review_id}
 
 
@@ -7693,6 +7697,7 @@ async def _dispatch_hitl_action(
             output=output,
             answer=answer,
             client_type=client_type,
+            resume_payload=resume_payload,
         )
     return await _dispatch_hitl_reject(
         mgr,
@@ -7715,6 +7720,7 @@ async def _resume_run_after_mcp_approval(
     resume_data: dict[str, Any],
     claim_token: str,
     expected_claim_status: str = "awaiting_human",
+    decision_status: str = "approved",
 ) -> dict[str, Any]:
     """Resume an MCP-approved run inline (FAR-2328), mirroring REST ``approve_review``.
 
@@ -7748,7 +7754,7 @@ async def _resume_run_after_mcp_approval(
     except ResumeClaimSupersededError:
         _log.warning("mcp.review_hitl.approve_resume_superseded", extra={"run_id": str(run_id)})
         return {
-            "status": "approved",
+            "status": decision_status,
             "review_id": review_id,
             "run_id": str(run_id),
             "resume_status": "superseded",
@@ -7780,14 +7786,14 @@ async def _resume_run_after_mcp_approval(
         )
         recovery_detail = "The reconciliation sweep will retry the resume." if recoverable else "Automatic recovery could not restore the run for reconciliation; operator intervention is required."
         return {
-            "status": "approved",
+            "status": decision_status,
             "review_id": review_id,
             "run_id": str(run_id),
             "resume_status": "failed",
             "reconcile_status": "queued" if recoverable else "failed",
             "detail": (f"Approval recorded, but resuming the pipeline failed. The decision is committed; {recovery_detail}"),
         }
-    return {"status": "approved", "review_id": review_id, "run_id": str(run_id)}
+    return {"status": decision_status, "review_id": review_id, "run_id": str(run_id)}
 
 
 def _mcp_resume_expected_claim_status(run: Any) -> str:
@@ -7862,6 +7868,9 @@ async def _resume_after_mcp_approval_decision(
             run_id=run_id,
             decision=decision,
         )
+    decision_status = decision.get("status")
+    if not isinstance(decision_status, str):
+        decision_status = "approved"
     return await _resume_run_after_mcp_approval(
         org_id=org_id,
         run_id=run_id,
@@ -7869,6 +7878,7 @@ async def _resume_after_mcp_approval_decision(
         resume_data=resume_data,
         claim_token=resume_claim_token,
         expected_claim_status=_mcp_resume_expected_claim_status(run),
+        decision_status=decision_status,
     )
 
 
@@ -8049,7 +8059,7 @@ async def _review_hitl_impl(
     # row. Only now is an inline resume safe — the same ordering REST
     # ``approve_review`` gets by awaiting ``_run_hitl_manager`` (which owns its
     # own ``session.begin()``) before calling ``executor.resume``.
-    if action == "approve" and decision.get("status") == "approved":
+    if action in {"approve", "deliver_manual"} and decision.get("status") in {"approved", "delivered_manual"}:
         return await _resume_after_mcp_approval_decision(
             org_id=org_id,
             run_id=rid,

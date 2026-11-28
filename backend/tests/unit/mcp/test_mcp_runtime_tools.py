@@ -1194,6 +1194,105 @@ class TestReviewHitl(_AuthContext):
         manager.approve.assert_awaited_once()
         executor.resume.assert_awaited_once()
 
+    @pytest.mark.parametrize(
+        ("action", "extra_kwargs"),
+        [
+            ("approve", {"claim_token": "tok-123"}),
+            ("deliver_manual", {"claim_token": "tok-123", "output": {"value": 1}}),
+        ],
+    )
+    @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
+    @patch("farna.api.mcp_server.HITLManager")
+    @patch("farna.api.mcp_server._session")
+    @patch("farna.api.mcp_server._build_resume_executor")
+    async def test_resuming_decision_at_capacity_writes_nothing(
+        self,
+        mock_build_resume_executor: MagicMock,
+        mock_session: AsyncMock,
+        mock_manager_cls: MagicMock,
+        mock_validate_auth: AsyncMock,
+        action: str,
+        extra_kwargs: dict[str, Any],
+    ) -> None:
+        """FAR-2705: approval/manual-delivery at the pipeline cap is refused pre-decision.
+
+        The decision must NOT be recorded and the run must NOT be resumed: an
+        approval is only refused BEFORE the manager write, so the gate stays
+        undecided and the caller can retry once a slot frees.
+        """
+        from farna.core.run_admission import GateClaimAdmission
+
+        self._set_role_operator()
+        manager = MagicMock()
+        manager.approve = AsyncMock()
+        manager.deliver_manual = AsyncMock()
+        run = MagicMock()
+        run.claim_token = "claim-current"
+        run.status = "awaiting_human"
+        mock_sesh = configure_mock_session(AsyncMock(), allow_empty_execute=True)
+        mock_sesh.execute = AsyncMock(side_effect=[_make_run_lookup_result(run), _make_run_lookup_result(None)])
+        mock_session.return_value = _make_session_context(mock_sesh)
+        mock_manager_cls.return_value = manager
+        executor = _stub_resume_executor(mock_build_resume_executor)
+
+        async def _deny(*_args: Any, **_kwargs: Any) -> GateClaimAdmission:
+            return GateClaimAdmission(allowed=False, used=2, limit=2)
+
+        run_id = str(uuid.uuid4())
+        with patch("farna.api.mcp_server.evaluate_gate_claim_admission", _deny):
+            result = await review_hitl(run_id=run_id, review_id="gate-1", action=action, **extra_kwargs)
+
+        assert result["error"] == "pipeline_capacity"
+        assert result["run_id"] == run_id
+        assert result["review_id"] == "gate-1"
+        assert "concurrency limit" in result["detail"]
+        manager.approve.assert_not_awaited()
+        manager.deliver_manual.assert_not_awaited()
+        executor.resume.assert_not_awaited()
+
+    @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
+    @patch("farna.api.mcp_server.HITLManager")
+    @patch("farna.api.mcp_server._session")
+    @patch("farna.api.mcp_server._build_resume_executor")
+    async def test_deliver_manual_resumes_inline_after_commit(
+        self,
+        mock_build_resume_executor: MagicMock,
+        mock_session: AsyncMock,
+        mock_manager_cls: MagicMock,
+        mock_validate_auth: AsyncMock,
+    ) -> None:
+        """FAR-2705 parity: MCP manual delivery resumes inline like REST, not later."""
+        self._set_role_operator()
+        manager = MagicMock()
+        manager.deliver_manual = AsyncMock()
+        run = MagicMock()
+        run.claim_token = "claim-current"
+        run.status = "awaiting_human"
+        mock_sesh = configure_mock_session(AsyncMock(), allow_empty_execute=True)
+        mock_sesh.execute = AsyncMock(side_effect=[_make_run_lookup_result(run), _make_run_lookup_result(None)])
+        mock_session.return_value = _make_session_context(mock_sesh)
+        mock_manager_cls.return_value = manager
+        executor = _stub_resume_executor(mock_build_resume_executor)
+        run_id = str(uuid.uuid4())
+
+        result = await review_hitl(
+            run_id=run_id,
+            review_id="gate-1",
+            action="deliver_manual",
+            claim_token="tok-123",
+            output={"value": 7},
+        )
+
+        assert result == {"status": "delivered_manual", "review_id": "gate-1", "run_id": run_id}
+        manager.deliver_manual.assert_awaited_once()
+        executor.resume.assert_awaited_once()
+        assert executor.resume.await_args.kwargs["resume_data"] == {
+            "action": "deliver_manual",
+            "review_id": "gate-1",
+            "output": {"value": 7},
+        }
+        assert executor.resume.await_args.kwargs["expected_claim_status"] == "awaiting_human"
+
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
     @patch("farna.api.mcp_server.HITLManager")
     @patch("farna.api.mcp_server._session")
@@ -1360,8 +1459,10 @@ class TestReviewHitl(_AuthContext):
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
     @patch("farna.api.mcp_server.HITLManager")
     @patch("farna.api.mcp_server._session")
+    @patch("farna.api.mcp_server._build_resume_executor")
     async def test_deliver_manual_success(
         self,
+        mock_build_resume_executor: MagicMock,
         mock_session: AsyncMock,
         mock_manager_cls: MagicMock,
         mock_validate_auth: AsyncMock,
@@ -1369,13 +1470,17 @@ class TestReviewHitl(_AuthContext):
         self._set_role_operator()
         manager = MagicMock()
         manager.deliver_manual = AsyncMock()
+        run = MagicMock()
+        run.claim_token = "claim-current"
+        run.status = "awaiting_human"
 
         mock_sesh = configure_mock_session(AsyncMock(), allow_empty_execute=True)
         # 1: run lookup; 2: gate-config snapshot lookup (gate id "gate-1" is
         # not a hitl_review_* id, so the human_only check resolves None).
-        mock_sesh.execute = AsyncMock(side_effect=[_make_run_lookup_result(), _make_run_lookup_result(None)])
+        mock_sesh.execute = AsyncMock(side_effect=[_make_run_lookup_result(run), _make_run_lookup_result(None)])
         mock_session.return_value = _make_session_context(mock_sesh)
         mock_manager_cls.return_value = manager
+        executor = _stub_resume_executor(mock_build_resume_executor)
 
         run_id = str(uuid.uuid4())
         result = await review_hitl(
@@ -1386,8 +1491,9 @@ class TestReviewHitl(_AuthContext):
             output={"result": "ok"},
         )
 
-        assert result == {"status": "delivered_manual", "review_id": "gate-1"}
+        assert result == {"status": "delivered_manual", "review_id": "gate-1", "run_id": run_id}
         manager.deliver_manual.assert_awaited_once()
+        executor.resume.assert_awaited_once()
         # FAR-541: the persisted decision payload is stamped with the gate id.
         assert manager.deliver_manual.await_args.kwargs["decision_payload"] == {
             "action": "deliver_manual",
@@ -1455,8 +1561,10 @@ class TestReviewHitl(_AuthContext):
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
     @patch("farna.api.mcp_server.HITLManager")
     @patch("farna.api.mcp_server._session")
+    @patch("farna.api.mcp_server._build_resume_executor")
     async def test_reject_and_deliver_manual_attribute_to_account_id(
         self,
+        mock_build_resume_executor: MagicMock,
         mock_session: AsyncMock,
         mock_manager_cls: MagicMock,
         mock_validate_auth: AsyncMock,
@@ -1466,23 +1574,29 @@ class TestReviewHitl(_AuthContext):
         manager = MagicMock()
         manager.reject = AsyncMock()
         manager.deliver_manual = AsyncMock()
+        run = MagicMock()
+        run.claim_token = "claim-current"
+        run.status = "awaiting_human"
         mock_sesh = configure_mock_session(AsyncMock(), allow_empty_execute=True)
         mock_sesh.execute = AsyncMock(
             side_effect=[
                 _make_run_lookup_result(),
                 _make_run_lookup_result(),
                 _make_run_lookup_result(None),
-                _make_run_lookup_result(),
-                _make_run_lookup_result(),
+                _make_run_lookup_result(run),
+                _make_run_lookup_result(run),
                 _make_run_lookup_result(None),
             ]
         )
         mock_session.return_value = _make_session_context(mock_sesh)
         mock_manager_cls.return_value = manager
+        _stub_resume_executor(mock_build_resume_executor)
 
-        result_reject = await review_hitl(run_id=str(uuid.uuid4()), review_id="gate-1", action="reject", claim_token="tok-123", reason="nope")
+        reject_run_id = str(uuid.uuid4())
+        manual_run_id = str(uuid.uuid4())
+        result_reject = await review_hitl(run_id=reject_run_id, review_id="gate-1", action="reject", claim_token="tok-123", reason="nope")
         result_manual = await review_hitl(
-            run_id=str(uuid.uuid4()),
+            run_id=manual_run_id,
             review_id="gate-1",
             action="deliver_manual",
             claim_token="tok-123",
@@ -1491,7 +1605,7 @@ class TestReviewHitl(_AuthContext):
 
         assert result_reject == {"status": "rejected", "review_id": "gate-1"}
         assert manager.reject.await_args.kwargs["actor_id"] == _PLACEHOLDER_USER_ID
-        assert result_manual == {"status": "delivered_manual", "review_id": "gate-1"}
+        assert result_manual == {"status": "delivered_manual", "review_id": "gate-1", "run_id": manual_run_id}
         assert manager.deliver_manual.await_args.kwargs["actor_id"] == _PLACEHOLDER_USER_ID
 
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)

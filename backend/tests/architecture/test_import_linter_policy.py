@@ -15,6 +15,7 @@ CONFIG_PATH = Path(__file__).resolve().parents[2] / ".importlinter"
 
 _EXPECTED_CONTRACTS = {
     "api-does-not-import-langgraph-directly",
+    "lifecycle-is-a-neutral-leaf",
     "connectors-do-not-import-api",
     "core-does-not-import-modulo-cloud",
     "otel-bridge-is-standalone",

@@ -142,10 +142,20 @@ class AnalyticsTriggerType(StrEnum):
 
 
 class AnalyticsStatus(StrEnum):
+    """The closed run-status vocabulary as an enum for the analytics API.
+
+    FAR-2705: membership must equal ``farna.lifecycle.ALL_RUN_STATUSES`` — a
+    status added to the lifecycle table without a member here would be
+    unfilterable on the analytics surface, and one removed would be rejected by
+    the DB constraint. Pinned by
+    ``tests/unit/core/test_run_lifecycle.py::test_analytics_status_matches_the_vocabulary``.
+    """
+
     PENDING = "pending"
     RUNNING = "running"
     AWAITING_HUMAN = "awaiting_human"
     CLAIMED = "claimed"
+    UNKNOWN = "unknown"
     HITL_PARKED = "hitl_parked"
     COMPLETE = "complete"
     FAILED = "failed"
@@ -154,6 +164,8 @@ class AnalyticsStatus(StrEnum):
     STALLED = "stalled"
     BUDGET_EXCEEDED = "budget_exceeded"
     ROUTER_NO_MATCH = "router_no_match"
+    COST_CEILING_EXCEEDED = "cost_ceiling_exceeded"
+    COMPENSATION_FAILED = "compensation_failed"
     REJECTED = "rejected"
 
 

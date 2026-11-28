@@ -37,6 +37,20 @@ ignore_imports =
     # machinery).
     farna.api.routes.admin_rotation -> farna.core.saq_worker
 
+[importlinter:contract:lifecycle-is-a-neutral-leaf]
+name = Run lifecycle table is a dependency-free leaf
+type = forbidden
+# FAR-2705: the transition table is the single source of truth BOTH the DB layer
+# (farna.db.models.run) and core/API import. It must stay a leaf: any farna
+# import here would create a cycle (db -> lifecycle -> db) or force the layering
+# contracts to grow an exemption. Being outside farna.core/farna.api is what lets
+# db-does-not-import-core / core-does-not-import-api stay unexempted, so this
+# contract protects the placement, not just the current import list.
+source_modules =
+    farna.lifecycle
+forbidden_modules =
+    farna
+
 [importlinter:contract:connectors-do-not-import-api]
 name = Connectors layer is independent of API
 type = forbidden

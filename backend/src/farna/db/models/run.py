@@ -35,6 +35,7 @@ from farna.lifecycle import (
     REDISPATCHABLE_STATUSES,
     RUN_STATUS_WHITELIST,
     SUCCESS_STATUSES,
+    TERMINAL_STATUS_SQL,
     TERMINAL_STATUSES,
 )
 
@@ -300,8 +301,8 @@ class Run(OrgScoped):
         Index(
             "ix_runs_workspace_drift_sweep",
             "id",
-            postgresql_where=text("status IN ('complete', 'failed', 'cancelled', 'eval_failed', 'stalled', 'budget_exceeded', 'router_no_match', 'cost_ceiling_exceeded', 'compensation_failed', 'rejected') AND workspace_inputs_drift_detected IS NULL"),
-            sqlite_where=text("status IN ('complete', 'failed', 'cancelled', 'eval_failed', 'stalled', 'budget_exceeded', 'router_no_match', 'cost_ceiling_exceeded', 'compensation_failed', 'rejected') AND workspace_inputs_drift_detected IS NULL"),
+            postgresql_where=text("status IN (" + TERMINAL_STATUS_SQL + ") AND workspace_inputs_drift_detected IS NULL"),
+            sqlite_where=text("status IN (" + TERMINAL_STATUS_SQL + ") AND workspace_inputs_drift_detected IS NULL"),
         ),
         # FAR-2116 — pipeline-decay alerting (core/pipeline_decay_alerts.py).
         # The sweep runs on EVERY reconcile tick (60s) and reads a 2-hour
@@ -324,8 +325,8 @@ class Run(OrgScoped):
                 "status",
                 "node_deadline_watchdog_fired_count",
             ],
-            postgresql_where=text("trigger_type = 'webhook' AND status IN ('budget_exceeded', 'cancelled', 'compensation_failed', 'complete', 'cost_ceiling_exceeded', 'eval_failed', 'failed', 'rejected', 'router_no_match', 'stalled')"),
-            sqlite_where=text("trigger_type = 'webhook' AND status IN ('budget_exceeded', 'cancelled', 'compensation_failed', 'complete', 'cost_ceiling_exceeded', 'eval_failed', 'failed', 'rejected', 'router_no_match', 'stalled')"),
+            postgresql_where=text("trigger_type = 'webhook' AND status IN (" + TERMINAL_STATUS_SQL + ")"),
+            sqlite_where=text("trigger_type = 'webhook' AND status IN (" + TERMINAL_STATUS_SQL + ")"),
         ),
         # FAR-153 / §15.1 — the two partial unique indexes that REPLACE the
         # former global UNIQUE(langgraph_thread_id) (dropped by migration

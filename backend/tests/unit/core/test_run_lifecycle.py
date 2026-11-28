@@ -193,9 +193,29 @@ class TestTableStructure:
         for status in sorted(lifecycle.ACTIVE_RUN_STATUSES):
             assert lifecycle.transitions_from(status), f"non-terminal status {status!r} can never be left"
 
-    def test_terminal_statuses_have_no_outgoing_transition(self) -> None:
+    def test_terminal_statuses_only_leave_through_declared_recovery_edges(self) -> None:
         for status in sorted(lifecycle.TERMINAL_STATUSES):
-            assert not lifecycle.transitions_from(status), f"terminal status {status!r} has an outgoing edge"
+            for transition in lifecycle.transitions_from(status):
+                assert transition.reopens_terminal, f"terminal status {status!r} has an undeclared outgoing edge via {transition.action!r}"
+
+    def test_every_non_terminal_status_can_reach_the_saq_failure_fence(self) -> None:
+        """``saq_hooks._mark_run_failed`` fails any active status except ``unknown``.
+
+        The fence is status-guarded (NOT IN terminal, <> unknown), so the table
+        must declare an edge to ``failed`` from every status it can match.
+        """
+        expected = lifecycle.ACTIVE_RUN_STATUSES - {lifecycle.STATUS_UNKNOWN}
+        assert expected <= allowed_from_for_target(lifecycle.STATUS_FAILED)
+
+    def test_every_recovery_edge_reopens_a_terminal_status(self) -> None:
+        recovery = [transition for transition in TRANSITIONS if transition.reopens_terminal]
+        assert recovery, "the operator recovery edges must be declared, not omitted"
+        assert all(transition.from_status in lifecycle.TERMINAL_STATUSES for transition in recovery)
+        assert {(transition.from_status, transition.to_status) for transition in recovery} >= {
+            (lifecycle.STATUS_FAILED, lifecycle.STATUS_RUNNING),
+            (lifecycle.STATUS_EVAL_FAILED, lifecycle.STATUS_RUNNING),
+            (lifecycle.STATUS_EVAL_FAILED, lifecycle.STATUS_PENDING),
+        }
 
     def test_every_action_is_documented_in_one_line(self) -> None:
         for transition in TRANSITIONS:
@@ -247,6 +267,17 @@ class TestTableStructure:
         """``hitl_parked -> running`` (resume claim) and ``claimed -> claimed``."""
         assert (STATUS_HITL_PARKED, STATUS_RUNNING) in {(t.from_status, t.to_status) for t in TRANSITIONS}
         assert (STATUS_CLAIMED, STATUS_CLAIMED) in {(t.from_status, t.to_status) for t in TRANSITIONS}
+
+    def test_the_sql_terminal_list_is_derived_from_the_table(self) -> None:
+        """Raw-SQL writers/indexes embed the SAME terminal vocabulary."""
+        assert ", ".join(f"'{status}'" for status in sorted(lifecycle.TERMINAL_STATUSES)) == lifecycle.TERMINAL_STATUS_SQL
+        assert set(re.findall(r"'([^']+)'", lifecycle.TERMINAL_STATUS_SQL)) == set(lifecycle.TERMINAL_STATUSES)
+
+    def test_analytics_status_matches_the_vocabulary(self) -> None:
+        """The analytics filter enum is exactly the lifecycle vocabulary."""
+        from farna.core.analytics.builder import AnalyticsStatus
+
+        assert {member.value for member in AnalyticsStatus} == set(lifecycle.ALL_RUN_STATUSES)
 
     def test_the_module_is_dependency_free(self) -> None:
         """No import from ``farna`` — the neutral leaf both layers may load."""
@@ -360,7 +391,18 @@ class TestWritersUseDeclaredEdges:
 
     def test_transition_run_defaults_to_the_declared_edges(self) -> None:
         """The default guard is the table, not the whole whitelist."""
-        assert allowed_from_for_target(STATUS_RUNNING) == frozenset({lifecycle.STATUS_PENDING, STATUS_RUNNING, STATUS_AWAITING_HUMAN, STATUS_CLAIMED, STATUS_HITL_PARKED})
+        assert allowed_from_for_target(STATUS_RUNNING) == frozenset(
+            {
+                lifecycle.STATUS_PENDING,
+                STATUS_RUNNING,
+                STATUS_AWAITING_HUMAN,
+                STATUS_CLAIMED,
+                STATUS_HITL_PARKED,
+                # Operator recovery deliberately re-opens a terminal run.
+                lifecycle.STATUS_FAILED,
+                lifecycle.STATUS_EVAL_FAILED,
+            }
+        )
         assert allowed_from_for_target(lifecycle.STATUS_COMPLETE) == frozenset({STATUS_RUNNING, lifecycle.STATUS_UNKNOWN})
         assert not allowed_from_for_target("no_such_status")
 

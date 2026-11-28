@@ -79,7 +79,7 @@ from farna.db.models.run import (
 from farna.db.rls import OutputsRlsMismatch, read_rls_org
 from farna.db.sqlstates import DUAL_WRITE_RETRYABLE_SQLSTATES, sqlstate_of
 from farna.db.unique_violation import is_unique_violation
-from farna.lifecycle import allowed_from_for_target
+from farna.lifecycle import TERMINAL_STATUS_SQL, allowed_from_for_target
 
 _log = logging.getLogger(__name__)
 
@@ -4339,15 +4339,14 @@ async def _update_run_status_orm(
 
 
 _UPDATE_STATUS_FENCED_SQL = text(
-    "UPDATE runs SET "
+    "UPDATE runs SET "  # nosec B608  # noqa: S608 - interpolates the lifecycle's own status literals only (never caller data)
     "status = CASE "
     "  WHEN cancellation_requested AND :status IN ('awaiting_human', 'complete') THEN 'cancelled' "
     "  ELSE :status END, "
     "started_at = CASE WHEN :status = 'running' AND started_at IS NULL THEN now() ELSE started_at END, "
     "completed_at = CASE "
     "  WHEN cancellation_requested AND :status IN ('awaiting_human', 'complete') THEN now() "
-    "  WHEN :status IN ('complete', 'failed', 'cancelled', 'eval_failed', 'stalled', "
-    "'budget_exceeded', 'router_no_match', 'cost_ceiling_exceeded', 'compensation_failed', 'rejected') THEN now() "
+    "  WHEN :status IN (" + TERMINAL_STATUS_SQL + ") THEN now() "
     "  ELSE completed_at END, "
     "claimed_by = CASE WHEN CAST(:claimed_by AS text) IS NOT NULL THEN CAST(:claimed_by AS text) ELSE claimed_by END, "
     "error_code = CASE WHEN :clear_error_code THEN NULL "
@@ -4489,6 +4488,14 @@ async def unpark_parked_run(session: AsyncSession, *, run_id: uuid.UUID, org_id:
     ``gate_coalescing.evaluate_gate_coalescing`` — closing the caller-side
     follow-up this note originally recorded under FAR-1601.
     """
+    # FAR-2705: the source status is NOT a hand-listed literal — it must be an
+    # edge the lifecycle table declares into ``awaiting_human``. The guarded
+    # UPDATE keeps this writer's narrow "parked only" contract (never a no-op
+    # wide transition); the assert makes a missing table edge a load-time-like
+    # programming error instead of a silent writer/table drift.
+    allowed_from = allowed_from_for_target(AWAITING_HUMAN_STATUS)
+    if HITL_PARKED_STATUS not in allowed_from:
+        raise ValueError(f"lifecycle table declares no {HITL_PARKED_STATUS!r} -> {AWAITING_HUMAN_STATUS!r} edge")
     await session.execute(
         update(Run)
         .where(
@@ -4501,10 +4508,8 @@ async def unpark_parked_run(session: AsyncSession, *, run_id: uuid.UUID, org_id:
 
 
 _TRANSITION_SQL = text(
-    "UPDATE runs SET status=CAST(:target AS text), "
-    "completed_at = CASE WHEN CAST(:target AS text) IN "
-    "('complete', 'failed', 'cancelled', 'eval_failed', 'stalled', 'budget_exceeded', 'router_no_match', "
-    "'cost_ceiling_exceeded', 'compensation_failed', 'rejected') "
+    "UPDATE runs SET status=CAST(:target AS text), "  # nosec B608  # noqa: S608 - interpolates the lifecycle's own status literals only (never caller data)
+    "completed_at = CASE WHEN CAST(:target AS text) IN (" + TERMINAL_STATUS_SQL + ") "
     "THEN now() ELSE completed_at END, "
     "error_code = COALESCE(CAST(:error_code AS text), error_code), "
     "error_detail = CASE WHEN CAST(:error_code AS text) IS NOT NULL "

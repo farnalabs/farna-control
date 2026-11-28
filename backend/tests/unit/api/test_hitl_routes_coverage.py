@@ -153,14 +153,41 @@ def test_claim_gate_at_capacity_returns_409_without_claiming(client: tuple[TestC
     transition.assert_not_awaited()
 
 
-def test_approve_at_capacity_returns_409_without_recording_the_decision(client: tuple[TestClient, AsyncMock]) -> None:
-    """FAR-2705: an approval at the pipeline cap is refused BEFORE it commits.
+@pytest.mark.parametrize(
+    ("path", "payload", "manager_attr"),
+    [
+        (f"/api/v1/runs/{_RUN_ID}/hitl/gate-1/approve", {"claim_token": "tok"}, "approve"),
+        (
+            f"/api/v1/runs/{_RUN_ID}/hitl/gate-1/approve-with-modification",
+            {"claim_token": "tok", "modified_output": {"value": 1}},
+            "approve_with_modification",
+        ),
+        (
+            f"/api/v1/runs/{_RUN_ID}/hitl/gate-1/deliver-manual",
+            {"claim_token": "tok", "output": {"value": 1}},
+            "deliver_manual",
+        ),
+        (
+            f"/api/v1/runs/{_RUN_ID}/manual/gate-1/submit",
+            {"claim_token": "tok", "output": {"value": 1}},
+            "approve",
+        ),
+    ],
+)
+def test_a_resuming_decision_at_capacity_returns_409_without_recording(
+    client: tuple[TestClient, AsyncMock],
+    path: str,
+    payload: dict[str, object],
+    manager_attr: str,
+) -> None:
+    """FAR-2705: EVERY resuming decision is capacity-admitted before it commits.
 
     The second half of the reported leak: a ``hitl_parked`` run's gate is
-    claimable without a slot, and the approval used to commit the decision and
-    then resume the run into ``running`` — a third capacity-holding run at cap
-    2. The approval path must therefore evaluate the RESUME's capacity (the
-    same shared helper the claim uses, ``action=GATE_ACTION_RESUME``) inside the
+    claimable without a slot, and a decision used to commit and then resume the
+    run into ``running`` — a third capacity-holding run at cap 2. All four
+    resuming paths (approve / approve-with-modification / deliver-manual /
+    submit-manual) must therefore evaluate the RESUME's capacity (the same
+    shared helper the claim uses, ``action=GATE_ACTION_RESUME``) inside the
     decision transaction: at cap the shared 409 is returned and NOTHING is
     written — the manager is never called, so the gate stays undecided, and no
     resume is attempted.
@@ -170,15 +197,18 @@ def test_approve_at_capacity_returns_409_without_recording_the_decision(client: 
     with (
         patch("farna.api.routes.hitl.evaluate_gate_claim_admission", new=admission),
         patch("farna.api.routes.hitl.HITLManager.approve", new=AsyncMock()) as approve,
+        patch("farna.api.routes.hitl.HITLManager.approve_with_modification", new=AsyncMock()) as approve_modified,
+        patch("farna.api.routes.hitl.HITLManager.deliver_manual", new=AsyncMock()) as deliver,
         patch("farna.api.routes.hitl._build_resume_executor") as build,
     ):
-        resp = http.post(f"/api/v1/runs/{_RUN_ID}/hitl/gate-1/approve", json={"claim_token": "tok"})
+        resp = http.post(path, json=payload)
 
     assert resp.status_code == 409, resp.text
     detail = resp.json()["detail"]
     assert "concurrency limit" in detail
     assert "decision was not recorded" in detail
-    approve.assert_not_awaited()
+    targeted = {"approve": approve, "approve_with_modification": approve_modified, "deliver_manual": deliver}[manager_attr]
+    targeted.assert_not_awaited()
     build.assert_not_called()
     # The admission asked the RESUME question — not the claim one.
     assert admission.await_args.kwargs["action"] == GATE_ACTION_RESUME

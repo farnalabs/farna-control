@@ -156,12 +156,19 @@ STATUSES: tuple[Status, ...] = (
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True, slots=True)
 class Transition:
-    """One legal edge of the run lifecycle, with a one-line explanation."""
+    """One legal edge of the run lifecycle, with a one-line explanation.
+
+    ``reopens_terminal`` marks the deliberate operator recovery edges that take a
+    TERMINAL run back into execution (recover-node). Terminal is otherwise
+    absorbing; keeping these edges in the table (instead of omitting them) is
+    what makes every real writer expressible through the declared relation.
+    """
 
     from_status: str | None
     action: str
     to_status: str
     description: str
+    reopens_terminal: bool = False
 
 
 #: Actions named by consumers that need to reason about the relation (the
@@ -195,6 +202,7 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(STATUS_RUNNING, "reclaim_stale", STATUS_RUNNING, "a stale-heartbeat running run is re-claimed by a new worker (self-transition)"),
     Transition(STATUS_RUNNING, ACTION_COMPLETE, STATUS_COMPLETE, "the graph finishes and the run is completed"),
     Transition(STATUS_RUNNING, ACTION_FAIL, STATUS_FAILED, "an execution failure terminal-fails the run"),
+    Transition(STATUS_RUNNING, "reject_terminal", STATUS_REJECTED, "a gate rejection with no reject route ends the resumed run rejected"),
     Transition(STATUS_RUNNING, "eval_fail", STATUS_EVAL_FAILED, "a blocking eval terminal-fails the run"),
     Transition(STATUS_RUNNING, "stall", STATUS_STALLED, "a stalled run is terminalised"),
     Transition(STATUS_RUNNING, "budget_exceeded", STATUS_BUDGET_EXCEEDED, "the run exhausts its budget"),
@@ -222,6 +230,16 @@ TRANSITIONS: tuple[Transition, ...] = (
     # --- unknown ----------------------------------------------------------
     Transition(STATUS_UNKNOWN, ACTION_RECONCILE_UNKNOWN, STATUS_COMPLETE, "an operator's same-key re-run reconciles the outcome to complete"),
     Transition(STATUS_UNKNOWN, "reconcile_unknown_failed", STATUS_FAILED, "an operator's same-key re-run reconciles the outcome to failed"),
+    # --- guarded SAQ task-failure fence (saq_hooks._mark_run_failed) -------
+    # The fence fails any non-terminal, non-``unknown`` run whose claimed SAQ job
+    # died, so these are real edges of the relation, not error-handling escapes.
+    Transition(STATUS_AWAITING_HUMAN, "saq_failure", STATUS_FAILED, "the SAQ job claimed by an awaiting_human run died and the fence failed it"),
+    Transition(STATUS_CLAIMED, "saq_failure", STATUS_FAILED, "the SAQ job claimed by a claimed run died and the fence failed it"),
+    Transition(STATUS_HITL_PARKED, "saq_failure", STATUS_FAILED, "the SAQ job claimed by a parked run died and the fence failed it"),
+    # --- operator recovery (deliberately re-opens a terminal run) ----------
+    Transition(STATUS_FAILED, "recover_node", STATUS_RUNNING, "an operator recovers a failed run at a node; the recovery lock re-enters execution", True),
+    Transition(STATUS_EVAL_FAILED, "recover_node", STATUS_RUNNING, "an operator recovers a guardrail-blocked run at a started node (recovery lock)", True),
+    Transition(STATUS_EVAL_FAILED, "recover_node_redispatch", STATUS_PENDING, "an operator recovers a zero-node guardrail block for a fresh dispatch", True),
     # --- cancellation (every non-terminal status can be cancelled) --------
     Transition(STATUS_PENDING, ACTION_CANCEL, STATUS_CANCELLED, "an operator cancels a queued run"),
     Transition(STATUS_RUNNING, ACTION_CANCEL, STATUS_CANCELLED, "an operator cancels a running run (cancel wins over every writer)"),
@@ -296,7 +314,8 @@ def lifecycle_violations(statuses: tuple[Status, ...] = STATUSES, transitions: t
     terminal = frozenset(status.name for status in statuses if status.cls == TERMINAL)
     non_terminal = known - terminal
     violations.extend(f"non-terminal status {name!r} has no outgoing transition" for name in sorted(non_terminal) if not transitions_from(name, transitions))
-    violations.extend(f"terminal status {name!r} has an outgoing transition" for name in sorted(terminal) if transitions_from(name, transitions))
+    violations.extend(f"terminal status {name!r} has an outgoing transition that does not declare ``reopens_terminal``" for name in sorted(terminal) if any(not transition.reopens_terminal for transition in transitions_from(name, transitions)))
+    violations.extend(f"transition {transition.action!r} declares ``reopens_terminal`` from non-terminal status {transition.from_status!r}" for transition in transitions if transition.reopens_terminal and transition.from_status not in terminal)
 
     # The non-terminal classes must be a pairwise-disjoint partition.
     classes = {status.name: status.cls for status in statuses}
@@ -415,6 +434,21 @@ SUCCESS_STATUSES: frozenset[str] = _PROJECTIONS["SUCCESS_STATUSES"]
 
 #: ``transition_run`` / ``update_run_status`` refuse anything outside this set.
 RUN_STATUS_WHITELIST: frozenset[str] = ALL_RUN_STATUSES
+
+
+def sql_in_list(statuses: frozenset[str] | tuple[str, ...]) -> str:
+    """Render *statuses* as a SQL ``IN`` body (``'a', 'b'``), sorted for stability.
+
+    Raw-SQL writers and partial-index predicates cannot bind Python sets, so they
+    embed the vocabulary as text. They MUST build it here from the lifecycle
+    projections — a hand-written literal list is a second source of truth that
+    silently drops a status added to the table (the FAR-2705 defect class).
+    """
+    return ", ".join(f"'{status}'" for status in sorted(statuses))
+
+
+#: The terminal vocabulary as a SQL ``IN`` body for raw-SQL writers/indexes.
+TERMINAL_STATUS_SQL: str = sql_in_list(TERMINAL_STATUSES)
 
 #: The projections the unit test pins against the table (and the shipped values).
 DOCUMENTED_PROJECTIONS: tuple[str, ...] = (

@@ -30,6 +30,7 @@ from typing import Any
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from farna import lifecycle
 from farna.core.audit_logger import append_audit_event
 from farna.core.audit_logger.labels import SYSTEM_ACTOR, short_id
 from farna.core.cron_helpers import _bound_org
@@ -150,9 +151,23 @@ async def _reset_stale_claims(session: AsyncSession, claim_ids: list[Any], now: 
 
 
 async def _reset_runs_to_awaiting_human(session: AsyncSession, expired: list[dict[str, Any]]) -> None:
-    """Batch-reset the affected runs back to awaiting_human."""
+    """Reset the affected runs back to ``awaiting_human`` through the lifecycle fence.
+
+    FAR-2705: this used a bare ``update(Run).values(status=...)`` with the source
+    status hand-listed. It stays a single batch UPDATE (as before) but its source
+    status is now the table's declared ``claim_expired`` edge
+    (``claimed -> awaiting_human``), asserted at call time — so a changed or
+    missing edge fails loudly instead of silently drifting from the model.
+    """
+    # FAR-2705: the source status is the table's declared ``claim_expired``
+    # edge into ``awaiting_human``, not a hand-listed literal. This stays a
+    # single batch UPDATE (one statement per org, as before); the assert makes a
+    # missing/changed table edge fail loudly instead of silently no-opping.
+    allowed_from = lifecycle.allowed_from_for_target(lifecycle.STATUS_AWAITING_HUMAN)
+    if lifecycle.STATUS_CLAIMED not in allowed_from:
+        raise ValueError(f"lifecycle table declares no {lifecycle.STATUS_CLAIMED!r} -> {lifecycle.STATUS_AWAITING_HUMAN!r} edge")
     run_ids = list({entry["run_id"] for entry in expired})
-    await session.execute(update(Run).where(Run.id.in_(run_ids), Run.status == "claimed").values(status="awaiting_human"))
+    await session.execute(update(Run).where(Run.id.in_(run_ids), Run.status == lifecycle.STATUS_CLAIMED).values(status=lifecycle.STATUS_AWAITING_HUMAN))
 
 
 async def _record_expired_claim_audits(

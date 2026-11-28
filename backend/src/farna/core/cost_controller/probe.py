@@ -50,6 +50,7 @@ from farna.db.models.daily_run_count import OrgDailyRunCount
 from farna.db.models.organisation import Organisation
 from farna.db.models.run import Run
 from farna.db.rls import set_rls_org
+from farna.lifecycle import TERMINAL_STATUS_SQL, TERMINAL_STATUSES
 
 _log = logging.getLogger(__name__)
 
@@ -75,18 +76,9 @@ FLOOD_MIN_DISTINCT_RUNS = 5
 FLOOD_COOLDOWN_SECONDS = 15 * 60
 
 # The canonical terminal-status set (spec §4.2) — the probe sample predicate.
-PROBE_TERMINAL_STATUSES = (
-    "complete",
-    "failed",
-    "cancelled",
-    "eval_failed",
-    "stalled",
-    "budget_exceeded",
-    "router_no_match",
-    "cost_ceiling_exceeded",
-    "compensation_failed",
-    "rejected",
-)
+# FAR-2705: derived from the run-lifecycle table, never a hand-listed copy, so a
+# terminal status added later cannot silently fall out of the probe sample.
+PROBE_TERMINAL_STATUSES = tuple(sorted(TERMINAL_STATUSES))
 
 # Per-org statement/query timeout (one stalled org cannot block the cadence).
 _ORG_STATEMENT_TIMEOUT_MS = 5000
@@ -95,14 +87,7 @@ _ORG_STATEMENT_TIMEOUT_MS = 5000
 _explain_checked = False
 
 _SAMPLE_QUERY_EXPLAIN_TEMPLATE = (
-    "SELECT id, total_cost_usd, cost_breakdown, started_at, ledger_written, ledger_refused_at "
-    "FROM runs "
-    "WHERE organisation_id = :org_id "
-    "AND status IN ('complete', 'failed', 'cancelled', 'eval_failed', 'stalled', "
-    "'budget_exceeded', 'cost_ceiling_exceeded', 'router_no_match', 'rejected') "
-    "AND cost_breakdown IS NOT NULL "
-    "ORDER BY started_at DESC "
-    "LIMIT 50"
+    "SELECT id, total_cost_usd, cost_breakdown, started_at, ledger_written, ledger_refused_at FROM runs WHERE organisation_id = :org_id AND status IN (" + TERMINAL_STATUS_SQL + ") AND cost_breakdown IS NOT NULL ORDER BY started_at DESC LIMIT 50"  # nosec B608  # noqa: S608 - interpolates the lifecycle's own status literals only (never caller data)
 )
 
 
