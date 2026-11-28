@@ -124,19 +124,38 @@ defineEmits<{
 /**
  * FAR-2870: a workflow primitive installs as a pipeline when it carries the
  * same graph the backend builder consumes (`graph_nodes` or the declarative
- * `nodes` shape, one id per node). The Create Pipeline action must be hidden
- * for a workflow with no usable graph — the endpoint rejects it with a 400.
+ * `nodes` shape, one unique id per node, and edges — when present — that
+ * connect declared nodes). The Create Pipeline action must be hidden for a
+ * workflow the endpoint would reject with a 400, so this mirrors the backend's
+ * duplicate-id and dangling-edge checks rather than only the non-empty-id check.
  */
 function workflowHasUsableGraph(prim: LibraryPrimitive): boolean {
   const content = prim.content_json
   if (!content || typeof content !== 'object') return false
-  const raw = content.graph_nodes ?? content.nodes
+  const raw = Object.prototype.hasOwnProperty.call(content, 'graph_nodes')
+    ? content.graph_nodes
+    : content.nodes
   if (!Array.isArray(raw) || raw.length === 0) return false
-  return raw.every((node) => {
+  const nodeIds = new Set<string>()
+  for (const node of raw) {
     if (!node || typeof node !== 'object') return false
     const id = (node as Record<string, unknown>).id
-    return typeof id === 'string' && id !== ''
-  })
+    if (typeof id !== 'string' || id === '' || nodeIds.has(id)) return false
+    nodeIds.add(id)
+  }
+  if (Object.prototype.hasOwnProperty.call(content, 'edges')) {
+    const edges = content.edges
+    if (!Array.isArray(edges)) return false
+    for (const edge of edges) {
+      if (!edge || typeof edge !== 'object') return false
+      const record = edge as Record<string, unknown>
+      const source = record.source ?? record.source_node_id
+      const target = record.target ?? record.target_node_id
+      if (typeof source !== 'string' || !nodeIds.has(source)) return false
+      if (typeof target !== 'string' || !nodeIds.has(target)) return false
+    }
+  }
+  return true
 }
 
 const canCreatePipeline = computed(() => {

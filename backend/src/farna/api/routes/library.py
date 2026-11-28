@@ -2140,6 +2140,28 @@ async def review_abuse_report_endpoint(
 # ---------------------------------------------------------------------------
 
 
+def _template_graph_section(
+    content: dict[str, Any],
+    key: str,
+) -> list[dict[str, Any]] | None:
+    """Read one graph section as a list, or ``None`` when the key is absent.
+
+    A present-but-non-list section is malformed: raise a 400 rather than
+    silently coercing it to an empty list. The coercion installed an EMPTY
+    pipeline (``graph_nodes``) or dropped declared edges (``edges``) instead of
+    rejecting the bad input, which is a client error, not a usable graph.
+    """
+    if key not in content:
+        return None
+    value = content[key]
+    if not isinstance(value, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Primitive graph section '{key}' must be a list",
+        )
+    return value
+
+
 def _template_graph_parts(
     content: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
@@ -2150,18 +2172,16 @@ def _template_graph_parts(
     graph under ``nodes`` instead (its ``agent`` slots name sibling primitive
     slugs), so reading the workflow shape here is what lets both primitive
     types install through the ONE shared build path rather than a second
-    builder. Malformed (non-list) sections read as empty so the caller's
-    validation can reject them with a 400 instead of failing mid-write.
+    builder. A section that is absent reads as empty; a present-but-non-list
+    section raises 400 (see :func:`_template_graph_section`).
     """
-    graph_nodes = content.get("graph_nodes")
-    if not isinstance(graph_nodes, list):
-        graph_nodes = content.get("nodes")
-    agents = content.get("agents")
-    edges = content.get("edges")
+    graph_nodes = _template_graph_section(content, "graph_nodes")
+    if graph_nodes is None:
+        graph_nodes = _template_graph_section(content, "nodes") or []
     return (
-        graph_nodes if isinstance(graph_nodes, list) else [],
-        agents if isinstance(agents, list) else [],
-        edges if isinstance(edges, list) else [],
+        graph_nodes,
+        _template_graph_section(content, "agents") or [],
+        _template_graph_section(content, "edges") or [],
     )
 
 
@@ -2200,7 +2220,12 @@ def _build_pipeline_from_template(
     pipeline_nodes = _convert_template_nodes(graph_nodes, agents, node_id_map)
     pipeline_edges = _convert_template_edges(edges, node_id_map)
 
-    return name, description, pipeline_nodes, pipeline_edges, len(agents), len(edges)
+    # A pipeline_template declares its agents in ``agents``; a workflow names
+    # them inline on each node (``agent`` slug -> ``template_agent``). Counting
+    # only ``len(agents)`` reported 0 for a workflow that carries an agent, so
+    # fall back to the agent slots actually installed.
+    agent_count = len(agents) if agents else sum(1 for node in pipeline_nodes if node.get("template_agent"))
+    return name, description, pipeline_nodes, pipeline_edges, agent_count, len(edges)
 
 
 def _build_template_node_id_map(graph_nodes: list[dict[str, Any]]) -> dict[str, str]:
@@ -2255,6 +2280,12 @@ def _convert_template_nodes(
         }
         if agent_index is not None and agent_index < len(agents):
             pipeline_node["template_agent"] = agents[agent_index]
+        elif node.get("agent"):
+            # A workflow node names its sibling agent primitive by slug instead
+            # of an ``agent_index``. Preserve the reference so a later agent
+            # configuration step can resolve it — dropping it left only the
+            # display label and lost the identity of the agent slot.
+            pipeline_node["template_agent"] = {"slug": node["agent"]}
         if node.get("node_type") == "manual":
             # FAR-889: carry every output-schema form through to the pipeline
             # node so the write-path guard accepts template manual gates.
@@ -2324,6 +2355,7 @@ def _pipeline_from_template_response(
     primitive_id: uuid.UUID,
     agent_count: int,
     edge_count: int,
+    ready_to_run: bool,
 ) -> PipelineFromTemplateResponse:
     """Build the pipeline-from-template response from a freshly created pipeline."""
     return PipelineFromTemplateResponse(
@@ -2335,7 +2367,7 @@ def _pipeline_from_template_response(
         template_source_id=primitive_id,
         agent_count=agent_count,
         edge_count=edge_count,
-        ready_to_run=True,
+        ready_to_run=ready_to_run,
         created_at=pipeline.created_at,
         updated_at=pipeline.updated_at,
     )
@@ -2453,7 +2485,13 @@ async def create_pipeline_from_template_endpoint(
         _log.exception(_CODE_LIBRARY_CREATE_PIPELINE_TEMPLATE)
         raise _not_implemented_error() from None
 
-    return _pipeline_from_template_response(pipeline, primitive_id, agent_count, edge_count)
+    return _pipeline_from_template_response(
+        pipeline,
+        primitive_id,
+        agent_count,
+        edge_count,
+        ready_to_run=bool(graph_nodes),
+    )
 
 
 @router.post(

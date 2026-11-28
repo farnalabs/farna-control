@@ -603,10 +603,95 @@ def test_create_pipeline_from_seeded_simplest_workflow_returns_201(client: TestC
     body = resp.json()
     assert body["name"] == "Simplest Workflow"
     assert body["template_source_id"] == str(primitive.id)
+    # The single agent node is honest about its agent slot: one agent, and the
+    # pipeline carries something to run.
+    assert body["agent_count"] == 1
+    assert body["ready_to_run"] is True
     assert len(pipeline.graph_nodes_json) == 1
     node = pipeline.graph_nodes_json[0]
     assert node["node_type"] == "agent"
     assert node["label"] == "spec-implementer"
+    # The workflow's sibling-agent slug reference must survive installation, not
+    # just its display label.
+    assert node["template_agent"] == {"slug": "spec-implementer"}
+
+
+def test_create_pipeline_from_workflow_with_non_list_edges_rejects(client: TestClient) -> None:
+    """A present-but-non-list ``edges`` is a 400, not silently dropped."""
+    primitive_id = uuid.uuid4()
+    primitive = _make_primitive(pid=primitive_id, primitive_type="workflow")
+    primitive.content_json = {
+        "nodes": [{"id": "spec-implementer", "agent": "spec-implementer"}],
+        "edges": "not-a-list",
+        "entry": "spec-implementer",
+    }
+
+    with (
+        patch("farna.api.routes.library.get_primitive", return_value=primitive),
+        patch("farna.api.routes.library.create_pipeline") as create_mock,
+        patch("farna.api.routes.library.set_rls_org"),
+        patch("farna.api.routes.library.set_rls_user_context"),
+    ):
+        resp = client.post(
+            f"/api/v1/libraries/{primitive_id}/create-pipeline",
+            json={},
+        )
+
+    assert resp.status_code == 400
+    assert "edges" in resp.json()["detail"]
+    create_mock.assert_not_called()
+
+
+def test_create_pipeline_from_template_with_non_list_graph_nodes_rejects(client: TestClient) -> None:
+    """A malformed ``graph_nodes`` on a pipeline_template is a 400, not an empty install."""
+    primitive_id = uuid.uuid4()
+    primitive = _make_primitive(pid=primitive_id, primitive_type="pipeline_template")
+    primitive.content_json = {
+        "agents": [],
+        "graph_nodes": {"not": "a list"},
+        "edges": [],
+    }
+
+    with (
+        patch("farna.api.routes.library.get_primitive", return_value=primitive),
+        patch("farna.api.routes.library.create_pipeline") as create_mock,
+        patch("farna.api.routes.library.set_rls_org"),
+        patch("farna.api.routes.library.set_rls_user_context"),
+    ):
+        resp = client.post(
+            f"/api/v1/libraries/{primitive_id}/create-pipeline",
+            json={},
+        )
+
+    assert resp.status_code == 400
+    assert "graph_nodes" in resp.json()["detail"]
+    create_mock.assert_not_called()
+
+
+def test_create_pipeline_from_template_with_non_list_edges_rejects(client: TestClient) -> None:
+    """A malformed ``edges`` on a pipeline_template is a 400, not a silent drop."""
+    primitive_id = uuid.uuid4()
+    primitive = _make_primitive(pid=primitive_id, primitive_type="pipeline_template")
+    primitive.content_json = {
+        "agents": [],
+        "graph_nodes": [{"id": "only-node", "node_type": "manual", "label": "Only", "output_schema_json": {"type": "object"}}],
+        "edges": 42,
+    }
+
+    with (
+        patch("farna.api.routes.library.get_primitive", return_value=primitive),
+        patch("farna.api.routes.library.create_pipeline") as create_mock,
+        patch("farna.api.routes.library.set_rls_org"),
+        patch("farna.api.routes.library.set_rls_user_context"),
+    ):
+        resp = client.post(
+            f"/api/v1/libraries/{primitive_id}/create-pipeline",
+            json={},
+        )
+
+    assert resp.status_code == 400
+    assert "edges" in resp.json()["detail"]
+    create_mock.assert_not_called()
 
 
 def test_create_pipeline_from_workflow_without_graph_rejects(client: TestClient) -> None:

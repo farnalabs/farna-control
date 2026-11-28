@@ -225,6 +225,100 @@ describe('LibraryPrimitiveCard', () => {
     expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
   })
 
+  it('does not render create-pipeline for a workflow with duplicate node ids', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: 'prim-1',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Duplicate Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: {
+          nodes: [{ id: 'n1' }, { id: 'n1' }],
+          edges: [],
+        },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
+  })
+
+  it('does not render create-pipeline for a workflow with a dangling edge', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: 'prim-1',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Dangling Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: {
+          nodes: [{ id: 'n1' }],
+          edges: [{ source: 'n1', target: 'missing-node' }],
+        },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
+  })
+
+  it('does not render create-pipeline for a workflow with non-list edges', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: 'prim-1',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Malformed Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: { nodes: [{ id: 'n1' }], edges: 'not-a-list' },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
+  })
+
+  it('renders create-pipeline for a workflow with no edges key', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: 'prim-1',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Edgeless Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: { nodes: [{ id: 'n1' }] },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(true)
+  })
+
+  it('renders create-pipeline for a workflow whose edges use node_id keys', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: 'prim-1',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Node Id Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: {
+          nodes: [{ id: 'n1' }, { id: 'n2' }],
+          edges: [{ source_node_id: 'n1', target_node_id: 'n2' }],
+        },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(true)
+  })
+
   it('emits create-pipeline when the workflow graph action is clicked', async () => {
     const wrapper = mountCard({
       prim: {
