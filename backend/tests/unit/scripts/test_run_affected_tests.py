@@ -84,6 +84,41 @@ def test_changed_test_files_still_selected_directly(tmp_path, monkeypatch):
     assert test_file in selected
 
 
+def test_is_collectable_test_matches_pytest_defaults():
+    assert mod._is_collectable_test("test_foo.py")
+    assert mod._is_collectable_test("foo_test.py")
+    assert not mod._is_collectable_test("testcontainers_harness.py")
+    assert not mod._is_collectable_test("helpers.py")
+
+
+def test_helper_module_maps_to_its_stem_tests_and_is_never_run_directly(tmp_path, monkeypatch):
+    """A support module under tests/ is not a test module.
+
+    Pytest collects nothing from ``tests/helpers/testcontainers_harness.py`` and
+    exits 5, so the selector must run the tests for its stem instead of handing
+    the helper itself to pytest (CI ``Test (Backend) affected`` regression).
+    """
+    _make_backend_tree(tmp_path)
+    helper = "backend/tests/helpers/testcontainers_harness.py"
+    (tmp_path / "backend" / "tests" / "helpers").mkdir(parents=True, exist_ok=True)
+    (tmp_path / helper).touch()
+    for name in (
+        "test_testcontainers_harness.py",
+        "test_testcontainers_harness_pull_retry.py",
+        "test_unrelated.py",
+    ):
+        (tmp_path / "backend" / "tests" / "unit" / name).touch()
+
+    monkeypatch.chdir(tmp_path)
+    selected = mod._select_test_files([helper])
+
+    assert helper not in selected
+    assert sorted(Path(p).name for p in selected) == [
+        "test_testcontainers_harness.py",
+        "test_testcontainers_harness_pull_retry.py",
+    ]
+
+
 def test_suite_grouping_separates_bdd_from_integration():
     paths = [
         "backend/tests/bdd/steps/test_email_settings.py",

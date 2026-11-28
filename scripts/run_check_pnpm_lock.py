@@ -2,9 +2,10 @@
 """Cross-platform pre-push wrapper for the frontend pnpm lockfile freshness check.
 
 Runs ``pnpm install --frozen-lockfile --ignore-scripts`` from ``frontend/`` —
-byte-for-byte the command CI's ``Frontend and WCAG`` and ``Frontend unit suite
-(merge-queue parity)`` jobs run.  Exit 0 when the lockfile is in sync with the
-manifests, 1 when it has drifted.
+byte-for-byte the command CI's ``Frontend lint and type-check`` job and the
+merge train's ``Validation: frontend`` and ``Validation: frontend unit parity
+(4 workers)`` jobs run.  Exit 0 when the lockfile is in sync with the manifests,
+1 when it has drifted.
 
 Why this exists
 ---------------

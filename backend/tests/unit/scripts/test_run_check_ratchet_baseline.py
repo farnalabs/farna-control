@@ -38,7 +38,7 @@ else:
     raise RuntimeError("Could not find repo root (scripts/run_check_ratchet_baseline.py)")
 
 REPO_ROOT = script_path.parent.parent
-CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+VALIDATE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "merge-validate.yml"
 
 _loader = SourceFileLoader("run_check_ratchet_baseline", str(script_path))
 mod = module_from_spec(spec_from_loader("run_check_ratchet_baseline", _loader))
@@ -799,7 +799,7 @@ def test_resolve_base_ignores_the_push_hint_when_github_base_ref_is_set(tmp_path
 
     On a pull_request event both env vars can be present, and the hint names the
     branch's own previous head - not a base. The guard must ignore it whenever
-    ``GITHUB_BASE_REF`` is set, so correctness does not depend on ``ci.yml``
+    ``GITHUB_BASE_REF`` is set, so correctness does not depend on the workflow
     blanking the hint.
     """
     repo = _make_repo(tmp_path)
@@ -1039,32 +1039,33 @@ def test_end_to_end_malformed_working_tree_fails_closed_even_when_the_base_is_al
 
 
 # ---------------------------------------------------------------------------
-# ci.yml workflow contract: the wiring that feeds the resolver
+# merge-validate.yml workflow contract: the wiring that feeds the resolver
 # ---------------------------------------------------------------------------
-def _ratchet_guard_step_env() -> dict[str, str]:
-    """The ``env:`` mapping of the ci.yml step that runs the ratchet guard."""
-    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+def _ratchet_guard_step() -> dict:
+    """The merge train step that runs the FAR-2699 ratchet guard."""
+    workflow = yaml.safe_load(VALIDATE_WORKFLOW.read_text(encoding="utf-8"))
     for job in workflow["jobs"].values():
         for step in job.get("steps") or []:
             if "run_check_ratchet_baseline.py" in (step.get("run") or ""):
-                env = step.get("env")
-                assert isinstance(env, dict), "the ratchet guard step has no env mapping"
-                return env
-    raise AssertionError("ci.yml has no step that runs scripts/run_check_ratchet_baseline.py")
+                return step
+    raise AssertionError("merge-validate.yml has no step that runs scripts/run_check_ratchet_baseline.py")
 
 
-def test_ci_workflow_wires_the_pr_base_and_keeps_the_push_hint():
-    """The workflow must keep feeding the guard BOTH base signals, correctly gated.
+def test_merge_train_feeds_the_ratchet_guard_the_train_base():
+    """The guard must compare against the train's base, never the branch's HEAD^.
 
-    ``GITHUB_BASE_REF`` is load-bearing: drop it and a pull request is left with
-    only the push hint (the branch's own previous head), reintroducing the
-    FAR-2699 bug. The ``RATCHET_BASE_REV`` blanking is belt-and-braces - the
-    resolver ignores that hint whenever ``GITHUB_BASE_REF`` is set (see
-    ``_resolve_base``) - so do not "simplify" it away: keep it push-gated so the
-    workflow and the resolver agree.
+    The merge train validates a branch composed of squash commits of admitted
+    PRs, so ``HEAD^`` is another PR's tree rather than the comparison base -
+    exactly the FAR-2699 failure in which a loosened shrink-only baseline still
+    passes. The step therefore names the base explicitly with
+    ``--base "origin/${TRAIN_BASE_REF}"`` (the ``base_ref`` input) and fetches
+    it first, because a fresh checkout of the train branch need not have an
+    ``origin/main`` remote-tracking ref.
     """
-    env = _ratchet_guard_step_env()
-
-    assert env.get("GITHUB_BASE_REF") == "${{ github.base_ref }}"
-    assert "github.event.before" in env.get("RATCHET_BASE_REV", "")
-    assert "push" in env.get("RATCHET_BASE_REV", "")
+    step = _ratchet_guard_step()
+    env = step.get("env")
+    assert isinstance(env, dict), "the ratchet guard step has no env mapping"
+    assert env.get("TRAIN_BASE_REF") == "${{ inputs.base_ref }}"
+    run = step.get("run") or ""
+    assert '--base "origin/${TRAIN_BASE_REF}"' in run
+    assert "git fetch" in run
