@@ -280,8 +280,13 @@ repos:
         pass_filenames: false
         stages: [pre-push]
       # EXACT frontend type-check invocation (ci.yml frontend job):
-      #   pnpm run type-check    (frontend/package.json: "vue-tsc --noEmit")
+      #   pnpm run type-check    (frontend/package.json:
+      #   "cross-env NODE_OPTIONS=--max-old-space-size=2560 vue-tsc --noEmit")
       # run_frontend_npm.py runs `pnpm run type-check` in frontend/ — same command.
+      # The heap pin lives in the script itself: vue-tsc's working set is
+      # ~2.05 GB, above Node's RAM-derived default old-space limit (~2 GB on a
+      # 4 GB runner and on a small dev box), so without it this gate and CI both
+      # die on a V8 OOM instead of a type error (FAR-2855).
       - id: prepush-vue-tsc
         name: prepush vue-tsc (exact CI type-check command)
         entry: uv run --project backend --no-sync --frozen python scripts/run_prepush_gated_check.py --pattern "frontend/src/**" -- uv run --project backend --no-sync --frozen python scripts/run_frontend_npm.py type-check

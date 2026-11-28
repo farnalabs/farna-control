@@ -315,7 +315,7 @@ cd frontend
 pnpm run lint                 # eslint src/**/*.{vue,ts,js}
 
 # Type check
-pnpm run type-check           # vue-tsc --noEmit
+pnpm run type-check           # vue-tsc --noEmit (heap pinned to 2560 MB)
 
 # Format check
 pnpm run lint:fix             # auto-fix lint issues
