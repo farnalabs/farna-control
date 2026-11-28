@@ -16,7 +16,7 @@ documented.
 |---|---|---|
 | Backend + SAQ workers | `farna-control/backend` | Trusted: holds org credentials, drives the engine |
 | Docker socket proxy | `lscr.io/linuxserver/socket-proxy` (digest-pinned in `deploy/compose/runner.yml`) | Filtered Docker API endpoint – accident prevention, NOT containment of a compromised backend |
-| Runner workspaces | `modulo-runner:opencode` (first-party, digest-pinned per minor) | Untrusted: runs agent-authored commands/LLM sessions |
+| Runner workspaces | `ghcr.io/farnalabs/farna-control/runner-opencode` (first-party, digest-pinned per release) | Untrusted: runs agent-authored commands/LLM sessions |
 | Workspace network | `modulo-runner-workspace` (compose-declared bridge) | The ONLY network a workspace joins – validated at CRUD, dispatch, and provider boundary (FAR-1020) |
 
 ## Execution-tier model (where T1 sits)
@@ -205,15 +205,18 @@ dependency CVEs and misconfigurations; it does not scan the built images.
 farna`, `nginx -t`) only, with no vulnerability gate. Until the automated
 trivy/grype image gate lands (the GA/CI item below), scanning a published
 image tag is a manual operator step:
-`trivy image ghcr.io/farnalabs/farna-control:<version>`. The digest-drift guard
-(the release job asserts the seed/docs digest constant matches the latest
-`released-<minor>` tag) is likewise a GA/CI item; until it exists, digest
-advances are manual and the pinned digests in `deploy/compose/runner.yml` +
-`farna/db/bundled_runner_template.py` are the source of truth. The CI
-rig's proxy pin in `deploy/compose/runner-ci.yml` is ALIGNED to production's
-digest – digest bumps must move the two compose files together, asserted by
-the harness composition guard
-(`test_overlay_matches_prod_proxy_config`).
+`trivy image ghcr.io/farnalabs/farna-control:<version>`. The shipped
+image reference is not a second hand-maintained source of truth: the release
+job builds and pushes the release's `runner-opencode` image, bakes the resolved
+digest into `BUNDLED_RUNNER_IMAGE_REF` in the CI checkout, and gates it with
+`scripts/check_released_runner_image_ref.py` before the remaining images are
+built. The committed default on `main` is the all-zero placeholder digest (it
+never names a real pin), and a released digest reaches ordinary rows through
+template drift — a row still pointing at the first-party runner repository at
+any digest advances on apply. The CI rig's proxy pin in
+`deploy/compose/runner-ci.yml` is ALIGNED to production's digest – digest bumps
+must move the two compose files together, asserted by the harness composition
+guard (`test_overlay_matches_prod_proxy_config`).
 
 ## Registration env matrix
 
@@ -341,9 +344,11 @@ setup instructions.
 Honest inventory of D4 boundaries that are documented rather than
 mechanically guarded here:
 
-- **Digest-drift guard + GHCR publish** (structure test, trivy/grype fail
-  high/critical, cosign/SBOM attest) – GA/CI item; digests are pinned but
-  the automated publish/verify pipeline does not exist yet.
+- **Image scanning and attestation at publish** (structure test, trivy/grype
+  fail high/critical, cosign/SBOM attest) – GA/CI item. The digest bake is not
+  pending: the release job resolves the pushed runner image's manifest digest,
+  bakes it into `BUNDLED_RUNNER_IMAGE_REF` in the CI checkout, and gates it
+  with `scripts/check_released_runner_image_ref.py`.
 - **The compose overlay CI guard** (no `privileged: true`, no host
   network/pid/ipc, no unrestricted `cap_add` in overlay services; no host
   ports for the proxy) – the overlay conforms today; the CI job that

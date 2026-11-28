@@ -163,12 +163,15 @@ Additional operational env for a shared or multi-deployment engine:
   `FARNA_CONTROL_DOCKER_HOST` – never a silent fallback.
 
 **Runner image on the engine.** The pinned runner image must exist on the
-VM's engine before dispatch can provision a workspace. Check the operator
-guide §3 for the digest you are pinned to and the known placeholder-digest
-dispatch-breakage window: until the GHCR publish job lands a real digest,
-self-build the image on the VM
-(`deploy/docker/runner-opencode.Dockerfile`), pin its digest per §3, and
-re-seed/apply.
+VM's engine before dispatch can provision a workspace (or the engine must be
+able to pull it). The release workflow builds `runner-opencode`, resolves its
+manifest digest, and bakes it into the Bundled Runner template constant, so a
+release install is pinned to a pullable digest. Check the operator guide §3
+for the digest you are pinned to. If the profile still carries the all-zero
+placeholder (a row seeded by an older build), the Runners page reports it as
+drifted; apply the template to write the released digest. To pin your own
+build, use `deploy/docker/runner-opencode.Dockerfile`, set its digest on the
+profile, and the image reference becomes operator-owned.
 
 ### Step 6 – Run a `sandbox_agent` node and collect its output
 

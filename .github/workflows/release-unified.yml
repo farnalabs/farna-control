@@ -961,7 +961,7 @@ jobs:
       all_in_one_digest: ${{ steps.publish_images.outputs.all_in_one_digest || steps.retag_images.outputs.all_in_one_digest }}
       backend_digest: ${{ steps.publish_images.outputs.backend_digest || steps.retag_images.outputs.backend_digest }}
       frontend_digest: ${{ steps.publish_images.outputs.frontend_digest || steps.retag_images.outputs.frontend_digest }}
-      runner_opencode_digest: ${{ steps.publish_images.outputs.runner_opencode_digest || steps.retag_images.outputs.runner_opencode_digest }}
+      runner_opencode_digest: ${{ steps.publish_runner_image.outputs.runner_opencode_digest || steps.retag_images.outputs.runner_opencode_digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -2365,6 +2365,80 @@ jobs:
       # -----------------------------------------------------------------------
       # Publish container images (cut and recut)
       # -----------------------------------------------------------------------
+      # FAR-2853: publish the runner image FIRST, resolve its manifest digest,
+      # and bake that digest into the Bundled Runner template constant in this
+      # CI checkout before the all-in-one / backend images are built. Those
+      # images embed BUNDLED_RUNNER_IMAGE_REF; building them before the digest
+      # is known would ship the all-zero placeholder and break every dispatch
+      # on the seeded profile for the whole release.
+      - name: Publish runner image and bake its digest
+        id: publish_runner_image
+        if: inputs.mode == 'cut' || inputs.mode == 'recut'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RC_TAG: ${{ steps.cut.outputs.rc_tag || steps.recut.outputs.rc_tag }}
+          REGISTRY_USER: ${{ github.actor }}
+          IMAGE_NAMESPACE: farnalabs/farna-control
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${RC_TAG}"
+          RUNNER_IMAGE_NAME="$IMAGE_NAMESPACE/runner-opencode"
+
+          # Log in to GHCR
+          echo "${GH_TOKEN}" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+          echo "Building and pushing runner-opencode with tag $TAG..."
+          docker buildx build \
+            "." \
+            --file "deploy/docker/runner-opencode.Dockerfile" \
+            --platform linux/amd64 \
+            --push \
+            --tag "ghcr.io/$RUNNER_IMAGE_NAME:$TAG" \
+            --cache-from type=gha,scope="runner-opencode" \
+            --cache-to type=gha,mode=max,scope="runner-opencode"
+
+          echo "Smoke check: ghcr.io/$RUNNER_IMAGE_NAME:$TAG"
+          docker run --rm --entrypoint opencode "ghcr.io/$RUNNER_IMAGE_NAME:$TAG" --version
+
+          RUNNER_DIGEST="$(docker buildx imagetools inspect "ghcr.io/$RUNNER_IMAGE_NAME:$TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if [[ ! "$RUNNER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::missing or invalid runner-opencode manifest digest for ghcr.io/$RUNNER_IMAGE_NAME:$TAG: '$RUNNER_DIGEST'"
+            exit 1
+          fi
+          echo "runner_opencode_digest=$RUNNER_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "runner-opencode=ghcr.io/$RUNNER_IMAGE_NAME@$RUNNER_DIGEST"
+
+          # Build-time injection into THIS checkout only. The released image
+          # bakes the real pinned digest; origin/main keeps the placeholder
+          # default (nothing is committed or pushed back).
+          TEMPLATE_FILE="backend/src/farna/db/bundled_runner_template.py"
+          SHIPPED_REF="ghcr.io/$RUNNER_IMAGE_NAME@$RUNNER_DIGEST"
+          python3 - "$TEMPLATE_FILE" "$SHIPPED_REF" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          shipped = sys.argv[2]
+          source = path.read_text(encoding="utf-8")
+          pattern = re.compile(r'(?m)^BUNDLED_RUNNER_IMAGE_REF\s*=\s*"[^"]*"')
+          new_source, count = pattern.subn(f'BUNDLED_RUNNER_IMAGE_REF = "{shipped}"', source)
+          if count != 1:
+              raise SystemExit(f"FAR-2853: expected exactly one BUNDLED_RUNNER_IMAGE_REF assignment in {path}, found {count}")
+          path.write_text(new_source, encoding="utf-8")
+          print(f"Injected BUNDLED_RUNNER_IMAGE_REF={shipped}")
+          PY
+
+          # Release gate: refuse to build/publish the all-in-one and backend
+          # images if the shipped reference is still the placeholder, is not a
+          # @sha256 pin, or does not name the runner-opencode repository.
+          python3 scripts/check_released_runner_image_ref.py
+
+      # -----------------------------------------------------------------------
+      # Publish the remaining images (the runner image and its digest are
+      # already published and baked above).
+      # -----------------------------------------------------------------------
       - name: Publish container images to GHCR
         id: publish_images
         if: inputs.mode == 'cut' || inputs.mode == 'recut'
@@ -2378,10 +2452,11 @@ jobs:
           set -euo pipefail
           TAG="${RC_TAG}"
 
-          # Log in to GHCR
+          # Log in to GHCR (docker config persists across steps; explicit here
+          # so this step stands alone if reordered).
           echo "${GH_TOKEN}" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
 
-          for img in all-in-one backend frontend runner-opencode; do
+          for img in all-in-one backend frontend; do
             case "$img" in
               all-in-one)
                 context="."
@@ -2398,17 +2473,11 @@ jobs:
                 dockerfile="frontend/Dockerfile.prod"
                 image_name="$IMAGE_NAMESPACE/frontend"
                 ;;
-               runner-opencode)
-                 context="."
-                 dockerfile="deploy/docker/runner-opencode.Dockerfile"
-                 image_name="$IMAGE_NAMESPACE/runner-opencode"
-                 ;;
-               *)
-                 echo "::error::unsupported image key: $img"
-                 exit 1
-                 ;;
-             esac
-
+              *)
+                echo "::error::unsupported image key: $img"
+                exit 1
+                ;;
+            esac
 
             echo "Building and pushing $img with tag $TAG..."
 
@@ -2448,30 +2517,25 @@ jobs:
                 # workaround.
                 docker run --rm --add-host backend:127.0.0.1 --entrypoint nginx "$IMAGE" -t
                 ;;
-               runner-opencode)
-                 docker run --rm --entrypoint opencode "$IMAGE" --version
-                 ;;
-               *)
-                 echo "::error::unsupported image key during smoke check: $img"
-                 exit 1
-                 ;;
-             esac
-
+              *)
+                echo "::error::unsupported image key during smoke check: $img"
+                exit 1
+                ;;
+            esac
           done
 
-           # Resolve the immutable manifest digest for every published image.
-           # The tag is only a lookup key; attestations target these digests.
-           for img in all-in-one backend frontend runner-opencode; do
-             case "$img" in
-               all-in-one) image_name="$IMAGE_NAMESPACE"; output_name=all_in_one_digest ;;
-               backend) image_name="$IMAGE_NAMESPACE/backend"; output_name=backend_digest ;;
-               frontend) image_name="$IMAGE_NAMESPACE/frontend"; output_name=frontend_digest ;;
-               runner-opencode) image_name="$IMAGE_NAMESPACE/runner-opencode"; output_name=runner_opencode_digest ;;
-               *)
-                 echo "::error::unsupported image key during digest lookup: $img"
-                 exit 1
-                 ;;
-             esac
+          # Resolve the immutable manifest digest for the remaining images.
+          # The tag is only a lookup key; attestations target these digests.
+          for img in all-in-one backend frontend; do
+            case "$img" in
+              all-in-one) image_name="$IMAGE_NAMESPACE"; output_name=all_in_one_digest ;;
+              backend) image_name="$IMAGE_NAMESPACE/backend"; output_name=backend_digest ;;
+              frontend) image_name="$IMAGE_NAMESPACE/frontend"; output_name=frontend_digest ;;
+              *)
+                echo "::error::unsupported image key during digest lookup: $img"
+                exit 1
+                ;;
+            esac
 
             digest="$(docker buildx imagetools inspect "ghcr.io/$image_name:$TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')"
             if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then

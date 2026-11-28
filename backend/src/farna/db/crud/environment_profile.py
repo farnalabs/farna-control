@@ -225,15 +225,22 @@ async def apply_bundled_runner_template(session: AsyncSession, profile_id: uuid.
     Refreshes ONLY the template-owned fields the live drift helper reports as
     diverged — top-level ``network_policy`` / ``persistence_policy`` and the
     drifted keys WITHIN ``config_json`` — so operator-owned fields survive the
-    refresh. ``image_ref`` is refreshed only while the row still carries the
-    release placeholder digest (or no image): in that state the template owns
-    it, so an advanced ``BUNDLED_RUNNER_IMAGE_REF`` reaches a placeholder-seeded
-    row. Once the operator points the profile at their own image it is
-    operator-owned, so it is neither reported as drift nor reset back to the
-    bundled placeholder by an apply. Other operator-owned fields (name,
-    description, secret refs, capabilities, timeout tweaks the operator made)
-    survive too. Only template-shaped ``runner_docker`` rows participate
-    (drift helper's ``is_seeded`` gate); a non-template row returns None.
+    refresh. ``image_ref`` is refreshed only while the template still owns it
+    (no image, the release placeholder digest, or a first-party runner
+    reference at any digest — see ``is_template_owned_image_ref``) AND the
+    shipped constant is a real release pin (``shipped_image_ref_is_real_pin``):
+    in that state an advanced ``BUNDLED_RUNNER_IMAGE_REF`` reaches the row, so
+    an upgrade advances the digest on EVERY release, not just the first one off
+    the placeholder. The template may only ADVANCE a reference, so on a
+    non-release build — whose shipped constant is still the placeholder — it
+    writes nothing to ``image_ref``: that would downgrade a real
+    earlier-release digest and break dispatch. Once the operator points the
+    profile at another repository the reference is operator-owned, so it is
+    neither reported as drift nor reset back to the bundled reference by an
+    apply. Other operator-owned fields (name, description, secret refs,
+    capabilities, timeout tweaks the operator made) survive too. Only
+    template-shaped ``runner_docker`` rows participate (drift helper's
+    ``is_seeded`` gate); a non-template row returns None.
 
     Revalidates the runner_docker persistence policy after the merge — the
     template always applies ``ephemeral``, so a previously-locked row stays
@@ -244,6 +251,7 @@ async def apply_bundled_runner_template(session: AsyncSession, profile_id: uuid.
         TEMPLATE_CONFIG_JSON,
         TEMPLATE_OWNED_FIELDS,
         is_template_owned_image_ref,
+        shipped_image_ref_is_real_pin,
         template_drift_fields,
     )
 
@@ -260,9 +268,13 @@ async def apply_bundled_runner_template(session: AsyncSession, profile_id: uuid.
     if not drift["is_seeded"]:
         return None
 
-    # Placeholder-scoped ownership: refresh the image ONLY while the template
-    # still owns it. An operator-set BYO image is never clobbered.
-    if is_template_owned_image_ref(profile.image_ref):
+    # First-party-repository-scoped ownership: refresh the image ONLY while the
+    # template still owns it (empty, placeholder, or a first-party runner ref at
+    # any digest). An operator-set BYO image is never clobbered. The shipped
+    # constant must also be a real release pin: on a non-release build it is the
+    # all-zero placeholder, and writing it here would DOWNGRADE a real earlier
+    # first-party digest (the template may only advance a reference).
+    if shipped_image_ref_is_real_pin() and is_template_owned_image_ref(profile.image_ref):
         profile.image_ref = BUNDLED_RUNNER_IMAGE_REF
     profile.network_policy = TEMPLATE_OWNED_FIELDS["network_policy"]
     profile.persistence_policy = TEMPLATE_OWNED_FIELDS["persistence_policy"]

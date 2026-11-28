@@ -1,10 +1,10 @@
 """Bundled Runner shipped template + live drift (FAR-590, D4).
 
 The shipped template constants live in the DB layer
-(``farna.db.bundled_runner_template``) so the seeding hook and the backfill
-migration can consume them without a ``db -> core`` import; this module
-re-exports them and owns the LIVE drift helper (no fingerprint lifecycle:
-drift is computed against the constants on every read).
+(``farna.db.bundled_runner_template``) so the seeding hook and the
+shipped-template drift helper can consume them without a ``db -> core`` import;
+this module re-exports them and owns the LIVE drift helper (no fingerprint
+lifecycle: drift is computed against the constants on every read).
 """
 
 from __future__ import annotations
@@ -13,24 +13,28 @@ from typing import Any
 
 from farna.db.bundled_runner_template import (
     BUNDLED_RUNNER_IMAGE_REF,
+    BUNDLED_RUNNER_IMAGE_REPOSITORY,
     BUNDLED_RUNNER_PLACEHOLDER_DIGEST,
     BUNDLED_RUNNER_PROVIDER_TYPE,
     TEMPLATE_CONFIG_JSON,
     TEMPLATE_OWNED_FIELDS,
     TEMPLATE_PROFILE_NAME,
     build_bundled_runner_profile_values,
+    is_first_party_runner_image_ref,
     is_placeholder_bundled_runner_image_ref,
     template_drift_fields,
 )
 
 __all__ = [
     "BUNDLED_RUNNER_IMAGE_REF",
+    "BUNDLED_RUNNER_IMAGE_REPOSITORY",
     "BUNDLED_RUNNER_PLACEHOLDER_DIGEST",
     "BUNDLED_RUNNER_PROVIDER_TYPE",
     "TEMPLATE_CONFIG_JSON",
     "TEMPLATE_OWNED_FIELDS",
     "TEMPLATE_PROFILE_NAME",
     "build_bundled_runner_profile_values",
+    "is_first_party_runner_image_ref",
     "is_placeholder_bundled_runner_image_ref",
     "template_drift_status",
 ]
@@ -48,8 +52,9 @@ def template_drift_status(profile_row: Any) -> dict[str, Any]:
     the drift logic has ONE implementation shared with the crud apply
     helper — the core module owns the LIVE profile-row access.
     """
-    # image_ref participates only while the template still owns it (empty or
-    # the release placeholder digest); an operator-set BYO image is not drift.
+    # image_ref participates only while the template still owns it (empty, the
+    # release placeholder digest, or a first-party runner reference at any
+    # digest); an operator-set BYO image in another repository is not drift.
     return template_drift_fields(
         provider_type=getattr(profile_row, "provider_type", None),
         image_ref=getattr(profile_row, "image_ref", None),

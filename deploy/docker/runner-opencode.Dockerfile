@@ -5,28 +5,36 @@
 # Contains everything a Farna Control sandbox_agent node needs to execute opencode
 # (or script-mode commands) inside a hardened workspace container:
 #   - git + common CLIs a script mode run may need
-#   - opencode (version pinned via the OPENCODE_VERSION build arg — the
-#     release job advances it and republishes; see "Pin-advance process" below)
+#   - opencode (version pinned via the OPENCODE_VERSION build arg; advancing that
+#     pin is a pending GA item — see "Pin-advance process" below)
 #
 # Pin-advance process (ADR 029 / plan D4):
-#   1. The GHCR publish release job (GA item) bumps OPENCODE_VERSION to the
-#      current minor, builds, then scans (trivy/grype fail high/critical)
-#      and runs container-structure-test before publishing the digest.
-#   2. The published tag advances the per-minor `released-<minor>` tag AND
-#     updates the digest constant (`BUNDLED_RUNNER_IMAGE_REF` in
-#     backend/src/farna/db/bundled_runner_template.py). The release job's
-#     digest-drift guard asserts the constant matches `released-<minor>`.
-#   3. Support window: the image supports the CURRENT opencode minor and
-#     N-1. A pin advance that moves past N-1 is a release-note item.
-#   4. Digests below are release-advanced: the D4 seed constants pin the
-#     per-minor digest, and an operator-pinned older digest survives
-#     (template updates are surfaced for review, never silently applied —
-#     the live drift helper in the profile module).
+#   1. TODAY the release job (release-unified.yml, cut/recut) builds this
+#      Dockerfile at its pinned OPENCODE_VERSION / BASE_IMAGE, smoke-checks the
+#      published image (`docker run --entrypoint opencode ... --version`) and
+#      resolves its manifest digest. It does NOT bump OPENCODE_VERSION, and it
+#      does NOT scan the image (no trivy/grype, no container-structure-test).
+#      publish-images.yml does not build this image at all.
+#   2. PENDING GA: the release job will advance OPENCODE_VERSION to the current
+#      opencode minor on each release, and scan the built image (trivy/grype
+#      failing on high/critical) and run container-structure-test before it is
+#      published.
+#   3. The release job resolves the pushed image's manifest digest and bakes it
+#      into BUNDLED_RUNNER_IMAGE_REF
+#      (backend/src/farna/db/bundled_runner_template.py) IN THE CI CHECKOUT,
+#      then gates it with scripts/check_released_runner_image_ref.py. The
+#      rewritten value is never committed: the committed default on main is the
+#      all-zero placeholder digest.
+#   4. Support window: the image supports the CURRENT opencode minor and
+#      N-1. A pin advance that moves past N-1 is a release-note item.
+#   5. Rows still pointing at the first-party runner repository at any digest
+#      are template-owned: a later release surfaces as drift and an apply
+#      advances them. An operator image in another repository is never touched.
 
 # FROM digest-pinned base (FAR-590 D4 blocking criterion). debian:12-slim keeps
-# the image small while glibc keeps opencode + python wheels happy. The digest
-# below is release-advanced by the publish job; bump it only when the base
-# image is re-scanned and the seed/docs digest constants advance with it.
+# the image small while glibc keeps opencode + python wheels happy. No workflow
+# advances this digest today: bump it by hand when the base image is re-scanned
+# (the automated re-scan/advance is part of the pending GA item above).
 # Pin by DIGEST ONLY (no :tag) so the base image reference is unambiguous and
 # cannot silently drift to a different tag.
 ARG BASE_IMAGE=debian@sha256:3cda3ca472ce45507a5109c6a3907093e24d9ae67d55954c9a07a45665dafba2
