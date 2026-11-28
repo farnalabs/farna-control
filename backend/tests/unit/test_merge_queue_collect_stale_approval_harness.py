@@ -133,7 +133,7 @@ class Harness:
         _write(self.fixtures / "pr_list.json", json.dumps(self.prs))
         fragment = _collect_run_block().replace("${{ github.repository }}", REPO)
         fragment = fragment.replace("/tmp/", "tmp/")
-        (self.work / "tmp").mkdir()
+        (self.work / "tmp").mkdir(exist_ok=True)
         # The step calls its helpers by repo-relative path.
         shutil.copytree(REPO_ROOT / ".github" / "scripts", self.work / ".github" / "scripts")
         _write(self.work / "step.sh", 'export PATH="$PWD/bin:$PATH"\n' + fragment)
@@ -197,3 +197,14 @@ def test_the_fast_lane_path_without_an_approval_is_unchanged(harness: Harness) -
 
     assert ready == [FRESH_PR]
     assert "fast-lane eligible" in log
+
+
+def test_a_leftover_held_back_file_from_an_earlier_pass_is_cleared(harness: Harness) -> None:
+    harness.add_pr(FRESH_PR, commit_date=BEFORE_APPROVAL)
+    _write(harness.work / "tmp" / "stale_approval_prs.txt", f"{STALE_PR}\n")
+
+    ready, log, summary = harness.run()
+
+    assert ready == [FRESH_PR]
+    assert "Held back" not in log
+    assert "Held back" not in summary

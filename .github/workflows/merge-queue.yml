@@ -468,7 +468,7 @@ jobs:
           # (farna-reviewbot is the reviewer identity after the FAR rebrand).
           APPROVED_COUNT=0
           echo "[]" > /tmp/prs.json
-          rm -f /tmp/ci_pending_prs.txt
+          rm -f /tmp/ci_pending_prs.txt /tmp/stale_approval_prs.txt
 
           jq -c '.[]' /tmp/all_prs.json | while IFS= read -r pr; do
             NUM=$(echo "$pr" | jq -r '.number')
