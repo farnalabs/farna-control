@@ -112,8 +112,8 @@ than being refused for the missing grant. Nothing publishes automatically.
 Credential contract (FAR-2748): the route groups accept a user JWT or an `mk_`
 org API key. The `farna-control apply` CLI manages System Maps as a declared
 entity kind and authenticates with its documented `mk_` key, so the four routes
-its workflow uses — the map collection read (`GET /api/v1/system-maps`) and the
-create / update / revision-create writes — carry the any-credential permission
+its workflow uses - the map collection read (`GET /api/v1/system-maps`) and the
+create / update / revision-create writes - carry the any-credential permission
 gate together with the any-credential plan/feature gates
 (`require_feature_any_credential` / `require_org_feature_any_credential`), so a
 JWT-only plan gate cannot reject the key before the permission gate runs (the

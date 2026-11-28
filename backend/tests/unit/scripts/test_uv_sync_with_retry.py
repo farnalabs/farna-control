@@ -130,7 +130,14 @@ def test_deploy_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
 
 def test_ci_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
     ci = _assert_no_raw_uv_sync("ci.yml")
+    # 6 since the PR tier went fast and the full-suite backend jobs moved to
+    # merge-validate.yml (the merge tier owns the heavy dependency installs).
     assert ci.count("uv_sync_with_retry.sh") == 6
+
+
+def test_merge_validate_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
+    validate = _assert_no_raw_uv_sync("merge-validate.yml")
+    assert validate.count("uv_sync_with_retry.sh") == 6
 
 
 def test_bdd_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
