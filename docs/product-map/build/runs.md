@@ -82,7 +82,9 @@ incident was exactly that disagreement).
 A non-terminal run is in exactly one class: `queued` (`pending`), `in_flight`
 (`running`, `claimed`), `recovering` (`unknown`, holds its slot but is not fresh
 work) or `parked` (`awaiting_human`, `hitl_parked`). A terminal status has no
-outgoing transition; every non-terminal status has at least one.
+outgoing transition except a declared `reopens_terminal` operator-recovery edge
+(only `failed` / `eval_failed` may be re-opened, and only back into `running` /
+`pending`); every non-terminal status has at least one.
 
 Every entry into execution is capacity-admitted against the pipeline's
 `max_concurrent_runs`: the executor's `_check_capacity` on a queued claim, the

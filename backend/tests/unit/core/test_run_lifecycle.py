@@ -7,9 +7,10 @@ These tests pin four things:
    here until the author updates the literal: a computed projection alone could
    silently absorb a new status.
 2. **Structure** — every non-terminal status has an outgoing transition, every
-   terminal status has none, the non-terminal classes partition the active set,
-   no status is both executing and parked, and the two real self/return edges
-   (``claimed -> claimed``, ``hitl_parked -> running``) are declared.
+   terminal status only leaves through a declared recovery edge, the
+   non-terminal classes partition the active set, no status is both executing
+   and parked, and the two real self/return edges (``claimed -> claimed``,
+   ``hitl_parked -> running``) are declared.
 3. **The constraint is derived** — ``ck_runs_status`` is parsed back out of the
    model and asserted equal to the lifecycle vocabulary (one source, not two).
 4. **The model bites** — injecting a seventh non-terminal status (``paused_quota``)
@@ -211,11 +212,49 @@ class TestTableStructure:
         recovery = [transition for transition in TRANSITIONS if transition.reopens_terminal]
         assert recovery, "the operator recovery edges must be declared, not omitted"
         assert all(transition.from_status in lifecycle.TERMINAL_STATUSES for transition in recovery)
-        assert {(transition.from_status, transition.to_status) for transition in recovery} >= {
+        assert {(transition.from_status, transition.to_status) for transition in recovery} == {
             (lifecycle.STATUS_FAILED, lifecycle.STATUS_RUNNING),
             (lifecycle.STATUS_EVAL_FAILED, lifecycle.STATUS_RUNNING),
             (lifecycle.STATUS_EVAL_FAILED, lifecycle.STATUS_PENDING),
         }
+
+    def test_a_recovery_edge_may_not_reopen_an_arbitrary_terminal_status(self) -> None:
+        """The flag alone must not legalise a terminal edge.
+
+        ``reopens_terminal`` keeps the real operator recovery edges in the
+        relation; if the flag were unconstrained, any ``cancelled -> ...`` (or
+        ``complete -> ...``) edge could declare it and pass the structural pins.
+        Both bounds are pinned: a recovery edge may only re-open
+        ``failed``/``eval_failed`` and may only re-enter ``running``/``pending``.
+        """
+        injected = (
+            *TRANSITIONS,
+            Transition(
+                lifecycle.STATUS_CANCELLED,
+                "recover_cancelled",
+                lifecycle.STATUS_FAILED,
+                "an arbitrary terminal edge that claims a cancelled run is recoverable",
+                True,
+            ),
+            Transition(
+                lifecycle.STATUS_CANCELLED,
+                "recover_cancelled_into_running",
+                lifecycle.STATUS_RUNNING,
+                "an arbitrary terminal edge that claims a cancelled run may re-enter execution",
+                True,
+            ),
+            Transition(
+                lifecycle.STATUS_FAILED,
+                "recover_failed_terminal",
+                lifecycle.STATUS_FAILED,
+                "a declared recovery edge that targets another terminal status",
+                True,
+            ),
+        )
+        violations = lifecycle_violations(transitions=injected)
+        for action in ("recover_cancelled", "recover_cancelled_into_running", "recover_failed_terminal"):
+            named = [violation for violation in violations if "reopens_terminal" in violation and repr(action) in violation]
+            assert named, f"the unconstrained recovery edge {action!r} was not rejected: {violations}"
 
     def test_every_action_is_documented_in_one_line(self) -> None:
         for transition in TRANSITIONS:

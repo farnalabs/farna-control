@@ -152,16 +152,21 @@ STATUSES: tuple[Status, ...] = (
 # Transitions — (from_status, action, to_status), each action documented once.
 #
 # ``from_status`` is ``None`` for creation. A terminal status has NO outgoing
-# transition; every non-terminal status has at least one.
+# transition except a declared ``reopens_terminal`` operator-recovery edge
+# (bounded to ``RECOVERABLE_TERMINAL_STATUSES`` -> ``RECOVERY_TARGET_STATUSES``);
+# every non-terminal status has at least one.
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True, slots=True)
 class Transition:
     """One legal edge of the run lifecycle, with a one-line explanation.
 
     ``reopens_terminal`` marks the deliberate operator recovery edges that take a
-    TERMINAL run back into execution (recover-node). Terminal is otherwise
-    absorbing; keeping these edges in the table (instead of omitting them) is
-    what makes every real writer expressible through the declared relation.
+    TERMINAL run back into execution (recover-node). The flag is NOT a general
+    escape hatch: only ``RECOVERABLE_TERMINAL_STATUSES`` may be re-opened and only
+    into ``RECOVERY_TARGET_STATUSES``, and ``lifecycle_violations`` rejects any
+    wider edge. Terminal is otherwise absorbing; keeping these edges in the table
+    (instead of omitting them) is what makes every real writer expressible
+    through the declared relation.
     """
 
     from_status: str | None
@@ -183,6 +188,15 @@ ACTION_COMPLETE: Final[str] = "complete"
 ACTION_FAIL: Final[str] = "fail"
 ACTION_CANCEL: Final[str] = "cancel"
 ACTION_RECONCILE_UNKNOWN: Final[str] = "reconcile_unknown"
+
+#: The ONLY terminal statuses a ``reopens_terminal`` operator-recovery edge may
+#: re-open, and the ONLY statuses it may re-open them INTO. A recovery edge is a
+#: deliberate, narrow exception to terminal absorption — bounded here so the
+#: flag alone cannot legalise an arbitrary terminal edge (``cancelled ->
+#: failed``, ``complete -> running``), which would smuggle a real terminal
+#: transition past the structural pins.
+RECOVERABLE_TERMINAL_STATUSES: Final[frozenset[str]] = frozenset({STATUS_FAILED, STATUS_EVAL_FAILED})
+RECOVERY_TARGET_STATUSES: Final[frozenset[str]] = frozenset({STATUS_RUNNING, STATUS_PENDING})
 
 
 TRANSITIONS: tuple[Transition, ...] = (
@@ -315,7 +329,14 @@ def lifecycle_violations(statuses: tuple[Status, ...] = STATUSES, transitions: t
     non_terminal = known - terminal
     violations.extend(f"non-terminal status {name!r} has no outgoing transition" for name in sorted(non_terminal) if not transitions_from(name, transitions))
     violations.extend(f"terminal status {name!r} has an outgoing transition that does not declare ``reopens_terminal``" for name in sorted(terminal) if any(not transition.reopens_terminal for transition in transitions_from(name, transitions)))
-    violations.extend(f"transition {transition.action!r} declares ``reopens_terminal`` from non-terminal status {transition.from_status!r}" for transition in transitions if transition.reopens_terminal and transition.from_status not in terminal)
+    violations.extend(
+        f"transition {transition.action!r} declares ``reopens_terminal`` from {transition.from_status!r}; only operator-recoverable terminal statuses {sorted(RECOVERABLE_TERMINAL_STATUSES)} may be re-opened"
+        for transition in transitions
+        if transition.reopens_terminal and transition.from_status not in RECOVERABLE_TERMINAL_STATUSES
+    )
+    violations.extend(
+        f"transition {transition.action!r} declares ``reopens_terminal`` into {transition.to_status!r}; a recovered run may only re-enter {sorted(RECOVERY_TARGET_STATUSES)}" for transition in transitions if transition.reopens_terminal and transition.to_status not in RECOVERY_TARGET_STATUSES
+    )
 
     # The non-terminal classes must be a pairwise-disjoint partition.
     classes = {status.name: status.cls for status in statuses}
@@ -386,7 +407,9 @@ _PROJECTIONS: dict[str, frozenset[str]] = derive_projections()
 #: The whole closed vocabulary (the ``ck_runs_status`` values).
 ALL_RUN_STATUSES: frozenset[str] = _PROJECTIONS["ALL_RUN_STATUSES"]
 
-#: Terminal statuses: the run is finalised and can never transition again.
+#: Terminal statuses: the run is finalised and only ever leaves through a
+#: declared ``reopens_terminal`` operator-recovery edge (``failed`` /
+#: ``eval_failed`` back into execution).
 TERMINAL_STATUSES: frozenset[str] = _PROJECTIONS["TERMINAL_STATUSES"]
 
 #: Non-terminal statuses — a run that still holds a slot (queued or otherwise).

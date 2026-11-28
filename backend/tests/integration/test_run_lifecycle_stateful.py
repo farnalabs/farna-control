@@ -719,11 +719,19 @@ class RunLifecycleMachine(RuleBasedStateMachine):
 
     @rule(run=runs)
     def complete_run(self, run: uuid.UUID) -> None:
-        """Real ``mark_complete`` — a running run finishes."""
+        """Real ``mark_complete`` — a running run finishes, and it must reach ``complete``.
+
+        A running row in this model has ``cancellation_requested = false`` (the
+        only writer, ``request_cancellation``, sets the flag and the terminal
+        status in the same UPDATE), and the isolated database has no competing
+        lock holder, so ``mark_complete``'s fenced update always applies here.
+        Asserting the exact outcome means a broken completion write can no
+        longer leave the run RUNNING while this rule still counts as fired.
+        """
         if self._run(self._status(run)) != lifecycle.STATUS_RUNNING:
             return
         self._run(mark_complete(self._engine, str(run), str(self.org_id)))
-        assert self._run(self._status(run)) in (lifecycle.STATUS_COMPLETE, lifecycle.STATUS_RUNNING)
+        assert self._run(self._status(run)) == lifecycle.STATUS_COMPLETE, "mark_complete did not terminalise a running run"
         self._observed.add("complete_run")
 
     @rule(run=runs)
