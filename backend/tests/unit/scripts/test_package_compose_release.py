@@ -230,6 +230,7 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
         expected_files = {
             "docker-compose.prod.yml",
             "docker-compose.yml",
+            "runner-all-in-one.yml",
             ".env.example",
             "quickstart.md",
             "init-env.sh",
@@ -243,14 +244,14 @@ def test_build_compose_release_end_to_end(tmp_path: Path):
     # Verify SHA256SUMS integrity over the files
     sums_file = extracted_dir / "SHA256SUMS"
     sums_lines = sums_file.read_text(encoding="utf-8").strip().splitlines()
-    assert len(sums_lines) == 7
+    assert len(sums_lines) == 8
 
     sums_dict: dict[str, str] = {}
     for line in sums_lines:
         digest, filename = line.split()
         sums_dict[filename] = digest
 
-    for name in ("docker-compose.prod.yml", "docker-compose.yml", ".env.example", "quickstart.md", "init-env.sh", "compose-restore.sh", "compose-rollback.sh"):
+    for name in ("docker-compose.prod.yml", "docker-compose.yml", "runner-all-in-one.yml", ".env.example", "quickstart.md", "init-env.sh", "compose-restore.sh", "compose-rollback.sh"):
         assert name in sums_dict
         file_bytes = (extracted_dir / name).read_bytes()
         actual_digest = hashlib.sha256(file_bytes).hexdigest()
@@ -418,6 +419,63 @@ def test_bundled_quickstart_documents_the_init_step():
     assert "docker compose up -d" in md
 
 
+def test_bundle_ships_the_all_in_one_executor_overlay() -> None:
+    """FAR-2854: the package carries an executor overlay that fits its own stack.
+
+    The repo-checkout overlay (deploy/compose/runner.yml) configures `backend`,
+    `saq-runner` and `saq-system`, which the packaged stack does not define. The
+    shipped overlay must target the packaged `farna-control` service, keep the
+    proxy private, and pin the workspace network's engine-side name so a Compose
+    project prefix cannot rename it.
+    """
+    files = _bundled_files()
+    assert "runner-all-in-one.yml" in files
+
+    overlay = yaml.safe_load(files["runner-all-in-one.yml"])
+    services = overlay["services"]
+    assert _APP_SERVICE in services
+    assert services[_APP_SERVICE]["environment"]["FARNA_CONTROL_DOCKER_HOST"] == "tcp://docker-socket-proxy:2375"
+
+    for absent in ("backend", "saq-runner", "saq-system", "postgres", "redis"):
+        assert absent not in services, f"the overlay must not re-define the packaged '{absent}' service"
+
+    proxy = services["docker-socket-proxy"]
+    assert "ports" not in proxy, "the filtered proxy must never publish a host port"
+    assert proxy["volumes"] == ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+    assert proxy["networks"] == ["default"]
+
+    networks = overlay["networks"]
+    pinned = [key for key, value in networks.items() if value.get("name") == key]
+    assert len(pinned) == 1, "the workspace network must be declared with exactly one explicit name pin"
+    workspace_network = pinned[0]
+    assert workspace_network not in (services["docker-socket-proxy"].get("networks") or [])
+    assert any(workspace_network in (service.get("networks") or []) for service in services.values()), "a service must reference the workspace network, or compose will not create it"
+
+
+def test_bundled_stack_without_the_overlay_keeps_executor_wiring_off() -> None:
+    """FAR-2854: the base bundle is unchanged - the executor is opt-in.
+
+    No overlay => no proxy service, no Docker endpoint on the application
+    service, and no name-pinned network. This is the "behaviour as before" half
+    of the acceptance criteria.
+    """
+    compose = yaml.safe_load(_bundled_files()["docker-compose.prod.yml"])
+
+    assert "docker-socket-proxy" not in compose["services"]
+    assert "FARNA_CONTROL_DOCKER_HOST" not in (compose["services"][_APP_SERVICE].get("environment") or {})
+    pinned_names = [value.get("name") for value in (compose.get("networks") or {}).values() if isinstance(value, dict)]
+    assert not pinned_names, "the base bundle must not declare a project-prefix-proof workspace network"
+
+
+def test_bundled_quickstart_documents_the_executor_overlay() -> None:
+    md = _bundled_files()["quickstart.md"]
+    assert "runner-all-in-one.yml" in md
+    assert "-f docker-compose.prod.yml -f runner-all-in-one.yml up -d" in md
+    # The tier limit is stated, not implied away: no gh binary, so no gh pr create.
+    assert "`gh`" in md
+    assert "gh pr create" in md
+
+
 def test_bundled_init_env_ships_executable(tmp_path: Path):
     tarball = build_compose_release(version="0.4.0", output_dir=tmp_path)
     with tarfile.open(tarball, "r:gz") as tar:
@@ -426,7 +484,7 @@ def test_bundled_init_env_ships_executable(tmp_path: Path):
     assert members["init-env.sh"].mode & 0o111, "init-env.sh must be executable in the tarball"
     assert members["compose-restore.sh"].mode & 0o111, "compose-restore.sh must be executable in the tarball"
     assert members["compose-rollback.sh"].mode & 0o111, "compose-rollback.sh must be executable in the tarball"
-    for name in ("docker-compose.prod.yml", "docker-compose.yml", ".env.example", "quickstart.md"):
+    for name in ("docker-compose.prod.yml", "docker-compose.yml", "runner-all-in-one.yml", ".env.example", "quickstart.md"):
         assert not members[name].mode & 0o111, f"{name} should not be executable"
 
 
