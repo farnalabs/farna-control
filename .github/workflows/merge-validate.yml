@@ -26,7 +26,7 @@ name: "Merge train: validate"
 #   tier1b            ci.yml tier1b-light (Testcontainers light connector/model set).
 #   frontend          ci.yml "Frontend and WCAG" (lint, type-check, WCAG contrast,
 #                     vitest WITH coverage, build). e2e-route-coverage stays in
-#                     ci.yml.
+#                     ci.yml (the fast-tier frontend-lint job), not here.
 #   e2e-visual        the three checks that had NO home after the PR tier became
 #                     fast: the @visual canvas snapshots (FAR-2461), the
 #                     mobile-nav specs (FAR-1850) and the e2e-visual-slice
@@ -36,9 +36,12 @@ name: "Merge train: validate"
 #                     are not @regression), so before this job they ran in no
 #                     gate at all.
 #   sonar             ci.yml sonarcloud-scan (coverage import). Analyses the MAIN
-#                     branch when `ref` is `main`, so the main baseline and the
-#                     coverage badge keep updating now that ci.yml has no push
-#                     trigger.
+#                     branch only when `ref` is `main`. Nothing dispatches this
+#                     workflow with `ref: main` automatically (the merge queue
+#                     dispatches ci.yml on main and calls this workflow with the
+#                     TRAIN branch), so until a scheduled/dispatch path exists the
+#                     main baseline and coverage badge update only on a MANUAL
+#                     dispatch with `ref: main`.
 #   sonar-new-issues  ci.yml sonar-new-issues-gate (PR-scoped; see the job note).
 #   coverage          ci.yml backend-coverage thresholds + coverage-gate
 #                     (diff-cover changed lines).
@@ -597,10 +600,12 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
           # MAIN-branch analysis. ci.yml lost its push trigger in the fast-tier
-          # cut, so this is the only path that can keep the project's main
-          # baseline and coverage badge updating. The dry-run / scheduled
-          # verification path dispatches this workflow with `ref: main`; for that
-          # case the scanner is told the branch EXPLICITLY, because its own SCM
+          # cut, and nothing dispatches this workflow with `ref: main`
+          # automatically (the merge queue dispatches ci.yml on main and calls
+          # this workflow with the TRAIN branch). So the project's main baseline
+          # and coverage badge update only on a MANUAL dispatch with `ref: main`
+          # until a scheduled/dispatch path exists. For that case the scanner is
+          # told the branch EXPLICITLY, because its own SCM
           # detection follows the CALLER's ref (a train branch, or a detached
           # dispatch ref) and the report would otherwise land as a feature-branch
           # analysis that never touches the main baseline. Any other ref is left

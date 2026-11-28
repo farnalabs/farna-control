@@ -1529,16 +1529,30 @@ def test_sonar_new_issues_gate_counts_only_the_blocking_subset() -> None:
 # holds them, so the checks may be moved between jobs freely.
 
 
-def _all_job_run_texts(workflow: dict) -> str:
-    """Every job step's ``run`` text in a workflow, joined with newlines."""
-    runs: list[str] = []
-    for job in (workflow.get("jobs") or {}).values():
-        if not isinstance(job, dict):
+def _statically_disabled(condition: object) -> bool:
+    """True when an ``if:`` value is literally false (YAML bool or string)."""
+    return condition is False or (isinstance(condition, str) and condition.strip().lower() == "false")
+
+
+def _enabled_jobs_running(workflow: dict, command: str) -> list[tuple[str, dict]]:
+    """Jobs with a non-disabled step whose ``run`` text contains ``command``.
+
+    A job or step gated off with a literal ``if: false`` is not counted: the
+    command would never execute, so it must not satisfy a "somewhere runs this"
+    assertion. (A non-literal gate such as ``inputs.full`` is beyond static
+    reach; this catches the common ``if: false`` re-orphaning.)
+    """
+    hits: list[tuple[str, dict]] = []
+    for job_id, job in (workflow.get("jobs") or {}).items():
+        if not isinstance(job, dict) or _statically_disabled(job.get("if")):
             continue
         for step in job.get("steps") or []:
-            if isinstance(step, dict) and step.get("run"):
-                runs.append(str(step["run"]))
-    return "\n".join(runs)
+            if not isinstance(step, dict) or _statically_disabled(step.get("if")):
+                continue
+            if command in str(step.get("run") or ""):
+                hits.append((job_id, job))
+                break
+    return hits
 
 
 #: label -> command substring. Each is a check whose ONLY gate is the merge tier:
@@ -1560,10 +1574,31 @@ def test_merge_validate_runs_the_checks_that_have_no_other_gate() -> None:
     ci.yml's frontend job, the job was slimmed, and nothing failed - the checks
     simply stopped running. A red test here is the only signal that would have
     fired.
+
+    The owning job must EXIST and not be statically disabled (``if: false``):
+    matching the command substring anywhere in the file would let a job gated off
+    re-orphan the check while this test stayed green.
     """
-    run_text = _all_job_run_texts(_load_yaml(VALIDATE_YML))
-    violations = [f"  merge-validate.yml: no job runs {label} ({command!r}) - that check would have no gate at all" for label, command in MERGE_TIER_ONLY_CHECKS.items() if command not in run_text]
+    workflow = _load_yaml(VALIDATE_YML)
+    violations = [f"  merge-validate.yml: no enabled job runs {label} ({command!r}) - that check would have no gate at all" for label, command in MERGE_TIER_ONLY_CHECKS.items() if not _enabled_jobs_running(workflow, command)]
     assert not violations, "merge-validate.yml dropped a check that runs nowhere else:\n" + "\n".join(violations)
+
+
+def test_ci_frontend_lint_runs_the_e2e_route_coverage_gate() -> None:
+    """The FAR-637 e2e route-coverage gate must stay in the fast PR tier.
+
+    It was orphaned by the 2026-11-27 fast-tier cut: removed from ci.yml's old
+    frontend job and not carried into ``frontend-lint``, so no workflow ran it
+    while the provenance comment claimed it stayed in ci.yml. This pin fails if
+    the script leaves the workflow OR its owning job is statically disabled, so
+    it cannot be silently re-orphaned again. Cheap and deterministic -> it
+    belongs in the fast tier, not the merge train.
+    """
+    workflow = _load_yaml(CI_YML)
+    command = "check_e2e_route_coverage.py"
+    hits = _enabled_jobs_running(workflow, command)
+    assert hits, f"ci.yml: no enabled job runs the FAR-637 e2e route-coverage gate ({command!r}); it would have no gate at all"
+    assert any(job_id == "frontend-lint" for job_id, _ in hits), "ci.yml: the e2e route-coverage gate must stay in the fast-tier frontend-lint job, not the merge train"
 
 
 # --- FAR-2139: the deploy escalation email edge is one shared implementation --
