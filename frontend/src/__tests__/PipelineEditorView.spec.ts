@@ -142,7 +142,7 @@ vi.mock('../lib/api/client', () => ({
     PUT: vi.fn().mockResolvedValue({ data: {}, error: undefined }),
     DELETE: vi.fn().mockResolvedValue({ data: {}, error: undefined }),
   },
-  getAccessToken: vi.fn().mockReturnValue('mock-token'),
+  getAccessToken: vi.fn().mockReturnValue(`h.${btoa(JSON.stringify({ org_role: 'operator' }))}.s`),
 }))
 
 import { api, getAccessToken } from '../lib/api/client'
@@ -3949,12 +3949,12 @@ describe('PipelineEditorView - system-admin snapshot lock (FAR-1287)', () => {
     // depend on test order.
     ;(api.GET as ReturnType<typeof vi.fn>).mockImplementation(routeGet)
     ;(api.POST as ReturnType<typeof vi.fn>).mockImplementation(routePost)
-    vi.mocked(getAccessToken).mockReturnValue('mock-token')
+    vi.mocked(getAccessToken).mockReturnValue(`h.${btoa(JSON.stringify({ org_role: 'operator' }))}.s`)
     snapshotLockState.reset()
   })
 
   afterEach(() => {
-    vi.mocked(getAccessToken).mockReturnValue('mock-token')
+    vi.mocked(getAccessToken).mockReturnValue(`h.${btoa(JSON.stringify({ org_role: 'operator' }))}.s`)
   })
 
   it('renders nothing for the snapshot lock when the caller is not a system admin', async () => {

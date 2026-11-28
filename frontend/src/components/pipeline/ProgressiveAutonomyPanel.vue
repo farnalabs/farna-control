@@ -64,77 +64,80 @@
       {{ $t('views.PipelineEditorView.autonomy_panel_earned_at', { when: formattedEarnedAt }) }}
     </p>
 
-    <div class="flex items-center gap-2">
-      <label
-        for="progressive-autonomy-target"
-        class="whitespace-nowrap text-[11px] text-muted-foreground"
-      >
-        {{ $t('views.PipelineEditorView.autonomy_panel_target') }}
-      </label>
-      <AppSelect
-        id="progressive-autonomy-target"
-        :model-value="targetLevel"
-        class="flex-1"
-        size="small"
-        :options="targetOptions"
-        option-label="label"
-        option-value="value"
-        option-disabled="disabled"
-        :label="$t('views.PipelineEditorView.autonomy_panel_target')"
-        data-testid="progressive-autonomy-target"
-        @update:model-value="onTargetChange"
-      >
-        <template #option="{ option }">
-          <span :data-value="option.value">{{ option.label }}</span>
-        </template>
-      </AppSelect>
-    </div>
+    <!-- FAR-2855: the levels above are for every role; changing them is not. -->
+    <template v-if="canManage">
+      <div class="flex items-center gap-2">
+        <label
+          for="progressive-autonomy-target"
+          class="whitespace-nowrap text-[11px] text-muted-foreground"
+        >
+          {{ $t('views.PipelineEditorView.autonomy_panel_target') }}
+        </label>
+        <AppSelect
+          id="progressive-autonomy-target"
+          :model-value="targetLevel"
+          class="flex-1"
+          size="small"
+          :options="targetOptions"
+          option-label="label"
+          option-value="value"
+          option-disabled="disabled"
+          :label="$t('views.PipelineEditorView.autonomy_panel_target')"
+          data-testid="progressive-autonomy-target"
+          @update:model-value="onTargetChange"
+        >
+          <template #option="{ option }">
+            <span :data-value="option.value">{{ option.label }}</span>
+          </template>
+        </AppSelect>
+      </div>
 
-    <div>
-      <label
-        for="progressive-autonomy-reason"
-        class="mb-1 block text-[11px] text-muted-foreground"
-      >
-        {{ $t('views.PipelineEditorView.autonomy_panel_reason') }}
-      </label>
-      <Input
-        id="progressive-autonomy-reason"
-        v-model="reason"
-        type="text"
-        size="small"
-        maxlength="2000"
-        class="h-7 w-full rounded-md border border-input bg-background px-1.5 text-xs"
-        data-testid="progressive-autonomy-reason"
-      />
-    </div>
+      <div>
+        <label
+          for="progressive-autonomy-reason"
+          class="mb-1 block text-[11px] text-muted-foreground"
+        >
+          {{ $t('views.PipelineEditorView.autonomy_panel_reason') }}
+        </label>
+        <Input
+          id="progressive-autonomy-reason"
+          v-model="reason"
+          type="text"
+          size="small"
+          maxlength="2000"
+          class="h-7 w-full rounded-md border border-input bg-background px-1.5 text-xs"
+          data-testid="progressive-autonomy-reason"
+        />
+      </div>
 
-    <!-- The demote/promote permission rule rides on each button as BOTH a
-         title (mouse hover) and an aria-description: a title alone is
-         invisible to touch / keyboard assistive tech. -->
-    <div class="flex items-center gap-2">
-      <button
-        type="button"
-        :class="btnDemote"
-        :disabled="!canDemote || pending !== null"
-        :title="$t('views.PipelineEditorView.autonomy_panel_demote_hint')"
-        :aria-description="$t('views.PipelineEditorView.autonomy_panel_demote_hint')"
-        data-testid="progressive-autonomy-demote"
-        @click="apply('demote')"
-      >
-        {{ pending === 'demote' ? pendingLabel : demoteLabel }}
-      </button>
-      <button
-        type="button"
-        :class="btnPromote"
-        :disabled="!canPromote || pending !== null"
-        :title="$t('views.PipelineEditorView.autonomy_panel_promote_hint')"
-        :aria-description="$t('views.PipelineEditorView.autonomy_panel_promote_hint')"
-        data-testid="progressive-autonomy-promote"
-        @click="apply('promote')"
-      >
-        {{ pending === 'promote' ? pendingLabel : promoteLabel }}
-      </button>
-    </div>
+      <!-- The demote/promote permission rule rides on each button as BOTH a
+           title (mouse hover) and an aria-description: a title alone is
+           invisible to touch / keyboard assistive tech. -->
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          :class="btnDemote"
+          :disabled="!canDemote || pending !== null"
+          :title="$t('views.PipelineEditorView.autonomy_panel_demote_hint')"
+          :aria-description="$t('views.PipelineEditorView.autonomy_panel_demote_hint')"
+          data-testid="progressive-autonomy-demote"
+          @click="apply('demote')"
+        >
+          {{ pending === 'demote' ? pendingLabel : demoteLabel }}
+        </button>
+        <button
+          type="button"
+          :class="btnPromote"
+          :disabled="!canPromote || pending !== null"
+          :title="$t('views.PipelineEditorView.autonomy_panel_promote_hint')"
+          :aria-description="$t('views.PipelineEditorView.autonomy_panel_promote_hint')"
+          data-testid="progressive-autonomy-promote"
+          @click="apply('promote')"
+        >
+          {{ pending === 'promote' ? pendingLabel : promoteLabel }}
+        </button>
+      </div>
+    </template>
 
     <!-- Async outcome: the native <output> element is an implicit polite live
          region (role=status, aria-live=polite), so an update is announced
@@ -180,7 +183,7 @@ const RANK: Record<string, number> = {
   fully_autonomous: 2,
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   pipelineId: string
   /** Pipeline default_autonomy_level (the level a NULL earned falls back to). */
   defaultLevel: string | null
@@ -189,7 +192,9 @@ const props = defineProps<{
   /** Runtime earned level; NULL until something has promoted/demoted it. */
   earnedLevel: string | null
   earnedUpdatedAt: string | null
-}>()
+  /** False for a role that may read the levels but not change them. */
+  canManage?: boolean
+}>(), { canManage: true })
 
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
@@ -333,7 +338,7 @@ watch([() => props.earnedLevel, () => props.earnedUpdatedAt], ([nextLevel, nextA
  * the alert region — the UI is never left silently stale.
  */
 async function apply(direction: 'demote' | 'promote'): Promise<void> {
-  if (pending.value) return
+  if (!props.canManage || pending.value) return
   const level = targetLevel.value
   const trimmed = reason.value.trim()
   pending.value = direction
