@@ -26,7 +26,9 @@ MACOS_INSTALLER_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "macos-installe
 STAPLE_HELPER = REPO_ROOT / "scripts" / "macos" / "staple-and-verify.sh"
 
 _MATRIX_START = "docker-upgrade-rollback:"
-_PEN_TEST_START = "pen-test:"
+# The fuzz leg is the job after the matrix (renamed from `pen-test` when it became
+# a two-pass matrix job in FAR-2800); it is also the boundary of the matrix text.
+_FUZZ_JOB_START = "rc-fuzz:"
 _PREDECESSOR_START = "Resolve the previous published immutable bundle tag"
 _MATRIX_RUN_START = "Run the Docker upgrade / failure / rollback matrix"
 
@@ -58,7 +60,7 @@ def _rc_validate_text() -> str:
 
 def _rc_validate_matrix_text() -> str:
     workflow = _rc_validate_text()
-    return workflow[workflow.index(_MATRIX_START) : workflow.index(_PEN_TEST_START)]
+    return workflow[workflow.index(_MATRIX_START) : workflow.index(_FUZZ_JOB_START)]
 
 
 def _rc_validate_step(step_name: str) -> dict[str, Any]:
@@ -167,21 +169,21 @@ def test_ga_release_uses_product_title_while_tag_stays_machine_facing() -> None:
     assert '--title "$GA_TAG"' not in promotion
 
 
-def test_rc_validation_runs_the_docker_acceptance_matrix_before_pen_test() -> None:
+def test_rc_validation_runs_the_docker_acceptance_matrix_before_the_fuzz_leg() -> None:
     workflow = _rc_validate_text()
     matrix_start = workflow.index(_MATRIX_START)
-    pen_test_start = workflow.index(_PEN_TEST_START)
-    matrix = workflow[matrix_start:pen_test_start]
+    fuzz_start = workflow.index(_FUZZ_JOB_START)
+    matrix = workflow[matrix_start:fuzz_start]
 
     assert "needs: [clean-host-compose]" in matrix
-    assert "needs: [clean-host-compose, docker-upgrade-rollback]" in workflow[pen_test_start:]
+    assert "needs: [clean-host-compose, docker-upgrade-rollback]" in workflow[fuzz_start:]
     assert "scripts/verify_compose_upgrade_rollback.py" in matrix
     assert '--old-tag "$OLD_TAG"' in matrix
     assert '--new-tag "$RC_TAG"' in matrix
     assert "alpha-docker-upgrade-rollback-${{ github.run_id }}" in matrix
     assert "scripts/render_validation_compose.py" in matrix
     assert "packaged compose asset is intentionally hard-pinned to RC_TAG" in matrix
-    assert matrix_start < pen_test_start
+    assert matrix_start < fuzz_start
 
 
 def test_rc_validation_renders_matrix_compose_without_a_concrete_tag() -> None:
