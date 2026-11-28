@@ -1,10 +1,86 @@
-import { clearAccessToken, getAccessToken, isValidToken, setAccessToken, setDemoSession } from './auth'
+import { decodeJwtPayload } from '../jwt'
+import {
+  clearAccessToken,
+  getAccessToken,
+  isValidToken,
+  refreshSession,
+  setAccessToken,
+  setDemoSession,
+  type RefreshOutcome,
+} from './auth'
 import { setMustChangePassword } from '../mustChangePassword'
 
 // The hand-off fetch runs pre-mount (router guard) and main.ts awaits
 // router.isReady() BEFORE App mounts, so a hung request would block first
 // paint indefinitely. Abort after a generous fixed window instead.
 const DEMO_HANDOFF_TIMEOUT_MS = 15_000
+// Also pre-mount, so also bounded. Shorter: a timeout only means "no verdict".
+const SESSION_PROBE_TIMEOUT_MS = 5_000
+// Longest the entry decision waits on a stored session, probe and refresh
+// together. Kept under the 10s main.ts waits for the first navigation before
+// mounting anyway.
+const SESSION_CHECK_BUDGET_MS = 8_000
+// A cheap read that checks the token's signature and expiry AND that its
+// account, organisation and membership still exist.
+const SESSION_PROBE_URL = '/api/v1/me/settings'
+
+function isPastExpiry(token: string): boolean {
+  const exp = decodeJwtPayload(token)?.exp
+  return typeof exp === 'number' && exp * 1000 <= Date.now()
+}
+
+// Whether the stored access token no longer authenticates. The server decides,
+// so a skewed client clock cannot discard a live session, and a token that is
+// unexpired but dead is still caught. Only when the server gives no verdict
+// (network error, timeout, 429, 5xx) is the token's own expiry claim used.
+// Deliberately a bare fetch: the API client would react to a 401 by tearing the
+// session down.
+async function isAccessTokenDead(token: string): Promise<boolean> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), SESSION_PROBE_TIMEOUT_MS)
+  try {
+    const res = await fetch(SESSION_PROBE_URL, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+    if (res.status === 401) return true
+    if (res.status !== 429 && res.status < 500) return false
+  } catch {
+    console.warn('[demo] could not check the stored session')
+  } finally {
+    clearTimeout(timeoutId)
+  }
+  return isPastExpiry(token)
+}
+
+// Stops waiting after `ms` and reports 'unavailable'. The refresh itself is
+// left running (see REFRESH_TIMEOUT_MS in ./auth): if it succeeds later, the
+// new token is still stored.
+async function refreshWithin(ms: number): Promise<RefreshOutcome> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  const gaveUp = new Promise<RefreshOutcome>((resolve) => {
+    timeoutId = setTimeout(() => resolve('unavailable'), ms)
+  })
+  try {
+    return await Promise.race([refreshSession(), gaveUp])
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+// Whether the browser holds a session worth keeping. A dead access token is
+// refreshed where possible. The session is given up only when the refresh is
+// refused: a refresh that could not be completed keeps it, so a transient
+// failure never swaps a real session for a demo one.
+async function keepStoredSession(token: string): Promise<boolean> {
+  const deadline = Date.now() + SESSION_CHECK_BUDGET_MS
+  if (!(await isAccessTokenDead(token))) return true
+  if ((await refreshWithin(deadline - Date.now())) !== 'rejected') return true
+  // A sign-in elsewhere (e.g. another tab) may have replaced the token while
+  // we were waiting; never tear that one down.
+  const current = getAccessToken()
+  return current !== null && current !== token
+}
 
 // FAR-535 demo auto-login hand-off.
 //
@@ -58,12 +134,15 @@ export type DemoEntryRoute = 'dashboard' | 'login'
 // qa iter 2: the single /demo decision point, shared by the router guard and
 // DemoView's defensive fallback so the two paths cannot drift. A browser that
 // already holds a LIVE session (demo or real) keeps it and goes to the
-// dashboard — a mere visit to /demo never tears a session down or re-mints a
-// token (Back/Forward must not burn the mint budget). A tokenless browser runs
-// the one-shot hand-off exactly once, landing on the dashboard on success or
-// plain login on failure — never an error that reveals demo internals.
+// dashboard — a mere visit to /demo never tears a live session down or re-mints
+// a token (Back/Forward must not burn the mint budget). A stored token alone is
+// not proof of a live session (FAR-2857): a dead one whose refresh is refused
+// counts as no session. A browser without a session runs the one-shot hand-off
+// exactly once, landing on the dashboard on success or plain login on failure —
+// never an error that reveals demo internals.
 export async function resolveDemoEntry(): Promise<DemoEntryRoute> {
-  if (getAccessToken()) {
+  const token = getAccessToken()
+  if (token && (await keepStoredSession(token))) {
     return 'dashboard'
   }
   const ok = await runDemoHandOff()
