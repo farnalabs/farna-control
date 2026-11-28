@@ -62,6 +62,7 @@ from farna.api.middleware.sensitive_mask import (
 from farna.api.models.team_visibility import TeamVisibilityMixin
 from farna.api.team_scope import (
     TeamScopedResource,
+    enforce_principal_team_scope,
     resolve_pipeline_team_scope,
     team_membership_exists,
     validate_owner_team_for_create,
@@ -4186,10 +4187,6 @@ async def _assert_team_transition_allowed(
     (task-authz-b-visibility-guard). Re-runs the RLS-parity membership-or-admin
     gate inside the same transaction (RLS context is transaction-scoped).
     """
-    # Org-admin bypass applies throughout (RLS parity).
-    if _is_admin(principal):
-        return
-
     changes_visibility = "visibility" in update_payload
     changes_owner_team = "owner_team_id" in update_payload
     if not changes_visibility and not changes_owner_team:
@@ -4198,12 +4195,30 @@ async def _assert_team_transition_allowed(
     new_visibility = update_payload.get("visibility", current.visibility)
     new_owner_team_id = update_payload.get("owner_team_id", current.owner_team_id)
 
+    # FAR-2781: a team-scoped credential's OWN team boundary is decided FIRST —
+    # before the org-admin bypass below — on the current and the new owner team.
+    # The owner-membership checks further down answer "is the key OWNER a
+    # member?", not "is the CREDENTIAL confined to that team?"; the security
+    # engineer's bug is exactly that gap (a team-A key whose owner is in team B).
+    team_scoped = enforce_principal_team_scope(principal, current.owner_team_id)
+    if team_scoped and new_owner_team_id is not None and new_owner_team_id != current.owner_team_id:
+        enforce_principal_team_scope(principal, new_owner_team_id)
+
     # A team-visible pipeline must keep an owner team.
     if new_visibility == "team" and new_owner_team_id is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="owner_team_id is required when visibility is 'team'",
         )
+
+    if _is_admin(principal):
+        # Org-admin bypass applies throughout (RLS parity) — but only AFTER the
+        # credential's own team boundary above.
+        return
+
+    if team_scoped:
+        # Confined to its own team; owner memberships are irrelevant.
+        return
 
     # Current team gate (if the pipeline is currently team-private): the caller
     # must be a member of the CURRENT team (or admin). ``_is_team_private`` is

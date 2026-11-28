@@ -3551,10 +3551,26 @@ async def set_resource_owner_team(
         new_team, team_err = _parse_optional_uuid(owner_team_id, "owner_team_id")
         if team_err is not None:
             return team_err
+        # FAR-2781: a team-scoped credential is confined to its own team. The
+        # owner-team validators below check the key OWNER's memberships, not the
+        # credential's team, so the NEW owner team must be bounded here too —
+        # a team-A key whose owner is a team-B member must not re-scope a
+        # resource INTO team B. The typed envelope is the MCP surface's
+        # established ``team_boundary_violation``.
+        if _team_scoped_key_mismatch(new_team):
+            return _team_scope_error(resource_type, resource_id)
 
         org_id = _ctx_org_id_val()
         account_id = _ctx_user_id_val()
-        principal = SimpleNamespace(organisation_id=org_id, account_id=account_id, org_role=_ctx_role_val())
+        # FAR-2781: thread the credential's team boundary onto the principal the
+        # shared owner-membership validators receive, so they enforce it as
+        # well (defence-in-depth on the REST/REST-helper parity).
+        principal = SimpleNamespace(
+            organisation_id=org_id,
+            account_id=account_id,
+            org_role=_ctx_role_val(),
+            team_id=_ctx_team_id_val(),
+        )
         async with _session(org_id) as s:
             if resource_type == "pipeline":
                 current_owner = await _pipeline_owner_team_id(s, rid)

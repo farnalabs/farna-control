@@ -59,12 +59,13 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from farna.api.run_scope import team_boundary_blocked
 from farna.db.models.connector_instance import ConnectorInstance
 from farna.db.models.environment_profile import EnvironmentProfile
 from farna.db.models.eval_dataset import EvalDataset
@@ -81,6 +82,68 @@ from farna.db.models.team_membership import TeamMembership
 from farna.db.models.trigger import Trigger
 
 _MSG_NOT_TEAM_MEMBER = "Not a member of the team that owns this resource"
+
+#: Machine-readable code for a credential that presents a team boundary and
+#: reaches a resource owned by a different team (FAR-2781). It is the SAME code
+#: the MCP surface emits (``mcp_server._team_scope_error``), so both surfaces
+#: name the refusal identically. REST raises it in the ``{"error": ...}`` detail
+#: shape ``problem_from_http_exception`` lifts onto the ProblemDetail ``code``
+#: extension member, so clients can branch on the code, not the prose.
+TEAM_BOUNDARY_VIOLATION_CODE = "team_boundary_violation"
+
+
+def _principal_team_scope_violation(principal_team_id: uuid.UUID, owner_team_id: uuid.UUID) -> HTTPException:
+    """Build the typed 403 for a credential outside its team boundary."""
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "error": TEAM_BOUNDARY_VIOLATION_CODE,
+            "detail": (f"This credential is scoped to team {principal_team_id} and cannot access resources owned by team {owner_team_id}"),
+        },
+    )
+
+
+def enforce_principal_team_scope(
+    principal: Any,
+    owner_team_id: uuid.UUID | None,
+) -> bool:
+    """Apply a credential's OWN team boundary to *owner_team_id* (FAR-2781).
+
+    The team gate's owner-membership checks (``validate_owner_team_for_create``
+    and ``validate_team_transition_for_update``) answer "is the key OWNER a
+    member of the target team?". They do NOT answer "is the CREDENTIAL confined
+    to that team?" — a team-A-scoped API key whose owner also belongs to team B
+    would pass the membership check and create or re-scope a team-B resource.
+    This function supplies that missing decision.
+
+    It is the single chokepoint the shared owner-membership validators (and the
+    sibling pipeline transition helper) call FIRST, before any org-role admin
+    bypass, so a team-scoped credential can never be widened by holding — or
+    acting through an account that holds — org admin.
+
+    The predicate is the repository's existing boundary predicate
+    (``api.run_scope.team_boundary_blocked``), the same one behind
+    ``evaluate_team_gate``'s ``team_key_id`` arm and the MCP per-row guards, so
+    the three surfaces cannot drift. Its semantics are reused verbatim:
+
+    * an unbound credential (``principal.team_id`` is ``None`` — a browser JWT,
+      an org-wide ``mk_`` key, a user-scoped key) is never blocked; returns
+      ``False`` so the caller keeps the owner-membership matrix;
+    * an org-level resource (``owner_team_id is None``) stays visible to every
+      team-scoped credential;
+    * a team-scoped credential touching another team's owned resource raises a
+      typed 403 and returns ``True`` on the permitted path so the caller knows
+      the credential's scope — not the owner's memberships — is the authority.
+
+    Returns ``True`` when the principal carries a team boundary (whether it was
+    permitted here), ``False`` when it does not.
+    """
+    principal_team_id: uuid.UUID | None = getattr(principal, "team_id", None)
+    if principal_team_id is None:
+        return False
+    if team_boundary_blocked(principal_team_id, owner_team_id):
+        raise _principal_team_scope_violation(principal_team_id, cast(uuid.UUID, owner_team_id))
+    return True
 
 
 @dataclass(frozen=True)
@@ -379,7 +442,15 @@ async def validate_owner_team_for_create(
     principal: Any,
     owner_team_id: uuid.UUID | None,
 ) -> None:
-    """Validate a client-supplied ``owner_team_id``/``target_team_id`` on a CREATE path.
+    """Validate the owner-team ASSIGNMENT on a CREATE path (owner eligibility).
+
+    This is an owner-ELIGIBILITY check, NOT a credential-scope check: it answers
+    "may this caller assign a resource to *owner_team_id*?" (the team exists in
+    the caller's organisation and, for a user principal, the caller belongs to
+    it). The credential's own team boundary is a DIFFERENT decision and is
+    enforced FIRST below by :func:`enforce_principal_team_scope` (FAR-2781);
+    do not treat passing this function alone as proof the credential is
+    confined to a team.
 
     The PATCH/import paths enforce the team gate
     (``require_team_membership_or_admin`` / ``_validate_owner_team``), but CREATE
@@ -387,11 +458,20 @@ async def validate_owner_team_for_create(
     could mint team-private resources owned by a foreign-org or non-existent
     team, or hand a resource to a team they don't belong to. Fail CLOSED:
 
-    1. the team must exist in the caller's organisation (404 otherwise — even
+    1. the credential's own team boundary is checked FIRST — before the
+       org-role admin bypass — so a team-A-scoped credential can never be
+       widened by an org-admin role (FAR-2781);
+    2. the team must exist in the caller's organisation (404 otherwise — even
        for admins, so a typo/probe is never silently persisted);
-    2. non-admin callers must hold a membership row in that team (403),
-       mirroring the PATCH ownership-reassignment rule.
+    3. a team-scoped credential that passed (1) is confined to its own team:
+       its boundary, not the key owner's membership rows, is the authority;
+    4. otherwise non-admin callers must hold a membership row in that team
+       (403), mirroring the PATCH ownership-reassignment rule.
     """
+    # FAR-2781: the credential boundary is decided FIRST. Keep this before the
+    # ``org_role == "admin"`` return below — a team-A-scoped credential held by
+    # an org admin must still be refused for team B.
+    team_scoped = enforce_principal_team_scope(principal, owner_team_id)
     if owner_team_id is None:
         return
     result = await session.execute(
@@ -406,6 +486,10 @@ async def validate_owner_team_for_create(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_FOREIGN_ORG_DETAIL.format(team_id=owner_team_id),
         )
+    if team_scoped:
+        # The credential is confined to its own team; the key OWNER's
+        # memberships are irrelevant (the MCP boundary semantics).
+        return
     org_role = getattr(principal, "org_role", None)
     if org_role == "admin":
         return
@@ -430,19 +514,49 @@ async def validate_team_transition_for_update(
 ) -> None:
     """Mirror the PATCH team gate (``_assert_team_transition_allowed``) generically.
 
-    Guards an UPDATE that changes ``visibility`` and/or ``owner_team_id``:
-    org-admins bypass membership checks; non-admins must be members of the
-    CURRENT team (when the resource is team-private) and of any NEW owner team
-    they reassign the resource to. A ``visibility='team'`` assignment without an
-    owner team is rejected (422). The NEW owner team must exist in the caller's
-    organisation (404, fail closed — zero create/edit bypass parity with
-    :func:`validate_owner_team_for_create`).
+    Guards an UPDATE that changes ``visibility`` and/or ``owner_team_id``.
+    FAR-2781: the credential's OWN team boundary is decided FIRST, on the
+    CURRENT and the NEW owner team, before the input invariant and before the
+    org-admin bypass — a team-A-scoped credential can never be widened by an
+    org-admin role. A team-scoped credential that passed the boundary is
+    confined to its own team (its boundary, not the key owner's memberships, is
+    the authority), with the same org-level allowance as
+    :func:`enforce_principal_team_scope`. For an unbound credential the
+    behaviour is unchanged: org-admins bypass membership checks; non-admins must
+    be members of the CURRENT team (when the resource is team-private) and of
+    any NEW owner team they reassign the resource to. A ``visibility='team'``
+    assignment without an owner team is rejected (422). The NEW owner team must
+    exist in the caller's organisation (404, fail closed — zero create/edit
+    bypass parity with :func:`validate_owner_team_for_create`).
     """
+    # FAR-2781: credential boundary FIRST — before the 422 and before the admin
+    # bypass below.
+    team_scoped = enforce_principal_team_scope(principal, current_owner_team_id)
+    if team_scoped and new_owner_team_id is not None and new_owner_team_id != current_owner_team_id:
+        enforce_principal_team_scope(principal, new_owner_team_id)
     if new_visibility == "team" and requires_owner_team_for_team_visibility and new_owner_team_id is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="owner_team_id is required when visibility is 'team'",
         )
+    if team_scoped:
+        # The credential is confined to its own team. A new owner team it may
+        # take (its own) necessarily exists; an org-level (None) owner stays
+        # allowed, matching the shared boundary predicate.
+        if new_owner_team_id is not None and new_owner_team_id != current_owner_team_id:
+            exists = await session.execute(
+                select(Team.id).where(
+                    Team.id == new_owner_team_id,
+                    Team.organisation_id == principal.organisation_id,
+                    Team.deleted_at.is_(None),
+                )
+            )
+            if exists.first() is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=_FOREIGN_ORG_DETAIL.format(team_id=new_owner_team_id),
+                )
+        return
     if getattr(principal, "org_role", None) == "admin":
         return
 
