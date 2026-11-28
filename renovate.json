@@ -104,7 +104,7 @@
       "automerge": false
     },
     {
-      "description": "Major updates merge on green: the merge train's full suite is the gate, so a major no longer waits for a human. Demoted only where we deliberately pin a version or hold a package (js-yaml, pytest, python, primevue, @primeuix/styled, postgres, @sentry/vue, mcp).",
+      "description": "Major updates merge on green: the merge train's full suite is the gate, so a major no longer waits for a human. The rules below are the exceptions: js-yaml, fast-uri and postgres majors are disabled outright (enabled: false); pytest, Python, primevue/@primevue/themes and @primeuix/styled are capped with allowedVersions, so an out-of-range major is never proposed; and @sentry/vue, mcp and github-actions majors are held for manual review (automerge: false).",
       "matchUpdateTypes": [
         "major"
       ],
@@ -206,6 +206,17 @@
       "description": "Hold mcp major updates for manual review. mcp is the MCP server SDK, where a protocol change can pass tests and still break tool calls at runtime; validation is tracked separately, so a human signs off on the major until then.",
       "matchPackageNames": [
         "mcp"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Hold GitHub Actions major updates for manual review. The 'GitHub Actions majors' grouping rule exists so a batch of action majors arrives as one reviewable change, not to merge unattended: a third-party action major carries supply-chain risk that a green build cannot fully validate (the same reasoning as the @sentry/vue and mcp holds), and exempting it from the global major-automerge rule is what keeps that grouping PR human-reviewed. This rule sits after the global major-automerge rule so its automerge:false wins.",
+      "matchManagers": [
+        "github-actions"
       ],
       "matchUpdateTypes": [
         "major"
