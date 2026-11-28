@@ -249,12 +249,20 @@ class TestServiceAccountLifecycle:
         assert exc.value.status_code == 422
 
         # Structural backstop: the 0311 TRIGGER refuses raw SQL too (23514).
-        with pytest.raises(DBAPIError) as raw:
+        # The runtime role is NOBYPASSRLS and 0367 fail-closes org_memberships
+        # with no org context, so set the caller's org inside the transaction
+        # (as every real write path does) — otherwise the UPDATE matches zero
+        # rows and the trigger never fires.
+        async def _raw_admin_grant() -> None:
             async with app_session.begin():
+                await set_rls_org(app_session, test_org)
                 await app_session.execute(
                     text("UPDATE org_memberships SET role = 'admin' WHERE account_id = :aid"),
                     {"aid": str(sa_id)},
                 )
+
+        with pytest.raises(DBAPIError) as raw:
+            await _raw_admin_grant()
         orig = getattr(raw.value, "orig", None)
         pgcode = str(getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", "") or "")
         assert pgcode == "23514"

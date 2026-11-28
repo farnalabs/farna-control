@@ -31,7 +31,7 @@ bdd:
   - backend/tests/bdd/steps/test_schemas.py
 depends-on:
   - feat-connectors
-status: covered
+status: partial
 ---
 
 # Typed JSON Schemas
@@ -47,29 +47,37 @@ applied migration between versions (`core/schema_registry/*`).
 
 - [x] A schema is created with a name that must be unique within the org – duplicate
       name is 409, cross-org read is 404 (`create.feature`)
+      <!-- behaviour: schemas-01 | tests: none -->
 - [x] Create accepts an optional initial `definition_json`; a structurally-invalid
       JSON Schema (Draft 2020-12, the same gate as `/validate` and `/import`) is
       rejected with 422 before any write, and a valid definition seeds the `latest`
       placeholder version so agents have something to pin (`create.feature`)
+      <!-- behaviour: schemas-02 | tests: none -->
 - [x] Updating a schema creates a new version rather than mutating in place; versions
       list and per-version retrieval are exposed (`version.feature`)
+      <!-- behaviour: schemas-03 | tests: backend/tests/bdd/features/schemas/version.feature -->
 - [x] A pipeline snapshot pins the schema version; a later schema update does not change
       the version a pinned run uses (`version.feature`)
+      <!-- behaviour: schemas-04 | tests: backend/tests/bdd/features/schemas/version.feature -->
 - [x] Deletion protection: an unused schema is deleted (204); a schema referenced by a
       pipeline is refused with 409 and an "in use by pipeline" error, and `force=true`
       bypasses the protection (`deletion_protection.feature`)
+      <!-- behaviour: schemas-05 | tests: backend/tests/bdd/features/schemas/deletion_protection.feature -->
 - [x] Inference at `/api/v1/schemas/infer` builds a `definition_json` draft from a
       connector instance's sample records with a default sample limit of 200, detects
       field types and suggests enums for constrained fields, flags rarely-used fields,
       and can be published as a schema version (`schema_inference.feature`)
+      <!-- behaviour: schemas-06 | tests: none -->
 - [x] Migration: `/api/v1/schemas/migrate` dry-runs a plan without mutating data, a
       `/migrate/plan` endpoint previews renames/additions and records `schema_migration_planned`
       audit events, applying a migration transforms data and drops removed fields while
       recording `schema_migration_completed`, and best-effort migration of a partial chain
       applies the reachable prefix and reports chain gaps (`schema_migration.feature`)
+      <!-- behaviour: schemas-07 | tests: backend/tests/bdd/features/schemas/schema_migration.feature -->
 - [x] Runtime input/output validation and sanitization of schema definitions live in
       `core/schema_registry/validation.py` / `sanitize.py` and are unit-covered
       (`test_schema_validation.py`, `test_schema_sanitize.py`)
+      <!-- behaviour: schemas-08 | tests: backend/tests/unit/core/test_schema_validation.py, backend/tests/unit/core/test_schema_sanitize.py -->
 - [x] Agent input/output schema bindings are (re)assignable and detachable via
       `PATCH /api/v1/agents/{id}`: an omitted version resolves to the org's
       `latest` placeholder version, an explicit `null` clears both id and version,
@@ -77,8 +85,10 @@ applied migration between versions (`core/schema_registry/*`).
       not resolve to an org-owned schema version is a 422
       (`schema_assignment.feature`, `test_update_agent_reassigns_input_output_schemas`,
       `test_update_agent_detaches_output_schema`)
+      <!-- behaviour: schemas-09 | tests: backend/tests/bdd/features/agents/schema_assignment.feature -->
 - [x] Parameter-schema CRUD for pipeline parameters is an admin surface under the same
       feature (`api/routes/parameter_schemas.py`, `test_parameter_schemas_endpoint.py`)
+      <!-- behaviour: schemas-10 | tests: backend/tests/unit/api/test_parameter_schemas_endpoint.py -->
 
 ## Known Gaps
 

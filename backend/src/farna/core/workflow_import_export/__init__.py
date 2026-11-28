@@ -2465,6 +2465,9 @@ def _materialize_edges(
             id=edge_id,
             organisation_id=ctx.org_id,
             pipeline_id=pipeline.id,
+            # ADR 070 Phase 1A: an imported edge becomes part of the new
+            # pipeline's live graph, so it takes that pipeline's owner.
+            owner_team_id=pipeline.owner_team_id,
             source_node_id=source_id,
             target_node_id=target_id,
             edge_type=edge_type,

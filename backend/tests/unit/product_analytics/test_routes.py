@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,9 +25,24 @@ from fastapi.testclient import TestClient
 from farna.api.constants import MSG_ORGANISATION_NOT_FOUND
 from farna.api.dependencies import get_db_session
 from farna.api.routes import product_analytics as pa_module
+from farna.api.routes import product_analytics_transparency as pat_module
 from farna.api.routes.product_analytics import router as product_analytics_router
-from farna.auth.dependencies import get_current_tenant_user
-from farna.auth.jwt import TenantPrincipal
+from farna.api.routes.product_analytics_transparency import (
+    _stale_dump_warning,
+)
+from farna.api.routes.product_analytics_transparency import (
+    router as transparency_router,
+)
+from farna.auth.dependencies import get_current_tenant_user, get_current_user
+from farna.auth.jwt import AuthenticatedPrincipal, TenantPrincipal
+from farna.core.product_analytics.constants import (
+    DUMP_LAST_FAILURE_AT_KEY,
+    DUMP_LAST_FAILURE_SUMMARY_KEY,
+    DUMP_WATERMARK_KEY,
+    INSTANCE_SWITCH_KEY,
+    LEVEL_ALL,
+    LEVEL_OFF,
+)
 
 # Mount only the product-analytics router on a minimal app so we exercise the
 # real handlers through TestClient without pulling in the full API surface
@@ -336,3 +352,148 @@ class TestNotFoundBodies:
         resp = _client().put(_PRODUCT_ANALYTICS_URL, json={"level": "all"})
         assert resp.status_code == 404, resp.text
         assert resp.json()["detail"] == MSG_ORGANISATION_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# FAR-2740: transparency carries the dump failure and the never-dumped warning
+# ---------------------------------------------------------------------------
+
+_TAPP = FastAPI()
+_TAPP.include_router(transparency_router)
+_TURL = "/api/v1/product-analytics/transparency"
+
+_T_SYS_ADMIN = AuthenticatedPrincipal(
+    username="ops@test",
+    organisation_id=uuid.UUID("00000000-0000-0000-0000-0000000000aa"),
+    account_id=uuid.UUID("00000000-0000-0000-0000-0000000000bb"),
+    org_role="admin",
+    is_system_admin=True,
+)
+_T_ORG_ALL = {"product_analytics": {"level": LEVEL_ALL}}
+
+
+def _t_config(value: object) -> MagicMock:
+    config = MagicMock()
+    config.value = value
+    return config
+
+
+def _t_session(org_settings: object) -> AsyncMock:
+    session = AsyncMock()
+    begin_cm = AsyncMock()
+    begin_cm.__aenter__ = AsyncMock(return_value=None)
+    begin_cm.__aexit__ = AsyncMock(return_value=False)
+    session.begin = MagicMock(return_value=begin_cm)
+    result = MagicMock()
+    org = MagicMock()
+    org.settings_json = org_settings
+    result.scalar_one_or_none = MagicMock(return_value=org)
+    session.execute = AsyncMock(return_value=result)
+    return session
+
+
+def _t_get_config(values: dict[str, object]):
+    async def _get(_session: object, key: str) -> MagicMock | None:
+        if key in values:
+            return _t_config(values[key])
+        return None
+
+    return _get
+
+
+def _t_request(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    route_values: dict[str, object] | None = None,
+    switch_values: dict[str, object] | None = None,
+    org_settings: object = _T_ORG_ALL,
+) -> dict[str, object]:
+    session = _t_session(org_settings)
+    _TAPP.dependency_overrides[get_db_session] = lambda: session
+    _TAPP.dependency_overrides[get_current_user] = lambda: _T_SYS_ADMIN
+    monkeypatch.delenv("FARNA_CONTROL_PRODUCT_ANALYTICS_ENABLED", raising=False)
+    try:
+        with (
+            patch.object(
+                pat_module,
+                "get_config",
+                new=AsyncMock(side_effect=_t_get_config(route_values or {})),
+            ),
+            patch(
+                "farna.core.product_analytics.consent.get_config",
+                new=AsyncMock(side_effect=_t_get_config(switch_values or {})),
+            ),
+            patch("farna.core.product_analytics.consent.get_license", lambda: None),
+        ):
+            resp = TestClient(_TAPP).get(_TURL)
+    finally:
+        _TAPP.dependency_overrides.clear()
+    assert resp.status_code == 200, resp.text
+    return dict(resp.json())
+
+
+class TestTransparencyDumpFailureFields:
+    def test_response_carries_the_failure_fields(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = _t_request(
+            monkeypatch,
+            route_values={
+                DUMP_LAST_FAILURE_AT_KEY: "2026-11-24T10:00:00+00:00",
+                DUMP_LAST_FAILURE_SUMMARY_KEY: "status=500: vendor boom",
+            },
+        )
+
+        assert body["last_failed_dump_at"] == "2026-11-24T10:00:00+00:00"
+        assert body["last_dump_failure"] == "status=500: vendor boom"
+
+    def test_absent_failure_record_reads_as_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = _t_request(monkeypatch)
+
+        assert body["last_failed_dump_at"] is None
+        assert body["last_dump_failure"] is None
+
+    def test_never_dumped_opted_in_instance_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The production state FAR-2740 fixes: switch on, consent given, zero
+        successful dumps. It must warn (it previously returned no warning)."""
+        body = _t_request(monkeypatch, switch_values={INSTANCE_SWITCH_KEY: True})
+
+        assert body["instance_enabled"] is True
+        assert body["last_successful_dump_at"] is None
+        assert body["warning"] == "never_reached_farnalabs"
+
+    def test_stale_previous_success_keeps_the_old_warning_value(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        stale = (datetime.now(UTC) - timedelta(days=4)).isoformat()
+        body = _t_request(
+            monkeypatch,
+            route_values={DUMP_WATERMARK_KEY: stale},
+            switch_values={INSTANCE_SWITCH_KEY: True},
+        )
+
+        assert body["warning"] == "not_reaching_farnalabs"
+
+
+class TestStaleDumpWarningNeverDumped:
+    def test_never_dumped_requires_switch_and_consent(self) -> None:
+        assert _stale_dump_warning(None, LEVEL_ALL, instance_enabled=True) == "never_reached_farnalabs"
+        assert _stale_dump_warning(None, LEVEL_ALL, instance_enabled=False) is None
+        assert _stale_dump_warning(None, LEVEL_OFF, instance_enabled=True) is None
+
+    def test_never_dumped_honours_the_consent_grace_window(self) -> None:
+        """A recently opted-in instance is quiet until the threshold elapses."""
+        recent = datetime.now(UTC) - timedelta(hours=6)
+        assert _stale_dump_warning(None, LEVEL_ALL, instance_enabled=True, consent_since=recent) is None
+        old = datetime.now(UTC) - timedelta(days=4)
+        assert _stale_dump_warning(None, LEVEL_ALL, instance_enabled=True, consent_since=old) == "never_reached_farnalabs"
+
+    def test_stale_previous_success_requires_the_switch(self) -> None:
+        stale = (datetime.now(UTC) - timedelta(days=4)).isoformat()
+        assert _stale_dump_warning(stale, LEVEL_ALL, instance_enabled=True) == "not_reaching_farnalabs"
+        # Turning analytics off silences the warning rather than leaving it
+        # forever (FAR-2740).
+        assert _stale_dump_warning(stale, LEVEL_ALL, instance_enabled=False) is None
+
+    def test_fresh_dump_never_warns(self) -> None:
+        fresh = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+        assert _stale_dump_warning(fresh, LEVEL_ALL, instance_enabled=True) is None

@@ -310,6 +310,7 @@ from .executor_parts.support import (
     RunNotFoundError,
     SandboxCapacityExceededError,
     _CapacitySnapshot,
+    _failure_reason,
     _is_finalize_lock_retryable,
     _RunScope,
     _safe_pipeline_name,
@@ -317,7 +318,6 @@ from .executor_parts.support import (
     _StreamConfig,
     _StreamContext,
     _StreamState,
-    _traceback_detail,
 )
 from .executor_parts.telemetry import TelemetryMixin as _TelemetryMixin
 
@@ -371,6 +371,7 @@ __all__ = [
     "_connector_scope_agent_ids",
     "_extract_chat_model_token_usage",
     "_extract_llm_token_usage",
+    "_failure_reason",
     "_frozen_eval_mode_entries",
     "_governed_evaluation_mode",
     "_graph_is_idempotent",
@@ -411,7 +412,6 @@ __all__ = [
     "_streamed_interrupts",
     "_teardown_hub",
     "_terminal_failure",
-    "_traceback_detail",
     "_try_agent_failure_elevation",
     "compute_retry_aware_topology_hash",
     "org_sandbox_capacity_free",
@@ -3030,9 +3030,8 @@ class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            _raw_tb = _traceback_detail(exc, limit=2000)
-            error_detail = _enrich_failure_detail(_raw_tb, exc)
-            _log.exception(
+            error_detail = _enrich_failure_detail(_failure_reason(exc), exc)
+            _log.error(
                 "pipeline.resume_error",
                 extra={
                     "run_id": str(run_id),
@@ -3045,6 +3044,7 @@ class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
                         else {}
                     ),
                 },
+                exc_info=exc,
             )
             final_status = "failed"
             error_code = type(exc).__name__
@@ -3198,9 +3198,8 @@ class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
         retry_policy_eligible: bool,
     ) -> tuple[str, str | None, str | None, dict[str, Any] | None, bool]:
         """Handle exceptions from _prepare_and_stream; return updated status tuple."""
-        _tb = _traceback_detail(exc, limit=2000)
-        error_detail = _enrich_failure_detail(_tb, exc)
-        _log.exception(
+        error_detail = _enrich_failure_detail(_failure_reason(exc), exc)
+        _log.error(
             "pipeline.execution_error",
             extra={
                 "run_id": str(run_id),
@@ -3213,6 +3212,7 @@ class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
                     else {}
                 ),
             },
+            exc_info=exc,
         )
         final_status = "failed"
         error_code = type(exc).__name__
@@ -6157,12 +6157,16 @@ class PipelineExecutor(_FinalizeMixin, _TelemetryMixin):
         operational_outcome = self._stream_operational_outcome(exc, broker, run_id, node_token_usage)
         if operational_outcome is not None:
             return operational_outcome
-        _tb = _traceback_detail(exc, limit=5000)
+        _log.error(
+            "pipeline.stream_unhandled_exception",
+            extra={"run_id": str(run_id), "exc_type": type(exc).__name__},
+            exc_info=exc,
+        )
         return _terminal_failure(
             broker,
             "failed",
             type(exc).__name__,
-            _tb,
+            _failure_reason(exc),
             state.node_token_usage or None,
         )
 

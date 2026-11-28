@@ -22,8 +22,8 @@ it (see [Limitation](#limitation-a-default-never-a-control)).
 ## The claim
 
 `product_analytics_required` must be present in the signed payload and be either
-boolean `true` or the string `"true"` (case-insensitive). Anything else —
-`false`, `"false"`, a missing claim, or a malformed payload — reads as not
+boolean `true` or the string `"true"` (case-insensitive). Anything else -
+`false`, `"false"`, a missing claim, or a malformed payload - reads as not
 required. The reader is
 `farna.core.product_analytics.consent.partner_license_requires_analytics`.
 
@@ -53,7 +53,7 @@ payload = {
     "product_analytics_required": True,           # boolean true, or the string "true"
 }
 
-private_key_hex = "<issuer Ed25519 private key, hex>"  # placeholder — never commit the real key
+private_key_hex = "<issuer Ed25519 private key, hex>"  # placeholder - never commit the real key
 licence_key = encode_license_key(payload, private_key_hex)
 print(licence_key)
 ```
@@ -117,7 +117,7 @@ The claim sets a DEFAULT only. The resolved switch takes the first match from:
 An explicit operator value always wins, **including OFF** over a licence that
 requires analytics. A key cannot force analytics on against the operator's
 choice. Treat this as a partner expectation (a contractual default), not a
-software control — and a partner that disables analytics is breaching a
+software control - and a partner that disables analytics is breaching a
 contract, which is a conversation, not something the product enforces.
 
 ## Constraint: the built-in mint paths cannot emit the claim
@@ -134,5 +134,5 @@ payload above does.
 Renewal does not currently drop the claim, because no production caller passes
 `expires_from`, so nothing re-mints. If a future caller starts renewing by
 re-minting through `generate_team_license`, the new key will NOT carry
-`product_analytics_required` — re-add it to the hand-built payload on renewal, or
+`product_analytics_required` - re-add it to the hand-built payload on renewal, or
 the instance silently reverts to the analytics default (OFF).

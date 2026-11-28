@@ -6,7 +6,7 @@
       >
         Sessions
       </h3>
-      <Button severity="secondary" text icon-only @click="handleNewSession" :title="$t('components.assistant.AssistantSessionDrawer.new_session')" :aria-label="$t('components.assistant.new_session')">
+      <Button variant="secondary-text" icon-only @click="handleNewSession" :title="$t('components.assistant.AssistantSessionDrawer.new_session')" :aria-label="$t('components.assistant.new_session')">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="14"
@@ -39,7 +39,7 @@
         variant="bare"
         :title="$t('components.assistant.AssistantSessionDrawer.no_sessions_yet')"
       >
-        <Button severity="primary" link size="small" @click="handleNewSession" class="mt-2">{{ $t('components.assistant.AssistantSessionDrawer.start_a_new_chat') }}</Button>
+        <Button variant="link" size="sm" @click="handleNewSession" class="mt-2">{{ $t('components.assistant.AssistantSessionDrawer.start_a_new_chat') }}</Button>
       </EmptyState>
     </div>
 
@@ -98,7 +98,7 @@
 <script setup lang="ts">
 import { shortId } from "@/utils/format";
 import { useAssistantStore } from "@/composables/useAssistantStore";
-import Button from 'primevue/button'
+import Button from '../ui/Button.vue'
 import EmptyState from "@/components/shared/EmptyState.vue";
 import { formatDateShort } from "@/lib/formatDate";
 

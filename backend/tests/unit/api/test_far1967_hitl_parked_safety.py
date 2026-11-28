@@ -42,6 +42,10 @@ def _principal() -> MagicMock:
     principal = MagicMock()
     principal.organisation_id = uuid.uuid4()
     principal.account_id = uuid.uuid4()
+    # ADR 070 §4: the cancel path now applies the shared per-run team clamp
+    # before it writes. These tests pin parked-run cancellability, not the
+    # boundary, so the principal is the org admin the clause exempts.
+    principal.org_role = "admin"
     return principal
 
 

@@ -89,7 +89,7 @@ import { api } from '../lib/api/client'
 import { decodeJwtPayload } from '../lib/jwt'
 import { usePlanStore } from '../stores/planStore'
 import SettingsMcpView from '../views/SettingsMcpView.vue'
-import Badge from 'primevue/badge'
+import Badge from '../components/ui/Badge.vue'
 import McpOauthClientsCard from '../components/settings/McpOauthClientsCard.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
@@ -446,15 +446,15 @@ describe('SettingsMcpView', () => {
     expect(statusBadges(wrapper)).toEqual(['Revoked'])
   })
 
-  it('gives each key status a distinct badge severity (FAR-1296)', async () => {
+  it('gives each key status a distinct badge variant (FAR-1296)', async () => {
     const wrapper = mountView(mockMcpConfig, threeStateKeys, mockNoOAuthClients)
     await nextTick()
     await nextTick()
     await nextTick()
-    const severities = wrapper
+    const variants = wrapper
       .findAll('[data-testid="settings-mcp-key-status"]')
-      .map((c) => c.findComponent(Badge).props('severity'))
-    expect(severities).toEqual(['success', 'warn', 'secondary'])
+      .map((c) => c.findComponent(Badge).props('variant'))
+    expect(variants).toEqual(['success', 'warning', 'neutral'])
   })
 
   it('opens create key dialog with name and role fields', async () => {
@@ -896,6 +896,22 @@ describe('SettingsMcpView', () => {
     await nextTick()
     const roleSelect = wrapper.find('[aria-label="Role"]')
     expect(roleSelect.exists()).toBe(true)
+  })
+
+  it('explains the role ceiling beside the role selector', async () => {
+    const wrapper = mountView()
+    await nextTick()
+    await nextTick()
+    await nextTick()
+    await wrapper.find('[data-testid="settings-mcp-create-key"]').trigger('click')
+    await nextTick()
+    const text = wrapper.text()
+    expect(text).toContain('Admin is only available on a user-scoped key')
+    expect(text).toContain('org-scoped keys are limited to Operator or Runner')
+    expect(text).toContain('shared machine credential')
+    expect(text).toContain('user_scoped_mcp_keys')
+    expect(text).toContain('expire within 90 days')
+    expect(text).toContain('Operator is enough for pipelines, connectors and runs')
   })
 
   // ─── Multiple API keys ────────────────────────────────────────────────

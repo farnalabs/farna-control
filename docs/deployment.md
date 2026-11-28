@@ -516,6 +516,44 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 # 401 = no such user (create one - step 1), or a wrong password
 ```
 
+**3c. Enable the Bundled Runner executor (optional).** The stack above runs
+pipelines without a local executor. To run `sandbox_agent` nodes on this host's
+Docker engine, apply the executor overlay shipped in the release bundle
+(`runner-all-in-one.yml`, also at
+[`deploy/compose/runner-all-in-one.yml`](../deploy/compose/runner-all-in-one.yml)
+in this repository):
+
+```bash
+docker compose -f docker-compose.prod.yml -f runner-all-in-one.yml up -d
+```
+
+(In a repository checkout, prepend `deploy/compose/` to both file names.)
+
+The overlay adds a filtered, digest-pinned Docker socket proxy (no published
+host ports; the engine socket is mounted read-only) and points the all-in-one
+`farna-control` container - the API and both SAQ workers - at it through
+`FARNA_CONTROL_DOCKER_HOST`. It also declares a dedicated workspace bridge under
+a fixed engine-side name, so provisioned workspaces attach to it and never join
+the stack's default network.
+
+The overlay is opt-in: without the second `-f` file the stack is exactly as
+before. Once enabled, repeat BOTH `-f` flags on every compose invocation against
+this stack (logs, ps, pull, up, down) and on an upgrade. The bundled
+`compose-rollback.sh` starts the previous application image from the base file
+only; if you enabled the executor and need to keep it across a rollback, start
+the rollback through both files with the same one-off image override the helper
+writes (the helper's own comment documents the override shape).
+
+**Pull requests on this tier.** The shipped runner image does not include the
+`gh` CLI, so the one-PR-per-run `gh` guard is inert here and `gh pr create`
+fails. A pipeline on this tier opens a pull request with the GitHub REST API
+from the agent (`curl` with the run-scoped `GITHUB_TOKEN`, which is scoped to
+github.com), or - preferably - by pushing its branch and opening the PR through
+a separate connector or API step. The post-run check that flags a run reporting
+more than one pull request still applies. See
+[`docs/security/bundled-runner-trust-boundary.md`](./security/bundled-runner-trust-boundary.md)
+for the endpoint allowlist and the container hardening defaults.
+
 **What runs.** The `farna-control` service runs the **all-in-one image**: one
 container whose `supervisord` starts the API (`uvicorn`), `nginx`, and **both
 SAQ queue workers** - `saq-runs` executes pipeline runs and `saq-system` owns
@@ -539,12 +577,35 @@ self-contained bundle (own Python runtime, PostgreSQL, Redis) for a workstation
 or single machine without Docker; it does not bootstrap this Compose stack.
 Download it to a file and run it rather than streaming it into a shell:
 `install.sh` verifies every download's sha256 before executing anything, and a
-`curl ... | bash` pipe skips that verification entirely.
+`curl ... | bash` pipe skips that verification entirely. A deployment whose
+reverse proxy publishes the installer entry point serves it at a stable URL; the
+GitHub raw URL always works as a fallback. The stable URL ships in the bundled
+Caddy config (`deploy/caddy/Caddyfile`), the Fly nginx ingress
+(`deploy/fly/nginx.conf`, which fronts `control.farna.dev`) and the all-in-one
+nginx image (`deploy/nginx/all-in-one.conf`).
 
 ```bash
+# Stable: the stable installer entry point (Caddy, Fly nginx or all-in-one nginx)
+curl -fsSL https://<your-domain>/install.sh -o farna-control-install.sh
+
+# Pinned: install release 0.3.329 (tag bundle-v0.3.329)
+curl -fsSL 'https://<your-domain>/install.sh?version=0.3.329' -o farna-control-install.sh
+VERSION=bundle-v0.3.329 bash farna-control-install.sh
+
+# Always-available fallback: the script on the default branch
 curl -fsSL https://raw.githubusercontent.com/farnalabs/farna-control/main/scripts/install.sh -o farna-control-install.sh
+
 bash farna-control-install.sh
 ```
+
+A pinned install needs both the `?version=X.Y.Z` URL *and* `VERSION=bundle-v<X.Y.Z>`:
+the URL fetches the installer script as it shipped in that release, but the
+installer downloads the latest bundle unless `VERSION` is set (its usage text:
+`VERSION=<tag>  Install a specific bundle tag (default: latest release)`). The
+`version=X.Y.Z` maps to the release tag `bundle-v<X.Y.Z>`; any other version
+shape is refused with `400` rather than silently falling back to the default
+branch. The Helm frontend configmap and `deploy/nginx/default.conf` do not yet
+carry the entry point.
 
 | Component | How it runs |
 |---|---|
@@ -621,10 +682,43 @@ A maintained, vendor-neutral Helm chart ships in this repository at
 runner and system workers, frontend, and an optional in-cluster Redis, against
 an external PostgreSQL - and includes ResourceQuota, LimitRange, optional HPA,
 ingress and namespace templates. `deploy/helm/farna-control/values.eks.example.yaml`
-is a validated EKS example (RDS, ElastiCache, ALB), and the chart was deployed
-end-to-end on a real EKS cluster on 2026-09-23 (FAR-1052); see
+is a validated EKS example (RDS, ElastiCache, ALB). The chart was first proven
+end-to-end on a real EKS cluster on 2026-09-23 (FAR-1052) and re-validated
+end-to-end on 2026-11-26 (FAR-2770, below); see
 `deploy/helm/farna-control/README.md` §Validation Status for exactly what was proven
 and which follow-ups remain open.
+
+**The chart was proven end to end on a real EKS cluster on 2026-11-26**
+(FAR-2770). Cluster shape: eksctl in `us-east-1` (AWS account 365370368472),
+cluster `farna-control-validation`, EKS 1.34 (Kubernetes `v1.34.12-eks-9adbfea`),
+2 x `m7i-flex.large` managed nodes, chart `farna-control-0.3.330`, embedded Redis
+(`redis.embedded=true` with a password), Postgres `postgres:16` in the sibling
+namespace `farna-control-db` with an admin role holding CREATEROLE + CREATEDB,
+ingress disabled, and images built from the current tree for `linux/amd64` and
+tagged `helm-validate-20261126` in ECR. On a fresh database the backend migrated
+with a single `alembic upgrade heads` (`0350_baseline_schema` to
+`0368_invitations_quarantine_rls`), all five workloads became Ready across both
+nodes, `/healthz/ready` returned 200 with top-level `status: ok`, sign-in through
+the UI worked, a model backend was created (proving the `FERNET_KEY` credential
+path), one pipeline ran to terminal status `complete` (run id
+`2384d050-194b-4599-bbf5-0cf235542b29`), and `helm upgrade` followed by
+`helm rollback` left readiness green, sign-in working and the pipeline list
+intact. This supersedes the 2026-11-25 attempt (FAR-2770; PR #3525), which failed
+only because `backend/entrypoint.sh` still booted the retired
+`alembic upgrade 0001_v2_identity_org` revision; FAR-2777 (PR #3527) replaced it
+with the single `alembic upgrade heads` and the 2026-11-26 run re-validated the
+chart. `deploy/helm/farna-control/README.md` §Validation Status carries the full
+evidence and the open follow-ups.
+
+Also observed on that fresh install and owned separately (FAR-2803, not fixed):
+the boot seed logs an RLS rejection for `environment_profiles` and leaves the
+table empty, so a fresh install currently ships no default environment profiles.
+It did not block readiness or the pipeline run above.
+
+One further limitation is by design for now and is **not** validated behaviour:
+the chart takes no pre-upgrade database snapshot (FAR-2675 is open), so a failed
+migration on the Helm path has nothing to restore, and `helm rollback` reverts
+Kubernetes objects only, never data. Recovery on Kubernetes is unproven.
 
 **Stack versus runtime provider.** The chart installs the stack, not the agent
 runtime. The Kubernetes *runtime provider*, which runs agent workspaces as

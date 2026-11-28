@@ -1,6 +1,10 @@
 services:
   db-local:
     image: postgres:16-alpine
+    # FAR-2808: same policy and rationale as the root compose's `db` - a
+    # container that exited never comes back on its own, and `unless-stopped`
+    # keeps an explicit `docker compose stop`/`down` stopped.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: farna_control
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
@@ -11,13 +15,24 @@ services:
     volumes:
       - pgdata_local:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U farna_control"]
+      # FAR-2808: TCP, not the default unix socket. The entrypoint's temporary
+      # initdb server is socket-only (`listen_addresses=''`), so a host-less
+      # probe answers 0 before the real server exists. See the root compose's
+      # `db` for the full mechanism.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U farna_control -d farna_control"]
       interval: 3s
       timeout: 5s
       retries: 10
+      # Same cold-first-start grace as the root compose's `db` (see the long
+      # rationale there). The faster 3s interval and 10 retries are kept for
+      # steady-state detection; start_period keeps the first-run initdb from
+      # consuming that retry budget.
+      start_period: 120s
 
   redis-local:
     image: redis:8-alpine
+    # FAR-2808: same policy as the root compose's `redis`.
+    restart: unless-stopped
     # FAR-2002 — same bound/policy as the root compose's `redis` service (see
     # the long rationale there): a hard maxmemory so the host is protected, and
     # `volatile-lru` so eviction can only touch TTL-bearing job hashes the
@@ -37,6 +52,10 @@ services:
   # for the worker role).
   saq-runner:
     build: ./backend
+    # FAR-2808: same failure class as the root compose's `saq-runner` (see
+    # there). There is no `backend` service in this file - the API runs on the
+    # host - so the two SAQ workers are the local stack's app services.
+    restart: unless-stopped
     command: ["python", "-m", "saq", "farna.core.saq_worker.runs_settings"]
     depends_on:
       db-local:
@@ -78,6 +97,9 @@ services:
   # via the custom runner (fly-ssh-only equivalent in prod).
   saq-system:
     build: ./backend
+    # FAR-2808: same failure class as the root compose's `saq-system` (see
+    # there): a dead scheduler silently stops every cron and polling trigger.
+    restart: unless-stopped
     command: ["python", "-m", "farna.core.saq_worker"]
     depends_on:
       db-local:

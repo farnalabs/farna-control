@@ -12,12 +12,13 @@
       >
         <template #default>
           <div class="flex items-end gap-3">
-            <div class="flex-1 sm:max-w-xs">
-              <label for="runner-concurrency-limit" class="mb-1.5 block text-xs font-medium text-muted-foreground">
-                {{ $t('views.RunnersConcurrencyTab.concurrent_run_limit') }}
-              </label>
-              <InputText
-                id="runner-concurrency-limit"
+            <Field
+              id="runner-concurrency-limit"
+              :label="$t('views.RunnersConcurrencyTab.concurrent_run_limit')"
+              label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+              class="flex-1 sm:max-w-xs"
+            >
+              <Input
                 :aria-label="$t('views.RunnersConcurrencyTab.concurrency_limit_aria')"
                 :model-value="limitInput == null ? '' : String(limitInput)"
                 @update:model-value="(v: any) => limitInput = v === '' ? null : Number(v)"
@@ -26,7 +27,7 @@
                 max="100"
                 data-testid="admin-sandbox-concurrency-limit"
               />
-            </div>
+            </Field>
             <Button :disabled="saving" data-testid="admin-sandbox-concurrency-save" @click="saveLimit">
               {{ saving ? $t('views.RunnersConcurrencyTab.saving') : $t('views.RunnersConcurrencyTab.save') }}
             </Button>
@@ -61,8 +62,9 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DataCard from '../../components/ui/DataCard.vue'
-import InputText from 'primevue/inputtext'
-import Button from 'primevue/button'
+import Field from '../../components/ui/Field.vue'
+import Input from '../../components/ui/Input.vue'
+import Button from '../../components/ui/Button.vue'
 import LoadingSpinner from '../../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
 import { api } from '../../lib/api/client'

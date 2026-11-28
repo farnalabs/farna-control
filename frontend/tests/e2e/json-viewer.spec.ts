@@ -94,8 +94,8 @@ test.describe('JsonViewer design-token theming', { tag: '@regression' }, () => {
       )
 
     // FAR-2016: value colours resolve through the TEXT-SAFE tokens
-    // (--success-text / --primary-text), not the fill hues. In the dark and
-    // agent themes each pair is byte-identical, so the difference only bites in
+    // (--success-text / --primary-text), not the fill hues. In the dark theme
+    // each pair is byte-identical, so the difference only bites in
     // light mode — where --success is 2.30:1 on white and --success-text is
     // 5.42:1 (see the FAR-1938 comment in style.css).
     const probes = [

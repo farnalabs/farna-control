@@ -49,7 +49,7 @@ replaces a marker with a job output silently disarms the signal – the guard su
 | `dast.yml` | Baseline DAST scan | Never fails on findings **by design** | ZAP report artifact | Summary | Enforcement is deploy.yml's `dast-gate` | Legitimate (documented report-only) |
 | `deploy-staleness-check.yml` | Prod staleness + consecutive-failure escalation | Every source unreadable → `healthy` empty, verdict step skipped | **Added:** UNKNOWN-tick marker step | **Added:** NOT MEASURED summary | Its own next tick (transition email state vector) | **Masking – fixed** |
 | `deploy-watchdog.yml` | Fly-level self-heal / re-dispatch | Same UNKNOWN verdict shape | **Added:** UNKNOWN-tick marker step; explicit verdicts elsewhere | **Added:** NOT MEASURED summary | Its own next tick | **Masking – fixed** |
-| `deploy.yml` | Staging + prod deploy | Throttle / already-in-progress → success, nothing shipped | `deployed` output + `NO DEPLOY` markers (FAR-2152 / PR #2405) | Yes (a `NO DEPLOY` marker in the summary) | deploy-staleness-check, deploy-watchdog, weekly report | **Masking – fixed in #2405 (not redone)** |
+| `deploy.yml` | Staging + prod deploy | Throttle / already-in-progress → success, nothing shipped | `deployed` output + `NO DEPLOY` markers (FAR-2152 / PR #2405) | Yes - the throttled banner names the specific reason, **when the last real deploy was**, and **how far production's deployed SHA is behind `origin/main`**; the step log leads with a one-line verdict and a `::warning::` annotation carries the same headline | deploy-staleness-check, deploy-watchdog, weekly report | **Masking – fixed in #2405; legibility extended (FAR-954)** |
 | `determination-eval.yml` | Score determination fixtures | None | Fails loud | Log | Operator | Legitimate |
 | `duplicate-delivery-guard.yml` | Warn on duplicate open PR titles | Guard not on the base commit yet (self-bootstrap) | `::warning::`, documented as expected | Log | PR checks | Legitimate (short-lived self-bootstrap) |
 | `fast-lane-post-merge-audit.yml` | Audit that fast-lane merges got a review | No fast-lane merges in the window | Step log | Log | Operator | Legitimate no-op |
@@ -65,10 +65,11 @@ replaces a marker with a job output silently disarms the signal – the guard su
 | `mutation-testing.yml` | Weekly mutation baseline | None | Fails loud | Report | Operator | Legitimate |
 | `native-gate0.yml` | Offline bundle boot proof on PRs | None – asserts every precondition | Fails loud | Log | PR checks | Legitimate (exemplar) |
 | `native-release-smoke.yml` | Install + smoke a published bundle | (a) No published `bundle-v*` release → canary skip; (b) a `workflow_dispatch` with NEITHER `canary_version` NOR `rollback_version` → no verification job is eligible, so only housekeeping runs | (a) `::notice::`, documented "honestly not applicable"; (b) **Added:** `dispatch-guard` job fails with an `::error::` naming both inputs | (a) Log; (b) error annotation | (a) `canary-housekeeping` deliberately treats it as not-applicable; (b) operator | (a) Legitimate (documented); (b) **Masking – fixed (FAR-2161)** |
+| `pipeline-heartbeat.yml` | Hourly monitor: alert when a scheduled workflow has not fired inside its declared window | None - every declared pipeline is checked on every run, and an unreadable run history is an `::error::`, never an all-clear | `::error::` naming each silent workflow, plus the run conclusion | Yes - a step summary on every run, and a notice when all are fresh | Operator / run history | Legitimate (the red run is the signal; it dispatches nothing) |
 | `pr-conflict-reconcile.yml` | Dispatch the fixer for conflicted PRs | `gh pr list` fails → fail-open skip | `api_failed` output + **Added:** NOTHING RECONCILED summary | **Added** | Operator | **Masking (minor) – fixed** |
 | `pr-review.yml` | Dispatch the PR reviewer | Draft / dedup / superseded / manual-delivery / fork → no dispatch | `ready=false` output + `::notice::` | Log | PR Housekeeper re-drives from the **review artifact** | Legitimate (consumer measures the artifact) |
 | `publish-images.yml` | Publish container images to GHCR | None | Fails loud | n/a | Operator | Legitimate |
-| `rc-validate.yml` | Pen-test an RC against prod | None (missing secrets exit 1) | Fails loud | n/a | Operator | Legitimate |
+| `rc-validate.yml` | Boot the RC's own disposable stack and fuzz it (plus the clean-host compose and upgrade/rollback legs) | None - every credential is generated on the runner and the image is pulled by its immutable RC tag | Fails loud, naming the container logs when the stack will not come up | Report + stack logs artifact | Operator | Legitimate |
 | `release-unified.yml` | Cut / recut / promote / dry-run | (a) `publish-release` was **skipped** while every direct need reported success (run `41786063745`, 2026-11-04: the run concluded success with no GitHub Release); (b) each mode otherwise fails loud on its own guards | **Added:** the `Validate publication dependencies` gate step names the unsatisfied need; publication runs under `!cancelled()` (so a skipped need becomes a named failure and an operator cancel cannot publish); the terminal `Assert the release and bundle tag exist` step verifies the release **and** the `bundle-v*` tag | **Added:** every failure names the dependency, the missing release, or the missing tag | Operator / run history; `native-release-smoke.yml` consumes the published release | **Masking – fixed (run 41786063745)** |
 | `release.yml` | (retired entry point) | n/a | **Fails loudly**, naming the replacement | Log | Operator | Legitimate (deliberately red) |
 | `runner-ci-backstop.yml` | Weekly forced harness run | None | Fails loud | n/a | Operator | Legitimate |
@@ -92,6 +93,19 @@ Notes:
   (FAR-2152). This sweep did not redo them; it added only the *UNKNOWN-tick*
   state-vector marker, which is a different defect (a tick that measured
   nothing, not a deploy that was throttled).
+* **`deploy.yml` throttled banner (FAR-954 legibility follow-up):** the
+  `deploy-throttle-status` job now renders "this run deployed nothing, why,
+  when the last real deploy was, and how far production's SHA is behind
+  `origin/main`". The last-deploy timestamp is the same anchor the throttle
+  uses (the last run whose production deploy **job** succeeded), passed through
+  as an output; the production SHA is read read-only from
+  `control.farna.dev/api/v1/deployment` and the gap from the GitHub
+  commits/compare API. The throttle decision and its 3h interval are unchanged,
+  and the run still concludes SUCCESS (throttling is intentional) - so the
+  distinction is visible in the summary, the `::warning::` annotation and the
+  status job's display name, never in the run conclusion. (No deploy *hold*
+  gate exists today - the SAQ_HOLD gate was retired 2026-08-05 - so the
+  summary's `hold` case is defensive for a reintroduced gate; nothing sets it.)
 * **`pr-review.yml` / `fast-lane-post-merge.yml` / `k8s-conformance.yml`**
   were the ticket's strongest candidates and each was *verified*, not assumed:
   their no-ops are covered by a consumer that measures the artifact (the review

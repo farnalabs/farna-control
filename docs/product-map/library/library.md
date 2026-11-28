@@ -49,23 +49,29 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
 
 - [x] Primitives list with `primitive_type`, `source` (local/registry/modulo), and `search`
       filters, plus single-primitive detail (`browse.feature`)
+      <!-- behaviour: library-01 | tests: backend/tests/bdd/features/library/browse.feature -->
 - [x] Copy-to-adapt: POST `/api/v1/libraries/{id}/adapt` copies a built-in primitive
       locally with `forked_from` set, supports an optional `owner_team_id`, returns 404 for
       a missing primitive, and MCP copy requires the runner role (403 for viewers)
       (`copy_to_adapt.feature`)
+      <!-- behaviour: library-02 | tests: backend/tests/bdd/features/library/copy_to_adapt.feature -->
 - [x] Ratings on library primitives are exercised (`ratings.feature`)
+      <!-- behaviour: library-03 | tests: backend/tests/bdd/features/library/ratings.feature -->
 - [x] Tier classification: an explicit tier (preview) persists on create, omitting the
       tier defaults to native, `in_dev` primitives are excluded from the default listing,
       `include_in_dev=true` reveals them only to authorized roles (403 for viewers)
       (`tiering.feature`)
+      <!-- behaviour: library-04 | tests: backend/tests/bdd/features/library/tiering.feature -->
 - [x] Fixture contributions are exercised end to end through
       `/api/v1/library/contribute` (`contributions.py`): a `draft` is created (201),
       missing fields are rejected 422, a draft is submitted to the `review_queue`,
       a non-draft submit is 409, a published contribution is versioned into a fresh
       `draft` (201, 409 on a draft original), and contributions/versions are
       listed (`contribute.feature`, `test_library_contributions.py`)
+      <!-- behaviour: library-05 | tests: backend/tests/bdd/features/library/contribute.feature, backend/tests/bdd/steps/test_library_contributions.py -->
 - [x] Library-schema seeding and dogfood schemas underpin create-pipeline from a template
       (`library/schemas.feature`, `test_schema_seeds.py`)
+      <!-- behaviour: library-06 | tests: backend/tests/bdd/features/library/schemas.feature, backend/tests/unit/library/test_schema_seeds.py -->
 - [x] Composite library primitives are saved/browsed/adapted, and the create and update
       boundaries validate the composite graph body: a `composite` primitive's
       `content_json` must carry `nodes` and `edges` lists, so an empty or structurally
@@ -74,6 +80,7 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
       (`composites/composite_library.feature`, `LibraryPrimitiveCreate` /
       `LibraryPrimitiveUpdate` handling in `api/routes/library.py`,
       `test_library_routes.py`)
+      <!-- behaviour: library-07 | tests: backend/tests/bdd/features/composites/composite_library.feature, backend/tests/unit/api/test_library_routes.py -->
 - [x] Composite library-primitive credential masking (FAR-1380): the shared
       `LibraryPrimitiveResponse._mask_composite_graph_credentials` validator masks
       credential-bearing node fields inside a **composite** primitive's `content_json`
@@ -87,6 +94,7 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
       masked-read → patch round-trip preserves the stored secret
       (`backend/tests/unit/api/test_library_primitive_masking.py`,
       `api/routes/library.py`, `api/mcp_server.py`)
+      <!-- behaviour: library-08 | tests: backend/tests/unit/api/test_library_primitive_masking.py -->
 - [x] Library collections (FAR-760): a `library_collection` primitive can be created as a
       draft (201), its manifest pins updated while draft, and published (200) – invalid
       pins, duplicate pins, an empty manifest and more than `MAX_COLLECTION_PINS` are
@@ -96,11 +104,13 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
       (`backend/tests/unit/api/test_library_collection.py`,
       `frontend/src/views/CollectionCreateView.vue`,
       `frontend/src/views/CollectionDetailView.vue`)
+      <!-- behaviour: library-09 | tests: backend/tests/unit/api/test_library_collection.py -->
 - [x] Workflow export (`export.feature`) serializes a pipeline into a `.modulo.zip` /
       signed YAML bundle with org-private fields stripped (owner_team_id, visibility,
       credentials/ciphertexts, env secrets) and preserves the configuration surface
       (`core/workflow_import_export/__init__.py`: `export_pipeline_bundle` /
       `export_pipeline_bundle_v2`)
+      <!-- behaviour: library-10 | tests: backend/tests/bdd/features/workflows/export.feature -->
 - [x] Workflow import (`import.feature`) is covered by executing BDD driving the real
       two-phase REST surface – `POST /api/v1/libraries/import/analyse` resolves every
       bundle reference (connector types to the org's local instances, schemas by
@@ -109,6 +119,7 @@ Library collections (FAR-760) are authored at `/library/collections/new` and vie
       materializes the pipeline (200 `imported`); a tampered (non-JSON) bundle is
       rejected 400 "Invalid bundle JSON" without creating entities. Only the DB
       read/materialization seams are patched (`test_workflows.py`)
+      <!-- behaviour: library-11 | tests: backend/tests/bdd/features/workflows/import.feature, backend/tests/bdd/steps/test_workflows.py -->
 
 ## Known Gaps
 

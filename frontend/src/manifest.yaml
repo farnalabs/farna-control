@@ -307,7 +307,7 @@ routes:
     /evals/editor:
         name: eval-editor
         breadcrumb: Eval Editor
-        parent: /
+        parent: /evals
         product_map: [feat-evals]
         # FAR-2609: the editor is a WRITE surface. `eval.list` resolves to viewer
         # and the router admits on ANY of these, so listing it here let a viewer
@@ -326,7 +326,7 @@ routes:
     /evals/proposals:
         name: eval-proposals-queue
         breadcrumb: Eval Proposals
-        parent: /
+        parent: /evals
         product_map: [feat-evals]
         # The queue LIST is `feedback.list` (viewer floor) - reading which eval
         # gaps were detected is genuinely useful to a viewer/auditor, so the
@@ -2602,6 +2602,15 @@ elements:
         dynamic_testid: false
     /admin/product-analytics:
       - testid: last-dump
+        type: element
+        dynamic_testid: false
+      - testid: last-dump-failure-detail
+        type: element
+        dynamic_testid: false
+      - testid: last-failed-dump
+        type: element
+        dynamic_testid: false
+      - testid: last-dump-failure
         type: element
         dynamic_testid: false
       - testid: dump-count-total
@@ -7929,6 +7938,8 @@ features:
             - "[x] The transparency endpoint's consent_level/egress_allowed are scoped per organisation (the caller's own org, the preferred source) with an instance-level fallback when the caller org cannot be resolved - all if any active org has opted in, else off (FAR-1635)"
             - "[x] Staged frontend events are consumed and purged end to end (FAR-1717) - the daily metrics_dump aggregates metrics_staging rows into the payload's event_counts section (_aggregate_staged_events) and every cron tick purges consumed rows (watermark past their date) plus rows older than the 30-day retention bound via _purge_staging, served by the plain index ix_metrics_staging_recorded_at (migration 0304); turning the org level off (admin PUT or prompt decline) purges its staged rows immediately"
             - "[x] The frontend event-capture composable is initialised in the app root (FAR-1718) - App.vue calls initProductAnalytics wired to productAnalyticsStore.isOptedIn as the live consent function, and curated track() call sites ship for pipeline create/run start, schema create, connector add, model-backend add, trigger create, eval create and HITL claim/approve/reject; no page_view event exists - per-route data is not captured client or server side; each event_id is a per-session prefix plus a monotonic counter, so a page reload (or a second tab) restarts the counter under a NEW prefix and its events cannot collide with the earlier session's IDs under the backend's (organisation_id, event_id) dedup (frontend/src/composables/useProductAnalytics.ts, useProductAnalytics.spec.ts)"
+            - "[x] A failed product-analytics dump is durable and alertable (FAR-2740) - the attempt writes product_analytics_last_dump_failure_at and a truncated product_analytics_last_dump_failure_summary into system_config (status code plus the vendor error text, with the instance secret redacted before it is persisted or surfaced) and raises core.health_alerts.send_operator_alert on the shared readiness channel (same SMTP config, recipients, environment allowlist and deployment-context footer); the next fully successful dump clears the record. A missing vendor endpoint or instance secret is recorded as a fixed-reason failure and alerted too, and a partial-success run still records the failure because the watermark/count already cover its delivered days"
+            - "[x] /admin/product-analytics warns when an opted-in instance is not delivering (FAR-2740) - never_reached_farnalabs when the switch is on, consent is all, no successful dump exists and the consent is older than the 3-day grace window (a freshly enabled instance is not alarmed before its first daily dump); not_reaching_farnalabs when the last success is stale; BOTH are silenced when the instance switch is off, so turning analytics off does not leave a permanent warning. The page renders the recorded failure timestamp and summary under the warning"
             - "[x] Analytics never degrades an organisation's plan or tier. The partner product_analytics_required claim is CONTRACTUAL: it only supplies the DEFAULT for the instance switch when no operator value exists (consent.resolve_instance_analytics_switch), and metrics_dump collects consenting orgs with no licence/tier inspection. A partner that disables the dump is breaching a contract, which is a conversation, not a software control"
             - "[ ] An in-product analytics export/administration surface (self-serve downloadable org metrics, configurable reporting schedule, or an in-app analytics warehouse) is not shipped — telemetry export is vendor-bound"
         deferrals:

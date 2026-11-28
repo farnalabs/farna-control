@@ -1,15 +1,17 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader :title="$t('views.SettingsErrorForwardersView.error_forwarders')" :subtitle="$t('views.SettingsErrorForwardersView.configure_external_error_tracking_and_alerting_integrations')" />
 
     <FeatureGate feature-name="error_forwarders" show-disabled>
 
       <div v-if="loading" class="space-y-6">
-        <div
+        <BaseCard
           v-for="n in 3"
           :key="`error-forwarders-skeleton-${n}`"
           data-testid="error-forwarders-skeleton"
-          class="rounded-lg border bg-card p-4 shadow-sm animate-pulse"
+          padding="md"
+          elevation="sm"
+          class="animate-pulse"
         >
           <div class="flex items-center gap-3">
             <div class="h-10 w-10 rounded-lg bg-muted" />
@@ -19,7 +21,7 @@
             </div>
             <div class="h-6 w-11 rounded-full bg-muted" />
           </div>
-        </div>
+        </BaseCard>
       </div>
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadForwarders" />
@@ -47,26 +49,14 @@
             <template #actions>
               <span
                 v-if="!fwd.configured"
-                class="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600"
+                class="rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-medium text-warning-text"
               >{{ $t('views.SettingsErrorForwardersView.not_configured') }}</span>
-              <button
-                type="button"
+              <ToggleSwitch
+                :checked="fwd.enabled"
                 data-testid="error-forwarders-toggle"
-                class="relative inline-flex h-6 w-11 items-center"
-                :aria-label="$t('views.SettingsErrorForwardersView.toggle_forwarder', { name: fwd.display_name })"
-                @click="toggleForwarder(fwd)"
-              >
-                <div
-                  class="h-6 w-11 rounded-full transition-colors"
-                  :class="fwd.enabled ? 'bg-primary' : 'bg-input'"
-                >
-                  <div
-                    class="h-5 w-5 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform"
-                    :class="fwd.enabled ? 'translate-x-[1.375rem]' : ''"
-                    style="margin-top: 2px;"
-                  />
-                </div>
-              </button>
+                :label="$t('views.SettingsErrorForwardersView.toggle_forwarder', { name: fwd.display_name })"
+                @toggle="toggleForwarder(fwd)"
+              />
             </template>
           </CardHeader>
 
@@ -76,46 +66,42 @@
           >
             <!-- Sentry -->
             <template v-if="fwd.forwarder_type === 'sentry'">
-              <div>
-                <label for="settingserrorforwardersview-field-13" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.dsn') }}</label>
-                <input id="settingserrorforwardersview-field-13"
+              <Field id="settingserrorforwardersview-field-13" :label="$t('views.SettingsErrorForwardersView.dsn')">
+                <Input
                   v-model="configs.sentry.dsn"
                   type="text"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.dsn_placeholder')"
                 />
-              </div>
-              <div>
-                <label for="settingserrorforwardersview-field-12" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.org_slug') }}</label>
-                <input id="settingserrorforwardersview-field-12"
+              </Field>
+              <Field id="settingserrorforwardersview-field-12" :label="$t('views.SettingsErrorForwardersView.org_slug')">
+                <Input
                   v-model="configs.sentry.org_slug"
                   type="text"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.org_slug_placeholder')"
                 />
-              </div>
-              <div>
-                <label for="settingserrorforwardersview-field-11" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.project_slug') }}</label>
-                <input id="settingserrorforwardersview-field-11"
+              </Field>
+              <Field id="settingserrorforwardersview-field-11" :label="$t('views.SettingsErrorForwardersView.project_slug')">
+                <Input
                   v-model="configs.sentry.project_slug"
                   type="text"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.project_slug_placeholder')"
                 />
-              </div>
+              </Field>
             </template>
 
             <!-- DataDog -->
             <template v-if="fwd.forwarder_type === 'datadog'">
-              <div>
-                <label for="settingserrorforwardersview-field-10" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.api_key') }}</label>
-                <input id="settingserrorforwardersview-field-10"
+              <Field id="settingserrorforwardersview-field-10" :label="$t('views.SettingsErrorForwardersView.api_key')">
+                <Input
                   v-model="configs.datadog.api_key"
                   type="password"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.datadog_api_key_placeholder')"
                 />
-              </div>
+              </Field>
               <div>
                 <label for="settingserrorforwardersview-datadog-site" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.site') }}</label>
                 <Select
@@ -143,91 +129,86 @@
 
             <!-- PagerDuty -->
             <template v-if="fwd.forwarder_type === 'pagerduty'">
-              <div>
-                <label for="settingserrorforwardersview-field-8" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.routing_key') }}</label>
-                <input id="settingserrorforwardersview-field-8"
+              <Field id="settingserrorforwardersview-field-8" :label="$t('views.SettingsErrorForwardersView.routing_key')">
+                <Input
                   v-model="configs.pagerduty.routing_key"
                   type="password"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.pagerduty_routing_key_placeholder')"
                 />
-              </div>
+              </Field>
             </template>
 
             <!-- Rollbar -->
             <template v-if="fwd.forwarder_type === 'rollbar'">
-              <div>
-                <label for="settingserrorforwardersview-field-7" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.access_token') }}</label>
-                <input id="settingserrorforwardersview-field-7"
+              <Field id="settingserrorforwardersview-field-7" :label="$t('views.SettingsErrorForwardersView.access_token')">
+                <Input
                   v-model="configs.rollbar.access_token"
                   type="password"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.rollbar_access_token_placeholder')"
                 />
-              </div>
-              <div>
-                <label for="settingserrorforwardersview-field-6" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.environment') }}</label>
-                <input id="settingserrorforwardersview-field-6"
+              </Field>
+              <Field id="settingserrorforwardersview-field-6" :label="$t('views.SettingsErrorForwardersView.environment')">
+                <Input
                   v-model="configs.rollbar.environment"
                   type="text"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.environment_placeholder')"
                 />
-              </div>
+              </Field>
             </template>
 
             <!-- OpsGenie -->
             <template v-if="fwd.forwarder_type === 'opsgenie'">
-              <div>
-                <label for="settingserrorforwardersview-field-5" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.api_key') }}</label>
-                <input id="settingserrorforwardersview-field-5"
+              <Field id="settingserrorforwardersview-field-5" :label="$t('views.SettingsErrorForwardersView.api_key')">
+                <Input
                   v-model="configs.opsgenie.api_key"
                   type="password"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.opsgenie_api_key_placeholder')"
                 />
-              </div>
-              <div>
-                <label for="settingserrorforwardersview-field-4" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.team') }}</label>
-                <input id="settingserrorforwardersview-field-4"
+              </Field>
+              <Field id="settingserrorforwardersview-field-4" :label="$t('views.SettingsErrorForwardersView.team')">
+                <Input
                   v-model="configs.opsgenie.team"
                   type="text"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.team_placeholder')"
                 />
-              </div>
+              </Field>
             </template>
 
             <!-- Loki -->
             <template v-if="fwd.forwarder_type === 'loki'">
-              <div>
-                <label for="settingserrorforwardersview-field-3" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.push_url') }}</label>
-                <input id="settingserrorforwardersview-field-3"
+              <Field id="settingserrorforwardersview-field-3" :label="$t('views.SettingsErrorForwardersView.push_url')">
+                <Input
                   v-model="configs.loki.push_url"
                   type="url"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.push_url_placeholder')"
                 />
-              </div>
-              <div>
-                <label for="settingserrorforwardersview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.tenant_id') }}</label>
-                <input id="settingserrorforwardersview-field-2"
+              </Field>
+              <Field id="settingserrorforwardersview-field-2" :label="$t('views.SettingsErrorForwardersView.tenant_id')">
+                <Input
                   v-model="configs.loki.tenant_id"
                   type="text"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.tenant_id_placeholder')"
                 />
-              </div>
-              <div>
-                <label for="settingserrorforwardersview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsErrorForwardersView.labels') }}</label>
-                <input id="settingserrorforwardersview-field-1"
+              </Field>
+              <Field
+                id="settingserrorforwardersview-field-1"
+                :label="$t('views.SettingsErrorForwardersView.labels')"
+                :help="$t('views.SettingsErrorForwardersView.labels_hint')"
+              >
+                <Input
                   v-model="configs.loki.labels"
                   type="text"
                   class="input-base"
                   :placeholder="$t('views.SettingsErrorForwardersView.labels_placeholder')"
                 />
-                <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.SettingsErrorForwardersView.labels_hint') }}</p>
-              </div>
+              </Field>
             </template>
 
             <div class="flex items-center gap-3 pt-2">
@@ -245,21 +226,26 @@
               </Button>
             </div>
 
-            <div
+            <Notice
               v-if="testResults[fwd.forwarder_type]"
-              class="rounded-lg border p-3 text-sm"
-              :class="testResults[fwd.forwarder_type]?.ok ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text'"
+              :variant="testResults[fwd.forwarder_type]?.ok ? 'success' : 'danger'"
+              :icon="false"
+              padding="sm"
+              class="text-sm"
             >
               <p class="font-medium">{{ testResults[fwd.forwarder_type]?.ok ? $t('views.SettingsErrorForwardersView.connection_successful') : $t('views.SettingsErrorForwardersView.connection_failed') }}</p>
               <p class="mt-0.5">{{ testResults[fwd.forwarder_type]?.message }}</p>
-            </div>
+            </Notice>
 
-            <div
+            <Notice
               v-if="formSuccess[fwd.forwarder_type]"
-              class="rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+              variant="success"
+              :icon="false"
+              padding="sm"
+              class="text-sm"
             >
               {{ formSuccess[fwd.forwarder_type] }}
-            </div>
+            </Notice>
             <!-- Save action error: no refetch loader; the forwarder's own Save
                  button is the retry path. -->
             <ErrorAlert
@@ -285,9 +271,13 @@ import FeatureGate from '../components/FeatureGate.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
-import Button from 'primevue/button'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 
 interface ForwarderItem {

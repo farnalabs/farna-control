@@ -16,7 +16,7 @@
           <span class="text-xs text-muted-foreground">{{ $t('components.assistant.AssistantOnlyView.assistant_only_mode') }}</span>
         </div>
       </div>
-      <Button severity="secondary" outlined size="small" data-testid="assistant-only-return-home" @click="returnHome">
+      <Button variant="secondary" size="sm" data-testid="assistant-only-return-home" @click="returnHome">
         <ArrowLeft class="mr-1 h-3.5 w-3.5" aria-hidden="true" />
         {{ $t('components.assistant.AssistantOnlyView.return_home') }}
       </Button>
@@ -34,7 +34,7 @@
         <div class="max-w-md space-y-2 text-center">
           <h2 class="text-lg font-semibold">{{ $t('components.assistant.AssistantOnlyView.assistant_unavailable') }}</h2>
           <p class="text-sm text-muted-foreground">{{ $t('components.assistant.AssistantOnlyView.assistant_unavailable_desc') }}</p>
-          <Button severity="secondary" outlined size="small" data-testid="assistant-only-return-home" @click="returnHome">
+          <Button variant="secondary" size="sm" data-testid="assistant-only-return-home" @click="returnHome">
             {{ $t('components.assistant.AssistantOnlyView.return_home') }}
           </Button>
         </div>
@@ -49,54 +49,39 @@
 
     <template v-else>
       <div class="flex items-center gap-1.5 overflow-x-auto border-b px-3 py-1.5">
-        <div
-          role="tablist"
-          :aria-label="$t('components.assistant.AssistantOnlyView.sessions_tab')"
-          :aria-owns="sessionTabOwns"
-          class="contents"
+        <StateTabs
+          :ariaLabel="$t('components.assistant.AssistantOnlyView.sessions_tab')"
+          :model-value="activeSessionTabKey"
+          :panel-id="panelsVisible ? 'assistant-only-panel-chat' : undefined"
+          :tabs="sessionTabItems"
           data-testid="assistant-only-tab-bar"
-        ></div>
-        <div
-          v-for="tab in tabsStore.tabs"
-          :key="tab.tabId"
-          class="flex shrink-0 items-center gap-1"
+          id-prefix="assistant-only-tab-button"
+          size="compact"
+          testid-prefix="assistant-only-tab"
+          @update:model-value="onSessionTabSelected"
         >
-            <button
-              type="button"
-              :ref="(el) => setTabButtonRef(tab.tabId, el)"
-              class="assistant-only-tab"
-              :class="{ active: tab.sessionId === store.activeSessionId }"
-              :data-testid="`assistant-only-tab-${tab.tabId}`"
-              :id="`assistant-only-tab-button-${tab.tabId}`"
-              role="tab"
-              :aria-selected="tab.sessionId === store.activeSessionId ? 'true' : 'false'"
-              :aria-controls="panelsVisible ? 'assistant-only-panel-chat' : undefined"
-              :title="sessionTitle(tab.sessionId)"
-              @click="selectTab(tab)"
-              @keydown.left.prevent="onSessionTablistKeydown($event, tab)"
-              @keydown.right.prevent="onSessionTablistKeydown($event, tab)"
-              @keydown.home.prevent="onSessionTablistKeydown($event, tab)"
-              @keydown.end.prevent="onSessionTablistKeydown($event, tab)"
-            >
-              <span class="max-w-[180px] truncate">{{ sessionTitle(tab.sessionId) }}</span>
-              <span
-                v-if="tab.sessionId === store.activeSessionId && store.isStreaming"
-                class="assistant-live-dot"
-                :title="$t('components.assistant.AssistantOnlyView.live')"
-                :aria-label="$t('components.assistant.AssistantOnlyView.live')"
-              />
-            </button>
+          <template #tab="{ tab }">
+            <span class="max-w-[180px] truncate">{{ tab.label }}</span>
+            <span
+              v-if="showLiveDot(tab.id)"
+              class="assistant-live-dot"
+              :title="$t('components.assistant.AssistantOnlyView.live')"
+              :aria-label="$t('components.assistant.AssistantOnlyView.live')"
+            />
+          </template>
+          <template #tab-trailing="{ tab }">
             <button
               type="button"
               class="assistant-only-tab-close"
-              :data-testid="`assistant-only-tab-close-${tab.tabId}`"
+              :data-testid="`assistant-only-tab-close-${tab.id}`"
               :aria-label="$t('components.assistant.AssistantOnlyView.close_tab')"
               :title="$t('components.assistant.AssistantOnlyView.close_tab')"
-              @click="closeTab(tab)"
+              @click="closeTabById(tab.id)"
             >
               <X class="h-3 w-3" aria-hidden="true" />
             </button>
-          </div>
+          </template>
+        </StateTabs>
         <button
           type="button"
           class="assistant-only-new-tab"
@@ -109,33 +94,18 @@
         </button>
       </div>
 
-      <div
-        role="tablist"
-        :aria-label="$t('components.assistant.AssistantOnlyView.sub_tabs_label')"
-        class="flex items-center gap-1 border-b px-3"
+      <StateTabs
+        :ariaLabel="$t('components.assistant.AssistantOnlyView.sub_tabs_label')"
+        :model-value="subTab"
+        :panel-id-prefix="panelsVisible ? 'assistant-only-panel' : undefined"
+        :tabs="subTabItems"
+        class="border-b px-3"
         data-testid="assistant-only-subtab-bar"
-      >
-        <button
-          type="button"
-          v-for="st in subTabs"
-          :key="st.key"
-          :ref="(el) => setSubTabButtonRef(st.key, el)"
-          class="assistant-only-subtab"
-          :class="{ active: subTab === st.key }"
-          :data-testid="`assistant-only-subtab-${st.key}`"
-          :id="`assistant-only-subtab-${st.key}`"
-          role="tab"
-          :aria-selected="subTab === st.key ? 'true' : 'false'"
-          :aria-controls="panelsVisible ? `assistant-only-panel-${st.key}` : undefined"
-          @click="subTab = st.key"
-          @keydown.left.prevent="onSubTablistKeydown($event, st.key)"
-          @keydown.right.prevent="onSubTablistKeydown($event, st.key)"
-          @keydown.home.prevent="onSubTablistKeydown($event, st.key)"
-          @keydown.end.prevent="onSubTablistKeydown($event, st.key)"
-        >
-          {{ $t(`components.assistant.AssistantOnlyView.${st.labelKey}`) }}
-        </button>
-      </div>
+        id-prefix="assistant-only-subtab"
+        size="compact"
+        testid-prefix="assistant-only-subtab"
+        @update:model-value="onSubTabSelected"
+      />
 
       <div
         v-if="tabsStore.tabs.length === 0"
@@ -146,7 +116,7 @@
           :title="$t('components.assistant.AssistantOnlyView.no_tabs_yet')"
           :description="$t('components.assistant.AssistantOnlyView.start_new')"
         >
-          <Button size="small" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
+          <Button size="sm" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
         </EmptyState>
       </div>
 
@@ -156,7 +126,7 @@
         data-testid="assistant-only-no-active"
       >
         <EmptyState :title="$t('components.assistant.AssistantOnlyView.select_tab_or_new')">
-          <Button size="small" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
+          <Button size="sm" @click="startNew">{{ $t('components.assistant.AssistantOnlyView.start_new') }}</Button>
         </EmptyState>
       </div>
 
@@ -206,14 +176,15 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import type { ComponentPublicInstance } from 'vue'
 import { useRouter } from 'vue-router'
-import Button from 'primevue/button'
+import { useI18n } from 'vue-i18n'
+import Button from '../components/ui/Button.vue'
 import { ArrowLeft, Plus, X } from '@lucide/vue'
 import { shortId } from '@/utils/format'
 import { useAssistantStore } from '@/composables/useAssistantStore'
 import { useAssistantTabsStore, type AssistantTab } from '@/composables/useAssistantTabsStore'
 import { usePlanStore } from '@/stores/planStore'
+import StateTabs, { type StateTab } from '@/components/shared/StateTabs.vue'
 import AssistantChat from '@/components/assistant/AssistantChat.vue'
 import AssistantSkillManager from '@/components/assistant/AssistantSkillManager.vue'
 import AssistantContextSources from '@/components/assistant/AssistantContextSources.vue'
@@ -221,6 +192,7 @@ import AssistantSessionDrawer from '@/components/assistant/AssistantSessionDrawe
 import EmptyState from '@/components/shared/EmptyState.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 const store = useAssistantStore()
 const tabsStore = useAssistantTabsStore()
 const planStore = usePlanStore()
@@ -229,28 +201,33 @@ const chatRef = ref<InstanceType<typeof AssistantChat> | null>(null)
 type SubTabKey = 'chat' | 'skills' | 'sources' | 'sessions'
 const subTab = ref<SubTabKey>('chat')
 
-const subTabs = computed<{ key: SubTabKey; labelKey: string }[]>(() => [
-  { key: 'chat', labelKey: 'chat_tab' },
-  { key: 'skills', labelKey: 'skills_tab' },
-  { key: 'sources', labelKey: 'sources_tab' },
-  { key: 'sessions', labelKey: 'sessions_tab' },
+const subTabItems = computed<StateTab[]>(() => [
+  { id: 'chat', label: t('components.assistant.AssistantOnlyView.chat_tab') },
+  { id: 'skills', label: t('components.assistant.AssistantOnlyView.skills_tab') },
+  { id: 'sources', label: t('components.assistant.AssistantOnlyView.sources_tab') },
+  { id: 'sessions', label: t('components.assistant.AssistantOnlyView.sessions_tab') },
 ])
 
-const tabButtonRefs = ref<Record<string, HTMLButtonElement | null>>({})
-const subTabButtonRefs = ref<Record<SubTabKey, HTMLButtonElement | null>>({
-  chat: null,
-  skills: null,
-  sources: null,
-  sessions: null,
-})
+const SUB_TAB_KEYS: readonly SubTabKey[] = ['chat', 'skills', 'sources', 'sessions']
 
-function setTabButtonRef(tabId: string, el: Element | ComponentPublicInstance | null) {
-  tabButtonRefs.value[tabId] = el instanceof HTMLButtonElement ? el : null
+/** Only the declared sub-tabs are selectable, whatever a caller sends. */
+function onSubTabSelected(id: string) {
+  const next = SUB_TAB_KEYS.find((key) => key === id)
+  if (next) subTab.value = next
 }
 
-function setSubTabButtonRef(key: SubTabKey, el: Element | ComponentPublicInstance | null) {
-  subTabButtonRefs.value[key] = el instanceof HTMLButtonElement ? el : null
-}
+/** One tab per open assistant session; the id is the tab id the store owns. */
+const sessionTabItems = computed<StateTab[]>(() =>
+  tabsStore.tabs.map((tab) => {
+    const title = sessionTitle(tab.sessionId)
+    return { id: tab.tabId, label: title, title }
+  }),
+)
+
+/** The open tab that fronts the active session (none when no tab is active). */
+const activeSessionTabKey = computed(
+  () => tabsStore.tabs.find((tab) => tab.sessionId === store.activeSessionId)?.tabId ?? '',
+)
 
 const activeSessionTabId = computed(() => {
   const active = tabsStore.tabs.find(t => t.sessionId === store.activeSessionId)
@@ -261,64 +238,14 @@ const activeSessionTabId = computed(() => {
 // AND an active session; omit aria-controls when the controlled panel is absent.
 const panelsVisible = computed(() => tabsStore.tabs.length > 0 && Boolean(store.activeSessionId))
 
-// The session tab buttons live outside the tablist container (so the per-tab
-// close buttons are not owned by it); the tablist claims them via aria-owns.
-const sessionTabOwns = computed(() => {
-  const ids = tabsStore.tabs.map(t => `assistant-only-tab-button-${t.tabId}`).join(' ')
-  return ids || undefined
-})
-
-function onSessionTablistKeydown(event: KeyboardEvent, tab: AssistantTab) {
-  const tabs = tabsStore.tabs
-  const index = tabs.findIndex(t => t.tabId === tab.tabId)
-  if (index === -1) return
-  let nextIndex: number
-  switch (event.key) {
-    case 'ArrowRight':
-      nextIndex = (index + 1) % tabs.length
-      break
-    case 'ArrowLeft':
-      nextIndex = (index - 1 + tabs.length) % tabs.length
-      break
-    case 'Home':
-      nextIndex = 0
-      break
-    case 'End':
-      nextIndex = tabs.length - 1
-      break
-    default:
-      return
-  }
-  event.preventDefault()
-  const target = tabs[nextIndex]
-  tabButtonRefs.value[target.tabId]?.focus()
-  selectTab(target)
+function showLiveDot(tabId: string): boolean {
+  const tab = tabsStore.tabs.find((candidate) => candidate.tabId === tabId)
+  return Boolean(tab && tab.sessionId === store.activeSessionId && store.isStreaming)
 }
 
-function onSubTablistKeydown(event: KeyboardEvent, key: SubTabKey) {
-  const index = subTabs.value.findIndex(st => st.key === key)
-  if (index === -1) return
-  let nextIndex: number
-  switch (event.key) {
-    case 'ArrowRight':
-      nextIndex = (index + 1) % subTabs.value.length
-      break
-    case 'ArrowLeft':
-      nextIndex = (index - 1 + subTabs.value.length) % subTabs.value.length
-      break
-    case 'Home':
-      nextIndex = 0
-      break
-    case 'End':
-      nextIndex = subTabs.value.length - 1
-      break
-    default:
-      return
-  }
-  event.preventDefault()
-  const target = subTabs.value[nextIndex]
-  subTabButtonRefs.value[target.key]?.focus()
-  subTab.value = target.key
+function onSessionTabSelected(tabId: string) {
+  const tab = tabsStore.tabs.find((candidate) => candidate.tabId === tabId)
+  if (tab) selectTab(tab)
 }
 
 const assistantUnavailable = computed(() => !planStore.devMode)
@@ -355,6 +282,11 @@ function closeTab(tab: AssistantTab) {
   tabsStore.closeTab(tab.tabId)
 }
 
+function closeTabById(tabId: string) {
+  const tab = tabsStore.tabs.find((candidate) => candidate.tabId === tabId)
+  if (tab) closeTab(tab)
+}
+
 function onSessionSelected() {
   if (store.activeSessionId) {
     chatRef.value?.disconnect()
@@ -388,19 +320,6 @@ onMounted(async () => {
 
 <style scoped>
 @reference "../style.css";
-.assistant-only-tab {
-  @apply flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors border-b-2 border-transparent;
-  color: hsl(var(--muted-foreground));
-  max-width: 220px;
-}
-.assistant-only-tab:hover {
-  color: hsl(var(--foreground));
-  background-color: hsl(var(--accent));
-}
-.assistant-only-tab.active {
-  color: hsl(var(--primary-text));
-  background-color: hsla(var(--primary) / 0.08);
-}
 .assistant-only-tab-close {
   @apply flex items-center justify-center rounded p-0.5 transition-colors shrink-0 border-0 bg-transparent;
   color: hsl(var(--muted-foreground));
@@ -439,16 +358,5 @@ onMounted(async () => {
 .assistant-only-new-tab:hover {
   color: hsl(var(--foreground));
   background-color: hsl(var(--accent));
-}
-.assistant-only-subtab {
-  @apply px-2.5 py-1.5 text-xs font-medium transition-colors border-b-2 border-transparent;
-  color: hsl(var(--muted-foreground));
-}
-.assistant-only-subtab:hover {
-  color: hsl(var(--foreground));
-}
-.assistant-only-subtab.active {
-  color: hsl(var(--primary-text));
-  border-bottom-color: hsl(var(--primary));
 }
 </style>

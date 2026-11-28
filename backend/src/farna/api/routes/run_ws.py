@@ -31,12 +31,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from farna.api.constants import MSG_UNEXPECTED_ERROR
 from farna.api.db_error_handling import handle_db_errors, session_contract_error_payload
 from farna.api.dependencies import _get_engine
+from farna.api.run_scope import load_run_in_scope
 from farna.auth.jwt import AuthenticatedPrincipal
 from farna.auth.ws_token import WsTokenExpiredError, consume_ws_token
 from farna.core.logging_config import org_id_var
 from farna.core.pipeline_engine.error_codes import sanitize_error_text
 from farna.core.pipeline_engine.event_broker import RunEvent, get_registry
-from farna.db.crud.run import get_run
 from farna.db.models.run import TERMINAL_STATUSES, Run
 from farna.db.rls import set_rls_org
 from farna.settings import get_settings
@@ -89,10 +89,16 @@ async def _load_run_with_rls(
     principal: AuthenticatedPrincipal,
     run_id: uuid.UUID,
 ) -> Run | None:
-    """Load the run inside a fresh RLS-scoped transaction (or None when missing)."""
+    """Load the run inside a fresh RLS-scoped transaction (or None when hidden).
+
+    ADR 070 §4: the shared per-run clamp applies here exactly as on the REST
+    readers, so a socket for a run outside the caller's team boundary is
+    indistinguishable from a missing run (the route answers its normal
+    ``run_not_found`` frame and closes 4004).
+    """
     async with session_factory() as session, session.begin():
         await set_rls_org(session, principal.organisation_id)
-        return await get_run(session, run_id, organisation_id=principal.organisation_id)
+        return await load_run_in_scope(session, principal, run_id)
 
 
 async def _forward_run_events(

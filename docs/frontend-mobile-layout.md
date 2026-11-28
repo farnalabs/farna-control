@@ -15,7 +15,7 @@ Mobile is lower priority than desktop. The rule is simple: below 640px (`sm:`) e
 |---|---|
 | Card title/description with actions | `CardHeader` (`components/ui`) with the `actions` slot |
 | Page title with right-hand controls | `PageHeader` (`components/shared`) with the `right` slot |
-| Any other "content left, buttons right" row | `ActionRow` (`components/shared`) with the default and `actions` slots |
+| Any other "content left, buttons right" row | compose it directly: `flex flex-col sm:flex-row sm:items-start sm:justify-between`, with `min-w-0` content and an `actions-nowrap` actions container |
 | A custom actions container | add the `actions-nowrap` class (stops button labels wrapping) |
 
 ## 390px acceptance test
@@ -23,7 +23,7 @@ Mobile is lower priority than desktop. The rule is simple: below 640px (`sm:`) e
 Every new or changed screen should pass this at a 390x844 viewport:
 
 - `document.documentElement.scrollWidth <= window.innerWidth` (no horizontal overflow)
-- every button label inside an `actions-nowrap` container (card header actions, page header right slot, ActionRow actions) sits on a single line
+- every button label inside an `actions-nowrap` container (card header actions, page header right slot, custom action rows) sits on a single line
 - at 1024px or wider, `CardHeader` is still a row
 
 The reference test is the "Mobile foundation" block in `frontend/tests/e2e/mobile-layout.spec.ts` (`pnpm run test:e2e:mobile`).

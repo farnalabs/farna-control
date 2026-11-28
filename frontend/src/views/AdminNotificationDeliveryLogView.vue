@@ -19,10 +19,13 @@
          sit above a full table — in that case a quieter notice replaces the
          banner rather than contradicting the rows beneath it. -->
     <div aria-live="polite">
-      <div
+      <Notice
         v-if="showNoEndpointsBanner"
+        variant="warning"
+        :icon="false"
+        padding="none"
         data-testid="admin-notification-log-no-endpoints"
-        class="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3"
+        class="mb-4 px-4 py-3"
       >
         <p class="text-sm font-semibold text-warning-text">
           {{ $t('views.AdminNotificationDeliveryLogView.no_outbound_endpoints_title') }}
@@ -47,7 +50,7 @@
             {{ $t('views.AdminNotificationDeliveryLogView.add_endpoint_needs_team') }}
           </span>
         </template>
-      </div>
+      </Notice>
 
       <p
         v-else-if="showHistoryOnlyNotice"
@@ -113,88 +116,98 @@
             data-testid="admin-notification-log-events-unavailable"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.event_list_unavailable') }}
-            <button
-              type="button"
+            <Button
+              variant="link"
+              size="sm"
               class="ml-1 underline"
               data-testid="admin-notification-log-events-retry"
               @click="loadAvailableEvents"
             >
               {{ $t('views.AdminNotificationDeliveryLogView.retry') }}
-            </button>
+            </Button>
           </output>
         </div>
-        <div>
-          <label for="adminnotificationdeliverylogview-field-2" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminNotificationDeliveryLogView.from') }}</label>
-          <input id="adminnotificationdeliverylogview-field-2"
+        <Field
+          id="adminnotificationdeliverylogview-field-2"
+          :label="$t('views.AdminNotificationDeliveryLogView.from')"
+          label-class="mb-1 block text-xs font-medium text-muted-foreground"
+        >
+          <Input
             v-model="filterDateFrom"
             type="date"
             data-testid="admin-notification-log-date-from"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
-        </div>
-        <div>
-          <label for="adminnotificationdeliverylogview-field-1" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminNotificationDeliveryLogView.to') }}</label>
-          <input id="adminnotificationdeliverylogview-field-1"
+        </Field>
+        <Field
+          id="adminnotificationdeliverylogview-field-1"
+          :label="$t('views.AdminNotificationDeliveryLogView.to')"
+          label-class="mb-1 block text-xs font-medium text-muted-foreground"
+        >
+          <Input
             v-model="filterDateTo"
             type="date"
             data-testid="admin-notification-log-date-to"
             class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
-        </div>
+        </Field>
         <div class="flex items-end gap-2">
           <Button data-testid="admin-notification-log-apply" @click="applyFilters">
             {{ $t('views.AdminNotificationDeliveryLogView.apply') }}
           </Button>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             data-testid="admin-notification-log-reset"
-            class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
             @click="resetFilters"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.reset') }}
-          </button>
-          <button
+          </Button>
+          <Button
             v-if="hasRetryableItems && !retryAllConfirm"
-            type="button"
+            variant="warning"
+            outlined
             :disabled="retryingAll"
             data-testid="admin-notification-log-retry-all"
-            class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-40 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+            class="rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm font-medium text-warning-text hover:bg-warning/20 disabled:opacity-40"
             @click="retryAllConfirm = true"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.retry_all_failed') }}
-          </button>
+          </Button>
           <div v-if="retryAllConfirm" class="flex items-center gap-2">
             <span class="text-sm text-muted-foreground">{{ $t('views.AdminNotificationDeliveryLogView.retry_all_confirm') }}</span>
-            <button
-              type="button"
+            <Button
+              variant="warning"
               :disabled="retryingAll"
               data-testid="admin-notification-log-retry-all-confirm"
-              class="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              class="rounded-lg bg-warning px-3 py-1.5 text-sm font-medium text-warning-foreground hover:bg-warning/90 disabled:opacity-50"
               @click="retryAllFailed"
             >
               {{ retryingAll ? $t('views.AdminNotificationDeliveryLogView.retrying_all') : $t('views.AdminNotificationDeliveryLogView.confirm') }}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               data-testid="admin-notification-log-retry-all-cancel"
-              class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent"
               @click="retryAllConfirm = false"
             >
               {{ $t('views.AdminNotificationDeliveryLogView.cancel') }}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
       <div v-if="total > 0" class="mt-3 text-sm text-muted-foreground">
         {{ $t('views.AdminNotificationDeliveryLogView.deliveries_count', { count: total }, total) }}
       </div>
-      <div
+      <Notice
         v-if="retrySuccessMessage"
+        variant="success"
+        :icon="false"
+        padding="none"
         data-testid="admin-notification-log-retry-success"
-        class="mt-3 rounded-lg border border-success/50 bg-success/10 px-4 py-3 text-sm text-success-text"
+        class="mt-3 px-4 py-3 text-sm"
       >
         {{ retrySuccessMessage }}
-      </div>
+      </Notice>
     </DataCard>
 
     <LoadingSpinner v-if="loading" />
@@ -207,15 +220,14 @@
       :title="$t('views.AdminNotificationDeliveryLogView.no_deliveries_match_title')"
       :description="$t('views.AdminNotificationDeliveryLogView.no_deliveries_match_body')"
     >
-       <button
-         type="button"
+       <Button
+         variant="secondary"
          data-testid="admin-notification-log-empty-reset"
          :aria-label="$t('views.AdminNotificationDeliveryLogView.reset_all_filters')"
-         class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
          @click="resetFilters"
        >
          {{ $t('views.AdminNotificationDeliveryLogView.reset_filters') }}
-       </button>
+       </Button>
      </EmptyState>
 
     <!-- FAR-2596: "No deliveries yet" is only rendered once the endpoint read
@@ -255,19 +267,16 @@
               @keydown.space.prevent="toggleRow(entry.id)"
             >
               <td class="table-cell text-muted-foreground">
-                <button
-                  type="button"
-                  class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                <Disclosure
+                  :open="expandedId === entry.id"
+                  :controls="'admin-notification-log-detail-' + entry.id"
                   :aria-label="$t('views.AdminNotificationDeliveryLogView.expand_delivery', { id: entry.id })"
                   :data-testid="'admin-notification-log-expand-' + entry.id"
-                  @click.stop="toggleRow(entry.id)"
-                >
-                  <ChevronRight
-                    :class="expandedId === entry.id ? 'rotate-90' : ''"
-                    class="h-3.5 w-3.5 transition-transform"
-                    aria-hidden="true"
-                  />
-                </button>
+                  chevron-class="h-3.5 w-3.5 transition-transform"
+                  class="inline-flex items-center rounded p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  stop-propagation
+                  @update:open="toggleRow(entry.id)"
+                />
               </td>
               <td class="table-cell whitespace-nowrap text-muted-foreground">
                 {{ formatTimestamp(entry.created_at) }}
@@ -289,29 +298,33 @@
                 <div v-if="retryMessages[entry.id]" class="text-xs" :class="retryMessages[entry.id].type === 'error' ? 'text-destructive' : 'text-success-text'">
                   {{ retryMessages[entry.id].text }}
                 </div>
-                <button
+                <Button
                   v-else-if="entry.status === 'failed' || entry.status === 'dead_lettered'"
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   :disabled="retryingId === entry.id"
                   data-testid="admin-notification-log-retry"
-                  class="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary-text hover:bg-primary/20 disabled:opacity-40"
                   @click.stop="retryDelivery(entry)"
                 >
                   {{ retryingId === entry.id ? $t('views.AdminNotificationDeliveryLogView.retrying') : $t('views.AdminNotificationDeliveryLogView.retry') }}
-                </button>
+                </Button>
               </td>
             </tr>
             <template v-if="expandedId">
-              <tr v-for="entry in expandedEntries" :key="`exp-${entry.id}`">
+              <tr
+                v-for="entry in expandedEntries"
+                :id="'admin-notification-log-detail-' + entry.id"
+                :key="`exp-${entry.id}`"
+              >
               <td colspan="8" class="table-cell bg-muted/20">
                 <div class="space-y-2 text-sm">
                   <div v-if="entry.response_body" class="rounded border bg-card p-3">
                     <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminNotificationDeliveryLogView.response_body') }}</span>
                     <pre class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{{ entry.response_body }}</pre>
                   </div>
-                  <div v-if="entry.last_error" class="rounded border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
-                    <span class="text-xs font-medium text-red-600 dark:text-red-400">{{ $t('views.AdminNotificationDeliveryLogView.error_details') }}</span>
-                    <pre class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-red-700 dark:text-red-300">{{ entry.last_error }}</pre>
+                  <div v-if="entry.last_error" class="rounded border border-destructive/30 bg-destructive/10 p-3">
+                    <span class="text-xs font-medium text-destructive-text">{{ $t('views.AdminNotificationDeliveryLogView.error_details') }}</span>
+                    <pre class="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-destructive-text">{{ entry.last_error }}</pre>
                   </div>
                   <div v-if="entry.response_code" class="text-muted-foreground">
                     <span class="text-xs font-medium">{{ $t('views.AdminNotificationDeliveryLogView.http_response_code') }}</span>
@@ -336,27 +349,25 @@
       </p>
 
       <div class="flex items-center justify-between">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="!prevCursor"
           data-testid="admin-notification-log-previous"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
           @click="goToPage(prevCursor)"
         >
           {{ $t('views.AdminNotificationDeliveryLogView.previous') }}
-        </button>
+        </Button>
         <span class="text-sm text-muted-foreground">
           {{ $t('views.AdminNotificationDeliveryLogView.of_deliveries', { count: items.length, total }) }}
         </span>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           :disabled="!nextCursor"
           data-testid="admin-notification-log-next"
-          class="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
           @click="goToPage(nextCursor)"
         >
           {{ $t('views.AdminNotificationDeliveryLogView.next') }}
-        </button>
+        </Button>
       </div>
 
       <DataCard
@@ -367,14 +378,14 @@
         :description="$t('views.AdminNotificationDeliveryLogView.dead_letter_queue_description', { count: deadLetteredCount }, deadLetteredCount)"
       >
         <template #headerActions>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             data-testid="admin-notification-log-dlq-filter"
-            class="rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent"
             @click="showDeadLettered"
           >
             {{ $t('views.AdminNotificationDeliveryLogView.view_dead_lettered') }}
-          </button>
+          </Button>
         </template>
       </DataCard>
     </template>
@@ -393,11 +404,14 @@ import { dateRangeQuery, defaultDateRange } from '../lib/formatDate'
 import type { components, paths } from '../lib/api/client'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import Button from 'primevue/button'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Button from '../components/ui/Button.vue'
+import Disclosure from '../components/ui/Disclosure.vue'
 import Select from '../components/shared/AppSelect.vue'
-import { ChevronRight } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import { usePlanStore } from '../stores/planStore'
 

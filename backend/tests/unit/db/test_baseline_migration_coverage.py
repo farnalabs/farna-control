@@ -50,6 +50,11 @@ _RENAME_MIGRATION = _load_version_module("0362_rename_legacy_db_objects.py")
 
 
 def _org_scoped_tables() -> set[str]:
+    # ``organisations`` is the root tenant (no RLS by design). ``invitations`` is
+    # excluded because its RLS is NOT in the frozen baseline: migration 0368
+    # enabled it later, together with the scoped pre-auth bootstrap grant, so the
+    # ``0351_baseline_rls`` text legitimately does not name it. Its policy shape
+    # is pinned by ``tests/integration/test_rls_policy_gate.py`` instead.
     return {name for name, table in Base.metadata.tables.items() if "organisation_id" in table.c and name not in {"organisations", "invitations"}}
 
 

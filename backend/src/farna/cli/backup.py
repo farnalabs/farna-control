@@ -65,7 +65,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 import psycopg
@@ -76,6 +76,9 @@ from psycopg.types.json import Jsonb
 from farna.cli.apply import register_apply
 from farna.db.url_utils import _POSTGRES_ASYNC_PREFIX
 from farna.settings import get_settings
+
+if TYPE_CHECKING:
+    from farna.launcher.supervisor import RestoreWindowStatus
 
 _log = logging.getLogger(__name__)
 
@@ -468,6 +471,33 @@ def assert_plain_dump_complete(dump_path: Path) -> None:
         raise RuntimeError(str(exc)) from exc
 
 
+#: Replay prelude: recreate the application schema before the dump.
+#:
+#: pg_dump's ``--clean --if-exists`` preamble only knows the objects that
+#: existed when the snapshot was taken. A target that has migrated PAST that
+#: revision can hold a NEWER object that depends on one the preamble tries to
+#: drop, and the drop then fails — observed on the FAR-2674 matrix: a snapshot
+#: taken at ``0359`` could not be replayed onto a database migrated to
+#: ``0364`` because ``DROP CONSTRAINT organisations_pkey`` was refused with
+#: "constraint farna_journey_facts_organisation_id_fkey depends on index
+#: organisations_pkey" (the later migration added the FK). That is general to
+#: any upgrade whose migrations add a constraint or FK onto a pre-existing PK
+#: or unique index, so the fix cannot be a drop-order tweak.
+#:
+#: Dropping and recreating ``public`` makes every ``DROP ... IF EXISTS`` in the
+#: dump a no-op, so the replay no longer depends on pg_dump's ordering over a
+#: schema that has moved on. It is one transaction with the dump (``psql -1``
+#: below), so a replay that fails rolls the reset back too and leaves the
+#: target exactly as it was. The recreated schema carries initdb's PostgreSQL
+#: 15+ defaults (owner ``pg_database_owner``, ``USAGE`` for ``PUBLIC``): the
+#: product's role grants are re-applied immediately afterwards by
+#: ``_ensure_restore_posture``. Only ``public`` is touched because every
+#: application object this product (or its migration chain) creates lives
+#: there; a non-public schema a newer migration might add is not itself dropped,
+#: but anything in it that depends on a public object is cascaded away.
+_REPLAY_SCHEMA_RESET_SQL = "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public AUTHORIZATION pg_database_owner; GRANT USAGE ON SCHEMA public TO PUBLIC;"
+
+
 def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     _check_tool("psql")
     from farna.db.url_utils import pg_child_env
@@ -477,16 +507,31 @@ def _run_psql(raw_url: str, input_path: Path, timeout: int = 600) -> None:
     # and psql would then exit 0 after a rolled-back restore. The explicit
     # -v ON_ERROR_STOP=1 below is authoritative only when nothing else can
     # change it, so the rc file is never read.
-    # -1 (single transaction): the --clean dump replays its DROPs and CREATEs
-    # atomically — a mid-import failure leaves the target database exactly as
-    # it was, not half-dropped. Combined with the pre-restore safety dump
-    # (see _take_safety_dump) a failed restore stays recoverable.
-    cmd = ["psql", "-X", "-q", "-1", "-v", "ON_ERROR_STOP=1", url_without_password]
+    # -1 (single transaction): the schema reset, the --clean dump's DROPs and
+    # its CREATEs all replay atomically — a mid-import failure leaves the
+    # target database exactly as it was, not half-dropped. Combined with the
+    # pre-restore safety dump (see _take_safety_dump) a failed restore stays
+    # recoverable.
+    # -c <reset> BEFORE -f <dump>: psql executes its -c/-f actions in the order
+    # given. Order is load-bearing — the dump must land in a freshly recreated
+    # schema, never one a forward migration has added objects to.
+    cmd = [
+        "psql",
+        "-X",
+        "-q",
+        "-1",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-c",
+        _REPLAY_SCHEMA_RESET_SQL,
+        "-f",
+        str(input_path),
+        url_without_password,
+    ]
     try:
-        with input_path.open("rb") as f:
-            result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
-                cmd, stdin=f, capture_output=True, check=False, timeout=timeout, env=pg_child_env(password)
-            )
+        result = subprocess.run(  # nosec B603 -- cmd is a hardcoded argv list with trusted input, never shell=True  # noqa: S603
+            cmd, capture_output=True, check=False, timeout=timeout, env=pg_child_env(password)
+        )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"psql restore timed out after {timeout}s") from exc
     if result.returncode != 0:
@@ -969,8 +1014,9 @@ def _restore_window_signal_handlers(stop_window: Callable[[], None]) -> Iterator
     it is trying to stop.
 
     SIGKILL cannot be handled by any process. That residual is covered by the
-    pid file the window writes (:func:`_record_restore_window_pid`), which a
-    later start or restore reports by pid — it is documented, not hidden.
+    identity record the window writes (:func:`_record_restore_window_pid`),
+    which a later start or restore verifies before it names or stops anything —
+    it is documented, not hidden.
     """
     stopping = threading.Event()
     previous: dict[int, Any] = {}
@@ -1001,7 +1047,7 @@ def _restore_window_signal_handlers(stop_window: Callable[[], None]) -> Iterator
 
 
 def _record_restore_window_pid(data_dir: Path, pid: int) -> None:
-    """Record the pid of the postmaster this window started (see supervisor)."""
+    """Record the identity (pid + start time + data dir) of this window's postmaster."""
     from farna.launcher.supervisor import write_restore_window_pidfile
 
     write_restore_window_pidfile(data_dir, pid)
@@ -1017,10 +1063,11 @@ def _clear_restore_window_pid(data_dir: Path) -> None:
 def _stop_identified_pid(pid: int, *, timeout: float = _RESTORE_PG_STOP_TIMEOUT) -> bool:
     """Stop ONE positively identified pid: fast shutdown, then TERM, then KILL.
 
-    Never a name or wildcard match: *pid* comes from the window's own pid file,
-    which this command wrote. Returns False when the process cannot be stopped
-    (or this platform cannot signal a foreign pid), so the caller can refuse
-    loudly instead of proceeding against a server it does not control.
+    Never a name or wildcard match: *pid* comes from the window's own record,
+    and only after every recorded identity field agrees (pid, start time, data
+    dir, still postgres). Returns False when the process cannot be stopped (or
+    this platform cannot signal a foreign pid), so the caller can refuse loudly
+    instead of proceeding against a server it does not control.
     """
     from farna.launcher.supervisor import _pid_alive
 
@@ -1049,27 +1096,71 @@ def _stop_identified_pid(pid: int, *, timeout: float = _RESTORE_PG_STOP_TIMEOUT)
 
 
 def _reap_leftover_window_postmaster(data_dir: Path) -> None:
-    """Stop a postmaster an INTERRUPTED restore left behind, naming it by pid.
+    """Stop a postmaster an INTERRUPTED restore left behind, naming it by identity.
 
     A window killed with SIGKILL (no handler can run) leaves its postmaster
-    running with nothing supervising it, recorded in the window pid file. This
+    running with nothing supervising it, recorded in the window record. This
     restore has already stopped the launcher and holds the data-dir lock, so
     that leftover is nobody's to keep: stop it before starting a fresh window,
     rather than reusing — or colliding with — a server this command cannot
     account for.
-    """
-    from farna.launcher.supervisor import live_restore_window_pid, restore_window_pidfile
 
-    pid = live_restore_window_pid(data_dir)
+    Only a VERIFIED identity is signalled (pid alive, same start time, still
+    postgres, same data dir — ``launcher/supervisor.py::
+    inspect_restore_window_postmaster``). A record that cannot be verified —
+    legacy bare pid, a truncated or unreadable file, a record written for a
+    different data dir — names a process this command cannot prove it started,
+    so it is REPORTED (file, pid, what to do) and the restore refuses instead
+    of killing it. A record that provably names nothing live is dropped.
+    """
+    from farna.launcher.supervisor import (
+        RestoreWindowState,
+        inspect_restore_window_postmaster,
+    )
+
+    window: RestoreWindowStatus = inspect_restore_window_postmaster(data_dir)
+    if window.state is RestoreWindowState.UNVERIFIABLE:
+        raise click.ClickException(_unidentifiable_window_record_message(window, data_dir))
+    pid = window.identified_pid
     if pid is None:
+        # A record that provably names nothing live is dropped — but it is still
+        # REPORTED (file, pid it named, why) so a legacy or truncated record
+        # never disappears silently.
+        if window.state is RestoreWindowState.STALE:
+            _log.warning(
+                "restore.window_record_dropped path=%s pid=%s reason=%s",
+                window.path,
+                window.pid,
+                window.detail,
+            )
         _clear_restore_window_pid(data_dir)
         return
-    pidfile = restore_window_pidfile(data_dir)
+    pidfile = window.path
     click.echo(f"Found the PostgreSQL an interrupted restore left behind (PID {pid}, recorded in {pidfile}); stopping it before this restore...")
     if not _stop_identified_pid(pid):
         raise click.ClickException(f"The PostgreSQL a previous restore left behind (PID {pid}, recorded in {pidfile}) is still running and this command cannot stop it. Stop it with `kill -INT {pid}`, then re-run the restore.")
     _clear_restore_window_pid(data_dir)
     click.echo("  Stopped. This restore owns the bundled cluster again.")
+
+
+def _unidentifiable_window_record_message(window: RestoreWindowStatus, data_dir: Path) -> str:
+    """The operator message for a record that cannot identify a process.
+
+    Names the file, the pid it claims and exactly what to do — never a guess
+    that ends in a signal to a PostgreSQL this restore did not start.
+    """
+    if window.pid is not None:
+        named = f"PID {window.pid}"
+        stop_hint = f"`kill -INT {window.pid}` (PostgreSQL's fast shutdown)"
+    else:
+        named = "no readable PID"
+        stop_hint = "`kill -INT <pid>` (PostgreSQL's fast shutdown)"
+    return (
+        f"Cannot identify the PostgreSQL an earlier restore may have left behind: {window.path} records {named} "
+        f"for {data_dir}, but that record cannot be verified — {window.detail}. This command will not signal a "
+        f"process it cannot prove it started. If {named.lower()} is a PostgreSQL an interrupted restore left "
+        f"behind, stop it with {stop_hint}; if it is not, delete {window.path}. Then re-run this restore."
+    )
 
 
 @contextlib.contextmanager
@@ -1094,12 +1185,12 @@ def _bundled_cluster_for_restore(data_dir: Path, raw_url: str) -> Iterator[None]
 
     The postmaster this window starts runs in its own session, so nothing
     supervises it: SIGTERM/SIGINT/SIGHUP are handled for the whole window (they
-    stop the cluster before unwinding, and restore the previous handlers), a
-    pid file names the child for anything a later start or restore has to
-    report, and a window killed earlier is stopped by pid before this one
-    starts. SIGKILL cannot be handled by any process; that window's pid file is
-    what makes the leftover visible instead of a cryptic stale
-    ``postmaster.pid`` or bound-port failure.
+    stop the cluster before unwinding, and restore the previous handlers), an
+    identity record (pid, start time, data dir) names the child for anything a
+    later start or restore has to report, and a window killed earlier is
+    verified and stopped before this one starts. SIGKILL cannot be handled by
+    any process; that window's record is what makes the leftover visible
+    instead of a cryptic stale ``postmaster.pid`` or bound-port failure.
     """
     from farna.launcher.entry import (
         PG_VERSION_FILE,
@@ -1115,8 +1206,9 @@ def _bundled_cluster_for_restore(data_dir: Path, raw_url: str) -> Iterator[None]
         raise click.ClickException(f"Cannot parse {_url_display(raw_url)} as a PostgreSQL target, so the bundled cluster cannot be started for the restore.")
     host, port = endpoint
     # A postmaster a KILLED earlier restore left behind still holds pgdata and
-    # this port, and nothing supervises it: stop it (by pid) before deciding
-    # anything else, so the window never reuses a server it cannot account for.
+    # this port, and nothing supervises it: verify its recorded identity and
+    # stop it before deciding anything else, so the window never reuses a server
+    # it cannot account for (and never signals one it cannot identify).
     _reap_leftover_window_postmaster(data_dir)
     if _port_accepting(host, port):
         click.echo(f"  The bundled PostgreSQL is already accepting connections on {host}:{port}; the restore reuses it.")
@@ -2457,10 +2549,13 @@ def _safety_dump(opts: _RestoreOptions, raw_url: str) -> None:
 def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: str, keys: _RestoreKeys) -> None:
     """Restore the database cluster from the archive.
 
-    Applies the SQL dump via psql, re-inserts the checkpoint_blobs /
-    checkpoints / checkpoint_writes JSON exports, re-encrypts credentials
-    when the FERNET_KEY has changed (ORDERING locked by contract: the
-    ``--previous-fernet-key`` re-encryption runs AFTER the checkpoint JSON
+    Applies the SQL dump via psql — resetting the ``public`` schema first and in
+    the SAME transaction, so a snapshot taken at revision N restores onto a
+    database migrated to N+k even when k added an FK/constraint onto a
+    pre-existing PK (see ``_REPLAY_SCHEMA_RESET_SQL``) — re-inserts the
+    checkpoint_blobs / checkpoints / checkpoint_writes JSON exports, re-encrypts
+    credentials when the FERNET_KEY has changed (ORDERING locked by contract:
+    the ``--previous-fernet-key`` re-encryption runs AFTER the checkpoint JSON
     exports and BEFORE the collation drift check), then checks
     collation-version drift when a database.sql was applied.
     """
@@ -2468,6 +2563,7 @@ def _restore_cluster(opts: _RestoreOptions, manifest: dict[str, Any], raw_url: s
     db_sql = backup_dir / _DB_SQL_FILE
     if db_sql.exists():
         click.echo("Restoring database schema and data via psql...")
+        click.echo("  Recreating the target's public schema first, so objects a later migration added cannot block the snapshot's drops")
         _run_psql(raw_url, db_sql)
         click.echo("  Database restored from SQL dump")
     else:
@@ -2778,16 +2874,29 @@ def backup(db_url: str | None, output_dir: Path | None, data_dir: Path | None, i
 )
 @click.option(
     "--target-fs",
-    type=click.Path(path_type=Path),
+    # readable=False is REQUIRED, not cosmetic: the value is only statvfs()'d
+    # by the disk pre-flight, and the compose deployment sets DB_CAPACITY_PATH
+    # to the postgres-owned 0700 database volume mounted read-only for the
+    # capacity monitor. click.Path defaults to readable=True, so the app user
+    # (www-data) failed option parsing on a path it never needs to read —
+    # restore exited 2 before any pre-flight (FAR-2763). The pre-flight still
+    # degrades loudly when it cannot measure (see _disk_preflight).
+    type=click.Path(path_type=Path, readable=False),
     envvar="DB_CAPACITY_PATH",
     default=None,
-    help=("A path on the DATABASE's own filesystem, used by the disk pre-flight. Without it (and without --data-dir) the pre-flight measures the archive's filesystem, which may be a different volume. The compose deployment sets DB_CAPACITY_PATH to its database volume."),
+    help=("A path on the DATABASE's own filesystem for the disk pre-flight (statvfs only, so it need not be readable). Without it (and without --data-dir) the pre-flight measures the archive's filesystem instead. The compose deployment sets DB_CAPACITY_PATH to its database volume."),
 )
 @click.option(
     "--verify-target-schema",
     is_flag=True,
     default=False,
-    help=("Refuse unless the TARGET database records exactly the schema revisions the archive was taken from. The compose recovery path's stand-in for the --data-dir instance-identity guard; --replace-cluster overrides it."),
+    help=(
+        "Refuse a TARGET database whose recorded revision is not in the archive's lineage "
+        "(a different release train, or not a Farna Control database at all). A target the "
+        "newer release has migrated PAST the archive is accepted, because that is the "
+        "rollback this archive exists for. The compose recovery path's stand-in for the "
+        "--data-dir instance-identity guard; --replace-cluster overrides it."
+    ),
 )
 def restore(
     backup_dir: Path,
@@ -2808,7 +2917,8 @@ def restore(
     Verifies BEFORE it wipes (manifest shape + version, instance identity,
     database-emptiness probe for fresh targets, schema downgrade guard, disk
     pre-flight, file integrity), takes a pre-restore safety dump of the
-    target (or --no-safety-dump), restores the database via psql in a single
+    target (or --no-safety-dump), recreates the target's public schema and
+    restores the database via psql in a single
     transaction, re-inserts checkpoint_blobs from the JSON export,
     re-encrypts credentials if the FERNET_KEY has changed, re-ADOPTS the
     launcher artefacts only after the database restore SUCCEEDS, re-runs the

@@ -14,7 +14,7 @@ import uuid
 from contextlib import suppress
 from types import SimpleNamespace
 from typing import Any, ClassVar, Self
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 from cryptography.fernet import Fernet
@@ -231,53 +231,75 @@ async def test_seed_system_schemas_admin_found(monkeypatch: pytest.MonkeyPatch) 
     assert seed.await_count == 2
 
 
+def _patch_env_profile_seed(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    session: AsyncMock,
+    org: Any,
+    admin: Any,
+    calls: list[str] | None = None,
+) -> AsyncMock:
+    """Wire the seeder's seams (FAR-2803): org resolver, RLS bind, template seed."""
+    _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
+    record = calls if calls is not None else []
+
+    async def _first_tenant_organisation(_session: object) -> Any:
+        record.append("org")
+        return org
+
+    async def _set_rls_org(_session: object, org_id: uuid.UUID) -> None:
+        assert org is not None
+        assert org_id == org.id
+        record.append("rls")
+
+    seeded = AsyncMock(side_effect=lambda *_a, **_kw: record.append("seed"))
+    monkeypatch.setattr("farna.db.seed.first_tenant_organisation", _first_tenant_organisation)
+    monkeypatch.setattr("farna.db.rls.set_rls_org", _set_rls_org)
+    monkeypatch.setattr("farna.db.seed.seed_bundled_runner_profile", seeded)
+    return seeded
+
+
 @pytest.mark.anyio
 async def test_seed_environment_profiles_no_org(monkeypatch: pytest.MonkeyPatch) -> None:
-    session = _mock_session(_result(scalar_one_or_none=None))
-    _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
-    create_profile = AsyncMock()
-    monkeypatch.setattr("farna.db.crud.environment_profile.create_environment_profile", create_profile)
+    calls: list[str] = []
+    seeded = _patch_env_profile_seed(monkeypatch, session=_mock_session(_result()), org=None, admin=None, calls=calls)
     await main._seed_environment_profiles(_make_settings())
-    assert create_profile.await_count == 0
+    assert calls == ["org"]
+    assert seeded.await_count == 0
 
 
 @pytest.mark.anyio
-async def test_seed_environment_profiles_already_exists(monkeypatch: pytest.MonkeyPatch) -> None:
-    org = SimpleNamespace(id=uuid.uuid4())
-    session = _mock_session()
-    results = [_result(scalar_one_or_none=org), _result(scalar_one_or_none=MagicMock())]
-
-    async def _execute(*_a: object, **_kw: object) -> MagicMock:
-        return results.pop(0) if results else results[-1]
-
-    session.execute = AsyncMock(side_effect=_execute)
-    _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
-    create_profile = AsyncMock()
-    monkeypatch.setattr("farna.db.crud.environment_profile.create_environment_profile", create_profile)
-    await main._seed_environment_profiles(_make_settings())
-    assert create_profile.await_count == 0
-
-
-@pytest.mark.anyio
-async def test_seed_environment_profiles_creates_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_seed_environment_profiles_binds_rls_before_seeding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FAR-2803: the RLS bind must precede the template seed (and its existence read)."""
     org = SimpleNamespace(id=uuid.uuid4())
     admin = SimpleNamespace(id=uuid.uuid4())
-    session = _mock_session()
-    results = [
-        _result(scalar_one_or_none=org),
-        _result(scalar_one_or_none=None),
-        _result(scalar_one_or_none=admin),
-    ]
-
-    async def _execute(*_a: object, **_kw: object) -> MagicMock:
-        return results.pop(0) if results else results[-1]
-
-    session.execute = AsyncMock(side_effect=_execute)
-    _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
-    create_profile = AsyncMock()
-    monkeypatch.setattr("farna.db.crud.environment_profile.create_environment_profile", create_profile)
+    calls: list[str] = []
+    seeded = _patch_env_profile_seed(
+        monkeypatch,
+        session=_mock_session(_result(scalar_one_or_none=admin)),
+        org=org,
+        admin=admin,
+        calls=calls,
+    )
     await main._seed_environment_profiles(_make_settings())
-    assert create_profile.await_count == 1
+    assert calls == ["org", "rls", "seed"]
+    seeded.assert_awaited_once_with(ANY, org.id, admin.id)
+
+
+@pytest.mark.anyio
+async def test_seed_environment_profiles_no_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    org = SimpleNamespace(id=uuid.uuid4())
+    calls: list[str] = []
+    seeded = _patch_env_profile_seed(
+        monkeypatch,
+        session=_mock_session(_result(scalar_one_or_none=None)),
+        org=org,
+        admin=None,
+        calls=calls,
+    )
+    await main._seed_environment_profiles(_make_settings())
+    assert calls == ["org", "rls"]
+    assert seeded.await_count == 0
 
 
 @pytest.mark.anyio
@@ -285,22 +307,15 @@ async def test_seed_environment_profiles_first_account_fallback(monkeypatch: pyt
     org = SimpleNamespace(id=uuid.uuid4())
     first_account = SimpleNamespace(id=uuid.uuid4())
     session = _mock_session()
-    results = [
-        _result(scalar_one_or_none=org),
-        _result(scalar_one_or_none=None),
-        _result(scalar_one_or_none=None),
-        _result(scalar_one_or_none=first_account),
-    ]
+    results = [_result(scalar_one_or_none=None), _result(scalar_one_or_none=first_account)]
 
     async def _execute(*_a: object, **_kw: object) -> MagicMock:
         return results.pop(0) if results else results[-1]
 
     session.execute = AsyncMock(side_effect=_execute)
-    _patch_db_seams(monkeypatch, _mock_engine(), _mock_factory(session))
-    create_profile = AsyncMock()
-    monkeypatch.setattr("farna.db.crud.environment_profile.create_environment_profile", create_profile)
+    seeded = _patch_env_profile_seed(monkeypatch, session=session, org=org, admin=first_account)
     await main._seed_environment_profiles(_make_settings())
-    assert create_profile.await_count == 1
+    seeded.assert_awaited_once_with(ANY, org.id, first_account.id)
 
 
 # ── _init_checkpointer / _run_retention_loop ──

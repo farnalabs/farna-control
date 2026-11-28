@@ -36,7 +36,8 @@
             <Button
               type="button"
               data-testid="variant-batch-back"
-              variant="outlined"
+              variant="primary"
+              :outlined="true"
               class="border border-input bg-background text-sm font-medium hover:bg-muted/50"
               @click="router.push('/variants/compare')"
             >
@@ -45,10 +46,10 @@
           </div>
         </div>
 
-        <output v-if="hasPartialResults" data-testid="variant-batch-partial" aria-labelledby="variant-batch-partial-label" class="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning-text">
+        <Notice v-if="hasPartialResults" variant="warning" live="polite" :icon="false" padding="none" aria-labelledby="variant-batch-partial-label" class="px-4 py-3 text-sm" data-testid="variant-batch-partial">
           <span class="sr-only" id="variant-batch-partial-label">{{ $t('views.variantBatch.aria_partial_results') }}</span>
           {{ $t('views.variantBatch.partialResults') }}
-        </output>
+        </Notice>
         <output v-if="batchFailed" data-testid="variant-batch-failed" aria-labelledby="variant-batch-failed-label" class="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive-text">
           <span class="sr-only" id="variant-batch-failed-label">{{ $t('views.variantBatch.aria_batch_failed') }}</span>
           {{ $t('views.variantBatch.batchFailed') }}
@@ -248,9 +249,10 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
@@ -328,7 +330,7 @@ function statusBadgeClass(run: VariantBatchRun): string {
     return 'badge badge-status-destructive capitalize'
   }
   if (run.run_status === 'cancelled' || run.run_status === 'eval_failed') return 'badge badge-status-warning capitalize'
-  if (nonTerminalStatuses.has(run.run_status)) return 'badge badge-status-info capitalize'
+  if (nonTerminalStatuses.has(run.run_status)) return 'badge badge-status-primary capitalize'
   return 'badge badge-status-muted capitalize'
 }
 
@@ -342,7 +344,7 @@ function batchStatusBadgeClass(status: string): string {
   if (status === 'complete') return 'badge badge-status-success capitalize'
   if (status === 'failed') return 'badge badge-status-destructive capitalize'
   if (status === 'partial' || status === 'cancelled') return 'badge badge-status-warning capitalize'
-  if (status === 'running' || status === 'pending') return 'badge badge-status-info capitalize'
+  if (status === 'running' || status === 'pending') return 'badge badge-status-primary capitalize'
   return 'badge badge-status-muted capitalize'
 }
 

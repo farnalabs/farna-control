@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader :title="$t('views.UserAssistantSkillsView.my_assistant_skills')" :subtitle="$t('views.UserAssistantSkillsView.manage_your_personal_skills_for_the_assistant_ai_assistant')">
       <template #right>
         <Button class="border border-primary/30" data-testid="assistant-user-skills-add" @click="skillDialogRef?.openCreate()">
@@ -106,7 +106,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { Pencil, Trash2 } from '@lucide/vue'
 import { api } from '../lib/api/client'
 import { useDataFetch } from '../composables/useDataFetch'

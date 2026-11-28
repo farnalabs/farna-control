@@ -1,5 +1,5 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <PageHeader
       :title="$t('views.AdminCostBreakdownView.cost_controls')"
       :subtitle="$t('views.AdminCostControlsView.budget_overview_team_budgets_alert_thresholds_and_billing_se')"
@@ -76,7 +76,7 @@
               :row-clickable="false"
             >
               <template #cell-budget="{ row }">
-                <InputText :aria-label="$t('views.AdminCostControlsView.budget')"
+                <Input :aria-label="$t('views.AdminCostControlsView.budget')"
                   :model-value="(row as any).editingBudget == null ? '' : String((row as any).editingBudget)" @update:model-value="(v: any) => (row as any).editingBudget = v === '' ? null : Number(v)"
                   type="number"
                   min="0"
@@ -92,7 +92,7 @@
               </template>
               <template #cell-actions="{ row }">
                 <div class="text-right">
-                  <Button size="small" :disabled="(row as any).saving" :data-testid="'cc-team-save-' + (row as any).id" @click="saveTeamBudget(row as any)">
+                  <Button size="sm" :disabled="(row as any).saving" :data-testid="'cc-team-save-' + (row as any).id" @click="saveTeamBudget(row as any)">
                     {{ (row as any).saving ? $t('views.AdminCostControlsView.saving') : $t('views.AdminCostControlsView.save') }}
                   </Button>
                 </div>
@@ -212,23 +212,27 @@
               </div>
             </div>
             <div class="mt-6">
-              <span class="mb-1.5 block text-xs font-medium text-muted-foreground">{{ $t('views.AdminCostControlsView.monthly_budget', { currency: settings.currency }) }}</span>
-              <div class="flex items-end gap-3">
-                <div class="flex-1">
-                  <InputText :aria-label="$t('views.AdminCostControlsView.monthly_budget', { currency: settings.currency })"
-                    :model-value="settings.budget == null ? '' : String(settings.budget)"
-                    @update:model-value="(v: any) => settings.budget = v === '' ? 0 : Number(v)"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    data-testid="cc-budget-input"
-                  />
+              <Field
+                :label="$t('views.AdminCostControlsView.monthly_budget', { currency: settings.currency })"
+                label-class="mb-1.5 block text-xs font-medium text-muted-foreground"
+              >
+                <div class="flex items-end gap-3">
+                  <div class="flex-1">
+                    <Input :aria-label="$t('views.AdminCostControlsView.monthly_budget', { currency: settings.currency })"
+                      :model-value="settings.budget == null ? '' : String(settings.budget)"
+                      @update:model-value="(v: any) => settings.budget = v === '' ? 0 : Number(v)"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      data-testid="cc-budget-input"
+                    />
+                  </div>
+                  <Button :disabled="savingBudget" data-testid="cc-budget-save" @click="saveBudget">
+                    {{ savingBudget ? $t('views.AdminCostControlsView.saving') : $t('views.AdminCostControlsView.save') }}
+                  </Button>
                 </div>
-                <Button :disabled="savingBudget" data-testid="cc-budget-save" @click="saveBudget">
-                  {{ savingBudget ? $t('views.AdminCostControlsView.saving') : $t('views.AdminCostControlsView.save') }}
-                </Button>
-              </div>
+              </Field>
               <p v-if="budgetSaveError" class="mt-2 text-xs text-destructive">{{ budgetSaveError }}</p>
               <p v-if="budgetSaveSuccess" class="mt-2 text-xs text-success-text">{{ $t('views.AdminCostControlsView.budget_updated') }}</p>
             </div>
@@ -251,9 +255,10 @@ import { usePlanStore } from '../stores/planStore'
 import FeatureGate from '../components/FeatureGate.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import StatCard from '../components/ui/StatCard.vue'
-import InputText from 'primevue/inputtext'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { DataTable } from '../components/ui/data-table'
 import Select from '../components/shared/AppSelect.vue'
 import { formatMoney } from '../lib/money'
@@ -398,7 +403,9 @@ const progressBarClass = computed(() => {
   const pct = percentUsed.value
   if (pct >= 100) return 'bg-destructive'
   if (pct >= 90) return 'bg-warning'
-  if (pct >= 75) return 'bg-amber-500'
+  // Both caution tiers share the warning token; they stay separate branches so a
+  // spend between 75% and 89% is still a caution, not the healthy primary fill.
+  if (pct >= 75) return 'bg-warning'
   return 'bg-primary'
 })
 

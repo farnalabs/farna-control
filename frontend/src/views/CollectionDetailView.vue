@@ -91,9 +91,10 @@
         class="empty:sr-only"
         data-testid="collection-install-warnings-live"
       >
-        <div
+        <Notice
           v-if="installWarnings.length > 0"
-          class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-warning-text"
+          variant="warning"
+          :icon="false"
           data-testid="collection-install-warnings"
         >
           <h3 class="text-sm font-medium">
@@ -107,7 +108,7 @@
               {{ warning }}
             </li>
           </ul>
-        </div>
+        </Notice>
       </div>
       <div v-if="collection.status === 'draft'" class="flex justify-end">
         <Button :disabled="publishing" data-testid="collection-publish" @click="publish">
@@ -162,7 +163,7 @@
                 </span>
                 <Button
                   v-if="install.registry_sourced && !install.agents_granted"
-                  size="small"
+                  size="sm"
                   :disabled="granting === install.install_id"
                   data-testid="collection-grant-agents"
                   @click="grantAgents(install.install_id)"
@@ -187,7 +188,7 @@
                 </span>
                 <Button
                   v-if="install.update_available"
-                  size="small"
+                  size="sm"
                   :disabled="upgrading === install.install_id"
                   data-testid="collection-upgrade"
                   @click="upgrade(install.install_id)"
@@ -219,10 +220,10 @@
                     class="inline-block h-2 w-2 rounded-full"
                     :class="
                       entry.status === 'configured+bound'
-                        ? 'bg-green-500'
+                        ? 'bg-success'
                         : entry.status === 'configured'
                           ? 'bg-yellow-500'
-                          : 'bg-red-500'
+                          : 'bg-destructive'
                     "
                   />
                   <span class="font-mono text-xs">{{ entry.connector_type_id }}</span>
@@ -233,8 +234,8 @@
                     v-if="entry.status !== 'configured+bound'"
                     as="router-link"
                     :to="`/admin/connectors`"
-                    size="small"
-                    variant="ghost"
+                    variant="primary"
+                    size="sm"
                     class="text-xs"
                     data-testid="collection-create-connector"
                   >
@@ -245,7 +246,7 @@
             </div>
 
             <!-- Runnability -->
-            <div v-if="install.runnable" class="text-xs text-green-600 dark:text-green-400">
+            <div v-if="install.runnable" class="text-xs text-success-text">
               {{ $t('views.CollectionDetail.runnable') }}
             </div>
             <div v-else class="text-xs text-muted-foreground">
@@ -262,9 +263,10 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { api } from '../lib/api/client'
 import { formatApiError } from '../lib/api/formatError'

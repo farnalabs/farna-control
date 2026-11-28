@@ -1,7 +1,8 @@
 <template>
   <div
     :class="[
-      'relative rounded-lg px-4 py-2 shadow-sm transition-shadow hover:shadow-md',
+      'relative break-words rounded-lg px-4 py-2 shadow-sm transition-shadow hover:shadow-md',
+      PIPELINE_NODE_MAX_WIDTH_CLASS,
       theme.radius,
       theme.border,
       theme.bg,
@@ -10,14 +11,14 @@
     :data-testid="testId"
   >
     <div class="flex items-center justify-between gap-2">
-      <div :class="['flex items-center gap-1.5 min-w-0 font-brand-mono text-[11px] font-medium lowercase tracking-wide', theme.labelColour]">
+      <div :class="['flex flex-wrap items-center gap-1.5 min-w-0 font-brand-mono text-[11px] font-medium lowercase tracking-wide', theme.labelColour]">
         <slot name="glyph"><span>{{ glyph }}</span></slot>
         <slot name="extra-badges" />
       </div>
       <slot name="actions" />
     </div>
     <div
-      class="text-sm font-semibold text-foreground truncate"
+      class="line-clamp-2 text-sm font-semibold text-foreground"
       :title="description || undefined"
     >
       {{ label || fallbackLabel }}
@@ -38,6 +39,7 @@ import PipelineGovernanceVisibility from '../PipelineGovernanceVisibility.vue'
 import PipelineNodeBadges from '../PipelineNodeBadges.vue'
 import {
   PIPELINE_CONNECTORS_KEY,
+  PIPELINE_NODE_MAX_WIDTH_CLASS,
   PIPELINE_TEAM_NAMES_KEY,
   getNodeRegistryEntry,
   getNodeType,

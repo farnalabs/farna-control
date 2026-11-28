@@ -123,7 +123,7 @@ than the default `~/.local/opt/farna-control`. The built-in default and
 
 `farna-control upgrade` flow:
 
-1. **Enforced pre-upgrade dump — only when a migration is pending.** The
+1. **Enforced pre-upgrade dump - only when a migration is pending.** The
    bundled pg_dump writes a versioned snapshot dir beside the cluster
    (`pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/`, never inside
    it) with a restore manifest. The dump is proven complete at dump time
@@ -131,11 +131,11 @@ than the default `~/.local/opt/farna-control`. The built-in default and
    the database's revision(s) are recorded as the snapshot's schema. The
    pending decision is made INSIDE the shared helper and compares the live
    database with the NEW bundle's migrations (`--target-bundle`), never with
-   the old installation that runs the helper — so a database already at the
+   the old installation that runs the helper - so a database already at the
    new bundle's head takes no snapshot (one line says so) and an installer
    re-run cannot rotate the recovery points for nothing. Retention keeps the
    two newest verified snapshots plus the newest one recording the database's
-   current schema — a bounded set, so the disk guard cannot eventually refuse
+   current schema - a bounded set, so the disk guard cannot eventually refuse
    every upgrade. The disk guard itself refuses when the output filesystem has
    less than `max(2 GB, 1.25 x database size)` free plus the snapshots
    retention keeps. A failed or unverified dump aborts the upgrade - NO binary
@@ -151,9 +151,9 @@ than the default `~/.local/opt/farna-control`. The built-in default and
 `--skip-backup` skips the enforced dump, not the recovery point. This flag is
 the loud, explicit acknowledgement that a verified snapshot already exists (the
 stop-then-rerun flow used by the published installer); the upgrade **refuses
-when no intact snapshot of the CURRENT schema is present** under the data dir —
+when no intact snapshot of the CURRENT schema is present** under the data dir -
 the snapshot's recorded revisions must equal the live database's, so an archive
-several migrations stale cannot satisfy it — and it probes the LIVE database for
+several migrations stale cannot satisfy it - and it probes the LIVE database for
 its revision(s) rather than the old bundle's script heads, so a database
 already migrated ahead is still detected.
 
@@ -216,12 +216,20 @@ as a workflow artifact and fails closed when no previous release exists. The
 matrix is:
 
 1. clean install with the old immutable image tag;
-2. upgrade to the new immutable image tag and readiness check;
+2. upgrade to the new immutable image tag and readiness check, asserting the
+   new release's verified pre-upgrade snapshot and that the database revision
+   moved forward;
 3. intentionally failed upgrade by replacing the app with an invalid
    `SECRET_KEY`, asserting readiness is no longer HTTP 200 and retaining the
    app logs;
-4. rollback to the old immutable image tag; and
-5. rollback verification with readiness and app logs.
+4. the previous image started on the forward-migrated database, which the
+   startup guard refuses with exit 78 and one `REFUSED:` line naming the
+   database revision, the running version and the documented restore command;
+5. restore the verified pre-upgrade snapshot with the shipped
+   `compose-restore.sh`; and
+6. start the previous release with `compose-rollback.sh` and verify readiness,
+   the reverted database revisions, and that the row written before the upgrade
+   is still present.
 
 The failed-upgrade leg is deliberately a real container replacement, not a
 mocked command. A run is not evidence unless the evidence directory contains
@@ -259,7 +267,7 @@ the migrations.
   rotating its own recovery point away on every restart.
 - the snapshot lands in the `snapshot_data` volume at
   `/backups/pre-upgrade-dump-<TAG>-<UTC timestamp>/`, never inside the
-  `postgres_data` volume — so it survives image replacement and
+  `postgres_data` volume - so it survives image replacement and
   `docker compose down`, and it is readable while Postgres is stopped. The
   volume is created from the image, so it is owned by the container user; only
   `docker compose down -v` deletes it (which also deletes the database);
@@ -267,7 +275,7 @@ the migrations.
   final non-empty line), checksummed, and recorded in both `manifest.json` and
   the restore-compatible `backup-info.json`;
 - retention keeps the two newest verified snapshots **plus the newest snapshot
-  recording the database's current schema** — the recovery point a database
+  recording the database's current schema** - the recovery point a database
   that did not move since (a failed migration, a rollback) depends on. At most
   three directories survive: older generations are superseded and deleted, so
   snapshots cannot accumulate until the disk guard refuses every upgrade.
@@ -295,22 +303,28 @@ destroys:
 ./compose-restore.sh --confirm /backups/pre-upgrade-dump-<TAG>-<UTC timestamp>
 ```
 
-1. **Verify the archive** — `restore --dry-run` in a one-off container checks
+1. **Verify the archive** - `restore --dry-run` in a one-off container checks
    the manifest, checksum coverage, every checksum and the dump's completeness.
    Each one-off container runs `--entrypoint farna-control … --no-deps`: the
    image's own `ENTRYPOINT` is `/entrypoint.sh`, which ignores its arguments,
    takes a snapshot, migrates and execs supervisord, so it must be overridden or
    the "dry run" would MIGRATE the live database.
-2. **Verify the target** — `--verify-target-schema` refuses unless the target
-   database records exactly the schema revisions the snapshot was taken from,
-   so a wrong target cannot wipe an unrelated cluster.
+2. **Verify the target** - `--verify-target-schema` refuses an unrelated target,
+   so a wrong target cannot wipe a cluster the snapshot did not come from. The
+   target it refuses is one whose recorded revision is not in the snapshot's
+   lineage (a different release train, or no Farna Control database at all). A
+   target the NEW release has migrated PAST the snapshot - the actual rollback
+   case - is accepted, and the restore rolls those migrations back with the
+   data: the archive replays over the later schema because the restore resets
+   the `public` schema first (FAR-2763), so a dump taken at revision N cannot
+   fail on a constraint a N+k migration added.
 3. **No URL, no password.** The helper never reads or passes a database URL: the
    one-off container inherits `DATABASE_ADMIN_URL` from the service environment
    and the CLI resolves it there. Nothing needs exporting in the operator's
    shell, so `set -u` cannot abort the recovery and the superuser password never
    appears on a host command line.
 4. **Stop, restore, stop.** It stops the application, restores the dump,
-   re-applies the application role's grants, and then **stops** — it prints the
+   re-applies the application role's grants, and then **stops** - it prints the
    exact start command (on failure as well as success) and never restarts the
    stack:
 
@@ -320,7 +334,7 @@ destroys:
 
 The bundle's `docker-compose.prod.yml` pins the image to a literal release tag
 (so the file can carry a `SHA256SUMS` entry), which is why `TAG=<previous>`
-`docker compose up -d` does not start anything different — `TAG` only sets
+`docker compose up -d` does not start anything different - `TAG` only sets
 `FARNA_CONTROL_VERSION`. `compose-rollback.sh` merges a one-line image override
 for that one invocation and leaves the pinned file, and its checksum, untouched.
 
@@ -329,13 +343,16 @@ database backwards (`alembic downgrade`) is not supported; the snapshot is the
 way back. The pre-restore safety dump of the database you are replacing is
 written into the same snapshot volume, next to the snapshot.
 
-**The RC matrix does not rehearse this yet.** `scripts/verify_compose_upgrade_rollback.py`
-currently re-points the image tag for its rollback leg; it never restores the
-pre-upgrade snapshot, so a green matrix is NOT evidence that the restore above
-works. FAR-2674 owns teaching the harness that leg (restore the snapshot, then
-start the previous image, and assert the data came back rather than assuming the
-old image can boot on a newer database). Until it lands, rehearse the restore on
-a disposable host by hand and record the evidence.
+**The RC matrix now asserts this leg (FAR-2674).**
+`scripts/verify_compose_upgrade_rollback.py` runs the documented recovery end to
+end: it verifies the new release's pre-upgrade snapshot, stops the app on the
+forward-migrated database, asserts the previous image is refused by the startup
+guard (exit 78 and the one `REFUSED:` line), restores the snapshot with the
+shipped `compose-restore.sh`, and starts the previous release with
+`compose-rollback.sh` on the restored database with the row written before the
+upgrade still present. The green path through that restore is still gated on
+FAR-2763, so a green matrix is evidence the leg is asserted and exercised, not
+that the restore has yet completed successfully against a real published pair.
 
 ### Fly.io
 
@@ -347,7 +364,7 @@ therefore finds the schema already at head and skips its migration work.
 
 A boot-time migration path still exists, though, and it takes no snapshot. The
 entrypoint keeps a 10-attempt `alembic upgrade heads` fallback that runs
-whenever its at-head probe reports the database behind — and, because that
+whenever its at-head probe reports the database behind - and, because that
 probe is fail-safe, on ANY probe error. When that fallback applies a schema
 change it does so unguarded, so Fly is still the documented exception to "every
 upgrade path keeps a recovery point": a schema-changing Fly deploy needs an

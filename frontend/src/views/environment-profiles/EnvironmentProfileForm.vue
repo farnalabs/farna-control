@@ -15,9 +15,13 @@
 
     <DataCard padding="lg" class="max-w-3xl">
     <form @submit.prevent="handleSubmit" class="space-y-5">
-      <div>
-        <label for="environmentprofileform-field-7" class="mb-1 block text-sm font-medium">{{ $t('views.EnvironmentProfileForm.name') }} <span class="text-destructive">*</span></label>
-        <input id="environmentprofileform-field-7"
+      <Field
+        id="environmentprofileform-field-7"
+        :label="$t('views.EnvironmentProfileForm.name')"
+        required
+        :error="submitted && !form.name.trim() ? $t('views.EnvironmentProfileForm.name_is_required') : ''"
+      >
+        <Input
           v-model="form.name"
           type="text"
           class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
@@ -25,19 +29,17 @@
           data-testid="envprofile-form-name"
           :class="{ 'border-destructive': submitted && !form.name.trim() }"
         />
-        <p v-if="submitted && !form.name.trim()" class="mt-1 text-xs text-destructive">{{ $t('views.EnvironmentProfileForm.name_is_required') }}</p>
-      </div>
+      </Field>
 
-      <div>
-        <label for="environmentprofileform-field-6" class="mb-1 block text-sm font-medium">{{ $t('views.EnvironmentProfileForm.description') }}</label>
-        <textarea id="environmentprofileform-field-6"
+      <Field id="environmentprofileform-field-6" :label="$t('views.EnvironmentProfileForm.description')">
+        <Textarea
           v-model="form.description"
           rows="3"
           class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
           :placeholder="$t('views.EnvironmentProfileForm.description_placeholder')"
           data-testid="envprofile-form-description"
         />
-      </div>
+      </Field>
 
       <div>
         <label for="environmentprofileform-field-5" class="mb-1 block text-sm font-medium">{{ $t('views.EnvironmentProfileForm.provider_type') }} <span class="text-destructive">*</span></label>
@@ -66,9 +68,11 @@
         </output>
       </div>
 
-      <div>
-        <label for="environmentprofileform-field-4" class="mb-1 block text-sm font-medium">{{ $t('views.EnvironmentProfileForm.image_reference') }}</label>
-        <input id="environmentprofileform-field-4"
+      <Field
+        id="environmentprofileform-field-4"
+        :label="$t('views.EnvironmentProfileForm.image_reference')"
+      >
+        <Input
           v-model="form.image_ref"
           type="text"
           class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
@@ -130,21 +134,22 @@
           <AlertTriangle :size="14" aria-hidden="true" />
           {{ $t('views.EnvironmentProfileForm.image_mutable_tag_warning') }}
         </output>
-      </div>
+      </Field>
 
-      <div>
-        <label for="environmentprofileform-max-node-seconds" class="mb-1 block text-sm font-medium">{{ $t('views.EnvironmentProfileForm.max_node_seconds') }}</label>
-         <input
-           id="environmentprofileform-max-node-seconds"
-           :value="form.max_node_seconds"
-           type="number"
-           min="60"
-           max="604800"
-           readonly
-           class="w-full rounded-lg border border-input bg-muted px-3 py-2 text-sm"
-           data-testid="envprofile-form-max-node-seconds"
-         />
-      </div>
+      <Field
+        id="environmentprofileform-max-node-seconds"
+        :label="$t('views.EnvironmentProfileForm.max_node_seconds')"
+      >
+        <Input
+          :model-value="form.max_node_seconds"
+          type="number"
+          min="60"
+          max="604800"
+          readonly
+          class="w-full rounded-lg border border-input bg-muted px-3 py-2 text-sm"
+          data-testid="envprofile-form-max-node-seconds"
+        />
+      </Field>
 
       <div>
         <span class="mb-1 block text-sm font-medium">{{ $t('views.EnvironmentProfileForm.capabilities') }}</span>
@@ -251,6 +256,9 @@
 <script setup lang="ts">
 import PageHeader from '../../components/shared/PageHeader.vue'
 import DataCard from '../../components/ui/DataCard.vue'
+import Field from '../../components/ui/Field.vue'
+import Input from '../../components/ui/Input.vue'
+import Textarea from '../../components/ui/Textarea.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'

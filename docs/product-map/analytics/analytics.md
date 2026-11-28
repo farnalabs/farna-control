@@ -34,36 +34,46 @@ reports resolve against a consistent fact model.
 
 - [x] Analytics facts are built from run outputs and cost components into structured
       fact/delta records (`core/analytics/builder.py`, `tests/unit/test_analytics_builder.py`)
+      <!-- behaviour: analytics-01 | tests: backend/tests/unit/test_analytics_builder.py -->
 - [x] Fact ingestion (`record_facts`) persists run-derived facts for later query
       (`tests/unit/test_analytics_record_facts.py`)
+      <!-- behaviour: analytics-02 | tests: backend/tests/unit/test_analytics_record_facts.py -->
 - [x] Analytics deltas and guardrail outcomes are reconciled into the report surface
       (`tests/unit/test_analytics_delta.py`, `test_analytics_guardrails.py`)
+      <!-- behaviour: analytics-03 | tests: backend/tests/unit/test_analytics_delta.py, backend/tests/unit/test_analytics_guardrails.py -->
 - [x] The analytics service executes queries against the aggregated fact model
       (`tests/unit/test_analytics_service.py`, `test_analytics_service_execution.py`)
+      <!-- behaviour: analytics-04 | tests: backend/tests/unit/test_analytics_service.py, backend/tests/unit/test_analytics_service_execution.py -->
 - [x] `/analytics` (UI route) and `GET /api/v1/analytics/query` expose the
       aggregated surface over the HTTP API (`/export`, `/scan`, `/concurrency`,
       `/guardrails` hang off the same `/api/v1/analytics` router prefix)
       (`backend/tests/integration/test_analytics_endpoint.py`)
+      <!-- behaviour: analytics-05 | tests: backend/tests/integration/test_analytics_endpoint.py -->
 - [x] The REST surface is permission-gated (`analytics.query`), org-context-required
       (a principal without an org context is 403), feature-gated (`analytics_page`,
       402 when disabled) and refuses unauthenticated callers (401);
       FastAPI-level validation rejects a malformed `date_from` and a `limit`
       outside 1..1000 with 422 (`backend/tests/bdd/features/analytics/query.feature`)
+      <!-- behaviour: analytics-06 | tests: backend/tests/bdd/features/analytics/query.feature -->
 - [x] The route maps the service's typed errors to HTTP: an inverted/over-wide range
       is 422, a rate-limited org is 429 and a statement timeout is 503, while the
       bucketed response carries the `group_by`/`dimension` envelope and the
       freshness indicators (`facts_freshness_hours` / `facts_stale`)
+      <!-- behaviour: analytics-07 | tests: backend/tests/bdd/features/analytics/query.feature -->
 - [x] A repeated `pipeline_id` composes an A/B comparison (both ids reach the
       service) and a `dimension` is echoed back on the response
+      <!-- behaviour: analytics-08 | tests: backend/tests/bdd/features/analytics/query.feature -->
 - [x] Export (`/export`) returns paginated JSON rows (`items`/`total`/`offset`
       /`limit`) and a CSV attachment with a `Content-Disposition: attachment`
       header for `format=csv`
+      <!-- behaviour: analytics-09 | tests: backend/tests/bdd/features/analytics/query.feature -->
 - [x] Scan export (`/scan`) streams the WHOLE matching fact set in one response
       (NDJSON by default, or a CSV attachment) with no offset/limit pagination -
       the server keyset-paginates over the stable `(run_date, created_at,
       run_id)` order in fixed page-size batches, sharing the typed filters, org +
       team-boundary scoping, per-org rate limit and bounded statement timeout of
       `/export` (`backend/tests/unit/test_analytics_service_execution.py`)
+      <!-- behaviour: analytics-10 | tests: backend/tests/unit/test_analytics_service_execution.py -->
 - [x] Claim→dispatch latency (FAR-1421): every bucket carries
       `avg_dispatch_latency_ms` = `dispatch_phase_entered_at` − `created_at`
       (the durable post-claim phase stamp from `pipeline_execution.py`),
@@ -75,6 +85,7 @@ reports resolve against a consistent fact model.
       and the metric survives the run purge; NULL when the bucket has no
       sample, never 0 (`core/analytics/builder.py`,
       `backend/tests/unit/api/test_analytics_export_contract.py`)
+      <!-- behaviour: analytics-11 | tests: backend/tests/unit/api/test_analytics_export_contract.py -->
 - [x] Node-deadline watchdog firings (FAR-1463): every query bucket carries
       `node_deadline_watchdog_fired_count`, the `SUM` of the per-run
       `RunDailyFact` column (COALESCEd to 0 - count semantics, never NULL for
@@ -84,10 +95,12 @@ reports resolve against a consistent fact model.
       written whether the kill re-dispatched (which nulls `error_code`) or
       terminal-failed (`core/analytics/builder.py`,
       `api/routes/analytics.py`, `backend/tests/unit/test_analytics_facts.py`)
+      <!-- behaviour: analytics-12 | tests: backend/tests/unit/test_analytics_facts.py -->
 - [x] Concurrency (`/concurrency`) reports the pooled slot-utilization series
       (`pool_reference` + per-bucket `max_active`/`avg_active`/`max_queued`/
       `avg_queued`), and the guardrail scorecard (`/guardrails`) is labelled
       `advisory_only: true`
+      <!-- behaviour: analytics-13 | tests: backend/tests/bdd/features/analytics/query.feature -->
 
 ## Known Gaps
 

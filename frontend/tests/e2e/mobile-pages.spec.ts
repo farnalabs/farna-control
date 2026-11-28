@@ -21,14 +21,17 @@ const SHORT_MCP_URL = 'https://control.farna.dev/mcp'
 
 // Desktop geometry measured on origin/main (1280x800), in CSS px.
 const DESKTOP_MCP = { urlToActionsGap: 0, actionsToRowRight: 16 }
-// The Triggers pause-all card now renders through CardHeader (title/description
-// + #headerActions) instead of the hand-built flex row. On desktop the primitive
-// gives the action its natural width (`sm:shrink-0`) and the label block is
-// flex-1, separated by the canonical `gap-4`: the button keeps its full 94 px
-// width (it used to flex-shrink to ~78.9 px), so the label block is
-// 942 - 16 - 94 = 832 px, with a 16 px label-to-button gap and the button still
-// flush to the header's right edge.
-const DESKTOP_TRIGGERS = { labelWidth: 832, labelToButtonGap: 16, buttonToCardRight: 0 }
+// The Triggers pause-all card renders through CardHeader (title/description
+// + #headerActions). On desktop the primitive gives the action its natural width
+// (`sm:shrink-0`) and the label block is `flex-1`, separated by the canonical
+// `gap-4`; the button stays flush to the header's right edge. The label block's
+// px width is therefore driven by the button's natural text width, which is a
+// font metric: retiring the per-view agent theme (FAR-2756) moved this page from
+// the JetBrains Mono agent font to the shared sans stack, legitimately narrowing
+// the "Pause all" button and widening the label. So the test asserts the layout
+// (label flush left, full unshrunk button, canonical gap, flush right) instead of
+// pinning a font-dependent label px.
+const DESKTOP_TRIGGERS = { labelToButtonGap: 16, buttonToCardRight: 0 }
 const DESKTOP_PROFILES = { buttonToRowRight: 0, centreOffset: 0 }
 
 const PROFILE = {
@@ -192,13 +195,15 @@ test.describe('Desktop 1280px is unchanged (FAR-2538)', () => {
     const b = await box(pause)
     const c = await box(card)
     expect(b.y).toBeLessThan(l.y + l.height)
-    // The label div is sized to the max-content width of its description text, so
-    // its width drifts a few tenths of a px with the host's font metrics: 861.9 px
-    // was measured on origin/main, and the identical desktop layout renders 863.1 px
-    // on the CI runner. Allow 2 px of font-metric drift there; the layout-governing
-    // spacing below stays exact, and any real regression is at least the 12 px mobile
-    // gap or the 16 px pr-4 padding, both far outside the tolerance.
-    expect(Math.abs(round(l.width) - DESKTOP_TRIGGERS.labelWidth)).toBeLessThanOrEqual(2)
+    // The label block is `flex-1` and the button is `sm:shrink-0`, so on desktop
+    // the label fills from the header's left edge up to the canonical `gap-4` and
+    // the button's full, unshrunk natural width. Assert that layout rather than an
+    // absolute label px: the label starts flush at the header's left edge, the
+    // button keeps its natural width (single line, no clipped overflow), and the
+    // two governing spacings are exact.
+    expect(round(l.x)).toBeCloseTo(round(c.x), 0)
+    expect(await pause.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1)
+    await expectSingleLine(pause)
     expect({
       labelToButtonGap: round(b.x - (l.x + l.width)),
       buttonToCardRight: round(c.x + c.width - (b.x + b.width)),

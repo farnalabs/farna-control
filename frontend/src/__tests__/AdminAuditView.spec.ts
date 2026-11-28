@@ -21,6 +21,7 @@ vi.mock('../lib/api/client', () => ({
 }))
 
 import AdminAuditView from '../views/AdminAuditView.vue'
+import StateTabs from '../components/shared/StateTabs.vue'
 import { api, getAccessToken } from '../lib/api/client'
 
 const auditEvent = (id: string, over: Record<string, unknown> = {}) => ({
@@ -727,6 +728,24 @@ describe('AdminAuditView — header action group', () => {
     expect(group.classList).toContain('w-full')
     expect(group.classList).toContain('sm:flex-nowrap')
   })
+
+  it('renders the header actions through the shared Button primitive (FAR-2801)', async () => {
+    const wrapper = await mountLoaded()
+    const verify = wrapper.get('[data-testid="admin-audit-verify-chain"]')
+    const reset = wrapper.get('[data-testid="admin-audit-reset"]')
+
+    // The shared Button renders a real PrimeVue button, so its variant flags are
+    // observable on the root. A raw <button> would carry none of them.
+    expect(verify.classes()).toContain('p-button')
+    expect(verify.classes()).toContain('p-button-secondary')
+    expect(verify.classes()).toContain('p-button-outlined')
+    expect(verify.attributes('data-p-severity')).toBe('secondary')
+    expect(verify.attributes('type')).toBe('button')
+
+    expect(reset.classes()).toContain('p-button-outlined')
+    expect(reset.attributes('data-p-severity')).toBe('secondary')
+    expect(reset.text()).toBe('Reset')
+  })
 })
 
 describe('AdminAuditView — formatActor branches', () => {
@@ -1130,6 +1149,52 @@ describe('AdminAuditView — system ledger (system admin)', () => {
     expect(wrapper.find('[data-testid="admin-audit-event-row-evt-1"]').exists()).toBe(true)
   })
 
+  it('renders the source tabs through the shared StateTabs primitive', async () => {
+    const wrapper = await mountLoaded()
+    const tablist = wrapper.get('[data-testid="admin-audit-source-tabs"]')
+
+    expect(tablist.attributes('role')).toBe('tablist')
+    expect(tablist.attributes('aria-label')).toBeTruthy()
+    expect(tablist.attributes('aria-orientation')).toBe('horizontal')
+    // Roving tabindex: only the active tab is in the tab order.
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('tabindex')).toBe('0')
+    expect(wrapper.get('[data-testid="admin-audit-tab-system"]').attributes('tabindex')).toBe('-1')
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-controls')).toBe('admin-audit-source-org')
+  })
+
+  it('switches the audit source from the keyboard (ArrowRight/Home)', async () => {
+    const wrapper = await mountLoaded()
+
+    await wrapper.get('[data-testid="admin-audit-tab-org"]').trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="admin-audit-tab-system"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="admin-audit-system-section"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="admin-audit-tab-system"]').trigger('keydown', { key: 'Home' })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-selected')).toBe('true')
+  })
+
+  it('selects only the two declared audit sources and ignores unknown ids', async () => {
+    const wrapper = await mountLoaded()
+    const sourceTabs = wrapper.findComponent(StateTabs)
+
+    sourceTabs.vm.$emit('update:modelValue', 'system')
+    await nextTick()
+    expect(wrapper.get('[data-testid="admin-audit-tab-system"]').attributes('aria-selected')).toBe('true')
+
+    sourceTabs.vm.$emit('update:modelValue', 'org')
+    await nextTick()
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-selected')).toBe('true')
+
+    // An unknown id is not a declared source, so the current selection stays.
+    sourceTabs.vm.$emit('update:modelValue', 'bogus')
+    await nextTick()
+    expect(wrapper.get('[data-testid="admin-audit-tab-org"]').attributes('aria-selected')).toBe('true')
+  })
+
   it('renders the shared table skeleton while the ledger loads (VIS-3/STATE-3)', async () => {
     ;(api.GET as Mock).mockImplementation(async (url: string) => {
       if (url === '/api/v1/admin/system-audit') return new Promise(() => {})
@@ -1429,5 +1494,24 @@ describe('AdminAuditView — table spacing (FAR-2584)', () => {
     expect(panel.classes()).toContain('space-y-4')
     expect(panel.find('.card').exists()).toBe(true)
     expect(panel.find('.table-wrapper').exists()).toBe(true)
+  })
+})
+
+describe('AdminAuditView — audit source guard', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('honours the two declared sources and ignores an unknown id', async () => {
+    mockAuditGet([])
+    const wrapper = mountView()
+    await nextTick()
+    const vm = wrapper.vm as unknown as { auditSource: string; onAuditSourceSelected: (id: string) => void }
+
+    vm.onAuditSourceSelected('system')
+    expect(vm.auditSource).toBe('system')
+    vm.onAuditSourceSelected('bogus')
+    expect(vm.auditSource).toBe('system')
   })
 })

@@ -79,7 +79,7 @@ test.describe('Notifications', { tag: "@regression" }, () => {
   })
 
   test('notifications page defaults to status=active filter', { tag: "@regression" }, async ({ page, env }) => {
-    let receivedParams: Record<string, string> = {}
+    const receivedParams: Record<string, string> = {}
     await loginAsAdmin(page, env)
     await page.route('**/api/v1/notifications/in-app?**', (route) => {
       const url = new URL(route.request().url())

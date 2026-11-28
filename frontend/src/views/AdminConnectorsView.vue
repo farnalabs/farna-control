@@ -320,7 +320,7 @@
         <p class="text-sm font-medium text-destructive-text">{{ $t('views.AdminConnectorsView.delete_confirm', { name: deleteConfirmName }) }}</p>
         <p class="mt-1 text-sm text-destructive-text">{{ $t('views.AdminConnectorsView.this_action_cannot_be_undone') }}</p>
         <div class="mt-3 flex items-center gap-2">
-          <Button :disabled="deleting" severity="danger" data-testid="admin-connectors-delete-confirm" @click="deleteConnector">
+          <Button :disabled="deleting" variant="danger" data-testid="admin-connectors-delete-confirm" @click="deleteConnector">
             {{ deleting ? $t('views.AdminConnectorsView.deleting') : $t('views.AdminConnectorsView.delete') }}
           </Button>
           <button type="button"
@@ -354,7 +354,7 @@ import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import { usePlanStore } from '../stores/planStore'
 import FeatureGate from '../components/FeatureGate.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import TableActions from '../components/shared/TableActions.vue'
 import RestConnectorConfigForm, {

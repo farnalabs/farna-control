@@ -57,6 +57,14 @@ describe('FilterBar', () => {
     expect(wrapper.find('.p-select-label').text()).toBe('All Status')
   })
 
+  it('falls back to the translated search copy when no placeholder is supplied', () => {
+    const wrapper = mountFilterBar({ search: { placeholder: '' } })
+    const input = wrapper.find('[data-testid="filter-bar-search"]')
+    expect(input.exists()).toBe(true)
+    expect(input.attributes('aria-label')).toBe('Search')
+    expect(input.attributes('placeholder')).toBe('Search')
+  })
+
   it('renders the "__all__" option with a distinct "All <label>" text', () => {
     const wrapper = mountFilterBar()
     const options = wrapper.findAll('.p-select-option')

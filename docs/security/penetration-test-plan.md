@@ -89,7 +89,7 @@ Testing follows the **OWASP Web Security Testing Guide (WSTG) v5.0** with additi
 
 ### 3.1 Information Gathering (WSTG-INFO)
 
-- DNS enumeration and subdomain discovery across `farna.dev` and `control.farna.dev` (the legacy `modulo.run` domain only redirects to `farna.dev` and is out of scope)
+- DNS enumeration and subdomain discovery across `farna.dev` and `control.farna.dev` (the legacy `modulo.run` domain only redirects to `farna.dev` and is out of scope) <!-- copy-consistency: allow: names the retired host to scope it out -->
 - Technology fingerprinting (HTTP headers, cookie attributes, framework signatures)
 - Endpoint discovery via common API path wordlists (`/api/v1/`, `/mcp/v1/`)
 - Directory listing and exposed `.git`, `.env`, and configuration files

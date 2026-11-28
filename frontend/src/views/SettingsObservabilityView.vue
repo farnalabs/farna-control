@@ -4,7 +4,7 @@
 
     <FeatureGate feature-name="observability" show-disabled>
 
-      <div v-if="envOverrideActive" data-testid="settings-observability-env-override" class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm text-warning-text">
+      <Notice v-if="envOverrideActive" variant="warning" :icon="false" class="text-sm" data-testid="settings-observability-env-override">
         <p class="font-medium">{{ $t('views.SettingsObservabilityView.env_override_active') }}</p>
         <p class="mt-1">
           {{ $t('views.SettingsObservabilityView.env_override_description_prefix') }}
@@ -13,34 +13,34 @@
           <strong>{{ effectiveOtlpEndpoint }}</strong>.
           {{ $t('views.SettingsObservabilityView.env_override_description_suffix') }}
         </p>
-      </div>
+      </Notice>
 
       <div v-if="loading" data-testid="settings-observability-loading" class="space-y-6">
-        <div class="rounded-lg border bg-card p-6 shadow-sm animate-pulse" aria-hidden="true">
+        <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
           <div class="mb-4 h-5 w-40 bg-muted rounded" />
           <div class="mb-1 h-4 w-32 bg-muted rounded" />
           <div class="h-9 w-full bg-muted rounded" />
-        </div>
-        <div class="rounded-lg border bg-card p-6 shadow-sm animate-pulse" aria-hidden="true">
+        </BaseCard>
+        <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
           <div class="mb-4 flex items-center justify-between">
             <div class="h-5 w-32 bg-muted rounded" />
             <div class="h-8 w-28 bg-muted rounded" />
           </div>
           <div class="h-9 w-full bg-muted rounded" />
-        </div>
-        <div class="rounded-lg border bg-card p-6 shadow-sm animate-pulse" aria-hidden="true">
+        </BaseCard>
+        <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
           <div class="mb-4 h-5 w-36 bg-muted rounded" />
           <div class="mb-1 h-4 w-40 bg-muted rounded" />
           <div class="h-9 w-full bg-muted rounded" />
           <div class="mt-2 h-3 w-2/3 bg-muted rounded" />
-        </div>
-        <div class="rounded-lg border bg-card p-6 shadow-sm animate-pulse" aria-hidden="true">
+        </BaseCard>
+        <BaseCard padding="lg" elevation="sm" class="animate-pulse" aria-hidden="true">
           <div class="mb-4 h-5 w-28 bg-muted rounded" />
           <div class="flex items-center gap-3">
             <div class="h-6 w-11 rounded-full bg-muted" />
             <div class="h-4 w-48 bg-muted rounded" />
           </div>
-        </div>
+        </BaseCard>
       </div>
 
       <ErrorAlert v-else-if="loadError" :message="loadError" :on-retry="loadSettings" />
@@ -53,16 +53,15 @@
           heading-level="h2"
           :title="$t('views.SettingsObservabilityView.otlp_endpoint')"
         >
-          <div>
-            <label for="settingsobservabilityview-field-3" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsObservabilityView.endpoint_url') }}</label>
-            <input id="settingsobservabilityview-field-3"
+          <Field id="settingsobservabilityview-field-3" :label="$t('views.SettingsObservabilityView.endpoint_url')">
+            <Input
               v-model="otlpEndpoint"
               type="url"
               data-testid="settings-observability-otlp-endpoint"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               placeholder="https://otlp.example.com:4318"
             />
-          </div>
+          </Field>
         </DataCard>
 
         <DataCard
@@ -73,7 +72,7 @@
           :title="$t('views.SettingsObservabilityView.otlp_headers')"
         >
           <template #headerActions>
-            <Button v-if="canManage" size="small" type="button" data-testid="settings-observability-add-header" @click="addHeader">
+            <Button v-if="canManage" size="sm" type="button" data-testid="settings-observability-add-header" @click="addHeader">
               {{ $t('views.SettingsObservabilityView.add_header') }}
             </Button>
           </template>
@@ -81,7 +80,7 @@
             {{ $t('views.SettingsObservabilityView.no_custom_headers_configured') }}
           </div>
           <div v-for="(header, index) in otlpHeaders" :key="index" class="mb-2 flex items-center gap-2">
-            <input
+            <Input
               v-model="header.key"
               type="text"
               :aria-label="$t('views.SettingsObservabilityView.header_name')"
@@ -89,7 +88,7 @@
               class="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               :placeholder="$t('views.SettingsObservabilityView.header_name')"
             />
-            <input
+            <Input
               v-model="header.value"
               type="text"
               :aria-label="$t('views.SettingsObservabilityView.header_value')"
@@ -118,17 +117,19 @@
           heading-level="h2"
           :title="$t('views.SettingsObservabilityView.export_interval')"
         >
-          <div>
-            <label for="settingsobservabilityview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsObservabilityView.interval_seconds') }}</label>
-            <input id="settingsobservabilityview-field-2"
+          <Field
+            id="settingsobservabilityview-field-2"
+            :label="$t('views.SettingsObservabilityView.interval_seconds')"
+            :help="$t('views.SettingsObservabilityView.export_interval_description')"
+          >
+            <Input
               v-model.number="exportIntervalSeconds"
               type="number"
               min="1"
               data-testid="settings-observability-export-interval"
               class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <p class="mt-1 text-xs text-muted-foreground">{{ $t('views.SettingsObservabilityView.export_interval_description') }}</p>
-          </div>
+          </Field>
         </DataCard>
 
         <DataCard
@@ -161,14 +162,15 @@
               <span class="text-sm font-medium">{{ $t('views.SettingsObservabilityView.enable_langsmith_tracing') }}</span>
             </div>
             <div v-if="langsmithEnabled">
-              <label for="settingsobservabilityview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsObservabilityView.api_key') }}</label>
-              <textarea id="settingsobservabilityview-field-1"
-                v-model="langsmithApiKey"
-                data-testid="settings-observability-langsmith-api-key"
-                rows="3"
-                class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                :placeholder="hasLangsmithKey ? $t('views.SettingsObservabilityView.leave_blank_to_keep_existing_key') : $t('views.SettingsObservabilityView.enter_langsmith_api_key')"
-              />
+              <Field id="settingsobservabilityview-field-1" :label="$t('views.SettingsObservabilityView.api_key')">
+                <Textarea
+                  v-model="langsmithApiKey"
+                  data-testid="settings-observability-langsmith-api-key"
+                  rows="3"
+                  class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  :placeholder="hasLangsmithKey ? $t('views.SettingsObservabilityView.leave_blank_to_keep_existing_key') : $t('views.SettingsObservabilityView.enter_langsmith_api_key')"
+                />
+              </Field>
               <div class="mt-1 flex items-center gap-2">
                 <button
                   type="button"
@@ -192,19 +194,20 @@
           :message="formError"
           :retryable="false"
         />
-        <div v-if="formSuccess" data-testid="settings-observability-form-success" class="rounded-lg border border-success/50 bg-success/10 p-4 text-sm text-success-text">
+        <Notice v-if="formSuccess" variant="success" :icon="false" class="text-sm" data-testid="settings-observability-form-success">
           {{ formSuccess }}
-        </div>
+        </Notice>
 
-        <div
+        <Notice
           v-if="testResult"
+          :variant="testResult.success ? 'success' : 'danger'"
+          :icon="false"
+          class="text-sm"
           data-testid="settings-observability-test-result"
-          class="rounded-lg border p-4 text-sm"
-          :class="testResult.success ? 'border-success/50 bg-success/10 text-success-text' : 'border-destructive/50 bg-destructive/10 text-destructive-text'"
         >
           <p class="font-medium">{{ testResult.success ? $t('views.SettingsObservabilityView.connection_successful') : $t('views.SettingsObservabilityView.connection_failed') }}</p>
           <p class="mt-1">{{ testResult.message }}</p>
-        </div>
+        </Notice>
 
         <div v-if="canManage" class="flex items-center gap-3 pt-2">
           <button
@@ -249,8 +252,13 @@ import { usePlanStore } from '../stores/planStore'
 import { formatApiError } from '../lib/api/formatError'
 import FeatureGate from '../components/FeatureGate.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import Button from 'primevue/button'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Textarea from '../components/ui/Textarea.vue'
+import Button from '../components/ui/Button.vue'
 import { X } from '@lucide/vue'
 
 type OtelSettingsResponse = components['schemas']['OtelSettingsResponse']

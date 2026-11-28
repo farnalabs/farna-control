@@ -22,12 +22,15 @@
     >
       {{ $t('views.AdminEvidenceRedaction.server_boundary_note') }}
     </div>
-    <div
-      class="mb-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
+    <Notice
+      variant="warning"
+      :icon="false"
+      padding="sm"
+      class="mb-4 text-sm"
       data-testid="admin-evidence-redaction-fail-closed-note"
     >
       {{ $t('views.AdminEvidenceRedaction.fail_closed_note') }}
-    </div>
+    </Notice>
 
     <div
       v-if="loading"
@@ -63,12 +66,12 @@
         />
 
         <form class="space-y-4" @submit.prevent="saveRule">
-          <div>
-            <label for="evidence-redaction-key-pattern" class="mb-1 block text-sm font-medium">
-              {{ $t('views.AdminEvidenceRedaction.key_pattern') }}
-            </label>
-            <input
-              id="evidence-redaction-key-pattern"
+          <Field
+            id="evidence-redaction-key-pattern"
+            :label="$t('views.AdminEvidenceRedaction.key_pattern')"
+            :help="$t('views.AdminEvidenceRedaction.key_pattern_hint')"
+          >
+            <Input
               v-model="form.key_pattern"
               type="text"
               maxlength="255"
@@ -77,10 +80,7 @@
               class="w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60"
               data-testid="admin-evidence-redaction-key-pattern"
             />
-            <p class="mt-1 text-xs text-muted-foreground">
-              {{ $t('views.AdminEvidenceRedaction.key_pattern_hint') }}
-            </p>
-          </div>
+          </Field>
 
           <div>
             <label for="evidence-redaction-role" class="mb-1 block text-sm font-medium">
@@ -111,23 +111,21 @@
               {{ $t('views.AdminEvidenceRedaction.redacted_fields') }}
             </legend>
             <div class="space-y-2">
-              <label
+              <Checkbox
                 v-for="redactionClass in classOptions"
                 :key="redactionClass"
+                :model-value="form.redacted_fields.includes(redactionClass)"
+                :value="redactionClass"
                 class="flex items-start gap-2 text-sm"
+                control-class="mt-0.5"
+                data-testid="admin-evidence-redaction-field-checkbox"
+                @update:model-value="toggleRedactedField(redactionClass)"
               >
-                <input
-                  v-model="form.redacted_fields"
-                  type="checkbox"
-                  :value="redactionClass"
-                  class="mt-0.5"
-                  data-testid="admin-evidence-redaction-field-checkbox"
-                />
                 <span>
                   <span class="font-mono text-xs">{{ redactionClass }}</span>
                   <span class="ml-2 text-muted-foreground">{{ classLabel(redactionClass) }}</span>
                 </span>
-              </label>
+              </Checkbox>
             </div>
             <p class="mt-2 text-xs text-muted-foreground">
               {{ $t('views.AdminEvidenceRedaction.redacted_fields_hint') }}
@@ -168,23 +166,29 @@
         </form>
       </BaseCard>
 
-      <p
+      <Notice
         v-if="statusMessage"
-        aria-live="polite"
-          class="mb-4 rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text"
+        variant="success"
+        live="polite"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-evidence-redaction-status"
       >
         {{ statusMessage }}
-      </p>
+      </Notice>
 
-      <p
+      <Notice
         v-if="!hasCatchAll"
-        aria-live="assertive"
-        class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive-text"
+        variant="danger"
+        live="assertive"
+        :icon="false"
+        padding="sm"
+        class="mb-4 text-sm"
         data-testid="admin-evidence-redaction-catch-all-missing"
       >
         {{ $t('views.AdminEvidenceRedaction.catch_all_missing') }}
-      </p>
+      </Notice>
 
       <EmptyState
         v-if="rules.length === 0 && !formOpen"
@@ -265,14 +269,18 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import PageHeader from '../components/shared/PageHeader.vue'
 import AppSelect from '../components/shared/AppSelect.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import CardHeader from '../components/ui/CardHeader.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/schema'
 import { useDataFetch } from '../composables/useDataFetch'
@@ -355,6 +363,14 @@ const form = ref<{ key_pattern: string; role: string; redacted_fields: string[] 
   role: 'viewer',
   redacted_fields: [],
 })
+
+function toggleRedactedField(redactionClass: string): void {
+  const next = [...form.value.redacted_fields]
+  const index = next.indexOf(redactionClass)
+  if (index === -1) next.push(redactionClass)
+  else next.splice(index, 1)
+  form.value.redacted_fields = next
+}
 
 /**
  * A stored role this page does not recognise (e.g. a future role) must stay

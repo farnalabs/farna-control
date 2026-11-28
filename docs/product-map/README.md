@@ -37,7 +37,7 @@ bdd: [tests/.../feature]           # BDD feature files (missing = coverage gap)
 unit-tests: [tests/...]            # unit/integration test files
 delivery-tasks: [task-...]         # delivery-plan task ids
 depends-on: [feat-...]             # prerequisite features
-status: covered | partial | gap    # coverage status of the behaviours below
+status: covered | partial | gap    # derived from the behaviour bindings (never typed)
 ---
 
 # <Feature Name>
@@ -77,12 +77,168 @@ For **any** feature change (new feature, changed behavior, deprecated behavior):
 1. Update the manifest: add/update the route's `product_map` references and keep the
    `features:` registry description accurate (`frontend/src/manifest.yaml`).
 2. Update the behavior-tracker entry in this directory (`docs/product-map/`) – tick
-   verified behaviors, add tests to `code:`/`unit-tests:`/`bdd:`, and note new known
-   gaps. If the change adds a genuinely new feature, create a new entry here **and**
-   register it in `features:` (unless it is an infra-only surface with no UI route).
+   verified behaviors, bind each one to the test that proves it (see
+   [Behaviour bindings](#behaviour-bindings) below), add tests to
+   `code:`/`unit-tests:`/`bdd:`, and note new known gaps. If the change adds a
+   genuinely new feature, create a new entry here **and** register it in
+   `features:` (unless it is an infra-only surface with no UI route).
 3. Run the architecture suite so the graph stays consistent:
-   `uv run --project backend --no-sync pytest backend/tests/architecture/test_product_map*.py -q`
-4. Update the PRD if the change introduces new behavior (see CONTRIBUTING.md).
+   `uv run --project backend --no-sync pytest backend/tests/architecture/test_product_map*.py backend/tests/architecture/test_behaviour_bindings.py -q`
+4. Add a `Proves:` line to the PR body naming the test that proves the change (see
+   [Prove-the-fix convention](#prove-the-fix-convention) below).
+5. Update the PRD if the change introduces new behavior (see CONTRIBUTING.md).
+
+## Behaviour bindings
+
+A tick in the `## Behaviors` checklist used to be a human claim: nothing failed
+when the test behind it was deleted, was vacuous, or tested something else, and
+the frontmatter `status:` was typed by hand. Every behaviour now carries a
+**binding**: a stable id plus the test references that prove it, written as an
+HTML comment at the end of the bullet (invisible when the page renders).
+
+```markdown
+- [x] `GET /healthz` returns `{"status": "ok"}` and is advisory only
+      <!-- behaviour: health-checks-01 | tests: backend/tests/unit/api/test_health.py::test_healthz_ready_mounted -->
+```
+
+- **The id** is `<entry-file-stem>-<NN>`, assigned when the behaviour is first
+  written. It is stable because it lives in the file: moving a behaviour within
+  (or between) entries carries its id with it, so a reorder never forces a
+  renumber. Position is not asserted. The baseline records an
+  `id -> fingerprint(normalised behaviour text)` for every behaviour, so an
+  existing id cannot silently attach to different prose: a reused or renumbered
+  id fails `test_behaviour_id_does_not_rebind_different_text` until the baseline
+  is regenerated deliberately and the rebinding is reviewed.
+- **`tests:`** is a comma-separated list of references, or `none`:
+
+  | Form | Meaning | Resolution |
+  | --- | --- | --- |
+  | `backend/tests/.../test_x.py::test_name` | node binding (the strong form) | the module exists and the function is defined in it |
+  | `frontend/src/.../X.spec.ts::<test title>` (or under `frontend/tests/`) | node binding for a Vitest/Playwright test | the spec exists and declares a test with that title |
+  | `backend/tests/.../test_x.py` | module binding (weakest, tolerated while backfilling) | the module exists and defines at least one test (or registers `scenarios(...)`) |
+  | `backend/tests/bdd/features/<x>.feature` | feature binding (scenario-level) | a step module registers the file via `scenarios(...)` and at least one scenario executes |
+
+  A binding may not name a test the shared test-style lenses report as vacuous
+  (a pass-only `@then` step, a self-asserting BDD step, a duplicate test body).
+  `docs/product-map/unbound-behaviours.md` lists, per entry, every ticked
+  behaviour that has no clean binding yet and why, plus the strength mix and the
+  weak (module-only) bindings.
+
+### Coverage status is derived, not typed
+
+`status:` is a measurement of the bindings, not a human claim:
+
+- `covered` – every behaviour in the entry is ticked, carries at least one
+  binding that resolves, is not vacuous, and is not frozen in the baseline;
+- `partial` – at least one behaviour is ticked but the entry is not `covered`
+  (a ticked behaviour may still be frozen, or a reference may not resolve);
+- `gap` – nothing in the entry is ticked.
+
+A baselined (frozen) behaviour counts as unbound for status purposes, so
+`status: covered` cannot survive a behaviour the shrink-only baseline still
+excuses. The regenerator rewrites the value (`--write-status`), and
+`test_frontmatter_status_matches_derivation` fails on any hand edit that drifts
+from the derivation.
+
+The baseline (`backend/tests/architecture/behaviour_bindings_baseline.json`) has
+two ratchets:
+
+- `entries` – ticked behaviours that cannot be bound yet. Shrink-only: binding a
+  frozen behaviour fails the stale-entry check until its entry is removed, so an
+  entry can only move towards a provable `covered`.
+- `weak_bindings` – ticked behaviours counted as bound by a whole test module
+  rather than a named test. Also shrink-only: a new module-only binding fails
+  (name the test instead).
+- `approved_removals` – the behaviour ids this repository has agreed to delete.
+  Deleting a behaviour **and its marker** leaves no other trace (the id stops
+  appearing in `entries`, in `weak_bindings` and in the fingerprint index), so
+  `--check-base` compares the behaviour id set against the PR's base revision and
+  fails on a `REMOVED` id. An intended removal is allowed only by listing the id
+  here, which keeps the deletion explicit and reviewable instead of invisible.
+  The list is preserved when the baseline is regenerated.
+
+The baseline also names its owner (`ticket`) and a `review_by` ISO date; once
+that date passes the gate fails until the frozen debt is re-reviewed and the date
+moved forward.
+
+The gate is `backend/tests/architecture/test_behaviour_bindings.py`. It fails
+when a ticked behaviour has no resolvable binding and is not in the baseline,
+when any reference does not resolve, when a reference is vacuous, when a
+baseline entry has since become bound, when an id is reused for different text,
+when the derived status disagrees with the frontmatter, when a weak binding was
+added, when the review date has passed, and when the baseline or
+`unbound-behaviours.md` are not exactly what the regenerator produces. On a pull
+request, `--check-base` additionally fails when an id documented at the base
+revision has been removed without an `approved_removals` entry.
+
+### Regenerating bindings, the baseline and the report
+
+```bash
+uv run --project backend --no-sync python scripts/run_behaviour_bindings_baseline.py --all
+```
+
+`--write-markers` adds a marker to any behaviour that lacks one (backfilling
+from the test names in its text, the entry's `unit-tests:`/`bdd:` citations for
+disambiguation, and the test tree); `--write-baseline` and `--write-report`
+regenerate the baseline JSON and `unbound-behaviours.md`; `--write-status`
+rewrites every frontmatter `status:` to the derived value. The artefacts are
+generated: never hand-edit them, and never widen the baseline to get green – a
+behaviour that genuinely has no test is a coverage gap, not a paperwork gap.
+
+## Prove-the-fix convention
+
+A PR that changes product code must name the test that proves it exists. When the
+diff touches `backend/src/**` or `frontend/src/**`, `scripts/run_check_prove_the_fix.py`
+(CI: the "Prove the fix marker" job in `.github/workflows/prove-the-fix.yml`,
+which also re-runs when the PR body is edited) requires a line in the PR body of
+the form:
+
+```
+Proves: backend/tests/unit/api/test_health.py::test_healthz_ready_mounted
+Proves: frontend/src/__tests__/design-system-components.spec.ts::stacks on mobile and restores the row layout at sm (FAR-2537)
+```
+
+- One marker suffices; repeat the line for as many tests as the change needs.
+  Name one test per line. An empty `Proves:` line (the placeholder the shipped PR
+  template carries) is ignored, not an error: it counts as absent, so a body whose
+  only marker is empty still fails with "no proving test", while a body that also
+  names a real test passes.
+- Every named reference must be a pytest node id under `backend/tests/`, or a
+  Vitest/Playwright test title under `frontend/src/**/*.spec.ts` or
+  `frontend/tests/**/*.spec.ts`. It must exist in the tree, and the module that
+  holds it must be part of the PR's changed-file list – a proving test is added
+  or updated by the same change, never an untouched test that happened to pass
+  before.
+- A frontend test title declared with a template literal, or with an `each`/`for`
+  printf (`%s`) or `$var` placeholder, must be written VERBATIM as declared,
+  placeholders included – that is the only string the gate matches, because the
+  test that must exist declares exactly that string. For a real example,
+  `frontend/tests/e2e/wcag-contrast.spec.ts` declares
+  `authenticated ${path} has no unexpected WCAG AA violations (light theme)` (the
+  `@regression` light-theme scan, which runs for every light-scanned authenticated
+  route), so the marker is
+  `Proves: frontend/tests/e2e/wcag-contrast.spec.ts::authenticated ${path} has no unexpected WCAG AA violations (light theme)`
+  – not the substituted title a single run prints. When a reference does not
+  match, the gate quotes the nearest declared title(s) that CAN be named as a
+  `Proves:` ref (annotating any that cannot prove anything because they are
+  skipped). A title containing a comma cannot be named as a ref – one ref names
+  one test per line – so it is never suggested; if only such titles are close,
+  there is no suggestion.
+- A test that is skipped or expected to fail cannot prove anything, at any
+  pytest scope: a `@pytest.mark.skip` / `skipif` / `xfail` decorator on the test
+  or on its enclosing class, a module-level `pytestmark = pytest.mark.skip(...)`
+  (or a list of markers), a body that starts with `pytest.skip()` /
+  `pytest.xfail()`, or a spec test marked `.skip` / `.fixme` / `.todo`.
+- Paths are resolved and confined to the repository and the test roots; a `..`
+  traversal is rejected.
+- Fenced code blocks and HTML comments are stripped before the `Proves:` lines
+  are read, so documenting the convention in a PR body cannot satisfy it.
+- The check is deterministic and uses no LLM: it reads the PR body and the
+  changed-file list.
+- Only `backend/src/**` and `frontend/src/**` trigger the requirement. A PR
+  confined to `docs/`, `backend/tests/`, `frontend/tests/` or the repo root needs
+  no marker.
+- The test named should be the one that would FAIL without the change.
 
 ## Index – manifest feature registry (single source of truth)
 
@@ -850,10 +1006,11 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > `journeys/eval-journey.spec.ts`; real-time run events by
 > `frontend/tests/e2e/sse-crossworker-notification.spec.ts` plus the backend
 > `operations/websocket_reconnection.feature` and
-> `observability/active_run_observability.feature` (all executing BDD); theme
-> switching does not ship (there is no theme toggle; the static
-> `data-theme="agent"` CSS hook is locked by
-> `frontend/src/__tests__/agent-theme-audit.spec.ts`).
+> `observability/active_run_observability.feature` (all executing BDD). Theme
+> switching ships as the sidebar light/dark toggle (`.light` / `.dark` on
+> `<html>`); the per-view theme hook these drafts assumed was retired in FAR-2756,
+> and `frontend/src/__tests__/agent-theme-audit.spec.ts` now audits view rendering
+> and testid coverage.
 > `_ORPHANED_BDD_FEATURES` stays empty and the new guard
 > `test_no_bdd_citations_for_fully_deselected_features` makes it an invariant
 > that a product-map `bdd:` citation always names at least one scenario CI
@@ -872,10 +1029,13 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > coverage answer from the machine layer Assistant indexes from. The trackers
 > now read `partial` (`configure/guardrails.md`, `licensing/license.md`,
 > `admin/plugins.md`, `admin/product-analytics.md`), the guardrail/license
-> trackers also name the exact deferral in Known Gaps, and the new
-> `test_graph_tracker_status_matches_manifest_registry` guard makes
-> manifest↔tracker status agreement an invariant so the two layers can never
-> drift again. `_ORPHANED_BDD_FEATURES` stays empty.
+> trackers also name the exact deferral in Known Gaps, and a manifest↔tracker
+> status guard was added. FAR-2701 later made the tracker `status:` derived from
+> the behaviour bindings (proof, which is narrower than the manifest's ship
+> claim), so that guard is now
+> `test_graph_tracker_status_does_not_overclaim_against_manifest_registry`:
+> the tracker may prove less than the manifest ships, never more.
+> `_ORPHANED_BDD_FEATURES` stays empty.
 >
 > **Closed this walk (2026-09-30):** closed four stale sub-surface gaps –
 > shipped behavior that neither product-map layer described. `feat-apply`
@@ -1271,6 +1431,45 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 > `declared_scopes` recorded but unenforced). `_ORPHANED_BDD_FEATURES` stays
 > empty.
 
+> **Closed this walk (2026-11-24):** tracked one shipped but untracked backend
+> surface: the system-administrator Fernet key-rotation control plane
+> (`system/key-rotation.md`). `POST /api/v1/admin/rotation/rotate-key` and
+> `GET /api/v1/admin/rotation/status` ship REST-only (no manifest route, no UI,
+> no MCP tool) and were documented only in `docs/security/secret-management.md`,
+> so neither product-map layer described them. The entry records the
+> `system.config.manage` floor, break-glass mint-deny, the start/completed audit
+> events, the Redis/in-process rotation lock, the `503` system-role guard and the
+> no-downtime contract, and keeps the honest gaps (process-local last result, no
+> resume/cancel, no failure audit event, no UI, instance-wide scope).
+> `_ORPHANED_BDD_FEATURES` stays empty.
+
+> **Closed this walk (2026-11-24):** tracked one shipped but untracked
+> operational surface: the deploy drain control plane
+> (`infra/deployment-drain.md`). `GET /api/v1/deployment` (public readout) and
+> `POST /api/v1/deployment/drain` (bearer-token admission freeze) ship REST-only
+> and are consumed by `.github/workflows/deploy.yml`; neither product-map layer
+> described them. The entry records the public-safe readout, the constant-time
+> token guard, the advisory-lock plus audit write, the `sandbox_agent`-scoped
+> `create_run` gate and its fail-closed flag read, and keeps the honest gaps
+> (CI-only control, no cancel-on-drain, reused `TriggersPausedError`, fail-open
+> malformed-graph scan, instance-wide scope). `_ORPHANED_BDD_FEATURES` stays
+> empty.
+
+> **Closed this walk (2026-11-25):** tracked one shipped but untracked backend
+> surface: the community primitive registry and its publisher trust model
+> (`library/primitive-registry.md`). `/api/v1/registry/*` (public anonymous
+> catalogue list/detail/pull, legacy and v2 publish, verify, download) and the
+> org-scoped `/api/v1/admin/publishers` CRUD ship REST-only with no manifest
+> route, no UI and no MCP tool, so neither product-map layer described them. The
+> entry records the anonymous catalogue contract, filtering/ranking,
+> signing/checksum verification, publisher trust states, the DB-backed
+> green/amber publisher CRUD and the library in-code-registry fallback, and
+> keeps the honest gaps (in-memory catalogue, per-process signing/trust keys,
+> two disagreeing publisher trust models, public third-party verification gap,
+> v2 payload/version mismatch, legacy private-key publish, authenticated
+> `/verify`, untested anonymous `GET /publishers`, unpinned pagination and
+> download materialisation). `_ORPHANED_BDD_FEATURES` stays empty.
+
 ### Admin
 - [feat-product-analytics](admin/product-analytics.md) => PRD N/A
 - [feat-plugins](admin/plugins.md) => PRD N/A
@@ -1330,6 +1529,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-apt-distribution](infra/apt-distribution.md) => PRD N/A
 - [feat-backup-restore](infra/backup-restore.md) => PRD N/A
 - [feat-container-deployment](infra/container-deployment.md) => PRD N/A
+- [feat-deployment-drain](infra/deployment-drain.md) => PRD N/A
 - [feat-infra-health](infra/health-checks.md) => PRD N/A
 - [feat-native-single-install](infra/native-single-install.md) => PRD N/A
 - [feat-support](infra/support-diagnostics.md) => PRD N/A
@@ -1337,6 +1537,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 ### Library
 - [feat-library](library/library.md) => PRD N/A
 - [feat-library-collections](library/library-collections.md) => PRD N/A
+- [feat-primitive-registry](library/primitive-registry.md) => PRD N/A
 
 ### Licensing
 - [feat-license](licensing/license.md) => PRD N/A
@@ -1362,6 +1563,7 @@ Behavior-tracker entries in this directory. Infra-only surfaces (no UI route in
 - [feat-schemas](schemas/schemas.md) => PRD N/A
 
 ### System
+- [feat-key-rotation](system/key-rotation.md) => PRD N/A
 - [feat-org](admin/org.md) => PRD N/A
 - [feat-runtime](system/runtime.md) => PRD N/A
 - [feat-system-config](system/system-config.md) => PRD N/A

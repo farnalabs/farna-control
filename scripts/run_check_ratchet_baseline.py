@@ -90,37 +90,66 @@ can see what was compared:
 
 1. ``--base <rev>`` (explicit; used locally, e.g. ``--base origin/main``). An
    explicit rev that does not resolve is a hard failure - never a silent pass.
-2. ``RATCHET_BASE_REV`` in the environment (the workflow passes a push event's
-   ``github.event.before``, i.e. the previous main tip). An unresolvable hint
-   falls through: on a brand-new branch it is the all-zero SHA, which names no
-   commit.
-3. ``HEAD^`` when ``HEAD^2`` exists - a pull_request checkout is the PR merge
-   commit, whose first parent is the base branch tip. No ``origin/<base>``
-   fetch is needed, which is why this comes before the ref lookup (see the
-   integration-test note in ``ci.yml``: ``actions/checkout`` does not always
-   create ``origin/<base>``).
-4. ``origin/$GITHUB_BASE_REF`` then ``$GITHUB_BASE_REF`` when
-   ``GITHUB_BASE_REF`` is set. If neither resolves the base is unreadable and
-   the guard FAILS CLOSED.
+2. ``origin/$GITHUB_BASE_REF`` then ``$GITHUB_BASE_REF``. ``GITHUB_BASE_REF`` is
+   the PR's target branch, so it names the base directly. This is AUTHORITATIVE
+   and comes before the push hint: whenever ``GITHUB_BASE_REF`` is set the
+   environment is describing a pull_request event, so the push-only
+   ``RATCHET_BASE_REV`` hint is ignored outright - correctness must not depend on
+   ``ci.yml`` blanking it. It also comes BEFORE ``HEAD^2``: when the PR base ref
+   WAS fetched (``fetch-depth: 0`` fetches ``refs/heads/*``), comparing against
+   the target branch is exact, whereas the merge-ref parent is a snapshot of main
+   taken when GitHub minted the merge commit. If neither candidate resolves we
+   fall through rather than abort - ``HEAD^2`` below is then the true base and
+   aborting would turn a fetch gap into a red PR.
+3. ``RATCHET_BASE_REV`` in the environment, when non-empty and resolvable, and
+   only when ``GITHUB_BASE_REF`` is unset. This is a PUSH-event hint: the
+   workflow passes ``github.event.before`` (the previous main tip), so a raise
+   buried mid-push is caught. On a pull_request event ``github.event.before`` is
+   the branch's own previous head, not a base, so the hint is never consulted
+   there. An unresolvable hint falls through (a brand-new branch's ``before`` is
+   the all-zero SHA, which names no commit).
+4. ``HEAD^`` when ``HEAD^2`` exists - a pull_request checkout is the PR merge
+   commit, whose first parent is the base branch tip. This is the real-CI path
+   when ``actions/checkout`` does not fetch ``origin/<base>`` (see the
+   integration-test note in ``ci.yml``).
 5. ``HEAD^`` - the previous commit. This is the documented non-PR fallback: a
    push to main compares the new tip against the commit before it, so a raised
-   baseline in the pushed commit is caught. With no parent commit at all the
-   guard FAILS CLOSED.
+   baseline in the pushed commit is caught.
+
+``ci.yml`` still blanks ``RATCHET_BASE_REV`` on a pull_request event. That is now
+belt-and-braces rather than load-bearing: rule 2 ignores the hint whenever
+``GITHUB_BASE_REF`` is set, so the resolver is correct even if the workflow
+passes a PR branch's ``before``. Do not "simplify" the workflow guard away - it
+keeps the two layers agreeing, and a workflow-contract test pins it.
+
+With none of the above resolvable the guard FAILS CLOSED.
 
 Fail-closed rules (an unreadable base must never look like a pass):
 
 * an explicit ``--base`` that does not resolve;
-* ``GITHUB_BASE_REF`` set but neither candidate ref resolves;
 * a git failure reading a ratchet at a base that does resolve;
-* a ratchet file missing from the working tree, or unparseable - the failure
+* a ratchet file missing from the WORKING TREE, or unparseable - the failure
   names the ratchet;
 * for the brand baseline, a malformed ``<path>\\t<count>`` line (no separator,
-  a non-integer count, a duplicate path).
+  a non-integer count, a duplicate path);
+* no base revision resolving at all.
 
-A ratchet file that does not exist at the base revision is the one legitimate
-"nothing to compare" case: it means this change introduces that ratchet, so the
-guard passes it with a loud notice. (Every ratchet exists on main today, so
-this branch is only reachable when a new ratchet is added.)
+Base versus working tree
+------------------------
+A BASE file that cannot be parsed (or whose frozen header disagrees with its
+entries) is NOT a defect in this change and must not block it: the base is
+simply unusable as a baseline, so no comparison is possible. The guard prints a
+loud WARNING naming the ratchet and the base revision and SKIPS that ratchet;
+every other ratchet is still compared and the run succeeds. This is the one
+asymmetry in an otherwise fail-closed guard, and it was added after a PR was
+blocked by a malformed header in its own merge-base (FAR-2699 follow-up). The
+WORKING TREE keeps failing closed: a malformed file being introduced by this
+change is exactly what a reviewer must see, so it is never skipped.
+
+A ratchet file that does not exist at the base revision is the one other
+legitimate "nothing to compare" case: it means this change introduces that
+ratchet, so the guard passes it with a loud notice. (Every ratchet exists on
+main today, so this branch is only reachable when a new ratchet is added.)
 
 Usage
 -----
@@ -133,7 +162,8 @@ Usage
     # Legacy single-ratchet mode (counted baseline only), exactly as before:
     python scripts/run_check_ratchet_baseline.py --baseline backend/tests/architecture/brand_consistency_baseline.txt
 
-Exit 0 clean, 1 loosened / unreadable / malformed.
+Exit 0 clean, or clean with a ratchet skipped because its BASE is unreadable
+(loud warning), 1 loosened / a malformed WORKING TREE / no resolvable base.
 """
 
 from __future__ import annotations
@@ -227,30 +257,60 @@ def _rev_exists(repo_root: Path, rev: str) -> bool:
 
 
 def _resolve_base(repo_root: Path, explicit: str | None) -> tuple[str, str]:
-    """Return ``(rev, why)`` for the revision the ratchets are compared against."""
+    """Return ``(rev, why)`` for the revision the ratchets are compared against.
+
+    Order (and why it is this order):
+
+    1. ``--base`` - the caller asked for a specific revision; an explicit rev
+       that does not resolve is a hard failure, never a silent pass.
+    2. ``origin/$GITHUB_BASE_REF`` then ``$GITHUB_BASE_REF`` - the PR's target
+       branch. It is AUTHORITATIVE: whenever ``GITHUB_BASE_REF`` is set the
+       environment describes a pull_request event, so the push-only
+       ``RATCHET_BASE_REV`` hint is ignored outright. It also beats ``HEAD^2``
+       because it is the branch itself rather than a snapshot of it; a fetch gap
+       falls through instead of aborting, because ``HEAD^2`` below is then the
+       true base.
+    3. ``RATCHET_BASE_REV`` - a PUSH-only hint (``github.event.before``, the
+       previous main tip), consulted only when ``GITHUB_BASE_REF`` is unset. On a
+       pull_request event ``before`` is the branch's own previous head, so the
+       hint is never used there.
+    4. ``HEAD^2``'s first parent - the pull_request merge-ref checkout, whose
+       parent is the base-branch tip even when no ``origin/<base>`` was fetched.
+    5. ``HEAD^`` - the documented non-PR fallback (previous commit).
+
+    Note this is deliberately NOT ``HEAD^`` while a PR base is knowable: that
+    compares a PR against its own previous commit, which makes the verdict
+    meaningless and can flag a change the PR never made.
+    """
     if explicit:
         if not _rev_exists(repo_root, explicit):
             raise RatchetError(f"--base {explicit!r} does not resolve to a commit in this repository; refusing to pass with an unreadable base")
         return explicit, "explicit --base"
 
-    hint = os.environ.get(BASE_ENV_VAR, "").strip()
-    if hint and _rev_exists(repo_root, hint):
-        return hint, f"{BASE_ENV_VAR} (push event's previous tip)"
-
-    if _rev_exists(repo_root, "HEAD^2"):
-        return _PARENT_REV, "HEAD^ (first parent of the PR merge commit)"
-
+    # GITHUB_BASE_REF is authoritative. It is set only on a pull_request event,
+    # where the push-only RATCHET_BASE_REV hint would be the branch's own
+    # previous head (never a base), so the hint is ignored outright whenever it
+    # is present - correctness must not depend on ci.yml blanking the hint.
     base_ref = os.environ.get("GITHUB_BASE_REF", "").strip()
     if base_ref:
         for candidate in (f"origin/{base_ref}", base_ref):
             if _rev_exists(repo_root, candidate):
-                return candidate, f"{candidate} (GITHUB_BASE_REF)"
-        raise RatchetError(f"GITHUB_BASE_REF={base_ref!r} is set but neither 'origin/{base_ref}' nor '{base_ref}' resolves; refusing to pass with an unreadable base")
+                return candidate, f"{candidate} (GITHUB_BASE_REF, the pull request's target branch)"
+        # Neither candidate resolves (a depth-1 checkout can omit both): fall
+        # through to the merge-ref parent, which IS the base branch tip. Aborting
+        # here would turn a fetch gap into a red PR on an otherwise valid change.
+
+    hint = os.environ.get(BASE_ENV_VAR, "").strip()
+    if not base_ref and hint and _rev_exists(repo_root, hint):
+        return hint, f"{BASE_ENV_VAR} (push event's previous tip)"
+
+    if _rev_exists(repo_root, "HEAD^2"):
+        return _PARENT_REV, "HEAD^ (first parent of the PR merge commit; origin/<base> was not fetched)"
 
     if _rev_exists(repo_root, _PARENT_REV):
         return _PARENT_REV, "HEAD^ (previous commit; no pull-request base available)"
 
-    raise RatchetError("no base revision could be resolved (no --base, no usable RATCHET_BASE_REV, no PR merge commit, no GITHUB_BASE_REF, and HEAD has no parent); refusing to pass with an unreadable base")
+    raise RatchetError("no base revision could be resolved (no --base, no usable RATCHET_BASE_REV, no GITHUB_BASE_REF ref, no PR merge commit, and HEAD has no parent); refusing to pass with an unreadable base")
 
 
 def parse_baseline(text: str, *, source: str) -> dict[str, int]:
@@ -1093,10 +1153,16 @@ def _run_counted(repo_root: Path, baseline_rel: str, explicit_base: str | None) 
                 file=sys.stderr,
             )
             return 0
-        base = parse_baseline(base_text, source=f"{baseline_rel}@{rev}")
     except RatchetError as exc:
         print(f"ratchet-baseline guard: FAILED CLOSED - {exc}", file=sys.stderr)
         return 1
+
+    try:
+        base = parse_baseline(base_text, source=f"{baseline_rel}@{rev}")
+    except RatchetError as exc:
+        _print_unreadable_base(baseline_rel, rev, why, exc)
+        print(f"ratchet-baseline guard: OK - {baseline_rel} skipped: no comparison is possible against an unreadable base.", file=sys.stderr)
+        return 0
 
     comparison_current = _without_new_file_entries(repo_root, rev, base, current)
     added, raised = compare(base, comparison_current)
@@ -1111,6 +1177,69 @@ def _run_counted(repo_root: Path, baseline_rel: str, explicit_base: str | None) 
     return 0
 
 
+def _print_unreadable_base(ratchet_key: str, rev: str, why: str, exc: RatchetError) -> None:
+    """The base is unusable as a baseline: say so loudly and skip, never fail.
+
+    An unreadable WORKING TREE is a defect in this change and fails closed (see
+    the callers). An unreadable BASE is not this change's doing and cannot be
+    compared against, so the only honest behaviour is to skip that ratchet with
+    a warning that names it and the base revision.
+    """
+    print(
+        f"ratchet-baseline guard: WARNING - [{ratchet_key}] the base revision {rev} ({why}) "
+        f"cannot be read as a baseline: {exc}. SKIPPING this ratchet - an unreadable base "
+        "is not a comparison, and it is not a defect in this change. The working tree was "
+        "still checked for a malformed file, and every other ratchet is still compared.",
+        file=sys.stderr,
+    )
+
+
+def _check_ratchet(repo_root: Path, rev: str, why: str, ratchet: Ratchet) -> tuple[str, list[str]]:
+    """Classify one ratchet against the base, isolating its fail/skip branches.
+
+    Returns ``(status, findings)`` where status is one of ``"fatal"`` (already
+    reported; the caller must fail), ``"introduced"``, ``"skipped"``, ``"ok"``
+    or ``"loosened"``.
+    """
+    # A malformed WORKING-TREE file is this change's doing: fail closed.
+    try:
+        current = ratchet.parse(_read_working_tree(repo_root, ratchet.path), source=ratchet.path)
+    except RatchetError as exc:
+        print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
+        return "fatal", []
+
+    # A git failure reading a resolved base is a hard failure.
+    try:
+        base_text = read_baseline_at_rev(repo_root, rev, ratchet.path)
+    except RatchetError as exc:
+        print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
+        return "fatal", []
+
+    if base_text is None:
+        return "introduced", []
+
+    # A malformed BASE file is not this change's doing: warn and skip.
+    try:
+        base = ratchet.parse(base_text, source=f"{ratchet.path}@{rev}")
+    except RatchetError as exc:
+        _print_unreadable_base(ratchet.key, rev, why, exc)
+        return "skipped", []
+
+    try:
+        comparison_current = _without_new_file_entries(repo_root, rev, base, current) if ratchet.allow_new_file_entries else current
+        findings = ratchet.loosenings(base, comparison_current)
+    except RatchetError as exc:
+        # A working-tree-side comparison failure (e.g. an unclassified mypy
+        # option polarity) is the change's own defect: still fail closed.
+        print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
+        return "fatal", []
+
+    if findings:
+        return "loosened", findings
+    print(f"ratchet-baseline guard: OK - [{ratchet.key}] {ratchet.path} is not loosened against {rev}.", file=sys.stderr)
+    return "ok", []
+
+
 def _run_all(repo_root: Path, explicit_base: str | None) -> int:
     """Check every enabled ratchet against one base revision."""
     try:
@@ -1122,33 +1251,29 @@ def _run_all(repo_root: Path, explicit_base: str | None) -> int:
     print(f"ratchet-baseline guard: base revision {rev} ({why}); checking {len(RATCHETS)} ratchets.", file=sys.stderr)
     failures: list[tuple[Ratchet, list[str]]] = []
     introduced: list[Ratchet] = []
+    skipped: list[Ratchet] = []
 
     for ratchet in RATCHETS:
-        try:
-            current = ratchet.parse(_read_working_tree(repo_root, ratchet.path), source=ratchet.path)
-            base_text = read_baseline_at_rev(repo_root, rev, ratchet.path)
-            if base_text is None:
-                introduced.append(ratchet)
-                continue
-            base = ratchet.parse(base_text, source=f"{ratchet.path}@{rev}")
-            comparison_current = _without_new_file_entries(repo_root, rev, base, current) if ratchet.allow_new_file_entries else current
-            findings = ratchet.loosenings(base, comparison_current)
-        except RatchetError as exc:
-            print(f"ratchet-baseline guard: FAILED CLOSED - [{ratchet.key}] {ratchet.path}: {exc}", file=sys.stderr)
+        status, findings = _check_ratchet(repo_root, rev, why, ratchet)
+        if status == "fatal":
             return 1
-        if findings:
+        if status == "introduced":
+            introduced.append(ratchet)
+        elif status == "skipped":
+            skipped.append(ratchet)
+        elif status == "loosened":
             failures.append((ratchet, findings))
-        else:
-            print(f"ratchet-baseline guard: OK - [{ratchet.key}] {ratchet.path} is not loosened against {rev}.", file=sys.stderr)
 
     _print_introduced(introduced, rev)
+    _print_skipped(skipped, rev)
 
     if failures:
         _print_all_failures(failures, rev, why)
         return 1
 
+    skipped_note = f" ({len(skipped)} skipped: unreadable base)" if skipped else ""
     print(
-        f"ratchet-baseline guard: OK - none of the {len(RATCHETS)} ratchets is loosened against {rev} ({why}).",
+        f"ratchet-baseline guard: OK - none of the checked ratchets is loosened against {rev} ({why}){skipped_note}.",
         file=sys.stderr,
     )
     return 0
@@ -1158,6 +1283,14 @@ def _print_introduced(introduced: list[Ratchet], rev: str) -> None:
     for ratchet in introduced:
         print(
             f"ratchet-baseline guard: OK - [{ratchet.key}] {ratchet.path} does not exist at {rev}; this change introduces the ratchet, so there is nothing to compare yet.",
+            file=sys.stderr,
+        )
+
+
+def _print_skipped(skipped: list[Ratchet], rev: str) -> None:
+    for ratchet in skipped:
+        print(
+            f"ratchet-baseline guard: WARNING - [{ratchet.key}] {ratchet.path} SKIPPED: the base revision {rev} is unreadable as a baseline (see the warning above).",
             file=sys.stderr,
         )
 

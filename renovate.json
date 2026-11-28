@@ -9,8 +9,10 @@
   "schedule": [
     "after 1am and before 7am"
   ],
-  "dependencyDashboard": true,
-  "dependencyDashboardTitle": "Dependency updates",
+  "dependencyDashboard": {
+    "enabled": true,
+    "title": "Dependency updates"
+  },
   "dependencyDashboardApproval": false,
   "vulnerabilityAlerts": {
     "enabled": true,
@@ -76,6 +78,16 @@
       "groupName": "CI tooling"
     },
     {
+      "description": "Group GitHub Actions major updates into a single PR so a batch of action majors arrives as one reviewable change rather than one PR per action.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "GitHub Actions majors"
+    },
+    {
       "description": "Automerge patch and digest updates after required checks",
       "matchUpdateTypes": [
         "patch",
@@ -94,17 +106,31 @@
       "automerge": false
     },
     {
-      "description": "Never automerge major updates",
+      "description": "Major updates merge on green: the merge train's full suite is the gate, so a major no longer waits for a human. The rules below are the exceptions: js-yaml, fast-uri and postgres majors are disabled outright (enabled: false); pytest, Python, primevue/@primevue/themes and @primeuix/styled are capped with allowedVersions, so an out-of-range major is never proposed; and @sentry/vue, mcp and github-actions majors are held for manual review (automerge: false).",
       "matchUpdateTypes": [
         "major"
       ],
-      "automerge": false,
-      "dependencyDashboardApproval": true
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true,
+      "dependencyDashboardApproval": false,
+      "minimumReleaseAge": "3 days"
     },
     {
       "description": "js-yaml v5 dropped YAML merge-key (<<) expansion — manifest tier/role gating depends on it",
       "matchPackageNames": [
         "js-yaml"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Hold fast-uri on the 3.x line. ajv@8.20.0 declares fast-uri ^3.0.1 and the frontend pnpm override caps it at >=3.1.9 <4; 3.1.9 already carries every published fast-uri advisory (GHSA-333x-w4r6-6crp, GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h), so a v4 bump adds no security benefit and would pin ajv outside its declared range. Remove once ajv itself accepts fast-uri 4.x.",
+      "matchPackageNames": [
+        "fast-uri"
       ],
       "matchUpdateTypes": [
         "major"
@@ -131,6 +157,74 @@
         "python"
       ],
       "allowedVersions": "<3.15"
+    },
+    {
+      "description": "Hold actions/setup-python's python-version below 3.15 by manager. The datasource-scoped Hold Python rule above did not catch Renovate's github-actions extraction of the actions/setup-python 'with: python-version' input (PR #3548 bumped the Copy consistency job to 3.15), so cap it explicitly by manager. Remove together with the Hold Python rule once the native dependencies publish cp315 wheels.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "allowedVersions": "<3.15"
+    },
+    {
+      "description": "Hold PrimeVue at v4. PrimeVue 5 cannot be packaged for self-hosters because of its licensing, so the stack was deliberately kept on PrimeVue 4 and these caps must not be raised without a licensing decision that supports self-hosted redistribution.",
+      "matchPackageNames": [
+        "primevue",
+        "@primevue/themes"
+      ],
+      "allowedVersions": "<5"
+    },
+    {
+      "description": "Hold @primeuix/styled below v1. PrimeVue 5 cannot be packaged for self-hosters because of its licensing, so the stack was deliberately kept on PrimeVue 4 and these caps must not be raised without a licensing decision that supports self-hosted redistribution. @primeuix/styled v1 ships with the PrimeVue 5 line, which is why it is capped below v1 even though it sits on 0.7.x today.",
+      "matchPackageNames": [
+        "@primeuix/styled"
+      ],
+      "allowedVersions": "<1"
+    },
+    {
+      "description": "Hold postgres below a major bump. postgres:16-alpine is the image in deploy/compose/docker-compose.prod.yml as well as every test and CI database, so a major bump changes the production database image, not just CI. PostgreSQL 16 is the only supported runtime database (ADR 068), and a green run on a newer major does not validate 16. Expanding supported PostgreSQL versions is tracked in a separate ticket; until that lands this stays held.",
+      "matchPackageNames": [
+        "postgres"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Hold @sentry/vue major updates for manual review. Sentry fails silently, so a green build proves the least here; validation that the new major actually reports errors is tracked separately, and this hold comes off when it passes.",
+      "matchPackageNames": [
+        "@sentry/vue"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Hold mcp major updates for manual review. mcp is the MCP server SDK, where a protocol change can pass tests and still break tool calls at runtime; validation is tracked separately, so a human signs off on the major until then.",
+      "matchPackageNames": [
+        "mcp"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Hold GitHub Actions major updates for manual review. The 'GitHub Actions majors' grouping rule exists so a batch of action majors arrives as one reviewable change, not to merge unattended: a third-party action major carries supply-chain risk that a green build cannot fully validate (the same reasoning as the @sentry/vue and mcp holds), and exempting it from the global major-automerge rule is what keeps that grouping PR human-reviewed. This rule sits after the global major-automerge rule so its automerge:false wins.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
     }
   ]
 }

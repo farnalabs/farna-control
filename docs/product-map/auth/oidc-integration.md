@@ -13,7 +13,7 @@ bdd:
   - backend/tests/bdd/steps/test_sso_oidc.py
 depends-on:
   - feat-auth-jwt-auth
-status: covered
+status: partial
 ---
 
 # OIDC Integration
@@ -25,14 +25,20 @@ the SSO callback flow (`feat-sso`).
 ## Behaviors
 
 - [x] Provider `jwks_uri` is discovered from the OpenID Connect discovery document
+      <!-- behaviour: oidc-integration-01 | tests: none -->
 - [x] JWKS is fetched over HTTPS and cached in-memory with a 1-hour TTL
+      <!-- behaviour: oidc-integration-02 | tests: none -->
 - [x] `id_token` JWT signature is verified against the matching JWK
+      <!-- behaviour: oidc-integration-03 | tests: none -->
 - [x] `iss` must match the provider issuer; `aud` must match the client id; `exp`
       must not be expired
+      <!-- behaviour: oidc-integration-04 | tests: none -->
 - [x] `alg` is restricted to an allowlist (`none` is rejected); key-type / algorithm
       mismatches fail closed
+      <!-- behaviour: oidc-integration-05 | tests: none -->
 - [x] OIDC SSO callback exchanges the authorization code and issues a JWT pair
       (`feat-auth-jwt-auth`)
+      <!-- behaviour: oidc-integration-06 | tests: none -->
 
 ## Known Gaps
 

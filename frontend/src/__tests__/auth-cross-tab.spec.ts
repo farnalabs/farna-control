@@ -98,6 +98,7 @@ describe('cross-tab refresh (cookie transport)', () => {
       method: 'POST',
       credentials: 'include',
       headers: { 'X-CSRF-Token': 'csrf-value' },
+      signal: expect.any(AbortSignal),
     })
   })
 

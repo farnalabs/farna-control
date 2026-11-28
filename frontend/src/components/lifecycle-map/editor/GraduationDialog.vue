@@ -16,57 +16,46 @@
            refetch loader — the Graduate button is the retry path. -->
       <ErrorAlert v-if="error" :message="error" :retryable="false" />
 
-      <div>
-        <label for="graduationdialog-field-2" class="mb-2 flex items-center gap-2 text-sm font-medium">
-          <input id="graduationdialog-field-2"
-            v-model="mode"
-            type="radio"
-            value="existing"
-            class="h-4 w-4 accent-primary"
-          />
-          Link to existing pipeline
-        </label>
-        <Select
-  aria-label="Select pipeline"
-  v-if="mode === 'existing'"
-  v-model="selectedPipelineId"
-  placeholder="Select a pipeline..."
-  class="ml-6 w-full"
-  :options="pipelines.map(p => ({ value: p.id, label: p.name }))"
-  option-label="label"
-  option-value="value"
->
-  <template #option="{ option }">
-    <span :data-value="option.value">{{ option.label }}</span>
-  </template>
-</Select>
-      </div>
-
-      <div>
-        <label for="graduationdialog-field-1" class="mb-2 flex items-center gap-2 text-sm font-medium">
-          <input id="graduationdialog-field-1"
-            v-model="mode"
-            type="radio"
-            value="new"
-            class="h-4 w-4 accent-primary"
-          />
-          Create new pipeline from template
-        </label>
-        <Select
-  aria-label="Select template"
-  v-if="mode === 'new'"
-  v-model="selectedTemplateId"
-  placeholder="Select a template..."
-  class="ml-6 w-full"
-  :options="[{ value: 'simple-sequential', label: $t('components.lifecycle-map.editor.GraduationDialog.simple_sequential') }, { value: 'hierarchical', label: $t('components.lifecycle-map.editor.GraduationDialog.hierarchical_agent') }, { value: 'parallel', label: $t('components.lifecycle-map.editor.GraduationDialog.parallel_processing') }]"
-  option-label="label"
-  option-value="value"
->
-  <template #option="{ option }">
-    <span :data-value="option.value">{{ option.label }}</span>
-  </template>
-</Select>
-      </div>
+      <RadioGroup
+        v-model="mode"
+        name="graduation-target"
+        :aria-label="$t('components.lifecycle-map.editor.GraduationDialog.graduate_stage')"
+        :options="graduationOptions"
+        class="space-y-4"
+        option-class="mb-2 flex items-center gap-2 text-sm font-medium"
+        control-class="h-4 w-4 accent-primary"
+      >
+        <template #option-after="{ option }">
+          <Select
+            v-if="option.value === 'existing' && mode === 'existing'"
+            aria-label="Select pipeline"
+            v-model="selectedPipelineId"
+            placeholder="Select a pipeline..."
+            class="ml-6 w-full"
+            :options="pipelines.map(p => ({ value: p.id, label: p.name }))"
+            option-label="label"
+            option-value="value"
+          >
+            <template #option="{ option: pipelineOption }">
+              <span :data-value="pipelineOption.value">{{ pipelineOption.label }}</span>
+            </template>
+          </Select>
+          <Select
+            v-else-if="option.value === 'new' && mode === 'new'"
+            aria-label="Select template"
+            v-model="selectedTemplateId"
+            placeholder="Select a template..."
+            class="ml-6 w-full"
+            :options="[{ value: 'simple-sequential', label: $t('components.lifecycle-map.editor.GraduationDialog.simple_sequential') }, { value: 'hierarchical', label: $t('components.lifecycle-map.editor.GraduationDialog.hierarchical_agent') }, { value: 'parallel', label: $t('components.lifecycle-map.editor.GraduationDialog.parallel_processing') }]"
+            option-label="label"
+            option-value="value"
+          >
+            <template #option="{ option: templateOption }">
+              <span :data-value="templateOption.value">{{ templateOption.label }}</span>
+            </template>
+          </Select>
+        </template>
+      </RadioGroup>
     </div>
   </FormDialog>
 </template>
@@ -76,6 +65,7 @@ import { ref, computed } from 'vue'
 import Select from '../../shared/AppSelect.vue'
 import FormDialog from '../../shared/FormDialog.vue'
 import ErrorAlert from '../../shared/ErrorAlert.vue'
+import RadioGroup, { type RadioOption } from '../../ui/RadioGroup.vue'
 import type { PipelineSummary } from '../../../types/lifecycleMap'
 
 // FAR-1908: a dialog's content box scrolls (`overflow-y: auto`), which clips an
@@ -102,6 +92,13 @@ const selectedPipelineId = ref<string | null>(null)
 const selectedTemplateId = ref<string | null>(null)
 const graduating = ref(false)
 const error = ref<string | null>(null)
+
+// The ids are kept from the hand-rolled markup so existing selectors still find
+// the same control (the FAR-835 spec drives `#graduationdialog-field-1`).
+const graduationOptions: RadioOption<'existing' | 'new'>[] = [
+  { value: 'existing', label: 'Link to existing pipeline', id: 'graduationdialog-field-2' },
+  { value: 'new', label: 'Create new pipeline from template', id: 'graduationdialog-field-1' },
+]
 
 const canGraduate = computed(() => {
   if (mode.value === 'existing') return !!selectedPipelineId.value

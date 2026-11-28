@@ -53,10 +53,14 @@ status: partial
 # Feature Licensing and Plan Tiers
 
 Licensing manages Ed25519-signed license keys and the Community / Team tier gates on
-`/settings/license`. An uploaded key is verified (validity period + signature), expands to
-the feature set for its tier, gates Team-scoped surfaces (SSO, team RBAC, audit viewer,
-admin spend limits) with a 402 when absent or expired, and backs the admin license-status,
-tier-catalog and feature-flag inspection endpoints. (The public, unauthenticated
+`/settings/license`. An uploaded key is verified (validity period + signature) and grants
+its tier's ENTITLEMENTS. Team capability is not a flat flag set: it is three named groups
+declared in `backend/src/farna/core/entitlements.py` - Identity (`sso`, `scim`,
+`team_rbac`), Audit and evidence (`audit_viewer`, `admin_run_retention`) and Cost
+governance (`admin_spend_limits`, `admin_cost_controls`, `admin_cost_breakdown`). A
+surface gated on any of those groups answers 402 when the licence does not grant that
+group. The same key backs the admin license-status, tier-catalog and feature-flag
+inspection endpoints. (The public, unauthenticated
 `/api/v1/license` surface resolves the deployment-level license ladder - the persisted
 system license, then a verified env-var key - and reports community / `is_valid: false`
 when neither is valid; see Behaviors.)
@@ -117,22 +121,28 @@ trust-anchor caveat) are documented in
       fails the same way (500, anchor mismatch) when the signing key and the
       anchor are not one keypair (`test_license_anchor.py`,
       `test_admin_license.py`)
+      <!-- behaviour: license-01 | tests: backend/tests/unit/core/test_license_anchor.py, backend/tests/unit/api/test_admin_license.py -->
 - [x] A valid Team license uploads (200) and reports its tier plus features
       (`sso, team_rbac, audit_viewer, admin_spend_limits`); a tampered key is rejected
       (422 "Signature") and an expired key is rejected (422 "expired")
       (`license_management.feature`)
+      <!-- behaviour: license-02 | tests: backend/tests/bdd/features/licensing/license_management.feature -->
 - [x] With no license, GET `/api/v1/admin/license` reports the community tier with
       `has_license: false`; after storage it reports tier / features / org / expires_at
       with `has_license: true` (`license_management.feature`)
+      <!-- behaviour: license-03 | tests: backend/tests/bdd/features/licensing/license_management.feature -->
 - [x] Non-admins are denied license management (403) (`license_management.feature`)
+      <!-- behaviour: license-04 | tests: backend/tests/bdd/features/licensing/license_management.feature -->
 - [x] Team gating: without a Team license, SSO providers, `/api/v1/teams`, the audit read
       surfaces (browse, verify, export, scan and evidence-pack) and admin spend limits all
       return 402 naming the gated feature; they pass (200) with a valid license; expiry
       degrades those surfaces back to community; community features stay accessible without
       a license (`team_gates.feature`)
+      <!-- behaviour: license-05 | tests: backend/tests/bdd/features/licensing/team_gates.feature -->
 - [x] Feature-flag inspection returns the `license` object plus the active `flags` array,
       supports per-flag detail and override toggles, and 404s unknown flags
       (`test_admin_feature_flags.py` + `feature_flag_inspection.feature`)
+      <!-- behaviour: license-06 | tests: backend/tests/unit/api/test_admin_feature_flags.py, backend/tests/bdd/features/licensing/feature_flag_inspection.feature -->
 - [x] Caller-scoped plan bootstrap: GET `/api/v1/plan` answers 200 for ANY
       authenticated org member with `license.tier` / `expires_at` / `org_id`,
       `dev_mode`, and the FULL known flag set with the org `feature_overrides`
@@ -148,6 +158,7 @@ trust-anchor caveat) are documented in
       (`viewmodel.py` `plan_bootstrap`, `test_viewmodel_plan.py`,
       `test_plan_bootstrap.py`, `frontend/src/stores/planStore.ts`,
       `planStore.spec.ts`; FAR-1806 + FAR-1809)
+      <!-- behaviour: license-07 | tests: backend/tests/unit/api/test_viewmodel_plan.py, backend/tests/integration/test_plan_bootstrap.py -->
 - [x] The public, unauthenticated `/api/v1/license` surface resolves the REAL
       deployment-level license through the canonical ladder (rungs 2-3 of
       `feature_flags._resolve_paid_plan`; the endpoint is org-less so the
@@ -161,16 +172,20 @@ trust-anchor caveat) are documented in
       `tier`/`features`/`is_valid` and never exposes the raw key
       (`test_viewmodel_license.py`, `feature_flag_inspection.feature`;
       FAR-1720)
+      <!-- behaviour: license-08 | tests: backend/tests/unit/api/test_viewmodel_license.py, backend/tests/bdd/features/licensing/feature_flag_inspection.feature -->
 - [x] Keys are cryptographically verified (`core/license_signing.py`) and exercised
       adversarially (`test_license_adversarial.py`, `test_license_key.py`)
+      <!-- behaviour: license-09 | tests: backend/tests/unit/test_license_adversarial.py, backend/tests/unit/core/test_license_key.py -->
 - [x] Tier activation feeds licensing/feature parity for team surfaces
       (`test_team_license_activation.py`)
+      <!-- behaviour: license-10 | tests: backend/tests/unit/test_team_license_activation.py -->
 - [x] Tier catalog: GET `/api/v1/admin/tiers` lists the org's tiers ordered by rank with
       `tier_id` / `label` / `rank` / `requires_license` / `description`; authenticated
       non-admins can list tiers, unauthenticated requests are 401, an empty catalog
       returns an empty list, and the tier query's programming / database errors degrade
       to 501 / 503 (`admin/tier_catalog.feature`, `test_tier_catalog_steps.py`,
       `test_admin_tiers_endpoint.py`)
+      <!-- behaviour: license-11 | tests: backend/tests/bdd/features/admin/tier_catalog.feature, backend/tests/bdd/features/admin/test_tier_catalog_steps.py, backend/tests/unit/api/test_admin_tiers_endpoint.py -->
 - [x] Stripe purchase webhook: POST `/api/v1/webhooks/stripe` verifies the raw body
       against its `Stripe-Signature` header (HMAC-SHA256 over `<timestamp>.<raw_body>`
       with a ±300s replay window) and FAILS CLOSED (400) on a missing / invalid /
@@ -182,6 +197,7 @@ trust-anchor caveat) are documented in
       customer email or of an unrelated type is acknowledged without dispatch, and the
       webhook is 404 when Stripe is not configured (`licensing/stripe_billing.feature`,
       `test_stripe_billing.py`, `test_stripe_webhook.py`)
+      <!-- behaviour: license-12 | tests: backend/tests/bdd/features/licensing/stripe_billing.feature, backend/tests/bdd/steps/test_stripe_billing.py, backend/tests/unit/api/test_stripe_webhook.py -->
 - [x] Stripe fulfilment fails CLOSED on an unverifiable generated key: if the key
       signed during `fulfil_team_purchase` does not verify against the
       deployment's own configured public key (a misconfigured keypair), the key
@@ -190,6 +206,7 @@ trust-anchor caveat) are documented in
       `admin_license.issue_license`, which answers 500 for the same condition
       instead of returning a bad key (`test_stripe_fulfilment.py`,
       `test_unverifiable_generated_key_is_not_emailed_or_claimed`)
+      <!-- behaviour: license-13 | tests: backend/tests/unit/core/test_stripe_fulfilment.py -->
 - [x] Every commercially meaningful Stripe event also alerts the operator,
       additively and without changing fulfilment. The webhook emails
       `ALERT_EMAIL_TO` through the shared operator-alert SMTP path for
@@ -212,6 +229,7 @@ trust-anchor caveat) are documented in
       exposes (HTML-escaped), never a card or credential-shaped metadata value
       (`stripe_webhook.py`, `core/event_dedup.py`, `test_stripe_webhook.py`,
       `test_event_dedup.py`)
+      <!-- behaviour: license-14 | tests: backend/tests/unit/api/test_stripe_webhook.py, backend/tests/unit/core/test_event_dedup.py -->
 - [x] License-status cache is invalidated on every license mutation: the admin
       status cache (`license:{org_id}`, 60s TTL in `admin_license.py`) is busted
       when the underlying license changes - a system upload
@@ -223,6 +241,7 @@ trust-anchor caveat) are documented in
       already committed) (`test_admin_license.py`
       `TestLicenseCacheInvalidationSystemChange`,
       `test_admin_orgs_coverage_gaps.py` set/remove invalidation tests; FAR-1719)
+      <!-- behaviour: license-15 | tests: backend/tests/unit/api/test_admin_license.py, backend/tests/unit/api/test_admin_orgs_coverage_gaps.py -->
 - [x] Env-var license keys are VERIFIED (Ed25519 signature + expiry via
       `parse_and_verify`), never trusted on mere presence, at every
       license-reading surface: the `/viewmodel/current` plan tier
@@ -240,6 +259,7 @@ trust-anchor caveat) are documented in
       surfaces were license-reading when FAR-1733 shipped; FAR-2059 removed the
       license condition from them (below). Org-level keys are also counted only
       after the same canonical signature and expiry verification.
+      <!-- behaviour: license-16 | tests: backend/tests/unit/api/test_viewmodel_resolve_tier.py, backend/tests/unit/api/test_admin_feature_flags.py, backend/tests/unit/mcp/test_mcp_governance_read_tools.py -->
 - [x] License state never gates authentication (FAR-2059/FAR-2060). A
       self-hosted key is an offline signed key delivered by email, so
       capability survives a FIXED 14-day grace past `expires_at`
@@ -258,6 +278,7 @@ trust-anchor caveat) are documented in
       (`test_sso_licence_admin_invariant.py`,
       `test_sso_licence_degradation.py`,
       `test_sso.py::TestSamlEnvLicenceIndependence`; FAR-2059/FAR-2060)
+      <!-- behaviour: license-17 | tests: backend/tests/unit/api/test_sso_licence_admin_invariant.py, backend/tests/integration/test_sso_licence_degradation.py -->
 
 - [x] Both license scopes are durable and the precedence order is explicit
       (FAR-2153). The organization key is stored in
@@ -280,6 +301,13 @@ trust-anchor caveat) are documented in
       (`backend/src/farna/core/license.py`,
       `backend/src/farna/core/feature_flags.py`,
       `backend/src/farna/api/routes/admin_license.py`, FAR-2153)
+      <!-- behaviour: license-18 | tests: none -->
+- [ ] License-driven gating is not applied to EVERY registered `feat-*` surface:
+      `require_feature` / `get_plan_context` gate the licensed Team-tier
+      surfaces (SSO administration, `/api/v1/teams`, the audit read surfaces
+      and admin spend limits), not the whole feature registry (unshipped
+      deferral; see Known Gaps).
+      <!-- behaviour: license-19 | tests: none -->
 
 ## Known Gaps
 

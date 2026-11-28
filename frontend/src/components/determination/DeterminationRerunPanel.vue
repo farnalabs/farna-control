@@ -7,12 +7,15 @@
     heading-level="h2"
   >
     <div class="space-y-5">
-    <p
-      class="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
+    <Notice
+      variant="warning"
+      :icon="false"
+      padding="sm"
+      class="text-sm"
       data-testid="determination-rerun-not-activated"
     >
       {{ $t('views.DeterminationView.rerun_not_activated') }}
-    </p>
+    </Notice>
 
     <p
       v-if="!proposal"
@@ -78,9 +81,12 @@
       <section v-else class="space-y-4" aria-live="polite" data-testid="determination-rerun-result">
         <h3 class="text-base font-semibold">{{ $t('views.DeterminationView.rerun_result_title') }}</h3>
 
-        <section
+        <Notice
           v-if="displayIncomplete"
-          class="rounded-lg border border-warning/50 bg-warning/10 p-3 space-y-2"
+          variant="warning"
+          :icon="false"
+          padding="sm"
+          class="space-y-2"
           data-testid="determination-rerun-incomplete"
         >
           <p class="text-sm font-semibold" data-testid="determination-rerun-incomplete-title">
@@ -98,7 +104,7 @@
               {{ reason }}
             </li>
           </ul>
-        </section>
+        </Notice>
 
         <section class="grid gap-3 sm:grid-cols-2" data-testid="determination-rerun-attempts">
           <DeterminationRerunAttempt
@@ -127,13 +133,16 @@
           </ul>
         </section>
 
-        <p
+        <Notice
           v-if="changes.length === 0"
-          class="rounded-lg border border-success/40 bg-success/5 p-3 text-sm"
+          variant="success"
+          :icon="false"
+          padding="sm"
+          class="text-sm"
           data-testid="determination-rerun-no-changes"
         >
           {{ $t('views.DeterminationView.rerun_no_changes') }}
-        </p>
+        </Notice>
 
         <div v-else class="space-y-3" data-testid="determination-rerun-changes">
           <section
@@ -209,13 +218,16 @@
 
         <section class="space-y-2" data-testid="determination-rerun-inputs">
           <h3 class="text-sm font-medium">{{ $t('views.DeterminationView.rerun_inputs_title') }}</h3>
-          <p
+          <Notice
             v-if="inputsUnchanged"
-            class="rounded-lg border border-success/40 bg-success/5 p-3 text-sm"
+            variant="success"
+            :icon="false"
+            padding="sm"
+            class="text-sm"
             data-testid="determination-rerun-inputs-unchanged"
           >
             {{ $t('views.DeterminationView.rerun_inputs_unchanged') }}
-          </p>
+          </Notice>
           <template v-else>
             <section
               v-if="newSources.length > 0"
@@ -390,6 +402,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '../shared/LoadingSpinner.vue'
 import ErrorAlert from '../shared/ErrorAlert.vue'
+import Notice from '../shared/Notice.vue'
 import DataCard from '../ui/DataCard.vue'
 import DeterminationEvidenceRefs from './DeterminationEvidenceRefs.vue'
 import DeterminationRerunAttempt from './DeterminationRerunAttempt.vue'

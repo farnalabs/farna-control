@@ -61,4 +61,30 @@ export default withVueTs(
       'no-unused-vars': 'error',
     },
   },
+  {
+    // E2E specs and their harness are CLIs whose stdout IS the deliverable, the
+    // same rationale as tests/visual-baseline above: the axe-violation dumps
+    // (failing node selector, measured foreground/background and the actual
+    // ratio) printed by wcag-contrast.spec.ts, staging-wcag.spec.ts,
+    // json-viewer.spec.ts and dialog-select-overlay.spec.ts are the diagnostic
+    // a CI failure is read from, and setup/seeder.ts + setup/coverage-teardown.ts
+    // print their progress as the run log. `console.log` is therefore the
+    // intended output channel here. Scoped to tests/e2e only — `src/**` keeps
+    // the warn/error-only policy above unchanged.
+    files: ['tests/e2e/**/*.ts'],
+    rules: {
+      'no-console': ['error', { allow: ['warn', 'error', 'log'] }],
+    },
+  },
+  {
+    // tests/e2e/setup/** is Node test scaffolding (the Playwright global setup /
+    // teardown and the data seeder), not bundled app code. The coverage teardown
+    // lazily `require()`s istanbul's CJS-only packages right beside an
+    // `await import` for the ESM-exported one — a legitimate Node CJS interop, so
+    // the browser-oriented no-require-imports rule does not apply to this scope.
+    files: ['tests/e2e/setup/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 )

@@ -61,7 +61,7 @@ bdd:
   - backend/tests/bdd/steps/test_audit_append_only.py
   - backend/tests/bdd/features/admin/test_audit_export_steps.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Audit Trail & Audit Log
@@ -78,24 +78,30 @@ guarded against tampering at both the ORM and the database layer.
 - [x] Significant actions append an `AuditEvent` carrying event_type, actor,
       resource type/id, organization, JSON payload, and request_id, with a
       SHA-256 hash of the canonical payload
+      <!-- behaviour: audit-trail-01 | tests: none -->
 - [x] Events form a tamper-evident hash chain – each event's `previous_hash`
       links to the prior event in the org's chain, appends are serialized under
       a per-org `AuditChainHead` row, and verification recomputes the whole
       chain and reports the first break (`verify_chain`)
+      <!-- behaviour: audit-trail-02 | tests: none -->
 - [x] Append-only enforcement is defense-in-depth: an application-layer ORM
       guard raises `AppendOnlyViolationError` on any UPDATE/DELETE, backed by
       database-level append-only triggers (`append_only.py`; executing BDD
       `append_only.feature` drives the real guard's UPDATE/DELETE/INSERT paths,
       and integration suites `test_audit_append_only` / `test_audit_immutability`
       pin the storage layer)
+      <!-- behaviour: audit-trail-03 | tests: backend/tests/bdd/features/audit/append_only.feature -->
 - [x] `GET /api/v1/admin/audit` lists events with cursor pagination
       (`next_cursor` + `total`) and filters by event_type, date range, actor
       user, and resource
+      <!-- behaviour: audit-trail-04 | tests: none -->
 - [x] `GET /api/v1/admin/audit/verify` recomputes and reports per-org chain
       integrity with an event count
+      <!-- behaviour: audit-trail-05 | tests: none -->
 - [x] `GET /api/v1/admin/audit/export` streams a paginated CSV export
       (items/total/page/page_size) honoring the same filters – compliance
       evidence surface
+      <!-- behaviour: audit-trail-06 | tests: none -->
 - [x] `GET /api/v1/admin/audit/scan` streams the WHOLE matching event set in
       ONE response (NDJSON by default, or a Content-Disposition CSV attachment)
       – the server-side scan companion to `/export` with the same typed filters
@@ -106,8 +112,10 @@ guarded against tampering at both the ORM and the database layer.
       `api/routes/audit.py` `scan_chain_endpoint`,
       `tests/unit/api/test_audit_scan_route.py`,
       `TestScanChain` in `tests/unit/api/test_audit.py`)
+      <!-- behaviour: audit-trail-07 | tests: backend/tests/unit/api/test_audit_scan_route.py -->
 - [x] `POST /api/v1/admin/audit/batch-detail` resolves a batch of event ids
       (`{"event_ids": [...]}`) into full records
+      <!-- behaviour: audit-trail-08 | tests: none -->
 - [x] An audit export can be emitted as offline-verifiable evidence
       (FAR-1697): `GET /api/v1/admin/audit/evidence-pack` (`audit_viewer` +
       `audit.manage`) returns a self-contained pack - the audit events as
@@ -131,15 +139,18 @@ guarded against tampering at both the ORM and the database layer.
       + `verification_key_endpoint`, `cli/evidence.py`,
       `docs/offline-verifiable-evidence.md`,
       `test_evidence_pack.py`, `test_audit_evidence_pack_route.py`)
+      <!-- behaviour: audit-trail-09 | tests: backend/tests/unit/core/evidence_pack/test_evidence_pack.py, backend/tests/unit/api/test_audit_evidence_pack_route.py -->
 - [x] Recording is not license-gated: every tier appends to the hash-chained,
       append-only trail. The READ surface (browse, verify, export, scan, evidence
       pack and verification key) is admin-only and gated by the Team-tier
       `audit_viewer` feature key plus `audit.manage` – 402 on an unlicensed
       Community install, 403 for non-admin, 401 unauthenticated
       (`test_audit_gating`, audit_export.feature)
+      <!-- behaviour: audit-trail-10 | tests: backend/tests/bdd/features/admin/audit_export.feature -->
 - [x] Cross-domain product events are recorded: HITL output delivery, HITL
       claim expiry, org deletion cancellation, fernet key rotation, and run
       lifecycle (event_recording.feature scenarios)
+      <!-- behaviour: audit-trail-11 | tests: backend/tests/bdd/features/audit/event_recording.feature -->
 - [x] Pipeline graph mutations are ALWAYS audited (FAR-1471): every successful
       `replace_pipeline_graph` write AND every `rollback_to_snapshot` appends
       one `pipeline.graph_updated` event in the SAME transaction as the write
@@ -154,6 +165,7 @@ guarded against tampering at both the ORM and the database layer.
       (`db/crud/pipeline.py` `graph_update_audit_payload` + `GRAPH_UPDATED_EVENT`,
       `db/crud/pipeline_snapshot_versioning.py`, `api/mcp_server.py`,
       `test_pipeline_graph_updated_audit.py`)
+      <!-- behaviour: audit-trail-12 | tests: backend/tests/unit/db/crud/test_pipeline_graph_updated_audit.py -->
 - [x] Pre-auth and webhook routes are audited through the actor-less
       `audited_system` variant (FAR-1516): sign-in/out, token refresh, the
       SAML ACS POST, the public error ingest and inbound webhooks record the
@@ -175,6 +187,7 @@ guarded against tampering at both the ORM and the database layer.
       `bind_audit_actor_source`, applied in `api/routes/auth.py`, `sso.py`,
       `slack.py`, `stripe_webhook.py`, `webhooks.py`, `errors.py`;
       `test_audit_coverage.py`, `test_webhooks_endpoint.py`)
+      <!-- behaviour: audit-trail-13 | tests: backend/tests/unit/api/test_audit_coverage.py, backend/tests/unit/api/test_webhooks_endpoint.py -->
 - [x] Org-lifecycle audit records survive a hard delete via an org-independent
       durable ledger (FAR-1517). `audit_events.organisation_id` FKs
       `organisations.id` with `ON DELETE CASCADE`, so a hard-deleted org took
@@ -212,6 +225,7 @@ guarded against tampering at both the ORM and the database layer.
       `api/routes/admin_orgs.py`,
       `tests/integration/test_system_audit_org_deletion.py`,
       `tests/unit/core/test_system_audit_logger.py`)
+      <!-- behaviour: audit-trail-14 | tests: backend/tests/integration/test_system_audit_org_deletion.py, backend/tests/unit/core/test_system_audit_logger.py -->
 - [x] Background, cron and boot write paths are audited or explicitly
       classified (FAR-1549). Writes that never see a request (SAQ system-cron
       sweeps, runs-worker tasks, reconcilers, boot seeds) either append a
@@ -259,6 +273,7 @@ guarded against tampering at both the ORM and the database layer.
       `test_background_audit_wiring.py`, `test_background_audit_coverage.py`,
       `test_seed_users.py`, `test_execute_suite_run.py`,
       `test_users_cli.py`)
+      <!-- behaviour: audit-trail-15 | tests: backend/tests/architecture/test_background_audit_coverage.py, backend/tests/unit/audit_logger/test_background_audit.py, backend/tests/unit/core/test_background_audit_wiring.py, backend/tests/unit/db/test_seed_users.py, backend/tests/unit/core/eval_engine/test_execute_suite_run.py, backend/tests/unit/cli/test_users_cli.py -->
 - [x] The durable org-lifecycle ledger has a system-admin read surface
       (FAR-1538): `GET /api/v1/admin/system-audit` lists the org-independent
       `system_audit_events` records read-only with offset pagination and
@@ -271,6 +286,7 @@ guarded against tampering at both the ORM and the database layer.
       (`api/routes/admin_system_audit.py`, `db/crud/system_audit_event.py`,
       `frontend/src/views/AdminAuditView.vue`, `test_admin_system_audit.py`,
       `test_system_audit_event.py`)
+      <!-- behaviour: audit-trail-16 | tests: backend/tests/unit/api/test_admin_system_audit.py, backend/tests/unit/crud/test_system_audit_event.py -->
 
 ## Known Gaps
 

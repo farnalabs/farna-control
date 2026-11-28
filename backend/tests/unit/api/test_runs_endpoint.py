@@ -207,6 +207,19 @@ def _stub_gate_fired(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runs_module, "read_run_blobs", _blobs)
 
 
+@pytest.fixture(autouse=True)
+def _stub_run_scope_load(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 070 §4: every per-run mutation loads the run through the team clamp.
+
+    The shared load (``runs._load_run_in_scope``) runs before cancel / observe /
+    recover / guardrail-override act. The mocked session answers no rows, so the
+    load is stubbed with a run; the ``client`` principal is an org admin, who is
+    exempt from the boundary. A test that needs a missing or foreign-team run
+    patches ``runs.get_run`` itself and wins over this default.
+    """
+    monkeypatch.setattr(runs_module, "get_run", AsyncMock(return_value=_make_run()))
+
+
 def _make_mock_session() -> AsyncMock:
     """Async session that supports `async with session.begin()`."""
     session = AsyncMock(spec=AsyncSession)

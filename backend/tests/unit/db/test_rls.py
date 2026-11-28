@@ -13,10 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from farna.db.rls import (
     _RLS_CONFIG_NAMES,
+    _TENANT_KEY_BOOTSTRAP,
+    BOOTSTRAP_CONTEXT_GUC,
     _read_guc_org,
     _set_config_statement,
+    clear_rls_bootstrap_context,
     read_rls_org,
     register_rls_reset_hook,
+    set_rls_bootstrap_context,
     set_rls_org,
     set_rls_user_context,
 )
@@ -175,13 +179,17 @@ class TestCheckoutResetListener:
 
         self._listener()(connection, MagicMock(), MagicMock())
 
-        assert cursor.execute.call_count == 4
+        assert cursor.execute.call_count == 5
         executed_sql = [str(call) for call in cursor.execute.call_args_list]
         for config_name in (
             "app.organisation_id",
             "app.user_id",
             "app.org_role",
             "app.execution_context",
+            # ADR 070 §2 / migration 0367: the pre-auth bootstrap grant must never
+            # survive a pool checkout, or a later request sharing the connection
+            # would inherit a four-table widening.
+            "app.bootstrap_context",
         ):
             assert any(f"set_config('{config_name}'" in sql for sql in executed_sql)
         cursor.close.assert_called_once()
@@ -366,3 +374,84 @@ class TestReadGucOrgDegradation:
         session.execute = AsyncMock(return_value=result)
 
         assert await _read_guc_org(session) is None
+
+
+class TestSetRlsBootstrapContext:
+    """The pre-auth bootstrap grant must widen exactly the four pinned tables.
+
+    ADR 070 §2 / migration 0367: on Postgres the grant is a transaction-local
+    GUC; generic backends (the test-only sqlite path) mirror it in session.info.
+    """
+
+    async def test_postgres_sets_the_bootstrap_guc(self) -> None:
+        session = _make_session(dialect="postgresql")
+
+        await set_rls_bootstrap_context(session)
+
+        session.execute.assert_awaited_once()
+        call_args = session.execute.await_args
+        assert call_args is not None
+        assert "set_config" in str(call_args[0][0])
+        assert call_args[0][1]["name"] == BOOTSTRAP_CONTEXT_GUC
+
+    async def test_generic_backend_sets_the_session_info_flag(self) -> None:
+        session = _make_session(dialect="sqlite")
+        session.info = {}
+
+        await set_rls_bootstrap_context(session)
+
+        assert session.info[_TENANT_KEY_BOOTSTRAP] is True
+
+
+class TestClearRlsBootstrapContext:
+    """Clearing the grant must be safe to call in every session state.
+
+    It is invoked on the exit path of every ``bootstrap_read`` block, so it has
+    to tolerate a session with no transaction, a Postgres GUC reset, a generic
+    session.info reset, and a connection that has already unwound.
+    """
+
+    async def test_returns_early_without_an_active_transaction(self) -> None:
+        session = _make_session(in_tx=False)
+
+        await clear_rls_bootstrap_context(session)
+
+        session.execute.assert_not_called()
+
+    async def test_postgres_resets_the_bootstrap_guc(self) -> None:
+        session = _make_session(dialect="postgresql")
+
+        await clear_rls_bootstrap_context(session)
+
+        session.execute.assert_awaited_once()
+        call_args = session.execute.await_args
+        assert call_args is not None
+        assert "set_config" in str(call_args[0][0])
+        assert call_args[0][1]["name"] == BOOTSTRAP_CONTEXT_GUC
+
+    async def test_generic_backend_pops_the_session_info_flag(self) -> None:
+        session = _make_session(dialect="sqlite")
+        session.info = {_TENANT_KEY_BOOTSTRAP: True}
+
+        await clear_rls_bootstrap_context(session)
+
+        assert _TENANT_KEY_BOOTSTRAP not in session.info
+
+    async def test_re_raises_cancelled_error(self) -> None:
+        session = _make_session(dialect="postgresql")
+        session.execute = AsyncMock(side_effect=asyncio.CancelledError)
+
+        with pytest.raises(asyncio.CancelledError):
+            await clear_rls_bootstrap_context(session)
+
+    async def test_swallows_and_debugs_a_dead_transaction(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A statement on an ABORTED transaction raises; the clear is best-effort
+        (the transaction rollback discards the LOCAL GUC anyway), so the failure
+        is swallowed at debug level rather than propagated."""
+        session = _make_session(dialect="postgresql")
+        session.execute = AsyncMock(side_effect=RuntimeError("transaction is aborted"))
+
+        with caplog.at_level(logging.DEBUG, logger="farna.db.rls"):
+            await clear_rls_bootstrap_context(session)
+
+        assert any("bootstrap_context_clear_failed" in message for message in caplog.messages)

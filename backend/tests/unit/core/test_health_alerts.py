@@ -1903,3 +1903,123 @@ async def test_print_failure_never_skips_send_or_state_commit(
     persisted = json.loads(store.data[ha.STATE_KEY])
     assert persisted["notified"] == "healthy"
     assert "health_alerts.stamp_print_failed" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# send_operator_alert — the shared channel for a non-readiness alert (FAR-2740)
+# ---------------------------------------------------------------------------
+
+
+async def test_send_operator_alert_reuses_the_shared_sender_and_recipients() -> None:
+    settings = _make_settings()
+    sender = AsyncMock(return_value=True)
+
+    delivered = await ha.send_operator_alert(
+        subject="[Farna Control] dump failed",
+        body_html="<p>html</p>",
+        body_text="text",
+        settings=settings,
+        sender=sender,
+    )
+
+    assert delivered is True
+    sender.assert_awaited_once()
+    args = sender.await_args.args
+    assert args[0] is settings
+    assert args[1] == ["ops@example.com", "sre@example.com"]
+    assert args[2] == "[Farna Control] dump failed"
+
+
+async def test_send_operator_alert_quiet_when_channel_unconfigured() -> None:
+    settings = _make_settings(smtp_host="", alert_email_to="")
+    sender = AsyncMock(return_value=True)
+
+    delivered = await ha.send_operator_alert(
+        subject="s",
+        body_html="h",
+        body_text="t",
+        settings=settings,
+        sender=sender,
+    )
+
+    assert delivered is False
+    sender.assert_not_awaited()
+
+
+async def test_send_operator_alert_reports_a_failed_send() -> None:
+    settings = _make_settings()
+    sender = AsyncMock(return_value=False)
+
+    delivered = await ha.send_operator_alert(
+        subject="s",
+        body_html="h",
+        body_text="t",
+        settings=settings,
+        sender=sender,
+    )
+
+    assert delivered is False
+    sender.assert_awaited_once()
+
+
+async def test_send_operator_alert_respects_the_environment_allowlist() -> None:
+    settings = _make_settings(alert_environments="production")
+    sender = AsyncMock(return_value=True)
+
+    delivered = await ha.send_operator_alert(
+        subject="s",
+        body_html="h",
+        body_text="t",
+        settings=settings,
+        sender=sender,
+    )
+
+    # The default test environment is not "production", so it is excluded.
+    assert delivered is False
+    sender.assert_not_awaited()
+
+
+async def test_send_operator_alert_appends_deployment_context_and_host() -> None:
+    """An operator alert must identify its deployment, like the readiness one."""
+    settings = _make_settings(alert_context="Runbook: https://example.com/runbook")
+    sender = AsyncMock(return_value=True)
+
+    delivered = await ha.send_operator_alert(
+        subject="s",
+        body_html="<p>fragment</p>",
+        body_text="fragment",
+        settings=settings,
+        sender=sender,
+    )
+
+    assert delivered is True
+    html_body = sender.await_args.args[3]
+    text_body = sender.await_args.args[4]
+    for body in (html_body, text_body):
+        assert "Environment:" in body
+        assert "Runbook: https://example.com/runbook" in body
+        assert ha._host() in body
+    # The HTML part stays one well-formed document around the fragment.
+    assert html_body.startswith("<html><body>")
+    assert html_body.endswith("</body></html>")
+    assert "<p>fragment</p>" in html_body
+
+
+async def test_send_operator_alert_uses_the_shared_alerting_gate(caplog: pytest.LogCaptureFixture) -> None:
+    """The disabled path is the shared gate, not a duplicated two-condition check."""
+    settings = _make_settings(smtp_host="", alert_email_to="")
+    sender = AsyncMock(return_value=True)
+
+    with caplog.at_level(logging.INFO, logger="farna.core.health_alerts"):
+        delivered = await ha.send_operator_alert(
+            subject="s",
+            body_html="h",
+            body_text="t",
+            settings=settings,
+            sender=sender,
+        )
+
+    assert delivered is False
+    sender.assert_not_awaited()
+    # The disabled log names the alert channel generically, not "readiness".
+    assert any("operator email alerting" in record.getMessage() for record in caplog.records)

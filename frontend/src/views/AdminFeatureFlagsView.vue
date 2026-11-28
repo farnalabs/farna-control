@@ -1,11 +1,11 @@
 <template>
-  <div data-theme="agent" class="page-wide">
+  <div class="page-wide">
     <header>
       <PageHeader :title="$t('views.AdminFeatureFlagsView.feature_flags')" :subtitle="$t('views.AdminFeatureFlagsView.all_known_feature_flags_and_their_current_activation_status')" />
       <output v-if="planInfoPending" class="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" aria-busy="true" :aria-label="$t('views.AdminFeatureFlagsView.loading_plan_info')">
         <span class="sr-only">{{ $t('views.AdminFeatureFlagsView.loading_plan_info') }}</span>
-        <div aria-hidden="true" class="h-4 w-28 animate-pulse rounded bg-muted/50" />
-        <div aria-hidden="true" class="h-4 w-40 animate-pulse rounded bg-muted/50" />
+        <SkeletonBlock aria-hidden="true" height-class="h-4 w-28" />
+        <SkeletonBlock aria-hidden="true" height-class="h-4 w-40" />
       </output>
       <div v-else-if="planUnavailable" class="mt-2">
         <ErrorAlert
@@ -70,17 +70,17 @@
         <div>
           <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminFeatureFlagsView.license_key') }}</span>
           <p class="mt-0.5">
-            <span :class="license.has_license_key ? 'badge badge-status-success' : 'badge badge-status-muted'">
+            <Badge :variant="license.has_license_key ? 'success' : 'neutral'">
               {{ license.has_license_key ? $t('views.AdminFeatureFlagsView.active') : $t('views.AdminFeatureFlagsView.not_set') }}
-            </span>
+            </Badge>
           </p>
         </div>
         <div>
           <span class="text-xs font-medium text-muted-foreground capitalize">{{ $t('views.AdminFeatureFlagsView.status_label') }}</span>
           <p class="mt-0.5">
-            <span :class="license.is_valid ? 'badge badge-status-success' : 'badge badge-status-destructive'">
+            <Badge :variant="license.is_valid ? 'success' : 'danger'">
               {{ license.is_valid ? $t('views.AdminFeatureFlagsView.valid') : $t('views.AdminFeatureFlagsView.invalid') }}
-            </span>
+            </Badge>
           </p>
         </div>
         <div>
@@ -89,7 +89,7 @@
             <template v-if="planStore.expiresAt">
               {{ formatDate(planStore.expiresAt) }}
             </template>
-            <span v-else class="badge badge-status-muted">{{ $t('views.AdminFeatureFlagsView.n_a') }}</span>
+            <Badge v-else variant="neutral">{{ $t('views.AdminFeatureFlagsView.n_a') }}</Badge>
           </p>
         </div>
       </div>
@@ -101,13 +101,13 @@
         {{ $t('views.AdminFeatureFlagsView.would_activate_features', { count: filteredWouldActivate.length }) }}
       </p>
       <div class="flex flex-wrap gap-2">
-        <span
-              v-for="flag in filteredWouldActivate"
+        <Badge
+          v-for="flag in filteredWouldActivate"
           :key="flag.name"
-          class="badge badge-status-warning"
+          variant="warning"
         >
           {{ flag.name }} <span class="opacity-70">({{ flag.tier }})</span>
-        </span>
+        </Badge>
       </div>
     </DataCard>
 
@@ -159,7 +159,7 @@
               <div class="border-b bg-muted/30 px-4 py-2">
                 <h3 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   {{ section.label }}
-                  <span class="ml-2 text-xs font-normal opacity-60">({{ section.flags.length }})</span>
+                  <span class="ml-2 text-xs font-normal">({{ section.flags.length }})</span>
                 </h3>
               </div>
               <table class="w-full" v-if="section.flags.length > 0">
@@ -199,7 +199,7 @@
                       </button>
                     </td>
                     <td class="table-cell">
-                      <span :class="isFlagTierLocked(flag) ? 'badge badge-status-warning' : (flag.currently_active ? 'badge badge-status-success' : 'badge badge-status-muted')">
+                      <Badge :variant="isFlagTierLocked(flag) ? 'warning' : (flag.currently_active ? 'success' : 'neutral')">
                         <template v-if="isFlagTierLocked(flag)">
                           <Lock class="inline-block w-3 h-3 mr-1 align-middle" aria-hidden="true" focusable="false" />
                           {{ $t('views.AdminFeatureFlagsView.locked_requires_team') }}
@@ -207,11 +207,11 @@
                         <template v-else>
                           {{ flag.currently_active ? $t('views.AdminFeatureFlagsView.active') : $t('views.AdminFeatureFlagsView.inactive') }}
                         </template>
-                      </span>
+                      </Badge>
                     </td>
                     <td class="table-cell text-muted-foreground">{{ flag.description || '—' }}</td>
                     <td class="table-cell-numeric">
-                      <Button severity="secondary" outlined size="small" :disabled="isFlagTierLocked(flag) && !flag.currently_active" :data-testid="'flag-override-' + flag.name" @click.stop="openOverrideDialog(flag)">
+                      <Button variant="secondary" size="sm" :disabled="isFlagTierLocked(flag) && !flag.currently_active" :data-testid="'flag-override-' + flag.name" @click.stop="openOverrideDialog(flag)">
                         {{ getCurrentOverride(flag.name) === null ? $t('views.AdminFeatureFlagsView.default') : (getCurrentOverride(flag.name) ? $t('common.enabled') : $t('common.disabled')) }}
                       </Button>
                     </td>
@@ -225,10 +225,10 @@
           <div v-if="totalPages > 1" class="flex items-center justify-center gap-4 py-4">
             <span class="text-sm text-muted-foreground">{{ $t('views.AdminFeatureFlagsView.page_of', { current: currentPage, total: totalPages }) }}</span>
             <div class="flex gap-2">
-              <Button severity="secondary" outlined size="small" :disabled="currentPage <= 1" data-testid="flags-prev-page" @click="currentPage = Math.max(1, currentPage - 1)">
+              <Button variant="secondary" size="sm" :disabled="currentPage <= 1" data-testid="flags-prev-page" @click="currentPage = Math.max(1, currentPage - 1)">
                 {{ $t('common.previous') }}
               </Button>
-              <Button severity="secondary" outlined size="small" :disabled="currentPage >= totalPages" data-testid="flags-next-page" @click="currentPage = Math.min(totalPages, currentPage + 1)">
+              <Button variant="secondary" size="sm" :disabled="currentPage >= totalPages" data-testid="flags-next-page" @click="currentPage = Math.min(totalPages, currentPage + 1)">
                 {{ $t('common.next') }}
               </Button>
             </div>
@@ -273,10 +273,12 @@ import { useDataFetch } from '../composables/useDataFetch'
 import { usePlanStore } from '../stores/planStore'
 import { formatApiError } from '../lib/api/formatError'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
+import Badge from '../components/ui/Badge.vue'
 import DataCard from '../components/ui/DataCard.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import { Lock } from '@lucide/vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import Select from '../components/shared/AppSelect.vue'

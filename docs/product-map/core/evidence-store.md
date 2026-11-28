@@ -26,7 +26,7 @@ unit-tests:
   - backend/tests/unit/db/test_evidence_first_producer.py
   - backend/tests/unit/pipeline_engine/test_evidence_probes.py
 depends-on: []
-status: covered
+status: partial
 ---
 
 # Core Evidence Store
@@ -49,17 +49,20 @@ the manifest registry.
       `producer_type` is CHECK-constrained to the five-value vocabulary
       `eval` / `policy_gate` / `run` / `system_state` / `derived`
       (`db/models/evidence.py`)
+      <!-- behaviour: evidence-store-01 | tests: none -->
 - [x] RLS org-isolation is enforced by the baseline RLS migration
       (`0351_baseline_rls.py`, with the table in `0350_baseline_schema.py`); the ORM
       exposes no `update()` / `delete()`, and DELETE from the table is forbidden
       except through the sanctioned retention sweep - the E1 append-only gate is
       pinned by `tests/architecture/test_evidence_deletion_carveout.py`
+      <!-- behaviour: evidence-store-02 | tests: backend/tests/architecture/test_evidence_deletion_carveout.py -->
 - [x] The evidence layer fetches subject-scoped evidence (`fetch()` returns the
       most recent row per distinct key with `DISTINCT ON` for cross-key snapshot
       consistency) and enforces producer write-authorization via the
       `KEY_NAMESPACE_OWNERSHIP` map (`assert_write_authorisation`); the CHECK
       constraint remains authoritative for the producer-type vocabulary
       (`core/eval_engine/evidence_layer.py`)
+      <!-- behaviour: evidence-store-03 | tests: none -->
 - [x] First production write path (FAR-1293): `append_evidence()` in
       `core/eval_engine/evidence_layer.py` is the store's single production
       write seam - every producer routes through it, so
@@ -77,13 +80,16 @@ the manifest registry.
       (`tests/unit/db/test_evidence_first_producer.py`: namespaced write
       lands, unowned namespace refused fail-closed at both the production seam
       and the helper, clean decisions also written, no guardrails → no rows)
+      <!-- behaviour: evidence-store-04 | tests: backend/tests/unit/db/test_evidence_first_producer.py -->
 - [x] Run-evidence fold-in maps existing `RunEvidence` tri-state rows into the
       generic evidence format (`map_run_evidence_to_evidence`) so legacy run
       evidence becomes queryable as evidence facts
+      <!-- behaviour: evidence-store-05 | tests: none -->
 - [x] The retention policy is per-org and stored in `Organisation.settings_json`
       under the `evidence_retention` key: `max_age_days` (default 90),
       `batch_size` (default 500), `lock_timeout_seconds` (default 30) and an
       optional `max_rows` cap (`core/evidence_retention.py`)
+      <!-- behaviour: evidence-store-06 | tests: none -->
 - [x] Admin REST surface, org-scoped: `GET` + `PUT /api/v1/admin/evidence-retention`
       read/update the policy (GET also returns the live `current_row_count`) and
       `POST /api/v1/admin/evidence-retention/purge` triggers a manual purge -
@@ -91,21 +97,25 @@ the manifest registry.
       org admins are bound to their own org (a mismatched `organisation_id` 403s),
       a system admin must name the target org (missing → 422), and the standard
       repo error mapping applies (migrations missing → 501, DB blip → 503)
+      <!-- behaviour: evidence-store-07 | tests: none -->
 - [x] The purge sweep is the single sanctioned deletion path for evidence rows
       (§2.4); it acquires a per-org advisory lock through the shared
       `PostgresLock` service (namespaced `evidence_retention:<org_id>`) and a
       second invoker that cannot acquire the lock within the timeout exits
       cleanly (idempotent)
+      <!-- behaviour: evidence-store-08 | tests: none -->
 - [x] The sweep purges oldest rows older than `max_age_days` in batched
       SAVEPOINTs, then (when `max_rows` is set) purges the oldest excess over
       the count limit; it never commits mid-sweep, so the transaction-local
       `app.organisation_id` RLS scope survives every batch - the unscoped
       batches-2..N failure a mid-sweep COMMIT caused is pinned at the unit tier
       (`tests/unit/core/evidence/test_retention.py`)
+      <!-- behaviour: evidence-store-09 | tests: backend/tests/unit/core/evidence/test_retention.py -->
 - [x] Deletion observability: every batch emits a structured log event and the
       `modulo_evidence_retention_deletions_total` OTel counter (tagged with the
       `organisation_id`), and the purge response carries `rows_deleted` /
       `batches` / `max_age_days` / `max_rows` (no-op when no meter is wired)
+      <!-- behaviour: evidence-store-10 | tests: none -->
 - [x] Advisory author warnings (FAR-957 §3): policy-gate binding
       (`POST`/`PUT /api/v1/evals/{eval_id}/policy-gate`) runs
       `check_author_warnings` for the eval's `evidence_key` and the
@@ -118,6 +128,7 @@ the manifest registry.
       safe direction) and a warning never prevents binding
       (`core/eval_engine/author_warnings.py`, wired from `api/routes/evals.py` -
       also tracked under `feat-evals`)
+      <!-- behaviour: evidence-store-11 | tests: none -->
 
 ## Known Gaps
 

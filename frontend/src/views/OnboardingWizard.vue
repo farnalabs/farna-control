@@ -18,7 +18,7 @@
       </template>
     </div>
 
-    <div class="rounded-lg border bg-card p-6 shadow-sm">
+    <BaseCard padding="lg" elevation="sm">
       <header class="mb-6">
         <h2 class="text-xl font-semibold">{{ steps[currentStep].title }}</h2>
         <p class="mt-1 text-sm text-muted-foreground">{{ steps[currentStep].subtitle }}</p>
@@ -43,9 +43,9 @@
       <!-- Step 1: Connect Tools -->
       <div v-if="currentStep === 1" class="space-y-4">
         <div v-if="loadingConnectors" class="space-y-3 py-4" aria-hidden="true">
-          <div class="h-16 animate-pulse rounded-lg bg-muted" />
-          <div class="h-16 animate-pulse rounded-lg bg-muted" />
-          <div class="h-16 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock height-class="h-16 w-full" />
+          <SkeletonBlock height-class="h-16 w-full" />
+          <SkeletonBlock height-class="h-16 w-full" />
         </div>
         <ErrorAlert v-else-if="connectorsError" :message="connectorsError" :on-retry="loadConnectors" />
         <EmptyState v-else-if="connectors.length === 0" variant="bare" :title="$t('views.OnboardingWizard.no_connectors_found')">
@@ -202,7 +202,7 @@
       <!-- Step 4: Browse Library -->
       <div v-if="currentStep === 4" class="space-y-4">
         <div v-if="loadingLibrary" class="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-hidden="true">
-          <div v-for="n in 4" :key="n" class="h-24 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock v-for="n in 4" :key="n" height-class="h-24 w-full" />
         </div>
         <ErrorAlert v-else-if="libraryError" :message="libraryError" :on-retry="loadLibrary" />
         <EmptyState v-else-if="libraryItems.length === 0" variant="bare" :title="$t('views.OnboardingWizard.no_library_items')" />
@@ -298,7 +298,7 @@
       <!-- Step 6: Telemetry Opt-In (FAR-1131) -->
       <div v-if="currentStep === 6" class="space-y-4">
         <div v-if="telemetryLoading" class="space-y-3 py-4" aria-hidden="true">
-          <div class="h-16 animate-pulse rounded-lg bg-muted" />
+          <SkeletonBlock height-class="h-16 w-full" />
         </div>
         <div v-else>
           <div class="rounded-lg border border-dashed p-6 text-center">
@@ -343,9 +343,9 @@
               role="alert"
               aria-live="assertive"
             />
-            <output v-if="telemetrySaved" data-testid="onboarding-wizard-telemetry-saved" class="mt-3 block rounded-lg border border-success/50 bg-success/10 p-3 text-sm text-success-text">
+            <Notice v-if="telemetrySaved" variant="success" live="polite" :icon="false" padding="sm" class="mt-3 text-sm" data-testid="onboarding-wizard-telemetry-saved">
               {{ $t('views.OnboardingWizard.telemetry_enabled_success') }}
-            </output>
+            </Notice>
             <div class="mt-6 flex items-center justify-center gap-3">
               <Button
                 v-if="!telemetryForbidden"
@@ -425,7 +425,7 @@
         </div>
         <ErrorAlert v-if="pipelineRunError" :message="pipelineRunError" :on-retry="runPipeline" />
       </div>
-    </div>
+    </BaseCard>
 
     <div v-if="currentStep < 7" class="flex items-center justify-between">
       <div>
@@ -462,8 +462,11 @@ import { Check, ChartLine, Layers } from '@lucide/vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
+import BaseCard from '../components/ui/BaseCard.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
+import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import { formatApiError } from '../lib/api/formatError'
 import { useProductAnalytics } from '../composables/useProductAnalytics'
 import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'

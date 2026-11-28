@@ -111,7 +111,7 @@ watch(
         <h4 class="text-sm font-medium">{{ $t('components.pipeline.composite.SchemaMappingPanel.schema_mapping') }}</h4>
         <span
           v-if="inputSchemaId || outputSchemaId"
-          class="rounded border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300"
+          class="rounded border border-node-composite/30 bg-node-composite/10 px-1.5 py-0.5 text-[10px] text-node-composite-muted"
         >
           {{ Object.keys(props.inputMapping).length + Object.keys(props.outputMapping).length }} mapped
         </span>
@@ -142,11 +142,11 @@ watch(
                 <span v-if="sourceFields.length > 0">
                   Source: {{ sourceFields.length }} field{{ sourceFields.length !== 1 ? 's' : '' }}
                 </span>
-                <span v-else class="text-amber-400">{{ $t('components.pipeline.composite.SchemaMappingPanel.no_preceding_node_schema') }}</span>
+                <span v-else class="text-warning-text">{{ $t('components.pipeline.composite.SchemaMappingPanel.no_preceding_node_schema') }}</span>
                 <span v-if="targetFields.length > 0">
                   Target: {{ targetFields.length }} field{{ targetFields.length !== 1 ? 's' : '' }}
                 </span>
-                <span v-else class="text-amber-400">{{ $t('components.pipeline.composite.SchemaMappingPanel.no_composite_input_schema') }}</span>
+                <span v-else class="text-warning-text">{{ $t('components.pipeline.composite.SchemaMappingPanel.no_composite_input_schema') }}</span>
               </div>
               <FieldMappingPair
                 :source-fields="sourceFields"
@@ -172,11 +172,11 @@ watch(
                 <span v-if="outputSourceFields.length > 0">
                   Source: {{ outputSourceFields.length }} field{{ outputSourceFields.length !== 1 ? 's' : '' }}
                 </span>
-                <span v-else class="text-amber-400">{{ $t('components.pipeline.composite.SchemaMappingPanel.no_composite_output_schema') }}</span>
+                <span v-else class="text-warning-text">{{ $t('components.pipeline.composite.SchemaMappingPanel.no_composite_output_schema') }}</span>
                 <span v-if="outputTargetFields.length > 0">
                   Target: {{ outputTargetFields.length }} field{{ outputTargetFields.length !== 1 ? 's' : '' }}
                 </span>
-                <span v-else class="text-amber-400">{{ $t('components.pipeline.composite.SchemaMappingPanel.no_downstream_schema') }}</span>
+                <span v-else class="text-warning-text">{{ $t('components.pipeline.composite.SchemaMappingPanel.no_downstream_schema') }}</span>
               </div>
               <FieldMappingPair
                 :source-fields="outputSourceFields"

@@ -25,10 +25,10 @@
       <span>{{ $t('views.ComplianceEvidenceIndex.loading') }}</span>
     </div>
 
-    <div v-else-if="permissionDenied" aria-live="assertive" data-testid="compliance-evidence-index-permission-denied" class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm">
+    <Notice v-else-if="permissionDenied" variant="warning" live="assertive" :icon="false" class="text-sm" data-testid="compliance-evidence-index-permission-denied">
       <p class="font-semibold">{{ $t('views.ComplianceEvidenceIndex.permission_denied_title') }}</p>
       <p class="mt-1">{{ $t('views.ComplianceEvidenceIndex.permission_denied_description') }}</p>
-    </div>
+    </Notice>
 
     <div v-else-if="loadError" data-testid="compliance-evidence-index-error">
       <ErrorAlert :message="loadError" :on-retry="load" />
@@ -64,10 +64,12 @@
         </div>
       </section>
 
-      <div
+      <Notice
         v-if="!indexData.complete || indexData.missing_artifact_types.length > 0"
-        class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm"
-        aria-live="polite"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        class="text-sm"
         data-testid="compliance-evidence-index-incomplete"
       >
         <p class="font-semibold">{{ $t('views.ComplianceEvidenceIndex.incomplete_title') }}</p>
@@ -75,18 +77,20 @@
         <ul v-if="indexData.missing_artifact_types.length > 0" class="mt-2 list-inside list-disc">
           <li v-for="artifactType in indexData.missing_artifact_types" :key="artifactType">{{ artifactType }}</li>
         </ul>
-      </div>
+      </Notice>
 
-      <div
+      <Notice
         v-if="lowerBoundArtifacts.length > 0"
-        class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm"
-        aria-live="polite"
+        variant="warning"
+        live="polite"
+        :icon="false"
+        class="text-sm"
         data-testid="compliance-evidence-index-lower-bounds"
       >
         <p class="font-semibold">{{ $t('views.ComplianceEvidenceIndex.lower_bound_title') }}</p>
         <p class="mt-1">{{ $t('views.ComplianceEvidenceIndex.lower_bound_description') }}</p>
         <p class="mt-2 font-mono text-xs">{{ lowerBoundArtifacts.join(', ') }}</p>
-      </div>
+      </Notice>
 
       <h2 id="evidence-index-pack-heading" class="sr-only">{{ $t('views.ComplianceEvidenceIndex.pack_heading') }}</h2>
       <dl class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-labelledby="evidence-index-pack-heading">
@@ -252,6 +256,7 @@ import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'

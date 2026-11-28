@@ -1,11 +1,12 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, ForeignKey, String, UniqueConstraint, Uuid
+from sqlalchemy import JSON, CheckConstraint, ForeignKey, String, UniqueConstraint, Uuid, event
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column
 
 from farna.db.models.base import OrgScoped
+from farna.db.pipeline_ownership import stamp_owner_from_pipeline
 
 
 class PipelineEdge(OrgScoped):
@@ -30,6 +31,12 @@ class PipelineEdge(OrgScoped):
         nullable=False,
         index=True,
     )
+    # ADR 070 Phase 1A: the owning team, inherited from ``pipelines.owner_team_id``
+    # (migration 0369). An edge is part of the pipeline's live graph, so it follows
+    # the pipeline's CURRENT owner - a reassignment moves the graph with the
+    # pipeline (unlike a run's owner, which is resolved at ``created_at``).
+    # ``ON DELETE RESTRICT`` mirrors ``pipelines.owner_team_id``.
+    owner_team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(), ForeignKey("teams.id", ondelete="RESTRICT"), nullable=True, index=True)
     # FAR-644: no FK to nodes.id — ``nodes`` is the deprecated composite-template
     # store; edge endpoints are JSON-graph ids (pipelines.graph_nodes_json) that
     # never materialise as ``nodes`` rows (see migration 0170's correction), so
@@ -58,3 +65,10 @@ class PipelineEdge(OrgScoped):
     # set on the same edge. Generic JSON for cross-backend parity.
     retry: Mapped[dict[str, Any] | None] = mapped_column(MutableDict.as_mutable(JSON), nullable=True)
     on_failure_target: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+# ADR 070 Phase 1A safety net: any ORM insert that did not stamp
+# ``owner_team_id`` inherits the parent pipeline's current owner in the same
+# transaction (see ``farna.db.pipeline_ownership``). Registered on the model, not
+# in a session factory, so it also covers writers that build their own session.
+event.listen(PipelineEdge, "before_insert", stamp_owner_from_pipeline())

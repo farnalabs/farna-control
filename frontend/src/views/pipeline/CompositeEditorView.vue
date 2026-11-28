@@ -23,8 +23,8 @@
         <button type="button"
           v-if="canManage"
           data-testid="composite-editor-save-as"
-          class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
-          @click="showSaveAsComposite = true"
+          class="rounded-md bg-action-build px-3 py-1 text-xs font-medium text-white hover:bg-action-build-hover"
+          @click="openSaveAsDialog"
         >
           {{ $t('views.CompositeEditorView.save_as_composite_action') }}
         </button>
@@ -58,28 +58,28 @@
                place: components/shared/FlowControls.vue (FAR-740). -->
           <FlowControls :show-interactive="false" />
           <template #node-manual="nodeProps">
-            <div class="rounded-lg border-2 border-warning/60 bg-warning/10 px-4 py-2 shadow-sm">
+            <div :class="['break-words rounded-lg border-2 border-warning/60 bg-warning/10 px-4 py-2 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
               <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-warning-text">{{ $t('views.CompositeEditorView.node_manual_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
           </template>
           <template #node-agent="nodeProps">
-            <div class="rounded-lg border-2 border-primary/60 bg-primary/10 px-4 py-2 shadow-sm">
+            <div :class="['break-words rounded-lg border-2 border-primary/60 bg-primary/10 px-4 py-2 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
               <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-primary-text">{{ $t('views.CompositeEditorView.node_agent_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
           </template>
           <template #node-composite="nodeProps">
-            <div class="rounded-lg border-2 border-indigo-500/60 bg-indigo-500/10 px-4 py-2 shadow-sm">
-              <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-indigo-700 dark:text-indigo-300">{{ $t('views.CompositeEditorView.node_composite_badge') }}</div>
+            <div :class="['break-words rounded-lg border-2 border-node-composite/60 bg-node-composite/10 px-4 py-2 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
+              <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-node-composite-text">{{ $t('views.CompositeEditorView.node_composite_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
           </template>
           <!-- FAR-1141: dispatch nodes get their own canvas badge so they never
                render as AGENT. Display only — no authoring controls. -->
           <template #node-dispatch="nodeProps">
-            <div class="rounded-lg border-2 border-cyan-500/60 bg-cyan-500/10 px-4 py-2 shadow-sm">
-              <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-cyan-700 dark:text-cyan-300">{{ $t('views.CompositeEditorView.node_dispatch_badge') }}</div>
+            <div :class="['break-words rounded-lg border-2 border-node-dispatch/60 bg-node-dispatch/10 px-4 py-2 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
+              <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-node-dispatch-text">{{ $t('views.CompositeEditorView.node_dispatch_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
           </template>
@@ -98,54 +98,42 @@
     </template>
 
     <!-- Save as composite dialog -->
-    <dialog
-      v-if="showSaveAsComposite"
-      ref="saveAsDialogRef"
-      aria-labelledby="composite-save-as-title"
-      class="w-full max-w-lg border-0 bg-transparent p-0 text-foreground backdrop:bg-black/50"
-      @click.self="closeSaveAsDialog"
-      @keydown.escape="closeSaveAsDialog"
-      @close="showSaveAsComposite = false"
+    <FormDialog
+      v-model:open="showSaveAsComposite"
+      :title="$t('views.CompositeEditorView.save_as_composite')"
+      :confirm-text="$t('views.CompositeEditorView.save')"
+      :confirm-loading-text="$t('views.CompositeEditorView.saving')"
+      :loading="saving"
+      :confirm-disabled="!saveAsName"
+      width="32rem"
+      cancel-test-id="composite-save-as-cancel"
+      confirm-test-id="composite-save-as-submit"
+      @confirm="handleSaveAs"
     >
-      <div class="w-full max-w-lg rounded-lg border bg-card p-6 shadow-lg">
-        <h3 id="composite-save-as-title" class="mb-4 text-base font-semibold">{{ $t('views.CompositeEditorView.save_as_composite') }}</h3>
-        <div class="space-y-4">
-          <div>
-            <label for="compositeeditorview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.CompositeEditorView.name') }}</label>
-            <input id="compositeeditorview-field-2"
-              v-model="saveAsName"
-              data-testid="composite-save-as-name"
-              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              :placeholder="$t('views.CompositeEditorView.name_placeholder')"
-            />
-          </div>
-          <div>
-            <label for="compositeeditorview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.CompositeEditorView.description') }}</label>
-            <textarea id="compositeeditorview-field-1"
-              v-model="saveAsDescription"
-              data-testid="composite-save-as-description"
-              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              rows="3"
-              :placeholder="$t('views.CompositeEditorView.description_placeholder')"
-            />
-          </div>
-          <!-- retry = click Save again; no separate loader -->
-          <ErrorAlert v-if="saveAsError" role="alert" :message="saveAsError" :retryable="false" />
-          <div class="flex justify-end gap-2">
-            <button type="button"
-              data-testid="composite-save-as-cancel"
-              class="rounded-lg border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
-              @click="closeSaveAsDialog"
-            >
-              {{ $t('views.CompositeEditorView.cancel') }}
-            </button>
-            <Button data-testid="composite-save-as-submit" :disabled="!saveAsName || saving" @click="handleSaveAs">
-              {{ saving ? $t('views.CompositeEditorView.saving') : $t('views.CompositeEditorView.save') }}
-            </Button>
-          </div>
+      <div class="space-y-4">
+        <div>
+          <label for="compositeeditorview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.CompositeEditorView.name') }}</label>
+          <input id="compositeeditorview-field-2"
+            v-model="saveAsName"
+            data-testid="composite-save-as-name"
+            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            :placeholder="$t('views.CompositeEditorView.name_placeholder')"
+          />
         </div>
+        <div>
+          <label for="compositeeditorview-field-1" class="mb-1 block text-sm font-medium">{{ $t('views.CompositeEditorView.description') }}</label>
+          <textarea id="compositeeditorview-field-1"
+            v-model="saveAsDescription"
+            data-testid="composite-save-as-description"
+            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+            rows="3"
+            :placeholder="$t('views.CompositeEditorView.description_placeholder')"
+          />
+        </div>
+        <!-- retry = click Save again; no separate loader -->
+        <ErrorAlert v-if="saveAsError" role="alert" :message="saveAsError" :retryable="false" />
       </div>
-    </dialog>
+    </FormDialog>
 
     <!-- Publish Composite Flow -->
     <PublishCompositeFlow
@@ -159,7 +147,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { VueFlow } from '@vue-flow/core'
@@ -167,7 +155,9 @@ import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import BackLink from '../../components/BackLink.vue'
+import { PIPELINE_NODE_MAX_WIDTH_CLASS } from '../../components/pipeline/nodes/NodeRegistry'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
+import FormDialog from '../../components/shared/FormDialog.vue'
 import FlowControls from '../../components/shared/FlowControls.vue'
 import SkeletonBlock from '../../components/shared/SkeletonBlock.vue'
 import { useDataFetch } from '../../composables/useDataFetch'
@@ -199,32 +189,20 @@ const rawEdges = ref<any[]>([])
 const ports = ref<ParameterPort[]>([])
 const showPortPanel = ref(true)
 const showSaveAsComposite = ref(false)
-const saveAsDialogRef = ref<HTMLDialogElement | null>(null)
 const showPublishFlow = ref(false)
 const saveAsName = ref('')
 const saveAsDescription = ref('')
 const saveAsError = ref<string | null>(null)
 const saving = ref(false)
 
-// A bare `<dialog open>` keeps the UA's fit-content sizing, so `fixed inset-0`
-// never stretches it and the backdrop is unreachable. showModal() makes it a
-// real modal: viewport-sized layout, an inert background and native Escape.
-// flush:'post' waits for the v-if branch to render the element.
-watch(
-  showSaveAsComposite,
-  (isOpen) => {
-    if (isOpen) openSaveAsDialog()
-  },
-  { immediate: true, flush: 'post' },
-)
-
+// FormDialog (PrimeVue Dialog) owns the modal semantics — backdrop, focus
+// trap and Escape — so these helpers only toggle the open state.
 function openSaveAsDialog(): void {
-  const dialog = saveAsDialogRef.value
-  if (dialog && !dialog.open) dialog.showModal()
+  showSaveAsComposite.value = true
 }
 
 function closeSaveAsDialog(): void {
-  saveAsDialogRef.value?.close()
+  showSaveAsComposite.value = false
 }
 
 const nodeTypes = { agent: 'agent', manual: 'manual', composite: 'composite', dispatch: 'dispatch' }

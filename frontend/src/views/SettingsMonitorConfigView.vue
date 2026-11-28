@@ -23,19 +23,21 @@
              enforces `system.config.manage`. Surface the established
              informational unavailable pattern instead of the raw permission
              exception; authorization stays enforced by the backend (FAR-2394). -->
-        <div
+        <Notice
           v-else-if="permissionDenied"
-          class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm"
+          variant="warning"
+          live="assertive"
+          :icon="false"
+          class="text-sm"
           data-testid="settings-monitor-permission-denied"
-          aria-live="assertive"
         >
           <p class="font-semibold">{{ $t('views.SettingsMonitorConfigView.permission_denied_title') }}</p>
           <p class="mt-1">{{ $t('views.SettingsMonitorConfigView.permission_denied_description') }}</p>
-        </div>
+        </Notice>
 
         <div v-else-if="error" class="flex flex-col items-center justify-center h-32 gap-3">
           <p class="text-destructive text-sm">{{ error || 'Failed to load monitoring configuration' }}</p>
-          <Button size="small" severity="secondary" outlined @click="load()">{{ $t('views.SettingsMonitorConfigView.retry') }}</Button>
+          <Button size="sm" variant="secondary" @click="load()">{{ $t('views.SettingsMonitorConfigView.retry') }}</Button>
         </div>
 
         <template v-else>
@@ -61,14 +63,15 @@
 
                 <div v-if="b.enabled" class="space-y-3">
                   <div v-for="field in b.fields" :key="field.key">
-                    <label for="settingsmonitorconfigview-field-1" class="block text-xs text-muted-foreground mb-1">{{ field.label }}</label>
-                    <input id="settingsmonitorconfigview-field-1"
-                      v-model="field.value"
-                      :type="field.secret && !field.revealed ? 'password' : 'text'"
-                      :placeholder="field.placeholder"
-                      class="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      @input="onDirty"
-                    />
+                    <Field :label="field.label" label-class="block text-xs text-muted-foreground mb-1">
+                      <Input
+                        v-model="field.value"
+                        :type="field.secret && !field.revealed ? 'password' : 'text'"
+                        :placeholder="field.placeholder"
+                        class="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        @input="onDirty"
+                      />
+                    </Field>
                     <div v-if="field.secret" class="mt-1">
                       <button type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="field.revealed = !field.revealed">
                         {{ field.revealed ? $t('common.hide') : $t('common.show') }}
@@ -80,7 +83,7 @@
             </DataCard>
           </div>
 
-          <div v-if="flash" class="p-3 rounded-md text-sm" :class="flashType === 'success' ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'">
+          <div v-if="flash" class="p-3 rounded-md text-sm" :class="flashType === 'success' ? 'bg-success/10 text-success-text' : 'bg-destructive/10 text-destructive-text'">
             {{ flash }}
           </div>
 
@@ -89,7 +92,7 @@
               <span v-if="saving" class="animate-spin h-4 w-4 border-2 border-background border-t-transparent rounded-full mr-2" />
               {{ $t('common.save') }}
             </Button>
-            <Button severity="secondary" outlined :disabled="!dirty" @click="reset">
+            <Button variant="secondary" :disabled="!dirty" @click="reset">
               {{ $t('common.reset') }}
             </Button>
           </div>
@@ -109,9 +112,12 @@ import { getErrorTracker } from '../lib/error-tracking'
 import { loadBackends } from '../monitor'
 import type { MonitorConfig } from '../monitor/types'
 import PageHeader from '../components/shared/PageHeader.vue'
+import Notice from '../components/shared/Notice.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
 import FeatureGate from '../components/FeatureGate.vue'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 
 const { t } = useI18n()
 

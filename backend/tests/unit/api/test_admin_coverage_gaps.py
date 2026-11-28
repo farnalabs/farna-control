@@ -226,6 +226,92 @@ def test_create_user_weak_password_422(api: tuple[TestClient, AsyncMock]) -> Non
     assert "entropy" in resp.json()["detail"]
 
 
+def test_create_user_binds_org_rls_before_membership_insert(
+    api: tuple[TestClient, AsyncMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The create-user route must bind the org GUC before inserting a membership.
+
+    Migration 0367 fail-closes ``org_memberships``: its ``FOR ALL USING`` clause
+    is also the INSERT WITH CHECK, so a membership INSERT with no
+    ``app.organisation_id`` GUC raises ``InsufficientPrivilege`` (surfaced as a
+    ``ProgrammingError`` -> HTTP 501 ``migration_required``).
+
+    The route opens TWO separate transactions - the read-side conflict check in
+    ``_existing_account_or_conflict`` and the write-side create/adopt in
+    ``_create_or_adopt_account`` - and ``set_config(..., is_local=true)`` is
+    transaction-local, so the binding in the READ transaction does NOT carry
+    into the WRITE transaction. A single global ordering assertion therefore
+    passes even when the write-side ``set_rls_org`` is reverted (the read-side
+    call still precedes the INSERT). To prove the actual bug, the spy events are
+    partitioned per ``session.begin`` transaction and the ordering assertion is
+    scoped to the SAME transaction as ``create_membership``.
+    """
+    client, session = api
+    account = _account(id=uuid.uuid4(), email="new@test", display_name="New")
+    membership = _membership(role="runner")
+    monkeypatch.setattr(admin, "get_account_by_email", AsyncMock(return_value=None))
+    monkeypatch.setattr(admin.account_crud, "create_account", AsyncMock(return_value=account))
+    monkeypatch.setattr(admin, "append_audit_event", AsyncMock())
+
+    # Partition every spied event into the ``session.begin`` transaction it ran
+    # inside, so a binding in one transaction can never satisfy an assertion
+    # about another. ``session.begin`` is a plain callable on the mock, so wrap
+    # it per *call* rather than re-using one context manager.
+    transactions: list[list[tuple[str, Any]]] = []
+    active: list[list[tuple[str, Any]]] = []
+
+    class _TxnBuffer:
+        async def __aenter__(self) -> None:
+            buffer: list[tuple[str, Any]] = []
+            transactions.append(buffer)
+            active.append(buffer)
+
+        async def __aexit__(self, *_exc: object) -> bool:
+            active.pop()
+            return False
+
+    session.begin = MagicMock(side_effect=lambda: _TxnBuffer())
+
+    def _record(kind: str, org_id: Any) -> None:
+        assert active, f"{kind} ran outside a session.begin transaction"
+        active[-1].append((kind, org_id))
+
+    real_set_rls_org = admin.set_rls_org
+
+    async def _spy_set_rls_org(sess: Any, org_id: uuid.UUID) -> None:
+        _record("set_rls_org", org_id)
+        await real_set_rls_org(sess, org_id)
+
+    async def _spy_create_membership(*args: Any, **kwargs: Any) -> Any:
+        _record("create_membership", kwargs.get("org_id"))
+        return membership
+
+    monkeypatch.setattr(admin, "set_rls_org", _spy_set_rls_org)
+    monkeypatch.setattr(admin, "create_membership", _spy_create_membership)
+
+    resp = client.post(
+        "/api/v1/admin/users",
+        json={"email": "new@test", "display_name": "New", "password": "Sup3r-Secret!", "org_role": "runner"},
+    )
+
+    assert resp.status_code == 201, resp.text
+    # The route must actually have opened the two transactions this regression
+    # turns on - otherwise the partitioning proves nothing.
+    assert len(transactions) == 2, transactions
+    insert_txns = [txn for txn in transactions if any(kind == "create_membership" for kind, _ in txn)]
+    assert len(insert_txns) == 1, transactions
+    insert_txn = insert_txns[0]
+    kinds = [kind for kind, _ in insert_txn]
+    # The org GUC must be bound in THIS transaction, before the membership
+    # INSERT. Reverting the write-side ``set_rls_org`` leaves this transaction
+    # with ``create_membership`` alone (the read-side binding lives in the other
+    # transaction) and fails here.
+    assert "set_rls_org" in kinds, insert_txn
+    assert kinds.index("set_rls_org") < kinds.index("create_membership"), insert_txn
+    assert all(org_id == _ORG_ID for txn in transactions for kind, org_id in txn if kind == "set_rls_org")
+
+
 # NOTE: admin_create_user catches IntegrityError itself (TOCTOU race guard:
 # concurrent duplicate email) and maps it to 409.  ProgrammingError → 501,
 # generic SQLAlchemyError → 503.
@@ -616,6 +702,14 @@ def test_deactivate_success(api: tuple[TestClient, AsyncMock], monkeypatch: pyte
     monkeypatch.setattr(admin, "assert_not_last_admin", AsyncMock())
     monkeypatch.setattr(admin, "list_team_memberships_for_account", AsyncMock(return_value=[]))
     monkeypatch.setattr("farna.core.audit_logger.append_audit_event", AsyncMock())
+    set_rls_calls: list[uuid.UUID] = []
+    real_set_rls_org = admin.set_rls_org
+
+    async def _spy_set_rls_org(sess: Any, org_id: uuid.UUID) -> None:
+        set_rls_calls.append(org_id)
+        await real_set_rls_org(sess, org_id)
+
+    monkeypatch.setattr(admin, "set_rls_org", _spy_set_rls_org)
     # The SECURITY DEFINER tombstones the membership; session.refresh is what
     # surfaces the new deactivated_at on the ORM object (per-org is_active).
     session.refresh = AsyncMock(side_effect=lambda obj, *a, **k: setattr(obj, "deactivated_at", _NOW))
@@ -624,6 +718,10 @@ def test_deactivate_success(api: tuple[TestClient, AsyncMock], monkeypatch: pyte
     data = resp.json()
     assert data["id"] == str(_TARGET_USER_ID)
     assert data["is_active"] is False
+    # 0367 fail-closes org_memberships with no org context: the post-commit
+    # refresh runs in a NEW transaction, so the route must re-establish the org
+    # scope there too (mutation transaction + refresh transaction).
+    assert set_rls_calls == [_ORG_ID, _ORG_ID]
 
 
 # ── POST /users/{user_id}/reactivate ──
@@ -653,15 +751,27 @@ def test_reactivate_membership_missing_404(api: tuple[TestClient, AsyncMock], mo
 
 
 def test_reactivate_success(api: tuple[TestClient, AsyncMock], monkeypatch: pytest.MonkeyPatch) -> None:
-    client, _ = api
+    client, _session = api
     account = _account()
     membership = _membership(role="runner")
     monkeypatch.setattr(admin, "get_account_by_id", AsyncMock(return_value=account))
     monkeypatch.setattr(admin, "get_membership_by_account_and_org", AsyncMock(return_value=membership))
     monkeypatch.setattr("farna.core.audit_logger.append_audit_event", AsyncMock())
+    set_rls_calls: list[uuid.UUID] = []
+    real_set_rls_org = admin.set_rls_org
+
+    async def _spy_set_rls_org(sess: Any, org_id: uuid.UUID) -> None:
+        set_rls_calls.append(org_id)
+        await real_set_rls_org(sess, org_id)
+
+    monkeypatch.setattr(admin, "set_rls_org", _spy_set_rls_org)
     resp = client.post(f"/api/v1/admin/users/{_TARGET_USER_ID}/reactivate")
     assert resp.status_code == 200
     assert resp.json()["is_active"] is True
+    # 0367 fail-closes org_memberships with no org context: the post-commit
+    # refresh runs in a NEW transaction, so the route must re-establish the org
+    # scope there too (mutation transaction + refresh transaction).
+    assert set_rls_calls == [_ORG_ID, _ORG_ID]
 
 
 @pytest.mark.parametrize(("exc", "expected"), _DB_ERROR_PARAMS)

@@ -21,17 +21,6 @@ vi.mock('../lib/api/client', () => ({
           error: undefined,
         })
       }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({
-          data: {
-            buckets: [
-              { date: '2026-09-01', count: 10, success_rate: 0.8 },
-              { date: '2026-09-02', count: 5, success_rate: 1.0 },
-            ],
-          },
-          error: undefined,
-        })
-      }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({
           data: [
@@ -125,7 +114,7 @@ describe('AdminCostBreakdownView', () => {
     // unpadded content area (FAR-2394).
     expect(Array.from(teamHeader!.classList)).not.toEqual(expect.arrayContaining(['px-6', 'pt-6']))
     const teamDescription = teamHeader!.querySelector('p')
-    expect(teamDescription?.textContent).toContain('Monthly spend, run count, and average cost per run')
+    expect(teamDescription?.textContent).toContain('Monthly spend, billable run count, and average cost per billable run')
     expect(teamDescription?.parentElement).toBe(teamHeading.element.parentElement)
     const anomalyHeader = page.findAll('.card-header')[1]
     expect(anomalyHeader.classes()).not.toEqual(expect.arrayContaining(['px-6', 'pt-6']))
@@ -194,10 +183,9 @@ describe('AdminCostBreakdownView', () => {
     expect(wrapper.find('[data-testid="cost-total-runs"]').text()).toContain('42')
   })
 
-  it('calculates cost per successful run from analytics buckets', async () => {
-    // Cost report: $400 total spend, 15 total runs
-    // Analytics: bucket 1 has 10 runs * 80% success = 8 successful, bucket 2 has 5 * 100% = 5 successful
-    // Total successful = 13, cost per successful run = 400 / 13 ≈ 30.77
+  it('renders the successful-run count and cost per successful run from the costs response', async () => {
+    // FAR-2824: the costs response is the single source. $400 total spend, 15
+    // total runs, 13 successful runs → cost per successful run = 400 / 13 ≈ 30.77.
     ;(api.GET as any).mockImplementation((path: string) => {
       if (path === '/api/v1/admin/costs') {
         return Promise.resolve({
@@ -208,17 +196,9 @@ describe('AdminCostBreakdownView', () => {
               { entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 250.0, total_runs: 10 },
               { entity_id: 'team-2', entity_name: 'Beta', total_spend_usd: 150.0, total_runs: 5 },
             ],
-          },
-          error: undefined,
-        })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({
-          data: {
-            buckets: [
-              { date: '2026-09-01', count: 10, success_rate: 0.8 },
-              { date: '2026-09-02', count: 5, success_rate: 1.0 },
-            ],
+            org_total: '400.000000',
+            org_run_count: 15,
+            org_successful_run_count: 13,
           },
           error: undefined,
         })
@@ -243,8 +223,7 @@ describe('AdminCostBreakdownView', () => {
 
     const card = wrapper.find('[data-testid="cost-per-successful-run"]')
     expect(card.exists()).toBe(true)
-    // successfulRuns = round(10 * 0.8) + round(5 * 1.0) = 8 + 5 = 13
-    // costPerSuccessfulRun = 400 / 13 ≈ 30.77
+    // successfulRuns = 13 (from the costs response) → 400 / 13 ≈ 30.77
     expect(card.text()).toContain('30.77')
 
     const countEl = wrapper.find('[data-testid="cost-successful-runs-count"]')
@@ -252,7 +231,53 @@ describe('AdminCostBreakdownView', () => {
     expect(countEl.text()).toContain('13')
   })
 
-  it('shows dash when zero successful runs (analytics returns all failures)', async () => {
+  it('reads total runs, successful runs and cost per successful run from one costs response (FAR-2820 / FAR-2824)', async () => {
+    // The report returns the successful count from the SAME facts window as
+    // Total Runs, so the two tiles and the cost-per-successful-run figure must
+    // all agree - there is no second source left to straddle a month boundary.
+    ;(api.GET as any).mockImplementation((path: string) => {
+      if (path === '/api/v1/admin/costs') {
+        return Promise.resolve({
+          data: {
+            period: 'month',
+            group_by: 'team',
+            items: [{ entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 226.0, total_runs: 0 }],
+            org_total: '226.000000',
+            org_run_count: 226,
+            org_successful_run_count: 200,
+          },
+          error: undefined,
+        })
+      }
+      if (path === '/api/v1/admin/costs/anomalies') {
+        return Promise.resolve({ data: [], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = usePlanStore()
+    store.$patch({ features: { admin_cost_breakdown: true } })
+
+    const wrapper = mount(AdminCostBreakdownView, {
+      global: { plugins: [pinia] },
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    const countEl = wrapper.find('[data-testid="cost-successful-runs-count"]')
+    expect(countEl.text()).toContain('200')
+
+    const totalRuns = wrapper.find('[data-testid="cost-total-runs"]')
+    expect(totalRuns.text()).toContain('226')
+
+    // 226 / 200 = 1.13 — the pair from the single costs response.
+    expect(wrapper.find('[data-testid="cost-per-successful-run"]').text()).toContain('1.13')
+  })
+
+  it('shows a dash and No successful runs when the costs response reports zero successes', async () => {
     ;(api.GET as any).mockImplementation((path: string) => {
       if (path === '/api/v1/admin/costs') {
         return Promise.resolve({
@@ -262,16 +287,9 @@ describe('AdminCostBreakdownView', () => {
             items: [
               { entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 100.0, total_runs: 5 },
             ],
-          },
-          error: undefined,
-        })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({
-          data: {
-            buckets: [
-              { date: '2026-09-01', count: 5, success_rate: 0.0 },
-            ],
+            org_total: '100.000000',
+            org_run_count: 5,
+            org_successful_run_count: 0,
           },
           error: undefined,
         })
@@ -304,7 +322,7 @@ describe('AdminCostBreakdownView', () => {
     expect(countEl.text()).toContain('No successful runs')
   })
 
-  it('shows dash when analytics endpoint fails (graceful degradation)', async () => {
+  it('shows a dash when the costs response omits org_successful_run_count (graceful degradation)', async () => {
     ;(api.GET as any).mockImplementation((path: string) => {
       if (path === '/api/v1/admin/costs') {
         return Promise.resolve({
@@ -314,14 +332,10 @@ describe('AdminCostBreakdownView', () => {
             items: [
               { entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 100.0, total_runs: 5 },
             ],
+            org_total: '100.000000',
+            org_run_count: 5,
           },
           error: undefined,
-        })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({
-          data: null,
-          error: { status: 403, message: 'Forbidden' },
         })
       }
       if (path === '/api/v1/admin/costs/anomalies') {
@@ -344,8 +358,58 @@ describe('AdminCostBreakdownView', () => {
 
     const card = wrapper.find('[data-testid="cost-per-successful-run"]')
     expect(card.exists()).toBe(true)
-    // Analytics failed → graceful degradation → dash
+    // No successful count in the costs response → degrade to 0 → dash.
     expect(card.text()).toContain('—')
+
+    const countEl = wrapper.find('[data-testid="cost-successful-runs-count"]')
+    expect(countEl.exists()).toBe(true)
+    expect(countEl.text()).toContain('No successful runs')
+  })
+
+  it('issues no analytics request for the summary tiles (FAR-2824)', async () => {
+    ;(api.GET as any).mockImplementation((path: string) => {
+      if (path === '/api/v1/admin/costs') {
+        return Promise.resolve({
+          data: {
+            period: 'month',
+            group_by: 'team',
+            items: [
+              { entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 100.0, total_runs: 5 },
+            ],
+            org_total: '100.000000',
+            org_run_count: 5,
+            org_successful_run_count: 4,
+          },
+          error: undefined,
+        })
+      }
+      if (path === '/api/v1/admin/costs/anomalies') {
+        return Promise.resolve({ data: [], error: undefined })
+      }
+      return Promise.resolve({ data: null, error: undefined })
+    })
+
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = usePlanStore()
+    store.$patch({ features: { admin_cost_breakdown: true } })
+
+    const wrapper = mount(AdminCostBreakdownView, {
+      global: { plugins: [pinia] },
+    })
+
+    await flushPromises()
+    await flushPromises()
+
+    // Every figure comes from the costs response: 100 / 4 = 25.00, count 4.
+    expect(wrapper.find('[data-testid="cost-per-successful-run"]').text()).toContain('25.00')
+    expect(wrapper.find('[data-testid="cost-successful-runs-count"]').text()).toContain('4')
+
+    // The removed fallback used to hit this endpoint; it must never be queried.
+    const analyticsCalls = (api.GET as any).mock.calls.filter(
+      (args: unknown[]) => args[0] === '/api/v1/analytics/query',
+    )
+    expect(analyticsCalls).toHaveLength(0)
   })
 
   it('shows an error alert when the anomalies request fails', async () => {
@@ -361,9 +425,6 @@ describe('AdminCostBreakdownView', () => {
           },
           error: undefined,
         })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
       }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({ data: null, error: { status: 500, message: 'Internal Server Error' } })
@@ -402,9 +463,6 @@ describe('AdminCostBreakdownView', () => {
           error: undefined,
         })
       }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
-      }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({
           data: [
@@ -442,9 +500,6 @@ describe('AdminCostBreakdownView', () => {
           data: { period: 'month', group_by: 'team', items: [] },
           error: undefined,
         })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
       }
       if (path === '/api/v1/admin/costs/anomalies') {
         // The contract is a bare array; this is the paged envelope shape that
@@ -492,9 +547,6 @@ describe('AdminCostBreakdownView', () => {
           error: undefined,
         })
       }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
-      }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({
           data: [
@@ -534,9 +586,6 @@ describe('AdminCostBreakdownView', () => {
           error: undefined,
         })
       }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
-      }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({ data: [], error: undefined })
       }
@@ -574,9 +623,6 @@ describe('AdminCostBreakdownView', () => {
           error: undefined,
         })
       }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [{ date: '2026-09-01', count: 4, success_rate: null }] }, error: undefined })
-      }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({ data: [], error: undefined })
       }
@@ -603,7 +649,7 @@ describe('AdminCostBreakdownView', () => {
     expect(wrapper.find('[data-testid="cost-team-table"]').text()).toContain('0.00')
   })
 
-  it('degrades gracefully when the analytics response omits buckets', async () => {
+  it('sources the successful count from the costs response even when org_total is absent', async () => {
     ;(api.GET as any).mockImplementation((path: string) => {
       if (path === '/api/v1/admin/costs') {
         return Promise.resolve({
@@ -611,14 +657,13 @@ describe('AdminCostBreakdownView', () => {
             period: 'month',
             group_by: 'team',
             items: [
-              { entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 100.0, total_runs: 5 },
+              { entity_id: 'team-1', entity_name: 'Alpha', total_spend_usd: 400.0, total_runs: 20 },
             ],
+            org_run_count: 20,
+            org_successful_run_count: 16,
           },
           error: undefined,
         })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: {}, error: undefined })
       }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({ data: [], error: undefined })
@@ -638,9 +683,12 @@ describe('AdminCostBreakdownView', () => {
     await flushPromises()
     await flushPromises()
 
+    // Without org_total the spend falls back to the item sum (400); the
+    // successful count still comes from the costs response (16) → 400 / 16 = 25.00.
     const card = wrapper.find('[data-testid="cost-per-successful-run"]')
     expect(card.exists()).toBe(true)
-    expect(card.text()).toContain('—')
+    expect(card.text()).toContain('25.00')
+    expect(wrapper.find('[data-testid="cost-successful-runs-count"]').text()).toContain('16')
   })
 
   it('shows an error alert when the anomalies request throws', async () => {
@@ -650,9 +698,6 @@ describe('AdminCostBreakdownView', () => {
           data: { period: 'month', group_by: 'team', items: [] },
           error: undefined,
         })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
       }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.reject(new Error('anomalies unavailable'))
@@ -684,9 +729,6 @@ describe('AdminCostBreakdownView', () => {
           data: { period: 'month', group_by: 'team', items: [] },
           error: undefined,
         })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
       }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({
@@ -800,9 +842,6 @@ describe('AdminCostBreakdownView', () => {
           error: undefined,
         })
       }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
-      }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({ data: [], error: undefined })
       }
@@ -859,9 +898,6 @@ describe('AdminCostBreakdownView', () => {
           error: undefined,
         })
       }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
-      }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({ data: [], error: undefined })
       }
@@ -901,9 +937,6 @@ describe('AdminCostBreakdownView', () => {
           error: undefined,
         })
       }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
-      }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({ data: [], error: undefined })
       }
@@ -938,9 +971,6 @@ describe('AdminCostBreakdownView', () => {
           },
           error: undefined,
         })
-      }
-      if (path === '/api/v1/analytics/query') {
-        return Promise.resolve({ data: { buckets: [] }, error: undefined })
       }
       if (path === '/api/v1/admin/costs/anomalies') {
         return Promise.resolve({ data: [], error: undefined })

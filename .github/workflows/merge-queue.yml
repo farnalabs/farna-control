@@ -60,10 +60,52 @@ env:
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/.insteadOf'
   GIT_CONFIG_VALUE_0: "https://github.com/"
+  # Shared bot git identity for commits this workflow authors. Defined once here
+  # and referenced by every job that commits (the queue pass and the train
+  # build), so the identity lives in exactly one place instead of being duplicated.
+  MERGE_BOT_GIT_NAME: modulo-merge-bot
+  MERGE_BOT_GIT_EMAIL: bot@modulo.run
 
 
 permissions:
   contents: read
+
+# One merge train at a time, for the WHOLE run.
+#
+# The group MUST be at workflow level, and it must be the ONLY place it is
+# declared. A train is a multi-job sequence (admit -> build -> validate ->
+# merge); job-level concurrency cannot serialise a sequence, because each job
+# releases the group when it finishes. With MERGE_TRAIN_ENABLED=true the `queue`
+# job is skipped and only `merge` held the group, so overlapping cron /
+# workflow_dispatch / repository_dispatch runs each ran admit + build + validate
+# CONCURRENTLY and then raced for the merge lock - doubling validation cost and
+# letting a stale train (built from an older main) reach `gh pr merge` after a
+# newer one.
+#
+# No job may re-declare this group. GitHub keeps workflow-run and job
+# concurrency in ONE shared repository-wide group namespace, so a job that
+# declares the same `merge-queue` group the run already holds queues behind its
+# OWN run's workflow-level lock and can never start - permanently, because
+# cancel-in-progress is false. That deadlock would stall the merge queue, the
+# sole merge authority. merge-queue-watchdog.yml does not rescue it: the
+# watchdog only cancels an in_progress run whose EVERY job has started_at ==
+# null, and here the freeze-gate / event-gate jobs start normally before the
+# deadlocked job blocks. The architecture test (test_workflow_structure.py)
+# fails CI if any job re-declares the group.
+#
+# This reverses the 2026-10 decision to scope the group to the `queue` job only.
+# That was taken while the removed high-frequency triggers (pull_request_review,
+# check_suite - see on.repository_dispatch, FAR-1428) flooded the queue: every
+# chained pass then queued behind an incumbent's event-gate pacing sleep. Two
+# things changed: those triggers are gone, and event-gate caps its wait at 120s,
+# so the cost of holding the lock across the gates is now bounded.
+#
+# cancel-in-progress MUST stay false: a later run must never cancel an
+# in-flight train mid-validate or mid-merge. GitHub keeps one pending run per
+# group, so a newer trigger replaces an older pending one - normal, non-lossy.
+concurrency:
+  group: merge-queue
+  cancel-in-progress: false
 
 jobs:
   freeze-gate:
@@ -177,9 +219,10 @@ jobs:
     # Cheap context-only filter. schedule/workflow_dispatch always pass;
     # repository_dispatch (self-chain) honors the payload's not-before time so
     # chained passes pace themselves - the wait happens HERE on a tiny idle
-    # runner, NOT inside the queue job, which would hold the merge-queue
-    # concurrency slot and delay other runs. The merge-queue concurrency group
-    # is scoped to the `queue` job precisely so this sleep cannot hold it.
+    # runner rather than on a merge-capable job. NOTE: now that the merge-queue
+    # group is declared at workflow level (see the top-level `concurrency`
+    # block), this wait DOES hold that lock; it is capped at 120s, which bounds
+    # the delay a chained pass can impose on the next one.
     # (The pull_request_review and check_suite paths were removed in FAR-1428.)
     runs-on: ubicloud-standard-2
     timeout-minutes: 15
@@ -226,9 +269,15 @@ jobs:
                 else
                   NOW=$(date -u +%s)
                   WAIT=$((CHAIN_READY_AT - NOW))
-                  if [ "$WAIT" -gt 660 ]; then
-                    # Malformed/foreign payload safety cap (11 min).
-                    WAIT=660
+                  # Cap the in-runner wait at 120s (was 660s). The gate itself
+                  # stays - a chained pass still paces itself - but burning a
+                  # billed runner for up to 11 minutes to do nothing was paying
+                  # for the self-chain's own delay. A pass that arrives earlier
+                  # than its ready_at now simply runs up to ~8 minutes early; the
+                  # pacing that matters (don't hammer the queue) is carried by
+                  # the self-chain re-dispatch, not by this sleep.
+                  if [ "$WAIT" -gt 120 ]; then
+                    WAIT=120
                   fi
                   if [ "$WAIT" -gt 0 ]; then
                     echo "Chained pass not due yet - waiting ${WAIT}s (paced self-chain)."
@@ -247,15 +296,19 @@ jobs:
   queue:
     name: Merge queue -> main
     needs: [freeze-gate, event-gate]
-    if: needs.freeze-gate.outputs.frozen == 'false' && needs.event-gate.outputs.should_run == 'true'
-    # The merge-queue concurrency group lives on THIS job, not at workflow
-    # level: only this job merges to main, so only it needs serialising. At
-    # workflow level the group was held by the whole run - including the
-# event-gate pacing sleep - so every chained pass queued behind an incumbent's
-# sleep and waited out the full pacing window before its own turn.
-    concurrency:
-      group: merge-queue
-      cancel-in-progress: false
+    # MERGE_TRAIN_ENABLED (phase 1 of the merge train): unset/not-'true' keeps the
+    # existing queue job EXACTLY as it runs today. When the flag is 'true' this
+    # job is skipped and the parallel `train` path (admit -> build -> validate ->
+    # merge, below) runs instead. The flag-off evaluation is byte-identical to the
+    # pre-train condition because `vars.MERGE_TRAIN_ENABLED != 'true'` is true when
+    # the variable is unset.
+    if: needs.freeze-gate.outputs.frozen == 'false' && needs.event-gate.outputs.should_run == 'true' && vars.MERGE_TRAIN_ENABLED != 'true'
+    # NO job-level `concurrency:` here: the merge-queue group is held at
+    # workflow level (see the top-level `concurrency` block), so this job already
+    # runs inside it. Re-declaring the same group on the job would queue it
+    # behind its own run's workflow-level lock and it would never start — GitHub
+    # shares one concurrency namespace across workflow runs and jobs. The
+    # architecture test enforces that no job re-declares the group.
     # 60 is the measured ceiling plus dispatch headroom. The last successful pass
     # took 37.0 min, of which the backend/frontend validation step alone was
     # 34.3 min; at the former 45-min timeout that left only ~8 min for the
@@ -265,7 +318,7 @@ jobs:
     # late-but-successful dispatch would have spent the 45-min margin - and a
     # cancelled job skips both the merge steps and the failure()-gated final
     # notification, i.e. the silent drop FAR-2066 exists to remove. Still
-    # bounded: this job holds the merge-queue concurrency lock
+    # bounded: this run holds the workflow-level merge-queue concurrency lock
     # (cancel-in-progress: false), so an unbounded hold would stall every
     # later queue pass. (History: 30 was the old failure ceiling at a 29.1-min
     # observed pass - backend 19.9 + frontend 7.2 sequential.)
@@ -274,6 +327,15 @@ jobs:
       contents: write
       pull-requests: write
       actions: write
+      # The "Merge source PRs via gh pr merge" step posts the
+      # `merge-gate/verified` commit status on each PR's head via
+      # POST /repos/{owner}/{repo}/statuses/{sha}. Creating a commit status
+      # needs statuses:write on GITHUB_TOKEN; without it the post 403s and the
+      # step fail-closes before merging. This job is one of only two that post
+      # the status (the train `merge` job is the other), so the permission lives
+      # here rather than at workflow level, where it would also be granted to
+      # the non-merging freeze-gate / event-gate / admit / build / validate jobs.
+      statuses: write
       # The "Close GitHub issues referenced by merged PRs" step runs
       # `gh issue comment` / `gh issue close`, which need issues:write on
       # GITHUB_TOKEN; without it every call 403s and the step silently
@@ -338,25 +400,16 @@ jobs:
           # convention (every other checkout in .github/workflows/ sets it).
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 11.29.0
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-
+      # The toolchain (uv, pnpm, node) is set up LATER, after the pass knows it
+      # has PRs to work on - see the gated setup-uv / pnpm / setup-node steps
+      # just after the "Exit if nothing to merge" step below. Nothing above
+      # this point needs it: collection and merging use git, gh, jq and
+      # python3 only, all of which the runner image already carries. A no-op
+      # pass therefore pays for no toolchain install.
       - name: Configure git
         run: |
-          git config user.name "modulo-merge-bot"
-          git config user.email "bot@modulo.run"
+          git config user.name "$MERGE_BOT_GIT_NAME"
+          git config user.email "$MERGE_BOT_GIT_EMAIL"
 
       - name: Check main CI status
         id: check-ci
@@ -415,7 +468,7 @@ jobs:
           # (farna-reviewbot is the reviewer identity after the FAR rebrand).
           APPROVED_COUNT=0
           echo "[]" > /tmp/prs.json
-          rm -f /tmp/ci_pending_prs.txt
+          rm -f /tmp/ci_pending_prs.txt /tmp/stale_approval_prs.txt
 
           jq -c '.[]' /tmp/all_prs.json | while IFS= read -r pr; do
             NUM=$(echo "$pr" | jq -r '.number')
@@ -460,11 +513,29 @@ jobs:
             fi
 
             # Check for approval reviews
-            APPROVERS=$(gh pr view "$NUM" --json reviews --jq '.reviews[]? | select(.state == "APPROVED") | .author.login' 2>/dev/null | sort -u)
+            # `|| APPROVERS=""`: under -eo pipefail one PR's API error would
+            # otherwise end the whole step; it reads as "not approved".
+            APPROVERS=$(gh pr view "$NUM" --json reviews --jq '.reviews[]? | select(.state == "APPROVED") | .author.login' 2>/dev/null | sort -u) || APPROVERS=""
 
             MERGEABLE=false
             if echo "$APPROVERS" | grep -qE '^(farnalabs|farna-reviewbot)$'; then
               echo "approved by $APPROVERS"
+              # FAR-2871: apply the merge step's SHA-pin guard HERE too. A stale
+              # approval is refused there, so collecting it only burns the batch
+              # slot, and oldest-first then starves every later PR (#3648).
+              REVIEWS_FILE=$(mktemp)
+              COMMITS_FILE=$(mktemp)
+              GUARD_OUT="stale|could not fetch reviews/commits - fail closed"
+              if gh api --paginate "repos/${{ github.repository }}/pulls/$NUM/reviews?per_page=100" > "$REVIEWS_FILE" 2>/dev/null \
+                && gh api --paginate "repos/${{ github.repository }}/pulls/$NUM/commits?per_page=100" > "$COMMITS_FILE" 2>/dev/null; then
+                GUARD_OUT=$(python3 .github/scripts/merge-queue-approve-guard.py "$REVIEWS_FILE" "$COMMITS_FILE" 2>/dev/null) || true
+              fi
+              rm -f "$REVIEWS_FILE" "$COMMITS_FILE"
+              if [ "${GUARD_OUT%%|*}" != "ok" ]; then
+                echo "::warning::PR #$NUM is NOT ready (no batch slot) - approval check: ${GUARD_OUT#*|}"
+                echo "$NUM" >> /tmp/stale_approval_prs.txt
+                continue
+              fi
               MERGEABLE=true
             fi
 
@@ -561,6 +632,10 @@ jobs:
           fi
           echo "Approved PRs still waiting on CI: $CI_PENDING"
 
+          if [ -f /tmp/stale_approval_prs.txt ]; then
+            echo "Held back, NOT merged - approval stale or unverifiable (see warnings): PR(s) $(xargs < /tmp/stale_approval_prs.txt)" | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          fi
+
           # Combine approved PRs into the prs.json file
           if [ -f /tmp/approved_prs.json ]; then
             jq -s '.' /tmp/approved_prs.json > /tmp/prs.json
@@ -612,7 +687,18 @@ jobs:
           # are unchanged: every PR in the batch still runs the full combined
           # backend+frontend validation and the freeze/TOCTOU guards before
           # `gh pr merge`.
-          BATCH_LIMIT=12
+          #
+          # ONE per pass (was 12). The combined-branch re-validation is the
+          # thing that fails on a batch and takes the whole batch down with it
+          # (a semantic conflict between two individually-green PRs, a
+          # two-migration head collision, a red combined run that the Branch
+          # Fixer then has to untangle). With one PR in the batch a validation
+          # failure is attributable to exactly that PR, so the queue never
+          # converts one bad PR into a batch-wide stall. Throughput is bought
+          # back by the cadence (hourly cron + Housekeeper + self-chain) and by
+          # the merge train (merge-validate.yml, behind MERGE_TRAIN_ENABLED)
+          # running the gates in parallel, not by widening the batch.
+          BATCH_LIMIT=1
           TOTAL_APPROVED=$(jq 'length' /tmp/prs.json 2>/dev/null || echo 0)
           if [ "$TOTAL_APPROVED" -gt "$BATCH_LIMIT" ]; then
             echo "Approved PRs ready: $TOTAL_APPROVED - merging the oldest $BATCH_LIMIT this pass; $((TOTAL_APPROVED - BATCH_LIMIT)) wait for the next cycle."
@@ -1116,7 +1202,7 @@ jobs:
                 fi
               else
                 git commit -m "squash! Merge PR #$NUM: $TITLE"
-                echo "PR #$NUM merged successfully."
+                echo "PR #$NUM: TRIAL squash-merge into the local merge-queue branch succeeded - NOT yet merged to main."
                 merged_prs="$merged_prs $NUM"
               fi
             else
@@ -1588,6 +1674,29 @@ jobs:
             echo "Nothing was merged. A green run here is NOT evidence that the queue merged a PR."
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
+
+      # Cheap win: a pass that collected no PR has nothing to validate, so it
+      # must not pay for a uv/pnpm/node install. These three lived near the top
+      # of the job and ran on every tick, including the many no-op ticks; they
+      # are gated on the collected PR count instead (the brief's gate), and
+      # nothing between here and the validation steps needs them.
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        if: steps.collect.outputs.pr_count != '0'
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        if: steps.collect.outputs.pr_count != '0'
+        with:
+          version: 11.29.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.collect.outputs.pr_count != '0'
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
 
       - name: Push merge-queue branch (for reference)
         if: steps.merge.outputs.merged_count != '0'
@@ -2211,6 +2320,12 @@ jobs:
           # step consumes this; guard-skipped PRs must never have tickets closed).
           GH_MERGED=""
           FAILED=""
+          # FAR-2871: the earlier trial merge is not a landing - say so when a
+          # merge-time gate skips a PR.
+          not_landed() {
+            echo "::warning::PR #$1 did NOT land on main: $2"
+            echo "PR #$1 did NOT land on main: $2" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          }
           for NUM in $PR_NUMS; do
             echo "  Merging PR #$NUM..."
 
@@ -2218,6 +2333,7 @@ jobs:
             REVIEW_DECISION=$(gh pr view "$NUM" --json reviewDecision --jq '.reviewDecision' 2>/dev/null || echo "unknown")
             if [ "$REVIEW_DECISION" != "APPROVED" ]; then
               echo "  PR #$NUM reviewDecision is '$REVIEW_DECISION' -- skipping merge (stays open for next queue cycle)"
+              not_landed "$NUM" "reviewDecision is '$REVIEW_DECISION'"
               continue
             fi
 
@@ -2236,6 +2352,7 @@ jobs:
             rm -f "$AUTHOR_FILE"
             if [ "${AUTHOR_OUT%%|*}" != "ok" ]; then
               echo "  PR #$NUM same-repo author gate: ${AUTHOR_OUT#*|} -- skipping merge (fail closed)"
+              not_landed "$NUM" "same-repo author gate"
               continue
             fi
 
@@ -2262,6 +2379,7 @@ jobs:
              HEAD_OID=$(gh pr view "$NUM" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
              if [ -z "$HEAD_OID" ]; then
                echo "  PR #$NUM could not resolve head oid -- skipping merge (fail closed)"
+               not_landed "$NUM" "could not resolve the head SHA"
                continue
              fi
              # SHA-pin TOCTOU guard. The decision is delegated to a versioned, unit-tested
@@ -2287,6 +2405,7 @@ jobs:
              GUARD_VERDICT="${GUARD_OUT%%|*}"
              if [ "$GUARD_VERDICT" != "ok" ]; then
                echo "  PR #$NUM SHA-pin guard: ${GUARD_OUT#*|} -- skipping merge (fail closed)"
+               not_landed "$NUM" "SHA-pin guard: ${GUARD_OUT#*|}"
                continue
              fi
              # No post-approval non-merge code (merge-only head moves keep approval valid).
@@ -2318,6 +2437,30 @@ jobs:
                 MERGE_TOKEN="$WORKFLOW_PAT"
                 echo "  PR #$NUM modifies .github/workflows/* - merging with the workflow-scoped PAT" ;;
             esac
+
+            # --- Landing gate: post the queue's verdict on the PR head --------
+            # `merge-gate/verified` is the merge queue's verdict as a commit
+            # status. It is a REQUIRED status check on main, so the queue becomes
+            # the only path that can land a PR: a direct `gh pr merge` (or a
+            # `--admin` bypass attempt by a human or agent) fails the required
+            # check unless this queue posted it.
+            #
+            # Posted ONLY here - after the review-decision re-check, the
+            # same-repo author gate and the SHA-pin guard above, and immediately
+            # before the merge - so it can never certify a PR that failed a gate.
+            # Pinned to $HEAD_OID (the head those guards just approved), never to
+            # main or to a merge commit. Fail CLOSED: if the status cannot be
+            # posted, do not merge and fail the job - the status IS the gate.
+            if ! GH_TOKEN="${{ github.token }}" gh api \
+              --method POST "repos/${{ github.repository }}/statuses/${HEAD_OID}" \
+              -f state=success \
+              -f context=merge-gate/verified \
+              -f description="Merge queue verified PR #${NUM}" > /dev/null; then
+              echo "::error::PR #${NUM}: failed to post the required merge-gate/verified status on head ${HEAD_OID} - refusing to merge (the status is the gate; fail closed)."
+              exit 1
+            fi
+            echo "  PR #${NUM}: posted merge-gate/verified on ${HEAD_OID}"
+
             if GH_TOKEN="$MERGE_TOKEN" gh pr merge --squash "$NUM" 2>&1; then
               echo "    PR #$NUM merged --"
               GH_MERGED="$GH_MERGED $NUM"
@@ -3061,5 +3204,838 @@ jobs:
             echo "## Merge queue: PR(s) left unmerged"
             echo ""
             echo "${LIST} failed to merge this tick and remain open. This run is marked failed so the outcome is visible."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+  # ==========================================================================
+  # MERGE TRAIN (phase 1) - parallel path behind MERGE_TRAIN_ENABLED.
+  #
+  # This path is additive. When the flag is unset (or not 'true') every job
+  # below is SKIPPED and the `queue` job above (with its flag guard
+  # `vars.MERGE_TRAIN_ENABLED != 'true'`) runs byte-identically to before. When
+  # the flag is 'true' the `queue` job is skipped and this path runs.
+  #
+  # Duplication with the `queue` job is deliberate for phase 1: the train path
+  # carries its own copies of the collection and merge logic so the proven old
+  # path is left untouched. The old path (and this duplication) is removed at
+  # rollout step 3, after the train is proven. The collection and build logic
+  # live in .github/scripts/merge_train_admit.py and merge_train_build.py so the
+  # YAML stays readable and the logic is unit-testable.
+  # ==========================================================================
+
+  admit:
+    name: "Merge train: admit"
+    needs: [freeze-gate, event-gate]
+    # Gate: the train is enabled AND the shared gates (release-freeze, event
+    # pacing) that guard the queue also guard admission.
+    if: >-
+      vars.MERGE_TRAIN_ENABLED == 'true'
+      && needs.freeze-gate.outputs.frozen == 'false'
+      && needs.event-gate.outputs.should_run == 'true'
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+      issues: read
+    outputs:
+      admitted: ${{ steps.collect.outputs.admitted }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Admit PRs onto a train manifest
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Caps, read from repo variables with the documented defaults. Phase 1
+          # is a single admit pass; TRAIN_WINDOW_MINUTES is carried in the
+          # manifest for the phase-2 multi-tick batching to time-box a train.
+          TRAIN_TARGET: ${{ vars.TRAIN_TARGET || '6' }}
+          TRAIN_MAX: ${{ vars.TRAIN_MAX || '8' }}
+          TRAIN_WINDOW_MINUTES: ${{ vars.TRAIN_WINDOW_MINUTES || '30' }}
+        shell: bash
+        run: |
+          python3 .github/scripts/merge_train_admit.py --out /tmp/train_manifest.json
+          ADMITTED=$(jq '(.admitted // []) | length' /tmp/train_manifest.json 2>/dev/null || echo 0)
+          echo "admitted=$ADMITTED" >> "$GITHUB_OUTPUT"
+          echo "Admitted ${ADMITTED} PR(s) onto the merge train."
+
+      - name: Upload train manifest
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: train-manifest
+          path: /tmp/train_manifest.json
+          retention-days: 7
+
+  build:
+    name: "Merge train: build"
+    needs: [admit]
+    if: >-
+      vars.MERGE_TRAIN_ENABLED == 'true'
+      && needs.admit.outputs.admitted != ''
+      && needs.admit.outputs.admitted != '0'
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 45
+    permissions:
+      # contents: write to push the train branch; the branch can carry
+      # .github/workflows/* changes, which is why the push uses the
+      # workflows-scoped PAT (FARNA_CONTROL_REVIEWBOT_TOKEN) below, not
+      # GITHUB_TOKEN.
+      contents: write
+      pull-requests: read
+      actions: read
+    outputs:
+      branch_ref: ${{ steps.build.outputs.branch_ref }}
+      should_validate: ${{ steps.build.outputs.should_validate }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Configure git
+        run: |
+          git config user.name "$MERGE_BOT_GIT_NAME"
+          git config user.email "$MERGE_BOT_GIT_EMAIL"
+
+      - name: Download train manifest
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: train-manifest
+          path: /tmp
+
+      - name: Build the train branch
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: merge-train-${{ github.run_id }}
+        shell: bash
+        run: |
+          # set +e: capture the script's exit code so the state outputs are
+          # written even on a build failure (the merge job's failure triage
+          # reads them). The step then exits with that code, failing the job.
+          set +e
+          python3 .github/scripts/merge_train_build.py \
+            --manifest /tmp/train_manifest.json \
+            --out /tmp/train_state.json \
+            --branch "$BRANCH" \
+            --repo-root .
+          RC=$?
+          set -e
+          MERGED=$(jq '(.merged_prs // []) | length' /tmp/train_state.json 2>/dev/null || echo 0)
+          SUCCESS=$(jq -r '.success // false' /tmp/train_state.json 2>/dev/null || echo false)
+          echo "branch_ref=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "merged_count=$MERGED" >> "$GITHUB_OUTPUT"
+          if [ "$SUCCESS" = "true" ] && [ "${MERGED:-0}" -gt 0 ]; then
+            echo "should_validate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_validate=false" >> "$GITHUB_OUTPUT"
+          fi
+          exit $RC
+
+      - name: Upload train state
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: train-state
+          path: /tmp/train_state.json
+          retention-days: 7
+
+      - name: Push the train branch
+        # Only a build that produced at least one merged PR is worth validating.
+        # The workflows-scoped PAT is carried by the workflow's SINGLE git
+        # credential mechanism (the url.<base>.insteadOf rewrite); only the
+        # token differs from the workflow-level default (FAR-1940).
+        if: always() && steps.build.outputs.should_validate == 'true'
+        env:
+          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN }}@github.com/.insteadOf'
+        shell: bash
+        run: |
+          git push origin "${{ steps.build.outputs.branch_ref }}:refs/heads/${{ steps.build.outputs.branch_ref }}"
+
+  validate:
+    name: "Merge train: validate"
+    needs: [build]
+    if: >-
+      vars.MERGE_TRAIN_ENABLED == 'true'
+      && needs.build.outputs.should_validate == 'true'
+    # The full suite as independent parallel jobs, against the train branch.
+    # permissions here are the CEILING for the called workflow; actions: read is
+    # what its sonar/coverage jobs need to download artifacts.
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/merge-validate.yml
+    with:
+      ref: ${{ needs.build.outputs.branch_ref }}
+      base_ref: main
+      pr_number: ""
+    secrets: inherit
+
+  merge:
+    name: "Merge train: merge"
+    needs: [admit, build, validate]
+    # Runs whenever the train admitted PRs, regardless of build/validate result,
+    # so the failure path can triage (the job's individual steps gate on the
+    # upstream results). A skipped admit leaves `admitted` empty and skips this.
+    if: >-
+      always()
+      && vars.MERGE_TRAIN_ENABLED == 'true'
+      && needs.admit.outputs.admitted != ''
+      && needs.admit.outputs.admitted != '0'
+    runs-on: ubicloud-standard-2
+    timeout-minutes: 60
+    # NO job-level `concurrency:` here either: this job merges to main via
+    # `gh pr merge`, exactly like `queue`, and runs inside the workflow-level
+    # `merge-queue` group (see the top-level `concurrency` block). Re-declaring
+    # the same group on the job would queue it behind its own run's
+    # workflow-level lock and it would never start — GitHub shares one
+    # concurrency namespace across workflow runs and jobs.
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      issues: write
+      # Posts the `merge-gate/verified` commit status on each merged PR's head
+      # (POST /repos/{owner}/{repo}/statuses/{sha}). Needed on this train merge
+      # job exactly as on the `queue` job - it is the other merge-to-main path.
+      # Kept job-scoped so the non-merging train jobs (admit/build/validate) do
+      # not inherit it.
+      statuses: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download train state
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if gh run download "$RUN_ID" --repo "$REPO" --name train-state --dir /tmp; then
+            echo "state_present=true" >> "$GITHUB_ENV"
+          else
+            echo "::warning::train-state artifact unavailable; the failure triage will fall back to the build output."
+            echo "state_present=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Download train manifest
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if gh run download "$RUN_ID" --repo "$REPO" --name train-manifest --dir /tmp; then
+            echo "manifest_present=true" >> "$GITHUB_ENV"
+          else
+            echo "manifest_present=false" >> "$GITHUB_ENV"
+          fi
+
+      # --- Failure path: excluded PRs (migration collisions / conflicts) ------
+      # A build that SUCCEEDED can still have excluded one or more PRs (a
+      # migration collision or a conflict) so the rest of the train can land.
+      # Those PRs are labelled, commented and handed to the Branch Fixer, exactly
+      # as the queue job does for migration collisions.
+      - name: Triage excluded PRs (migration collisions / conflicts)
+        if: always() && needs.build.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
+          DISPATCH_BUDGET_SECONDS: 120
+        shell: bash
+        run: |
+          EXCLUDED=$(jq -r '(.excluded_prs // []) | map(.number) | join(" ")' /tmp/train_state.json 2>/dev/null || echo "")
+          if [ -z "$EXCLUDED" ]; then
+            echo "No excluded PRs this train."
+            exit 0
+          fi
+          DETAILS=$(jq -r '.migration_collision_details // ""' /tmp/train_state.json 2>/dev/null || echo "")
+          for NUM in $EXCLUDED; do
+            REASON=$(jq -r --argjson n "$NUM" '(.excluded_prs // [])[] | select(.number == $n) | .reason' /tmp/train_state.json 2>/dev/null || echo "")
+            [ -z "$REASON" ] && REASON="excluded from the merge train (see the train run log)"
+            # Label via gh api, never `gh pr edit --add-label` (FAR-1173: it exits
+            # 0 while applying nothing). This also feeds the "not dropped this
+            # hour" cool-down in merge_train_admit.py.
+            if gh api -X POST "repos/${{ github.repository }}/issues/$NUM/labels" -f "labels[]=merge-queue-failed" > /dev/null 2>&1; then
+              echo "  PR #$NUM: labelled merge-queue-failed."
+            else
+              echo "::warning::PR #$NUM: could not apply the merge-queue-failed label (continuing)."
+            fi
+            THIS_DETAIL=$(printf '%s\n' "$DETAILS" | grep -F "PR #$NUM:" || true)
+            [ -z "$THIS_DETAIL" ] && THIS_DETAIL="PR #$NUM: $REASON"
+            BODY=$(printf '%s\n' \
+              "The merge train EXCLUDED this PR from the current train: $REASON." \
+              "" \
+              "**Detail:**" \
+              "" \
+              "$THIS_DETAIL" \
+              "" \
+              "The rest of the train was validated and merged without it. This PR stays OPEN and is skipped for the next hour (the merge-queue-failed label cool-down); re-request a review once fixed." \
+              "" \
+              "Train run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+            if gh pr comment "$NUM" --body "$BODY" > /dev/null 2>&1; then
+              echo "  PR #$NUM: posted the exclusion reason."
+            else
+              echo "::warning::PR #$NUM: could not post the exclusion reason."
+            fi
+          done
+          if [ -n "$DISPATCH_URL" ]; then
+            BODY_PAYLOAD=$(jq -n \
+              --arg repo "${{ github.repository }}" \
+              --arg phase "migration-collision" \
+              --arg taskKind "conflict" \
+              --arg collisionPrs "$EXCLUDED" \
+              --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              '{repository: $repo, phase: $phase, taskKind: $taskKind, collisionPrs: $collisionPrs, runUrl: $run_url}')
+            DISPATCH_RESULT_FILE="/tmp/train_dispatch_excluded.env"
+            rm -f "${DISPATCH_RESULT_FILE}"
+            if DISPATCH_RESULT_FILE="${DISPATCH_RESULT_FILE}" DISPATCH_BODY="${BODY_PAYLOAD}" bash scripts/dispatch_with_retry.sh; then
+              echo "Branch Fixer notified of excluded PR(s): $EXCLUDED"
+            else
+              echo "::warning::Branch Fixer dispatch for excluded PR(s) failed; the durable PR comments above remain the signal."
+            fi
+          fi
+
+      # --- Failure path: build or validation failure -------------------------
+      # PHASE 1: no bisection. If the combined branch fails validation we cannot
+      # attribute the failure to a single PR, so every admitted PR is labelled
+      # and commented with the failing job + log tail, and the Branch Fixer is
+      # dispatched against the train branch once.
+      #
+      # TODO (phase 2): BISECT a validation failure. Intended design: on a red
+      # combined branch, split the admitted set (e.g. drop the newest half,
+      # rebuild, re-validate) until the offending PR(s) are isolated; label only
+      # those, and merge the innocent remainder on a re-run. Until then, the
+      # whole train is held and labelled, which is safe but conservative.
+      - name: Triage build/validation failure
+        # Any non-success/non-skipped upstream outcome (failure, cancelled,
+        # timed_out) is a failed train: without this a cancelled/timed-out build
+        # or validation would leave the admitted PRs unlabelled (red run, no PR
+        # signal). A skipped build/validate is the legitimate no-work case.
+        if: >-
+          always()
+          && (contains(fromJSON('["failure","cancelled","timed_out"]'), needs.build.result)
+              || contains(fromJSON('["failure","cancelled","timed_out"]'), needs.validate.result))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED_JOBS: ${{ needs.validate.outputs.failed_jobs }}
+          DISPATCH_URL: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_WEBHOOK_URL }}
+          DISPATCH_SECRET: ${{ secrets.FARNA_CONTROL_BRANCH_FIXER_HMAC_SECRET }}
+          DISPATCH_LABEL: "Farna Control Branch Fixer"
+          DISPATCH_BUDGET_SECONDS: 120
+        shell: bash
+        run: |
+          FAILING="${FAILED_JOBS:-build}"
+          TRAIN_BRANCH="${{ needs.build.outputs.branch_ref }}"
+          # Bounded log tail of the failed steps for the PR comment. `--log-failed`
+          # is the closest durable record of what failed in the reusable workflow.
+          LOG_TAIL=$(gh run view "${{ github.run_id }}" --repo "${{ github.repository }}" --log-failed 2>/dev/null | tail -n 60 || true)
+          if [ -z "$LOG_TAIL" ]; then
+            LOG_TAIL="(no failed-step log tail was available; see the run URL)"
+          fi
+          # Admitted PRs come from the manifest; fall back to the build state's
+          # admitted_prs if the manifest artifact was not downloaded.
+          ADMITTED=""
+          if [ "${manifest_present:-false}" = "true" ] && [ -f /tmp/train_manifest.json ]; then
+            ADMITTED=$(jq -r '(.admitted // []) | map(.number) | join(" ")' /tmp/train_manifest.json 2>/dev/null || echo "")
+          fi
+          if [ -z "$ADMITTED" ] && [ -f /tmp/train_state.json ]; then
+            ADMITTED=$(jq -r '(.admitted_prs // []) | join(" ")' /tmp/train_state.json 2>/dev/null || echo "")
+          fi
+          if [ -z "$ADMITTED" ]; then
+            echo "::error::Could not determine the admitted PRs to notify about a failed train (failing job(s): ${FAILING})."
+            exit 1
+          fi
+          echo "Train failed (failing job(s): ${FAILING}); notifying admitted PR(s): ${ADMITTED}"
+          for NUM in $ADMITTED; do
+            if gh api -X POST "repos/${{ github.repository }}/issues/$NUM/labels" -f "labels[]=merge-queue-failed" > /dev/null 2>&1; then
+              echo "  PR #$NUM: labelled merge-queue-failed."
+            else
+              echo "::warning::PR #$NUM: could not apply the merge-queue-failed label (continuing)."
+            fi
+            BODY=$(printf '%s\n' \
+              "The merge train did not merge: combined-branch validation failed on failing job(s) **${FAILING}**." \
+              "" \
+              "This PR is one of the train's admitted PRs. Phase 1 does not bisect a validation failure, so every admitted PR carries this label; the innocent PRs are unblocked once the failure is resolved. Nothing was merged to \`main\`." \
+              "" \
+              "**Failing job(s):** ${FAILING}" \
+              "" \
+              "**Log tail (last 60 lines of the failed steps):**" \
+              "\`\`\`" \
+              "$LOG_TAIL" \
+              "\`\`\`" \
+              "" \
+              "Train branch: \`${TRAIN_BRANCH}\`" \
+              "" \
+              "Train run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+            if gh pr comment "$NUM" --body "$BODY" > /dev/null 2>&1; then
+              echo "  PR #$NUM: posted the validation-failure reason."
+            else
+              echo "::warning::PR #$NUM: could not post the validation-failure reason."
+            fi
+          done
+          if [ -n "$DISPATCH_URL" ]; then
+            BODY_PAYLOAD=$(jq -n \
+              --arg repo "${{ github.repository }}" \
+              --arg phase "ci-failure" \
+              --arg branchName "$TRAIN_BRANCH" \
+              --arg merged_prs "$ADMITTED" \
+              --arg failure_description "merge train validation failed (failing job(s): ${FAILING})" \
+              --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              '{repository: $repo, phase: $phase, branchName: $branchName, mergedPrs: $merged_prs, failureDescription: $failure_description, runUrl: $run_url}')
+            DISPATCH_RESULT_FILE="/tmp/train_dispatch_failure.env"
+            rm -f "${DISPATCH_RESULT_FILE}"
+            if DISPATCH_RESULT_FILE="${DISPATCH_RESULT_FILE}" DISPATCH_BODY="${BODY_PAYLOAD}" bash scripts/dispatch_with_retry.sh; then
+              echo "Branch Fixer notified of the train failure."
+            else
+              echo "::warning::Branch Fixer dispatch for the train failure failed; the durable PR comments above remain the signal."
+            fi
+          fi
+
+      # --- Success path: merge the validated train to main -------------------
+      - name: Re-verify freeze before merging (TOCTOU guard)
+        id: toctou
+        if: needs.build.result == 'success' && needs.validate.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          # Same shared helper + fail-closed policy as freeze-gate: a freeze that
+          # started after admit must stop this merge.
+          OUT=$(python3 .github/scripts/release-freeze-check.py) || true
+          VERDICT_LINE="$(printf '%s\n' "$OUT" | sed -n '1p')"
+          VERDICT="${VERDICT_LINE%%|*}"
+          MSG="${VERDICT_LINE#*|}"
+          case "$VERDICT" in
+            frozen)
+              echo "::error::Release freeze became ACTIVE after this train passed admission - aborting merge (${MSG})."
+              echo "aborted=true" >> "$GITHUB_OUTPUT" ;;
+            open)
+              echo "Freeze re-check clean - proceeding to merge." ;;
+            fail-closed)
+              echo "::error::$MSG - aborting this merge tick (fail CLOSED)."
+              echo "aborted=true" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "::error::release-freeze helper produced no verdict ($OUT) - aborting this merge tick (fail CLOSED)."
+              echo "aborted=true" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Merge source PRs via gh pr merge
+        id: ghmerge
+        if: >-
+          success() && needs.build.result == 'success' && needs.validate.result == 'success'
+          && steps.toctou.outputs.aborted != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Workflows-capable credential, selected per-PR (GITHUB_TOKEN has no
+          # `workflows` permission and GitHub refuses it on any PR touching a
+          # workflow file).
+          WORKFLOW_PAT: ${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN }}
+        shell: bash
+        run: |
+          # Build+validate succeeded, so a non-empty train-state is expected. If
+          # it is missing (a failed artifact download) or records no merged PRs,
+          # merging nothing and staying green would be a silent no-op: fail the
+          # run instead.
+          if [ ! -f /tmp/train_state.json ]; then
+            echo "::error::train-state artifact is missing but build+validate succeeded - cannot merge the trained PRs (fail CLOSED)."
+            exit 1
+          fi
+          PR_NUMS=$(jq -r '(.merged_prs // []) | join(" ")' /tmp/train_state.json 2>/dev/null || echo "")
+          if [ -z "$PR_NUMS" ]; then
+            echo "::error::train-state records no merged PRs but build+validate succeeded - nothing to merge (fail CLOSED)."
+            exit 1
+          fi
+          echo "Merging train PRs (oldest first):"
+          echo "$PR_NUMS"
+          GH_MERGED=""
+          FAILED=""
+          for NUM in $PR_NUMS; do
+            echo "  Merging PR #$NUM..."
+            # Re-verify review decision immediately before merge (TOCTOU, PR #535).
+            REVIEW_DECISION=$(gh pr view "$NUM" --json reviewDecision --jq '.reviewDecision' 2>/dev/null || echo "unknown")
+            if [ "$REVIEW_DECISION" != "APPROVED" ]; then
+              echo "  PR #$NUM reviewDecision is '$REVIEW_DECISION' -- skipping merge (stays open)"
+              continue
+            fi
+            # Same-repo author gate re-verify (FAR-264, defense in depth).
+            AUTHOR_FILE=$(mktemp)
+            if gh api "repos/${{ github.repository }}/pulls/$NUM" > "$AUTHOR_FILE" 2>/dev/null; then
+              AUTHOR_OUT=$(python3 .github/scripts/same-repo-author-guard.py "$AUTHOR_FILE" "${{ github.repository }}" 2>/dev/null) || true
+            else
+              AUTHOR_OUT=""
+            fi
+            rm -f "$AUTHOR_FILE"
+            if [ "${AUTHOR_OUT%%|*}" != "ok" ]; then
+              echo "  PR #$NUM same-repo author gate: ${AUTHOR_OUT#*|} -- skipping merge (fail closed)"
+              continue
+            fi
+            # SHA-pin guard (FAR-455): the approval must cover the current head.
+            HEAD_OID=$(gh pr view "$NUM" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
+            if [ -z "$HEAD_OID" ]; then
+              echo "  PR #$NUM could not resolve head oid -- skipping merge (fail closed)"
+              continue
+            fi
+            REVIEWS_FILE=$(mktemp)
+            COMMITS_FILE=$(mktemp)
+            gh api --paginate "repos/${{ github.repository }}/pulls/$NUM/reviews?per_page=100" > "$REVIEWS_FILE" 2>/dev/null || true
+            gh api --paginate "repos/${{ github.repository }}/pulls/$NUM/commits?per_page=100" > "$COMMITS_FILE" 2>/dev/null || true
+            GUARD_OUT=$(python3 .github/scripts/merge-queue-approve-guard.py "$REVIEWS_FILE" "$COMMITS_FILE" "$HEAD_OID" 2>/dev/null) || true
+            rm -f "$REVIEWS_FILE" "$COMMITS_FILE"
+            if [ -z "$GUARD_OUT" ]; then
+              GUARD_OUT="stale|guard script produced no output - fail closed"
+            fi
+            if [ "${GUARD_OUT%%|*}" != "ok" ]; then
+              echo "::warning::PR #$NUM did NOT land on main - SHA-pin guard: ${GUARD_OUT#*|} -- skipping merge (fail closed)"
+              continue
+            fi
+            # Workflow-scoped merge credential per PR (Wall A / Wall B).
+            MERGE_TOKEN="$GH_TOKEN"
+            WF_COUNT=$(gh api "repos/${{ github.repository }}/pulls/$NUM/files?per_page=100" \
+              --jq '[.[].filename | select(startswith(".github/workflows/"))] | length' 2>/dev/null || echo "")
+            case "$WF_COUNT" in
+              0|"") ;;
+              *[!0-9]*) echo "  PR #$NUM: could not determine workflow-file status - merging with github.token" ;;
+              *)
+                if [ -z "$WORKFLOW_PAT" ]; then
+                  echo "::error::PR #$NUM modifies .github/workflows/* but FARNA_CONTROL_REVIEWBOT_TOKEN is empty."
+                  FAILED="$FAILED $NUM"
+                  continue
+                fi
+                MERGE_TOKEN="$WORKFLOW_PAT"
+                echo "  PR #$NUM modifies .github/workflows/* - merging with the workflow-scoped PAT" ;;
+            esac
+
+            # --- Landing gate: post the train's verdict on the PR head --------
+            # Identical contract to the `queue` job's post: `merge-gate/verified`
+            # is a REQUIRED status check on main, so the merge train is a landing
+            # path only when it certifies the PR here. Posted ONLY after this
+            # step's `if:` has proven build+validate succeeded, after the
+            # review-decision re-check, the same-repo author gate and the SHA-pin
+            # guard, and immediately before the merge. Pinned to $HEAD_OID (the
+            # head the guards approved), never to main or a merge commit. Fail
+            # CLOSED: if the status cannot be posted, do not merge.
+            if ! GH_TOKEN="${{ github.token }}" gh api \
+              --method POST "repos/${{ github.repository }}/statuses/${HEAD_OID}" \
+              -f state=success \
+              -f context=merge-gate/verified \
+              -f description="Merge queue verified PR #${NUM}" > /dev/null; then
+              echo "::error::PR #${NUM}: failed to post the required merge-gate/verified status on head ${HEAD_OID} - refusing to merge (the status is the gate; fail closed)."
+              exit 1
+            fi
+            echo "  PR #${NUM}: posted merge-gate/verified on ${HEAD_OID}"
+
+            if GH_TOKEN="$MERGE_TOKEN" gh pr merge --squash "$NUM" 2>&1; then
+              echo "    PR #$NUM merged --"
+              GH_MERGED="$GH_MERGED $NUM"
+              # Delete the source branch after a successful merge (best-effort;
+              # never main; never a fork branch; never a branch that is the base
+              # of an open stacked PR - FAR-917).
+              HEAD_REF=$(gh pr view "$NUM" --json headRefName --jq '.headRefName' 2>/dev/null || echo "")
+              HEAD_REPO=$(gh pr view "$NUM" --json headRepositoryOwner --jq '.headRepositoryOwner.login' 2>/dev/null || echo "")
+              if [ -n "$HEAD_REF" ] && [ "$HEAD_REF" != "main" ] && [ "$HEAD_REPO" = "${{ github.repository_owner }}" ]; then
+                CHILD_PRS=$(gh pr list --state open --json number,baseRefName \
+                  --jq "[.[] | select(.baseRefName == \"$HEAD_REF\")] | length" 2>/dev/null) || CHILD_PRS=""
+                case "$CHILD_PRS" in
+                  '' ) echo "::warning::FAR-917: could not determine open child PRs for $HEAD_REF - keeping branch (fail safe)" ;;
+                  0 ) gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$HEAD_REF" 2>/dev/null && echo "    Deleted source branch $HEAD_REF for PR #$NUM" || echo "    Could not delete branch $HEAD_REF (may already be gone)" ;;
+                  * ) echo "    FAR-917: branch $HEAD_REF is base of $CHILD_PRS open PR(s) -- skipping deletion" ;;
+                esac
+              fi
+            else
+              echo "    PR #$NUM failed to merge via gh -- leaving OPEN for the next train"
+              FAILED="$FAILED $NUM"
+            fi
+          done
+          for NUM in $FAILED; do
+            RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "::warning::PR #$NUM: squash-merge attempt failed; PR stays OPEN for the next train (not closed). See run $RUN_URL."
+          done
+          GH_MERGED=$(echo "$GH_MERGED" | xargs)
+          echo "$GH_MERGED" > /tmp/gh_merged_prs.txt
+          echo "gh_merged_pr_nums=$GH_MERGED" >> "$GITHUB_OUTPUT"
+          echo "failed_gh_merge=$(echo "$FAILED" | xargs)" >> "$GITHUB_OUTPUT"
+
+      - name: Close Linear tickets for merged PRs
+        if: success() && needs.build.result == 'success' && needs.validate.result == 'success' && steps.toctou.outputs.aborted != 'true'
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          GH_MERGED_PRS: ${{ steps.ghmerge.outputs.gh_merged_pr_nums }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          RUN_STARTED_AT=$(gh run view "${{ github.run_id }}" --repo "$REPO" --json createdAt --jq '.createdAt' 2>/dev/null || echo "")
+          gh pr list --repo "$REPO" --state merged --limit 20 --json number,title,mergedAt 2>/dev/null \
+            | jq -r --arg start "$RUN_STARTED_AT" \
+                '.[] | select(.mergedAt != null) | select($start == "" or .mergedAt >= $start) | .number' \
+            > /tmp/close_sweep_nums.txt || true
+          : > /tmp/close_candidates.txt
+          for NUM in $GH_MERGED_PRS; do echo "$NUM" >> /tmp/close_candidates.txt; done
+          cat /tmp/close_sweep_nums.txt >> /tmp/close_candidates.txt
+          sort -u /tmp/close_candidates.txt -o /tmp/close_candidates.txt
+          CANDIDATES=$(tr '\n' ' ' < /tmp/close_candidates.txt | xargs)
+          [ -z "$CANDIDATES" ] && { echo "No PRs merged this train - nothing to close."; exit 0; }
+          echo "Candidate PRs for Linear close: $CANDIDATES"
+          if [ -z "$LINEAR_API_KEY" ]; then
+            echo "::warning::LINEAR_API_KEY not configured - skipping Linear ticket close (fail-open)."
+            exit 0
+          fi
+          TEAM_ID=$(curl -sS --max-time 30 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" -H "$LINEAR_CONTENT_TYPE" \
+            -d '{"query":"{ teams(first: 50) { nodes { id key } } }"}' \
+            | jq -r '.data.teams.nodes[] | select(.key == "FAR") | .id' 2>/dev/null || echo "")
+          if [ -z "$TEAM_ID" ]; then
+            echo "::warning::Could not resolve FAR team id - skipping Linear ticket close (fail-open)."
+            exit 0
+          fi
+          DONE_STATE_ID=$(curl -sS --max-time 30 -X POST https://api.linear.app/graphql \
+            -H "Authorization: $LINEAR_API_KEY" -H "$LINEAR_CONTENT_TYPE" \
+            -d "{\"query\":\"query(\$teamId: String!) { team(id: \$teamId) { states { nodes { id name } } } }\",\"variables\":{\"teamId\":\"$TEAM_ID\"}}" \
+            | jq -r '.data.team.states.nodes[] | select(.name == "Done") | .id' 2>/dev/null || echo "")
+          if [ -z "$DONE_STATE_ID" ]; then
+            echo "::warning::Could not resolve FAR 'Done' workflow state - skipping Linear ticket close (fail-open)."
+            exit 0
+          fi
+          for NUM in $CANDIDATES; do
+            TITLE=$(gh pr view "$NUM" --json title --jq '.title' 2>/dev/null || echo "")
+            TICKETS=$(echo "$TITLE" | grep -oP 'FAR-\d+' | sort -u || true)
+            if [ -z "$TICKETS" ]; then
+              echo "PR #$NUM has no FAR-xxx ticket in title - skipping Linear close"
+              continue
+            fi
+            PARTIAL=$(echo "$TITLE" | grep -qi '\[partial\]' && echo "yes" || echo "no")
+            for TICKET in $TICKETS; do
+              if [ "$PARTIAL" = "yes" ]; then
+                echo "PR #$NUM title carries [partial] - commenting on $TICKET instead of closing"
+              else
+                echo "Closing Linear ticket $TICKET for PR #$NUM"
+              fi
+              ISSUE_ID=$(curl -sS --max-time 30 -X POST https://api.linear.app/graphql \
+                -H "Authorization: $LINEAR_API_KEY" -H "$LINEAR_CONTENT_TYPE" \
+                -d "{\"query\":\"query(\$identifier: String!) { issue(id: \$identifier) { id identifier state { name } } }\",\"variables\":{\"identifier\":\"$TICKET\"}}" \
+                | jq -r '.data.issue.id // empty' 2>/dev/null || echo "")
+              if [ -z "$ISSUE_ID" ]; then
+                echo "::warning::Ticket $TICKET not found in Linear - skipping"
+                continue
+              fi
+              if [ "$PARTIAL" = "yes" ]; then
+                COMMENT_BODY=$(printf 'PR #%s merged (partial slice): "%s". Ticket left open - close it manually when the sweep completes.' "$NUM" "$TITLE")
+                COMMENT_PAYLOAD=$(jq -n \
+                  --arg q 'mutation($input: CommentCreateInput!) { commentCreate(input: $input) { success comment { id } } }' \
+                  --arg id "$ISSUE_ID" --arg body "$COMMENT_BODY" \
+                  '{query: $q, variables: { input: { issueId: $id, body: $body } } }' \
+                  2>/dev/null || echo "")
+                COMMENT_OK=$(curl -sS --max-time 30 -X POST https://api.linear.app/graphql \
+                  -H "Authorization: $LINEAR_API_KEY" -H "$LINEAR_CONTENT_TYPE" \
+                  -d "$COMMENT_PAYLOAD" \
+                  | jq -r '.data.commentCreate.success' 2>/dev/null || echo "")
+                if [ "$COMMENT_OK" = "true" ]; then
+                  echo "  $TICKET <- partial-slice comment posted (ticket left open)"
+                else
+                  echo "::warning::Failed to comment on $TICKET for PR #$NUM (fail-open)"
+                fi
+                continue
+              fi
+              RESULT=$(curl -sS --max-time 30 -X POST https://api.linear.app/graphql \
+                -H "Authorization: $LINEAR_API_KEY" -H "$LINEAR_CONTENT_TYPE" \
+                -d "{\"query\":\"mutation(\$id: String!, \$stateId: String!) { issueUpdate(id: \$id, input: { stateId: \$stateId }) { issue { id state { name } } } }\",\"variables\":{\"id\":\"$ISSUE_ID\",\"stateId\":\"$DONE_STATE_ID\"}}" \
+                | jq -r '.data.issueUpdate.issue.state.name' 2>/dev/null || echo "")
+              if [ -n "$RESULT" ]; then
+                echo "  $TICKET -> $RESULT"
+              else
+                echo "::warning::Failed to close $TICKET (fail-open)"
+              fi
+            done
+          done
+
+      - name: Close GitHub issues referenced by merged PRs
+        if: success() && needs.build.result == 'success' && needs.validate.result == 'success' && steps.toctou.outputs.aborted != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_MERGED_PRS: ${{ steps.ghmerge.outputs.gh_merged_pr_nums }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          RUN_STARTED_AT=$(gh run view "${{ github.run_id }}" --repo "$REPO" --json createdAt --jq '.createdAt' 2>/dev/null || echo "")
+          gh pr list --repo "$REPO" --state merged --limit 20 --json number,title,mergedAt 2>/dev/null \
+            | jq -r --arg start "$RUN_STARTED_AT" \
+                '.[] | select(.mergedAt != null) | select($start == "" or .mergedAt >= $start) | .number' \
+            > /tmp/gh_close_sweep_nums.txt || true
+          : > /tmp/gh_close_candidates.txt
+          for NUM in $GH_MERGED_PRS; do echo "$NUM" >> /tmp/gh_close_candidates.txt; done
+          cat /tmp/gh_close_sweep_nums.txt >> /tmp/gh_close_candidates.txt
+          sort -u /tmp/gh_close_candidates.txt -o /tmp/gh_close_candidates.txt
+          CANDIDATES=$(tr '\n' ' ' < /tmp/gh_close_candidates.txt | xargs)
+          [ -z "$CANDIDATES" ] && { echo "No PRs merged this train - nothing to close for GitHub issues."; exit 0; }
+          CLOSING_REGEX='(^|[[:space:]]+)(fixes|closes|resolves):?[[:space:]]+#[0-9]+(([[:space:]]*,[[:space:]]*|[[:space:]]+and[[:space:]]+)#[0-9]+)*'
+          for NUM in $CANDIDATES; do
+            TITLE=$(gh pr view "$NUM" --json title --jq '.title' 2>/dev/null || echo "")
+            BODY=$(gh pr view "$NUM" --json body --jq '.body // ""' 2>/dev/null || echo "")
+            PARTIAL=$(echo "$TITLE" | grep -qi '\[partial\]' && echo "yes" || echo "no")
+            ISSUES=$(echo "$TITLE"$'\n'"$BODY" \
+              | awk '
+                  {
+                    stripped = $0
+                    sub(/^[[:space:]]*/, "", stripped)
+                    if (in_fence) {
+                      if (stripped ~ ("^" fence_char fence_char fence_char)) in_fence = 0
+                      next
+                    }
+                    if (stripped ~ /^```/ || stripped ~ /^~~~/ ) { fence_char = substr(stripped, 1, 1); in_fence = 1; next }
+                    print
+                  }' \
+              | grep -ioE "$CLOSING_REGEX" \
+              | grep -oE '#[0-9]+' \
+              | sed 's/^#//' \
+              | sort -un || true)
+            if [ -z "$ISSUES" ]; then
+              echo "PR #$NUM has no closing-keyword issue references - skipping"
+              continue
+            fi
+            for ISSUE_NUM in $ISSUES; do
+              if [ "$PARTIAL" = "yes" ]; then
+                ISSUE_STATE=$(gh issue view "$ISSUE_NUM" --json state --jq '.state' 2>/dev/null || echo "")
+                if [ "$ISSUE_STATE" = "CLOSED" ]; then echo "Issue #$ISSUE_NUM already closed - skipping comment"; continue; fi
+                if [ -z "$ISSUE_STATE" ]; then echo "::warning::Could not fetch state for issue #$ISSUE_NUM - skipping comment (fail-open)"; continue; fi
+                if ! gh issue comment "$ISSUE_NUM" --body "PR #$NUM merged (partial slice): \"$TITLE\". Issue left open - close it manually when the sweep completes." > /dev/null 2>&1; then
+                  echo "::warning::Failed to comment on issue #$ISSUE_NUM (fail-open)"
+                fi
+                continue
+              fi
+              ISSUE_STATE=$(gh issue view "$ISSUE_NUM" --json state --jq '.state' 2>/dev/null || echo "")
+              if [ "$ISSUE_STATE" = "CLOSED" ]; then echo "Issue #$ISSUE_NUM already closed - skipping"; continue; fi
+              if [ -z "$ISSUE_STATE" ]; then echo "::warning::Could not fetch state for issue #$ISSUE_NUM - skipping (fail-open)"; continue; fi
+              RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              if ! gh issue comment "$ISSUE_NUM" --body "Auto-closed by the merge train: PR #$NUM merged and referenced this issue. See run $RUN_URL." > /dev/null 2>&1; then
+                echo "::warning::closure comment failed for issue #$ISSUE_NUM - closing without audit-trail comment."
+              fi
+              if gh issue close "$ISSUE_NUM" > /dev/null 2>&1; then
+                echo "  issue #$ISSUE_NUM -> CLOSED"
+              else
+                echo "::warning::Failed to close issue #$ISSUE_NUM (fail-open)"
+              fi
+            done
+          done
+
+      - name: Find and retarget stacked PRs (FAR-917)
+        id: stacked_pr_guard
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh api "repos/${{ github.repository }}/pulls?state=closed&per_page=100&sort=updated&direction=desc" --paginate \
+               --jq '.[] | select(.merged_at != null) | select(.head.repo.id == .base.repo.id) | .head.ref' \
+               2>/tmp/branches_to_delete.err | sort -u > /tmp/branches_to_delete.txt; then
+            :
+          else
+            echo "::error title=FAR-917 stacked-PR guard::could not enumerate branches slated for deletion ($(head -1 /tmp/branches_to_delete.err 2>/dev/null)) -- skipping ALL branch deletions this tick (fail safe)"
+            {
+              echo "protected_branches="
+              echo "retargeted_prs="
+              echo "skip_deletions=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BRANCH_COUNT=$(wc -l < /tmp/branches_to_delete.txt 2>/dev/null || echo 0)
+          echo "Branches slated for deletion: $BRANCH_COUNT"
+          if [ "$BRANCH_COUNT" -eq 0 ]; then
+            echo "No branches to check -- skipping stacked PR detection."
+            echo "protected_branches=" >> "$GITHUB_OUTPUT"
+            echo "retargeted_prs=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mapfile -t BRANCHES < /tmp/branches_to_delete.txt
+          python3 .github/scripts/retarget-stacked-prs.py "${BRANCHES[@]}" main
+
+      - name: Delete branches whose PRs are already merged (defense-in-depth)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROTECTED_BRANCHES: ${{ steps.stacked_pr_guard.outputs.protected_branches }}
+          SKIP_DELETIONS: ${{ steps.stacked_pr_guard.outputs.skip_deletions }}
+        shell: bash
+        run: |
+          if [ "${SKIP_DELETIONS:-false}" = "true" ]; then
+            echo "::warning::FAR-917: the stacked-PR guard could not enumerate merged branches -- skipping the branch sweep this tick (fail safe)."
+            exit 0
+          fi
+          gh api "repos/${{ github.repository }}/pulls?state=closed&per_page=100&sort=updated&direction=desc" --paginate --jq '.[] | select(.merged_at != null) | select(.head.repo.id == .base.repo.id) | .head.ref' 2>/dev/null | sort -u > /tmp/merged_heads.txt || true
+          gh api "repos/${{ github.repository }}/branches" --paginate --jq '.[].name' 2>/dev/null | sort -u > /tmp/remote_branches.txt || true
+          gh api "repos/${{ github.repository }}/pulls?state=open&per_page=100" --paginate --jq '.[].head.ref' 2>/dev/null | sort -u > /tmp/open_heads.txt || true
+          echo "$PROTECTED_BRANCHES" | tr ' ' '\n' | sort -u > /tmp/protected_bases.txt 2>/dev/null || true
+          while IFS= read -r branch; do
+            [ -z "$branch" ] && continue
+            [ "$branch" = "main" ] && continue
+            if grep -qx "$branch" /tmp/open_heads.txt 2>/dev/null; then
+              echo "  Skipping $branch (head of an open PR)"; continue
+            fi
+            if grep -qx "$branch" /tmp/protected_bases.txt 2>/dev/null; then
+              echo "  Skipping $branch (FAR-917: base of an open stacked PR that could not be retargeted)"; continue
+            fi
+            if grep -qx "$branch" /tmp/merged_heads.txt 2>/dev/null; then
+              gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$branch" 2>/dev/null && echo "  Deleted merged branch: $branch" || echo "  Could not delete $branch (may already be gone)"
+            fi
+          done < /tmp/remote_branches.txt
+          echo "Merged-branch sweep complete."
+
+      - name: Trigger main CI and deploy after merge
+        if: >-
+          success() && needs.build.result == 'success' && needs.validate.result == 'success'
+          && steps.ghmerge.outputs.gh_merged_pr_nums != '' && steps.toctou.outputs.aborted != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          echo "Train merged to main - dispatching CI and deploy workflows..."
+          gh workflow run ci.yml --ref main
+          gh workflow run deploy.yml --ref main
+          echo "Dispatched 'CI: Fast Validation' and 'Deploy: Staging + Prod' on main."
+
+      - name: Clean up the train branch
+        if: success() && steps.ghmerge.outputs.gh_merged_pr_nums != ''
+        env:
+          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ secrets.FARNA_CONTROL_REVIEWBOT_TOKEN }}@github.com/.insteadOf'
+        shell: bash
+        run: |
+          git push origin --delete "refs/heads/${{ needs.build.outputs.branch_ref }}" 2>/dev/null || true
+          echo "Cleaned up the train branch."
+
+      - name: Fail the run when a PR was left unmerged
+        if: always() && steps.ghmerge.outputs.failed_gh_merge != ''
+        env:
+          FAILED_PRS: ${{ steps.ghmerge.outputs.failed_gh_merge }}
+        shell: bash
+        run: |
+          LIST="PR #${FAILED_PRS// /, #}"
+          echo "::error::Merge train could not merge ${LIST} - the PR(s) stay OPEN for the next train, but this run is FAILED so a PR left unmerged can never be reported as a silent success."
+          {
+            echo "## Merge train: PR(s) left unmerged"
+            echo ""
+            echo "${LIST} failed to merge this train and remain open."
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1

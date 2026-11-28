@@ -5,7 +5,7 @@
         :subtitle="$t('views.AdminHousekeepingView.subtitle')"
       >
         <template #right>
-          <Button severity="secondary" outlined data-testid="hk-refresh" :disabled="loading" @click="scan">
+          <Button variant="secondary" data-testid="hk-refresh" :disabled="loading" @click="scan">
             {{ loading ? $t('views.AdminHousekeepingView.scanning') : $t('views.AdminHousekeepingView.refresh_scan') }}
           </Button>
         </template>
@@ -55,27 +55,25 @@
           Without this the page could read as a clean scan (0 candidates) even
           though one or more scanners never completed.
         -->
-        <div
+        <ErrorAlert
           v-if="failedCategoryCount > 0"
-          role="alert"
-          class="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive-text"
+          class="mb-4 text-sm"
+          :retryable="false"
         >
           <p class="font-medium">{{ $t('views.AdminHousekeepingView.scan_incomplete_title') }}</p>
           <p class="mt-1">{{ $t('views.AdminHousekeepingView.scan_incomplete_description', failedCategoryCount) }}</p>
-        </div>
+        </ErrorAlert>
 
         <DataCard class="mb-4" variant="bordered" padding="sm" elevation="sm">
           <div class="flex items-center gap-4">
-            <label class="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                :checked="allSelected"
-                :indeterminate.prop="someSelected && !allSelected"
-                data-testid="hk-select-all"
-                @change="toggleSelectAll"
-              />
-              {{ $t('views.AdminHousekeepingView.select_all') }}
-            </label>
+            <Checkbox
+              :model-value="allSelected"
+              :indeterminate="someSelected && !allSelected"
+              :label="$t('views.AdminHousekeepingView.select_all')"
+              class="flex items-center gap-2 text-sm"
+              data-testid="hk-select-all"
+              @update:model-value="toggleSelectAll"
+            />
             <span class="text-sm text-muted-foreground">
               {{ $t('views.AdminHousekeepingView.selected_count', { count: selectedCount, total: totalCount }) }}
             </span>
@@ -83,7 +81,7 @@
               {{ $t('views.AdminHousekeepingView.total_candidates', totalCount) }}
             </span>
             <div class="ml-auto">
-              <Button v-if="selectedCount > 0" severity="danger" data-testid="hk-delete-selected" @click="confirmDelete">
+              <Button v-if="selectedCount > 0" variant="danger" data-testid="hk-delete-selected" @click="confirmDelete">
                 {{ $t('views.AdminHousekeepingView.delete_selected', { count: selectedCount }) }}
               </Button>
             </div>
@@ -105,14 +103,14 @@
             header-class="items-center border-b px-4 py-3 mb-0!"
           >
             <template #leading>
-              <input
-                type="checkbox"
+              <Checkbox
+                bare
                 :aria-label="cat.label"
-                :checked="categorySelected(cat.category)"
-                :indeterminate.prop="categoryPartial(cat.category)"
+                :model-value="categorySelected(cat.category)"
+                :indeterminate="categoryPartial(cat.category)"
                 :disabled="isFailed(cat)"
                 data-testid="hk-category-checkbox"
-                @change="toggleCategory(cat.category)"
+                @update:model-value="toggleCategory(cat.category)"
               />
             </template>
             <template #actions>
@@ -133,16 +131,15 @@
           -->
           <div
             v-if="isFailed(cat)"
-            role="alert"
             class="px-4 py-3"
           >
-            <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive-text">
+            <ErrorAlert compact :retryable="false">
               <p class="font-medium">{{ $t('views.AdminHousekeepingView.scan_failed_title') }}</p>
               <p class="mt-1">{{ $t('views.AdminHousekeepingView.scan_failed_reason', { reason: failureReason(cat) }) }}</p>
               <p v-if="failureException(cat)" class="mt-1">
                 {{ $t('views.AdminHousekeepingView.scan_failed_exception', { exception: failureException(cat) }) }}
               </p>
-            </div>
+            </ErrorAlert>
           </div>
 
           <div v-else-if="cat.candidates.length === 0" class="px-4 py-3 text-sm text-muted-foreground">
@@ -155,12 +152,12 @@
             class="flex items-center gap-3 border-t px-4 py-2.5"
             data-testid="hk-candidate"
           >
-            <input
-              type="checkbox"
+            <Checkbox
+              bare
               :aria-label="c.name"
-              :checked="isSelected(c.id)"
+              :model-value="isSelected(c.id)"
               data-testid="hk-candidate-checkbox"
-              @change="toggleItem(c.id)"
+              @update:model-value="toggleItem(c.id)"
             />
             <div class="flex-1 min-w-0">
               <p class="truncate text-sm font-medium">{{ c.name }}</p>
@@ -212,15 +209,15 @@
             />
             {{ $t('views.AdminHousekeepingView.checkpoint_day', { count: ckptMaxAge }) }}
           </label>
-          <Button v-if="!ckptConfirming" severity="danger" :disabled="ckptPurgeLoading || ckptMaxAge < 1" data-testid="hk-ckpt-purge" @click="ckptConfirming = true">
+          <Button v-if="!ckptConfirming" variant="danger" :disabled="ckptPurgeLoading || ckptMaxAge < 1" data-testid="hk-ckpt-purge" @click="ckptConfirming = true">
             {{ $t('views.AdminHousekeepingView.checkpoint_purge_button') }}
           </Button>
           <template v-else>
             <span class="text-sm text-muted-foreground">{{ $t('views.AdminHousekeepingView.checkpoint_confirm_prompt', { count: ckptMaxAge }) }}</span>
-            <Button severity="danger" :disabled="ckptPurgeLoading" data-testid="hk-ckpt-purge-confirm" @click="doCheckpointPurge">
+            <Button variant="danger" :disabled="ckptPurgeLoading" data-testid="hk-ckpt-purge-confirm" @click="doCheckpointPurge">
               {{ ckptPurgeLoading ? $t('views.AdminHousekeepingView.checkpoint_purging') : $t('views.AdminHousekeepingView.checkpoint_confirm_purge') }}
             </Button>
-            <Button severity="secondary" outlined :disabled="ckptPurgeLoading" data-testid="hk-ckpt-purge-cancel" @click="ckptConfirming = false">
+            <Button variant="secondary" :disabled="ckptPurgeLoading" data-testid="hk-ckpt-purge-cancel" @click="ckptConfirming = false">
               {{ $t('views.AdminHousekeepingView.cancel') }}
             </Button>
           </template>
@@ -262,7 +259,8 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApi } from '../composables/useApi'
 import type { components } from '../lib/api/schema'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import FormDialog from '../components/shared/FormDialog.vue'
 import SkeletonBlock from '../components/shared/SkeletonBlock.vue'
 import PageHeader from '../components/shared/PageHeader.vue'

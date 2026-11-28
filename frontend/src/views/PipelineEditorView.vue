@@ -164,7 +164,7 @@
                   data-testid="pipeline-editor-save-as-composite"
                   @click="openSaveAsComposite"
                 >
-                  <DownloadIcon class="h-4 w-4 text-indigo-400" aria-hidden="true" />
+                  <DownloadIcon class="h-4 w-4 text-node-composite-code" aria-hidden="true" />
                   {{ $t('views.PipelineEditorView.composite') }}
                 </button>
               </div>
@@ -670,23 +670,24 @@
                   {{ retryPolicyError }}
                 </div>
                 <div class="mt-3 flex justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
-                    class="rounded-md border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     data-testid="pipeline-editor-retry-policy-close"
                     @click="closeRetryPolicy"
                   >
                     {{ $t('views.PipelineEditorView.cancel') }}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    class="rounded-md border border-input bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    size="sm"
                     :disabled="retryPolicySaving || retryPolicySaveBlocked"
                     @click="saveRetryPolicy"
                     data-testid="pipeline-editor-retry-policy-save"
                   >
                     {{ retryPolicySaving ? $t('views.PipelineEditorView.saving') : $t('views.PipelineEditorView.save') }}
-                  </button>
+                  </Button>
                 </div>
               </dialog>
             </div>
@@ -933,10 +934,10 @@
             </div>
           </div>
           <div class="flex flex-wrap items-center justify-center gap-2 pointer-events-auto">
-            <Button size="small" type="button" class="text-xs" @click="openRenameDialog">{{ $t('views.PipelineEditorView.rename') }}</Button>
-            <button v-if="!pipeline?.archived_at" type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</button>
-            <button v-else type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</button>
-            <button type="button" class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive-text hover:bg-destructive/20" data-testid="pipeline-editor-empty-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</button>
+            <Button size="sm" type="button" class="text-xs" @click="openRenameDialog">{{ $t('views.PipelineEditorView.rename') }}</Button>
+            <Button v-if="!pipeline?.archived_at" type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-archive" @click="handleArchive">{{ $t('views.PipelineEditorView.archive') }}</Button>
+            <Button v-else type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-unarchive" @click="handleUnarchive">{{ $t('views.PipelineEditorView.unarchive') }}</Button>
+            <Button type="button" variant="danger" :outlined="true" size="sm" data-testid="pipeline-editor-empty-delete" @click="showDeleteConfirm = true">{{ $t('common.delete') }}</Button>
             <Select
               v-model="newNodeType"
               :options="nodeTypeOptions"
@@ -947,9 +948,9 @@
               :aria-label="$t('views.PipelineEditorView.new_node_type')"
               data-testid="pipeline-editor-empty-node-type-select"
             />
-            <Button severity="secondary" outlined size="small" type="button" class="text-xs" data-testid="pipeline-editor-empty-add-node" @click="addNode()">{{ $t('views.PipelineEditorView.add_node') }}</Button>
-            <button type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-show-me" @click="startEmptyStateWalkthrough">{{ $t('views.PipelineEditorView.empty_state_show_me') }}</button>
-            <button type="button" class="rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent" data-testid="pipeline-editor-empty-template" @click="openTemplateLibrary">{{ $t('views.PipelineEditorView.empty_state_start_from_template') }}</button>
+            <Button variant="secondary" size="sm" type="button" class="text-xs" data-testid="pipeline-editor-empty-add-node" @click="addNode()">{{ $t('views.PipelineEditorView.add_node') }}</Button>
+            <Button type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-show-me" @click="startEmptyStateWalkthrough">{{ $t('views.PipelineEditorView.empty_state_show_me') }}</Button>
+            <Button type="button" variant="secondary" size="sm" data-testid="pipeline-editor-empty-template" @click="openTemplateLibrary">{{ $t('views.PipelineEditorView.empty_state_start_from_template') }}</Button>
           </div>
         </div>
         <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions --><!-- palette keyboard region: Escape works from any palette control, including the option buttons -->
@@ -1046,15 +1047,15 @@
               {{ emptyRunWarning }}
             </div>
             <div class="flex justify-end gap-2 pt-2">
-              <button
+              <Button
                 type="button"
-                class="px-4 py-2 border border-input bg-background text-foreground text-sm font-medium rounded-lg hover:bg-accent transition-colors"
+                variant="secondary"
                 data-testid="pipeline-editor-run-dialog-cancel"
                 @click="closeRunDialog"
               >
                 {{ $t('views.PipelineEditorView.cancel') }}
-              </button>
-              <Button v-if="!isWebhookTriggered" type="button" class="border-indigo-300 bg-indigo-600 text-white hover:bg-indigo-500" :disabled="running" @click="triggerRun" data-testid="pipeline-editor-run-submit">
+              </Button>
+              <Button v-if="!isWebhookTriggered" type="button" class="border-action-build-border bg-action-build text-white hover:bg-action-build-hover" :disabled="running" @click="triggerRun" data-testid="pipeline-editor-run-submit">
                 <LoaderCircleIcon
                   v-if="running"
                   class="animate-spin h-4 w-4 mr-1"
@@ -1104,8 +1105,10 @@
               :id="nodeProps.id"
             />
           </template>
-          <template #edge-default="edgeProps">
-            <EdgeBadges :data="edgeProps.data" />
+          <!-- FAR-2810: Vue Flow picks the slot by the edge's `type`, and every
+               canvas edge is `smoothstep`; an `edge-default` slot never runs. -->
+          <template #edge-smoothstep="edgeProps">
+            <PipelineEdge v-bind="edgeProps" />
           </template>
         </VueFlow>
         </div>
@@ -1439,7 +1442,7 @@
                 <button
                   v-if="!isViewing"
                   type="button"
-                  class="mt-1 text-xs text-indigo-500 hover:text-indigo-400"
+                  class="mt-1 text-xs text-action-link hover:text-action-link-hover"
                   data-testid="pipeline-save-param-set"
                   @click="saveAsNewParamSet"
                 >
@@ -1501,12 +1504,13 @@
                     @keydown.enter.prevent="addCapabilityEntry('allowed_tools')"
                     data-testid="pipeline-editor-scope-tool-input"
                   />
-                  <button
+                  <Button
                     type="button"
-                    class="shrink-0 rounded border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     @click="addCapabilityEntry('allowed_tools')"
                     data-testid="pipeline-editor-scope-tool-add"
-                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</button>
+                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</Button>
                 </div>
               </div>
               <!-- Context Scope (free-form list of run_context keys) -->
@@ -1534,12 +1538,13 @@
                     @keydown.enter.prevent="addCapabilityEntry('context_scope')"
                     data-testid="pipeline-editor-scope-context-input"
                   />
-                  <button
+                  <Button
                     type="button"
-                    class="shrink-0 rounded border border-input bg-background px-2 py-1 text-xs hover:bg-accent"
+                    variant="secondary"
+                    size="sm"
                     @click="addCapabilityEntry('context_scope')"
                     data-testid="pipeline-editor-scope-context-add"
-                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</button>
+                  >{{ $t('views.PipelineEditorView.capability_scope_add') }}</Button>
                 </div>
               </div>
               <!-- Reset to unrestricted -->
@@ -1547,7 +1552,7 @@
                 <span v-if="!doesNodeHaveCapabilityScope(selectedNodeData)" class="text-[11px] text-muted-foreground">{{ $t('views.PipelineEditorView.capability_scope_unrestricted') }}</span>
                 <button
                   type="button"
-                  class="text-[11px] text-indigo-500 hover:text-indigo-400"
+                  class="text-[11px] text-action-link hover:text-action-link-hover"
                   @click="resetCapabilityScope"
                   data-testid="pipeline-editor-scope-reset"
                 >{{ $t('views.PipelineEditorView.capability_scope_reset') }}</button>
@@ -1610,7 +1615,7 @@
                     v-model="singlePrPerRun"
                     type="checkbox"
                     :disabled="isViewing"
-                    class="mt-0.5 size-3.5 shrink-0 accent-indigo-500"
+                    class="mt-0.5 size-3.5 shrink-0 accent-node-port"
                     :aria-label="$t('views.PipelineEditorView.single_pr_per_run')"
                     aria-describedby="single-pr-per-run-help"
                     data-testid="pipeline-editor-single-pr-per-run-toggle"
@@ -1678,15 +1683,16 @@
           <Button v-if="selectedNodeData.node_type === 'manual'" type="button" class="w-full" data-testid="pipeline-editor-convert-to-agent" @click="openAgentPicker">
             {{ $t('views.PipelineEditorView.convert_to_agent') }}
           </Button>
-          <button
+          <Button
             v-if="selectedNodeData.node_type === 'agent'"
             type="button"
             data-testid="pipeline-editor-revert-to-manual"
-            class="inline-flex w-full items-center justify-center rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+            variant="secondary"
+            class="w-full"
             @click="openRevertDialog"
           >
             {{ $t('views.PipelineEditorView.revert_to_manual') }}
-          </button>
+          </Button>
         </div>
       </aside>
       <!-- Edge Properties Panel (with HITL gate config). Mobile (FAR-1841):
@@ -1853,14 +1859,17 @@
                run gets cancelled. Warn, never gate the save. aria-live (not
                role="status") so assistive tech announces it without SonarCloud
                Web:S6819. -->
-          <p
+          <Notice
             v-if="ownerlessGateAdvisory"
-            class="rounded-lg border border-warning/40 bg-warning/10 p-2 text-xs text-warning-text"
-            aria-live="polite"
+            variant="warning"
+            live="polite"
+            :icon="false"
+            padding="xs"
+            class="text-xs"
             data-testid="pipeline-editor-ownerless-gate-advisory"
           >
             {{ $t('views.PipelineEditorView.ownerless_gate_advisory') }}
-          </p>
+          </Notice>
           <hr class="border-t" />
           <div>
             <label for="pipelineeditorview-field-11" class="mb-1 block text-xs font-medium text-muted-foreground">{{ $t('views.PipelineEditorView.condition_type') }}</label>
@@ -2091,7 +2100,7 @@
                 v-model="saveAsSelectedNodeIds"
                 type="checkbox"
                 :value="node.id"
-                class="h-4 w-4 rounded border-gray-300 text-indigo-500 focus:ring-indigo-500"
+                class="h-4 w-4 rounded border-gray-300 text-node-port focus:ring-node-port"
               />
               <span>{{ node.label || $t('views.PipelineEditorView.node_fallback_label', { id: shortId(node.id) }) }}</span>
             </label>
@@ -2172,7 +2181,7 @@
             {{ $t('views.PipelineEditorView.historic_restore_diff_failed') }}
           </p>
           <Button
-            size="small"
+            size="sm"
             class="text-xs"
             data-testid="pipeline-editor-restore-diff-retry"
             @click="loadRestoreDiff"
@@ -2192,7 +2201,7 @@
             {{ $t('views.PipelineEditorView.historic_restore_diff_no_baseline') }}
           </p>
           <Button
-            size="small"
+            size="sm"
             class="text-xs"
             data-testid="pipeline-editor-restore-diff-reload"
             @click="loadRestoreDiff"
@@ -2291,11 +2300,14 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { useDataFetch } from '../composables/useDataFetch'
 import { FOCUSABLE_SELECTOR, trapTabInElement } from '../composables/useFocusTrap'
+import { usePipelineRestore } from '../composables/usePipelineRestore'
+import { usePipelineVersionQuery } from '../composables/usePipelineVersionQuery'
 import { formatApiError, throwOnError } from '../lib/api/formatError'
 import { usePlanStore } from '../stores/planStore'
 
 import FormDialog from '../components/shared/FormDialog.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import FolderListError from '../components/pipelines/FolderListError.vue'
 import FlowControls from '../components/shared/FlowControls.vue'
 import PipelineSnapshotTimeline from '../components/pipeline/PipelineSnapshotTimeline.vue'
@@ -2312,20 +2324,12 @@ import RouterNode from '../components/pipeline/nodes/RouterNode.vue'
 import HitlNode from '../components/pipeline/nodes/HitlNode.vue'
 import DispatchNode from '../components/pipeline/nodes/DispatchNode.vue'
 import ConnectorNode from '../components/pipeline/nodes/ConnectorNode.vue'
-import EdgeBadges from '../components/pipeline/nodes/EdgeBadges.vue'
+import PipelineEdge from '../components/pipeline/edges/PipelineEdge.vue'
 import { NODE_REGISTRY, PIPELINE_CONNECTORS_KEY, PIPELINE_TEAM_NAMES_KEY } from '../components/pipeline/nodes/NodeRegistry'
 import { projectCanvasEdge, projectGraphNode } from '../types/pipeline-graph-projection'
 import { shortId } from '../utils/format'
 import { doesNodeHaveCapabilityScope } from '../utils/pipeline-graph'
-import {
-  isBlockingSeverity,
-  readBreakingChanges,
-  readChangeClassCounts,
-  readImpactedNodes,
-  severityLabel as resolveSeverityLabel,
-  type SnapshotBreakingChange,
-  type SnapshotDiffPayload,
-} from '../lib/pipelineSnapshotDiff'
+import { isBlockingSeverity, type SnapshotDiffPayload } from '../lib/pipelineSnapshotDiff'
 import { formatDateShort } from '../lib/formatDate'
 import { formatCompactDuration, worstCaseForEvent, type WorstCase } from '../lib/worstCase'
 import { withTimeout } from '../lib/requestTimeout'
@@ -2333,6 +2337,7 @@ import { CANVAS_EDGE_STROKE, PIPELINE_EDITOR_VIRTUALIZATION_THRESHOLD } from '..
 import {
   layoutNodes,
   layoutNodesIncrementalWithBaseline,
+  type GraphNodeInput,
   type ProvenanceMap,
 } from '../utils/graph-layout'
 import { api } from '../lib/api/client'
@@ -2348,7 +2353,7 @@ import { ANALYTICS_EVENTS } from '../composables/productAnalyticsEvents'
 import { useEnvironmentProfilesStore } from '../stores/environmentProfiles'
 import { runnerTierLabelKeyForProvider } from '../lib/runnerTiers'
 import { currentSubstantiveVersion, NON_VERSION_CREATED_KINDS, SNAPSHOT_PAGE_SIZE } from '../lib/pipelineVersion'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import Select from '../components/shared/AppSelect.vue'
 import { Pencil as PencilIcon, LoaderCircle as LoaderCircleIcon, Download as DownloadIcon, Play as PlayIcon, Plus as PlusIcon, Maximize2 as Maximize2Icon, X as XIcon } from '@lucide/vue'
 import PipelineGovernanceVisibility from '../components/pipeline/PipelineGovernanceVisibility.vue'
@@ -2363,9 +2368,9 @@ const { track } = useProductAnalytics()
 
 function nodeTypeBadgeClass(nodeType: string): string {
   if (nodeType === 'manual') return 'badge badge-status-warning'
-  if (nodeType === 'router') return 'badge bg-indigo-500/10 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300'
+  if (nodeType === 'router') return 'badge bg-node-router/10 text-node-router-text dark:bg-node-router-surface'
   if (nodeType === 'hitl') return 'badge bg-rose-500/10 text-rose-600 dark:bg-rose-900 dark:text-rose-300'
-  if (nodeType === 'dispatch') return 'badge bg-cyan-500/10 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300'
+  if (nodeType === 'dispatch') return 'badge bg-node-dispatch/10 text-node-dispatch-text dark:bg-node-dispatch-surface'
   if (nodeType === 'connector') return 'badge bg-teal-500/10 text-teal-700 dark:bg-teal-900 dark:text-teal-300'
   return 'badge badge-status-primary'
 }
@@ -2463,7 +2468,7 @@ function nodeComponent(nodeType: string) {
   return NODE_COMPONENTS[nodeType] ?? AgentNode
 }
 
-const { fitView, onPaneReady, addEdges } = useVueFlow()
+const { fitView, onPaneReady, addEdges, findNode } = useVueFlow()
 
 // Vue Flow renders edge geometry from these presentation options; semantic
 // edge metadata lives on each edge's `data` and is never affected.
@@ -2477,6 +2482,13 @@ const defaultEdgeOptions = {
     height: 16,
     color: CANVAS_EDGE_STROKE,
   },
+  // FAR-2816: Vue Flow 1.48.2 writes the focusable edge's `tabIndex` attribute
+  // with a capital I. SVG attribute names are case-sensitive, so `tabindex`
+  // never exists on the rendered <g>, browsers do not put the edge in the tab
+  // order, and `.focus()` is a no-op. `domAttributes` is spread onto that same
+  // <g> AFTER Vue Flow's own attributes and is written verbatim, so this adds
+  // the correctly-cased attribute the browser needs.
+  domAttributes: { tabindex: '0' },
 }
 
 // Layout ownership is frontend provenance (FAR-2420), not inferred from
@@ -2545,7 +2557,7 @@ const canvasAnnouncement = ref('')
 // menu bar reads as one consistent control set (presentation only).
 const btnToolbarBase = 'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 const btnToolbarSecondary = `${btnToolbarBase} border border-input bg-background hover:bg-accent`
-const btnToolbarPrimary = `${btnToolbarBase} bg-indigo-600 text-white hover:bg-indigo-500`
+const btnToolbarPrimary = `${btnToolbarBase} bg-action-build text-white hover:bg-action-build-hover`
 const btnToolbarDestructive = `${btnToolbarBase} border border-destructive/50 bg-destructive/10 text-destructive-text hover:bg-destructive/20`
 const btnToolbarIcon = 'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
 const groupDividerClass = 'mx-0.5 hidden h-5 w-px shrink-0 bg-border md:block'
@@ -2581,8 +2593,31 @@ async function runInitialFitView() {
     console.warn('[PipelineEditorView] initial fitView failed; retry paths remain armed', error)
   }
 }
-onPaneReady(() => { void runInitialFitView() })
-watch(() => flowNodes.value.length, (len) => { if (len > 0) void runInitialFitView() })
+/**
+ * FAR-2815: keep edge badges visible over node cards.
+ *
+ * Vue Flow renders the edge-label layer BEFORE the nodes layer and gives
+ * neither a z-index, so a label that lands over a card (a loop edge's midpoint
+ * sits mid-graph) is painted underneath that card and disappears. The layer is
+ * `pointer-events: none`, so raising it only changes paint order. Node cards
+ * are elevated to z-index 1000 when selected (`elevateNodesOnSelect`), hence
+ * 1001. Re-applied on pane-ready because Vue Flow remounts on pipeline switch.
+ */
+function liftEdgeLabelsAboveNodes(): void {
+  const labels = canvasRef.value?.querySelector<HTMLElement>('.vue-flow__edge-labels')
+  if (labels) labels.style.zIndex = '1001'
+}
+
+onPaneReady(() => {
+  void runInitialFitView()
+  liftEdgeLabelsAboveNodes()
+})
+watch(() => flowNodes.value.length, (len) => {
+  if (len > 0) {
+    void runInitialFitView()
+    liftEdgeLabelsAboveNodes()
+  }
+})
 
 const agents = ref<any[]>([])
 const connectors = ref<any[]>([])
@@ -3960,7 +3995,7 @@ function convertBackendNode(n: any): any {
 
 // Backend edges map onto their Vue Flow edge entirely through the shared
 // projection adapter (FAR-2482): projectCanvasEdge owns the variant stroke
-// table and the `data` wrapper the canvas + EdgeBadges consume. Every canvas
+// table and the `data` wrapper the canvas edge (PipelineEdge) consumes. Every canvas
 // edge originates here - both loadGraph() and loadViewedSnapshot() map through
 // convertBackendEdge.
 function convertBackendEdge(e: any, i: number): any {
@@ -4044,6 +4079,44 @@ function hasPlacedPositions(nodes: any[]): boolean {
   })
 }
 
+/**
+ * The size Vue Flow measured for a rendered node, if it has measured it yet.
+ *
+ * FAR-2815: the backend graph carries no pixel dimensions and the cards size to
+ * their own content (bounded only by a maximum width), so a layout fed only the backend fields
+ * falls back to graph-layout's 200x100 defaults. A wider or taller real card
+ * then lands on top of its neighbour when the ranks are spaced for 200x100.
+ * Vue Flow stores the measured box on the live node, which is the only truthful
+ * source for the arrangement.
+ */
+function measuredNodeSize(id: string): { width?: number; height?: number } {
+  const dimensions = findNode(id)?.dimensions
+  const width = dimensions?.width
+  const height = dimensions?.height
+  return {
+    width: typeof width === 'number' && width > 0 ? width : undefined,
+    height: typeof height === 'number' && height > 0 ? height : undefined,
+  }
+}
+
+/**
+ * Layout input for every node: measured canvas size when known, otherwise the
+ * node's own (usually absent) dimensions so graph-layout applies its defaults.
+ */
+function layoutNodeInputs(nodes: any[]): GraphNodeInput[] {
+  return nodes.map((node) => {
+    const measured = measuredNodeSize(node.id)
+    return {
+      id: node.id,
+      node_type: node.node_type,
+      label: node.label,
+      width: measured.width ?? node.width,
+      height: measured.height ?? node.height,
+      position: node.position,
+    }
+  })
+}
+
 function computeGraphLayout(): Record<string, PositionSnapshot> {
   // Validate the source graph before layout so malformed/unknown fields cannot
   // be carried into a generated arrangement.
@@ -4052,13 +4125,7 @@ function computeGraphLayout(): Record<string, PositionSnapshot> {
     edges: rawEdges.value.map(buildEdgePayload),
   })
   const laidOut = layoutNodes(
-    rawNodes.value.map((node: any) => ({
-      id: node.id,
-      node_type: node.node_type,
-      label: node.label,
-      width: node.width,
-      height: node.height,
-    })),
+    layoutNodeInputs(rawNodes.value),
     rawEdges.value.map((edge: any) => ({
       source: edge.source_node_id,
       target: edge.target_node_id,
@@ -4132,15 +4199,10 @@ async function arrangeGraph(): Promise<void> {
     generatedLayout: preArrangeGeneratedLayout,
     provenance: preArrangeProvenance,
   }
-  // Build nodes input for layoutNodesIncremental
-  const nodesInput = rawNodes.value.map((node: any) => ({
-    id: node.id,
-    node_type: node.node_type,
-    label: node.label,
-    width: node.width,
-    height: node.height,
-    position: node.position,
-  }))
+  // Build nodes input for layoutNodesIncremental. Measured canvas sizes are
+  // included (FAR-2815): without them the layout spaces ranks and rows for its
+  // 200x100 defaults and a real, wider card overlaps its neighbour.
+  const nodesInput = layoutNodeInputs(rawNodes.value)
   const edgesInput = rawEdges.value.map((edge: any) => ({
     source: edge.source_node_id,
     target: edge.target_node_id,
@@ -4813,6 +4875,25 @@ function handleCanvasArrow(event: KeyboardEvent): void {
 }
 
 /**
+ * FAR-2816: Enter/Space on a focused canvas edge opens its properties.
+ *
+ * Vue Flow puts the edge in the tab order (see `defaultEdgeOptions`) but only a
+ * pointer click emits `edge-click`, so a keyboard user could focus an edge and
+ * get no further. The edge's <g> carries Vue Flow's `data-id`, which is enough
+ * to route the key press through the same click path.
+ */
+function activateFocusedCanvasEdge(event: KeyboardEvent): boolean {
+  if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return false
+  const target = event.target instanceof Element ? event.target : null
+  const edgeId = target?.closest('.vue-flow__edge')?.getAttribute('data-id')
+  if (!edgeId) return false
+  if (!inspectSourceEdges.value.some((edge: any) => edge.id === edgeId)) return false
+  event.preventDefault()
+  onEdgeClick({ edge: { id: edgeId } })
+  return true
+}
+
+/**
  * Canvas-scoped key handling. Deliberately ignores events originating in an
  * editable control (the palette input has its own handler) so typing a node
  * label can never trigger a shortcut.
@@ -4828,6 +4909,7 @@ function onCanvasKeydown(event: KeyboardEvent): void {
   // Modified key presses belong to the browser/OS (Ctrl+A, Cmd+E, ...), not the
   // canvas shortcuts below.
   if (event.ctrlKey || event.metaKey || event.altKey) return
+  if (activateFocusedCanvasEdge(event)) return
   switch (event.key) {
     case 'Escape':
       handleCanvasEscape(event)
@@ -5935,191 +6017,21 @@ const pipelineLoadError = ref<string | null>(null)
 // early-returns while isViewing holds.
 // ---------------------------------------------------------------------------
 
-function readQueryValue(value: unknown): string | null {
-  const raw = Array.isArray(value) ? value.at(0) : value
-  return typeof raw === 'string' && raw.length > 0 ? raw : null
-}
-
-const snapshotParam = computed(() => readQueryValue(route.query.snapshot))
-const versionParam = computed(() => readQueryValue(route.query.version))
-const historicRequested = computed(() => snapshotParam.value !== null || versionParam.value !== null)
-
-// FAR-1818: version compare mode. `?compare=<uuid>` — the KEY's presence is
-// what selects the mode, and an empty/absent id means "compare against the
-// latest version". The base side is the resolved `?snapshot=` version (or its
-// `?version=` alias), so the canonical deep link is
-// `?snapshot=<base>&compare=<other>`. Kept separate from the historic-view
-// refs: entering compare never hydrates the editable graph.
-const compareRequested = computed(() => route.query.compare !== undefined)
-const compareParam = computed(() => readQueryValue(route.query.compare))
-
-// The latest saved version (the snapshot list is version-DESCENDING and
-// loadCatalog filters version 0) — the default "compare against" target.
-const latestSnapshotId = computed<string | null>(() => snapshots.value.at(0)?.id ?? null)
-
-/** `?version=<n>`: the positive integer, -1 when malformed, null when absent. */
-const requestedVersion = computed(() => {
-  const raw = versionParam.value
-  if (raw === null) return null
-  return /^\d+$/.test(raw) ? Number(raw) : -1
-})
-
-// --- `?version=<n>` alias resolution ---------------------------------------
-// The alias resolves against the server's version-DESCENDING snapshot list
-// (`GET /{pipeline_id}/snapshots`), which is PAGINATED (page_size caps at
-// 100, default 20). Resolving only the first loaded page made a deep link
-// like `?version=3` on a long-lived pipeline report "This version is no
-// longer available" for a version that exists — a false statement on the
-// exact promise the feature exists to keep. The search here is BOUNDED by
-// construction:
-//
-//   * page 1 at SNAPSHOT_PAGE_SIZE — a single request covers the top
-//     100 versions (every pipeline up to 100 versions), and
-//   * for deeper versions, a binary search over the remaining pages — at
-//     most log2(pageCount) further requests, hard-capped at
-//     SNAPSHOT_LOOKUP_MAX_PROBES (12 probes = 409,600 versions; exhausting
-//     the budget throws rather than guessing "missing").
-//
-// The `?snapshot=<uuid>` path never enters this code — no extra request, no
-// latency change for the canonical link. Nothing depends on loadCatalog's
-// page-1 list, so a partial or failed catalog load cannot make an existing
-// deep version read as missing either.
-//
-// FAR-1816/1817: SNAPSHOT_PAGE_SIZE is the shared window this lookup and the
-// timeline fetch (lib/pipelineVersion). The chip no longer uses it (FAR-1895:
-// it resolves through a server-filtered query), so the number is NOT a
-// chip/timeline parity guarantee — that parity is structural (see
-// currentVersionSnapshot below and PipelineSnapshotTimeline's groupHistory).
-const SNAPSHOT_LOOKUP_MAX_PROBES = 12
-
-type VersionLookupStatus = 'idle' | 'loading' | 'found' | 'absent' | 'failed'
-const versionLookupStatus = ref<VersionLookupStatus>('idle')
-const versionLookupId = ref<string | null>(null)
-// Monotonic token: a search superseded by a newer query change (or a page
-// reload) must never write its result over the newer one.
-let versionLookupToken = 0
-
-async function fetchSnapshotLookupPage(
-  page: number,
-): Promise<{ items: components['schemas']['SnapshotResponse'][]; total: number }> {
-  const { data, error } = await withTimeout((signal) =>
-    api.GET('/api/v1/pipelines/{pipeline_id}/snapshots', {
-      params: { path: { pipeline_id: pipelineId }, query: { page, page_size: SNAPSHOT_PAGE_SIZE } },
-      signal,
-    }),
-  )
-  if (error || !data) throw new Error(`snapshot list page ${page} could not be loaded`)
-  const items = data.items ?? []
-  // `total` is always sent by the server; fall back to the page's own length
-  // so a response without it degrades to "one page", never to NaN bounds.
-  const total = Number.isFinite(data.total) ? data.total : items.length
-  return { items, total }
-}
-
-/**
- * Find `version` in the server's version-DESC snapshot ordering.
- *
- * Returns the snapshot id, or null when the version is PROVABLY absent
- * (it lies outside the existing version range, or the page whose range
- * contains it has no such row — the list is sorted, so absence on that page
- * is absence everywhere). Throws when the search could not complete: a
- * failed search must never masquerade as "this version is no longer
- * available".
- */
-async function findSnapshotIdByVersion(version: number): Promise<string | null> {
-  const find = (items: components['schemas']['SnapshotResponse'][]) =>
-    items.find((s) => s.snapshot_version === version) ?? null
-  const pageOne = await fetchSnapshotLookupPage(1)
-  const onFirst = find(pageOne.items)
-  if (onFirst) return onFirst.id
-  if (pageOne.items.length === 0) return null // no snapshots at all
-  // Sorted version-DESC: page 1 spans [newest … oldest-on-page-1].
-  if (version > pageOne.items.at(0)!.snapshot_version) return null // newer than the newest
-  if (version >= pageOne.items.at(-1)!.snapshot_version) {
-    return null // inside page 1's range, not present — absent
-  }
-  // Below page 1: binary search the remaining pages by the range each spans.
-  let lo = 2
-  let hi = Math.ceil(pageOne.total / SNAPSHOT_PAGE_SIZE)
-  let probes = 0
-  while (lo <= hi) {
-    if (probes >= SNAPSHOT_LOOKUP_MAX_PROBES) {
-      throw new Error('version alias search exceeded its probe budget')
-    }
-    probes += 1
-    const mid = Math.floor((lo + hi) / 2)
-    const page = await fetchSnapshotLookupPage(mid)
-    // Versions saved while this search runs push every older version DOWN
-    // the ranking — refresh `hi` from each page's live total so a stale
-    // bound can never truncate the search below the target's new rank (a
-    // false "no longer available" of exactly the kind this search exists to
-    // prevent). Termination is unaffected: `probes` still caps the loop.
-    hi = Math.max(hi, Math.ceil(page.total / SNAPSHOT_PAGE_SIZE))
-    if (page.items.length === 0) {
-      hi = mid - 1 // past the end (list shrank) — search earlier
-      continue
-    }
-    const hit = find(page.items)
-    if (hit) return hit.id
-    if (version > page.items.at(0)!.snapshot_version) {
-      hi = mid - 1 // belongs above this page
-      continue
-    }
-    if (version < page.items.at(-1)!.snapshot_version) {
-      lo = mid + 1 // belongs below this page
-      continue
-    }
-    return null // inside this page's range, not present — absent
-  }
-  return null
-}
-
-/**
- * Resolve the current `?version=<n>` alias. No-op for the canonical
- * `?snapshot=` link (which needs no list at all), for an absent alias, and
- * for a malformed one (versionMissing derives that case directly, with no
- * request). A completed search records found/absent; a FAILED one lands on
- * pageError — an accurate load error — never on the graceful miss, because
- * "no longer available" would be false when the search itself failed.
- */
-async function resolveVersionAlias(): Promise<void> {
-  const token = ++versionLookupToken
-  const version = requestedVersion.value
-  if (snapshotParam.value !== null || versionParam.value === null || version === null || version <= 0) {
-    versionLookupId.value = null
-    versionLookupStatus.value = 'idle'
-    return
-  }
-  versionLookupId.value = null
-  versionLookupStatus.value = 'loading'
-  try {
-    const id = await findSnapshotIdByVersion(version)
-    if (token !== versionLookupToken) return
-    versionLookupId.value = id
-    versionLookupStatus.value = id ? 'found' : 'absent'
-  } catch (e: unknown) {
-    if (token !== versionLookupToken) return
-    console.warn('Failed to resolve the ?version= alias', e)
-    versionLookupStatus.value = 'failed'
-    pageError.value = t('views.PipelineEditorView.version_load_failed', { error: formatApiError(e) })
-  }
-}
-
-// Re-resolve whenever the alias (or its precedence against `?snapshot=`)
-// changes: entering a version, switching versions, or leaving to latest.
-// NOT immediate — mount is covered by the fetcher below, which AWAITS this
-// same routine, so `loading` spans the search and the spinner never gaps.
-// reloadPage (ErrorAlert's retry) re-runs it for the same reason: a failed
-// search must be retryable from the error it produced.
-watch([snapshotParam, versionParam], () => {
-  void resolveVersionAlias()
-})
-
-const resolvedSnapshotId = computed<string | null>(() => {
-  if (snapshotParam.value !== null) return snapshotParam.value
-  if (versionLookupStatus.value !== 'found') return null
-  return versionLookupId.value
-})
+// The query-derived version state and the bounded `?version=` alias lookup
+// live in usePipelineVersionQuery (extracted verbatim). `?snapshot=` still
+// wins over the alias; a failed search still lands on pageError.
+const {
+  snapshotParam,
+  versionParam,
+  historicRequested,
+  compareRequested,
+  compareParam,
+  latestSnapshotId,
+  requestedVersion,
+  versionLookupStatus,
+  resolveVersionAlias,
+  resolvedSnapshotId,
+} = usePipelineVersionQuery({ route, pipelineId, snapshots, pageError })
 
 type VersionDetailStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'failed'
 const versionDetailStatus = ref<VersionDetailStatus>('idle')
@@ -6454,6 +6366,10 @@ function openVersionTimeline(): void {
 // never rewritten), and the server's own guards still refuse a weakening
 // restore. The dialog shows the old-vs-latest change summary from the diff
 // endpoint and names the consequences before the user confirms.
+//
+// The dialog STATE stays here (its markup binds it, and the component specs
+// read/write it); usePipelineRestore owns the behaviour - the change summary,
+// its sequence guard, the refusal copy and the rollback orchestration.
 const showRestoreConfirm = ref(false)
 const restoreLoading = ref(false)
 const restoreError = ref<string | null>(null)
@@ -6474,57 +6390,6 @@ const restoreDiffError = ref<string | null>(null)
 // a bare "Change summary" title that reads as "nothing will change".
 const restoreDiffIsCurrent = ref(false)
 const restoreDiffNoBaseline = ref(false)
-// M6: sequence guard so an earlier dialog's diff cannot land after a later one.
-let restoreDiffRequestSeq = 0
-
-interface RestoreDiffSummary {
-  nodesRestored: number
-  nodesRemoved: number
-  nodesModified: number
-  edgesRestored: number
-  edgesRemoved: number
-  edgesModified: number
-  impacted: number
-  breaking: SnapshotBreakingChange[]
-  /** True when restoring would change ANYTHING (see the predicate below). */
-  hasChanges: boolean
-}
-
-const restoreDiffSummary = computed<RestoreDiffSummary | null>(() => {
-  const d = restoreDiff.value
-  if (!d) return null
-  // FAR-1893: the change-class enumeration, the semantic readers and the
-  // severity label all come from the shared module. Only this dialog's LAYOUT
-  // (the list of counts) stays local.
-  const counts = readChangeClassCounts(d)
-  const breaking = readBreakingChanges(d)
-  const impacted = readImpactedNodes(d).length
-  // Deliberately broader than the compare view's `hasStructuralChanges`
-  // (structural only): this dialog answers "does restoring this version
-  // change anything at all?", so a semantic-only difference (an impacted node
-  // or a breaking port change) still means "not identical". Both predicates
-  // are expressed from the same shared counts, so neither can drift on the
-  // structural half.
-  const hasChanges = counts.hasChanges || impacted > 0 || breaking.length > 0
-  return {
-    nodesRestored: counts.nodesAdded,
-    nodesRemoved: counts.nodesRemoved,
-    nodesModified: counts.nodesModified,
-    edgesRestored: counts.edgesAdded,
-    edgesRemoved: counts.edgesRemoved,
-    edgesModified: counts.edgesModified,
-    impacted,
-    breaking,
-    hasChanges,
-  }
-})
-
-/** Shared severity rule (neutral namespace), injected with this view's `t`. */
-function restoreSeverityLabel(severity?: string): string {
-  return resolveSeverityLabel(severity, t)
-}
-
-const timelineRef = ref<InstanceType<typeof PipelineSnapshotTimeline> | null>(null)
 
 function setRestoreNotice(message: string): void {
   restoreNotice.value = message
@@ -6552,123 +6417,40 @@ function restoreSuccessNotice(restored: number | null, created: number | null): 
   return t('views.PipelineEditorView.historic_restore_success_generic')
 }
 
-async function loadRestoreDiff(): Promise<void> {
-  const seq = ++restoreDiffRequestSeq
-  restoreDiff.value = null
-  restoreDiffError.value = null
-  restoreDiffIsCurrent.value = false
-  restoreDiffNoBaseline.value = false
-  const target = restoreTargetId.value
-  // The newest snapshot is the closest representation of the live/current
-  // config. Without it (or when the target IS the current snapshot) there is
-  // nothing to compare — but that outcome must still be stated explicitly
-  // (C2), never left as an empty box.
-  const latest = snapshots.value.at(0)?.id as string | undefined
-  if (!target || !latest) {
-    restoreDiffNoBaseline.value = true
-    return
-  }
-  if (target === latest) {
-    restoreDiffIsCurrent.value = true
-    return
-  }
-  restoreDiffLoading.value = true
-  try {
-    const { data, error } = await withTimeout((signal) =>
-      api.POST('/api/v1/pipelines/{pipeline_id}/snapshots/diff', {
-        params: { path: { pipeline_id: pipelineId } },
-        body: { snapshot_a_id: latest, snapshot_b_id: target },
-        signal,
-      }),
-    )
-    // C2/M6: an earlier dialog's response must not land after a later one.
-    if (seq !== restoreDiffRequestSeq) return
-    if (error) {
-      console.warn('[PipelineEditorView] failed to load restore diff', formatApiError(error))
-      restoreDiffError.value = formatApiError(error)
-      return
-    }
-    restoreDiff.value = data ?? null
-  } catch (e: unknown) {
-    if (seq !== restoreDiffRequestSeq) return
-    console.warn('[PipelineEditorView] failed to load restore diff', formatApiError(e))
-    restoreDiffError.value = formatApiError(e)
-  } finally {
-    if (seq === restoreDiffRequestSeq) restoreDiffLoading.value = false
-  }
-}
+const timelineRef = ref<InstanceType<typeof PipelineSnapshotTimeline> | null>(null)
 
-/**
- * FAR-1816: turn a restore refusal into human language. The server refuses a
- * restore that would weaken a HITL gate, strip a node-bound guardrail, or pin
- * another team's connector — those must read as plain sentences, never the raw
- * server string. Any UNCLASSIFIED refusal gets generic human copy too (the
- * detail is logged for diagnostics); the raw server text is never rendered.
- */
-function describeRestoreRefusal(err: unknown): string {
-  const raw = formatApiError(err)
-  if (/connector_team_mismatch/i.test(raw)) {
-    return t('views.PipelineEditorView.historic_restore_blocked_connector')
-  }
-  if (/gate weakening denied/i.test(raw)) {
-    return t('views.PipelineEditorView.historic_restore_blocked_hitl')
-  }
-  if (/guardrail/i.test(raw)) {
-    return t('views.PipelineEditorView.historic_restore_blocked_guardrail')
-  }
-  // M8: never surface the raw server string as user-facing copy.
-  console.warn('[PipelineEditorView] restore refused', raw)
-  return t('views.PipelineEditorView.historic_restore_failed_generic')
-}
-
-async function openRestoreConfirm(snapshotId?: string, snapshotVersion?: number): Promise<void> {
-  // Reuse the same unsaved-changes guard the "view historic version" path
-  // runs: restoring replaces the live graph, so unsaved edits must not be
-  // silently discarded.
-  if (isGraphDirty.value && !(await confirmLeaveUnsaved())) return
-  restoreTargetId.value = snapshotId ?? resolvedSnapshotId.value
-  restoreTargetVersion.value = snapshotVersion ?? viewSnapshot.value?.snapshot_version ?? null
-  restoreError.value = null
-  restoreDiff.value = null
-  restoreDiffError.value = null
-  showRestoreConfirm.value = true
-  void loadRestoreDiff()
-}
-
-async function confirmRestore(): Promise<void> {
-  const snapshotId = restoreTargetId.value ?? resolvedSnapshotId.value
-  if (!snapshotId) return
-  const restoredVersion = restoreTargetVersion.value ?? viewSnapshot.value?.snapshot_version ?? null
-  restoreLoading.value = true
-  restoreError.value = null
-  try {
-    const { data, error } = await withTimeout((signal) =>
-      api.POST('/api/v1/pipelines/{pipeline_id}/snapshots/{snapshot_id}/rollback', {
-        params: { path: { pipeline_id: pipelineId, snapshot_id: snapshotId } },
-        signal,
-      }),
-    )
-    if (error) {
-      restoreError.value = describeRestoreRefusal(error)
-      return
-    }
-    const createdVersion = (data as { snapshot_version?: number } | null)?.snapshot_version ?? null
-    showRestoreConfirm.value = false
-    setRestoreNotice(restoreSuccessNotice(restoredVersion, createdVersion))
-    // A restore replays this version into the LIVE graph and creates a new
-    // version from it — reload the graph, the catalog (for the version chip)
-    // and the timeline (so the new version shows as a rollback entry), then
-    // land back in the latest editor with the historic banner gone.
-    await loadGraph()
-    await loadCatalog()
-    await timelineRef.value?.reload()
-    viewLatest()
-  } catch (e: unknown) {
-    restoreError.value = describeRestoreRefusal(e)
-  } finally {
-    restoreLoading.value = false
-  }
-}
+const {
+  restoreDiffSummary,
+  restoreSeverityLabel,
+  loadRestoreDiff,
+  openRestoreConfirm,
+  confirmRestore,
+} = usePipelineRestore({
+  pipelineId,
+  snapshots,
+  resolvedSnapshotId,
+  viewSnapshot,
+  isGraphDirty,
+  confirmLeaveUnsaved,
+  loadGraph,
+  loadCatalog,
+  viewLatest,
+  timelineRef,
+  setRestoreNotice,
+  restoreSuccessNotice,
+  state: {
+    showRestoreConfirm,
+    restoreLoading,
+    restoreError,
+    restoreTargetId,
+    restoreTargetVersion,
+    restoreDiff,
+    restoreDiffLoading,
+    restoreDiffError,
+    restoreDiffIsCurrent,
+    restoreDiffNoBaseline,
+  },
+})
 
 // --- Copy link (banner action) --------------------------------------------
 const linkCopied = ref(false)

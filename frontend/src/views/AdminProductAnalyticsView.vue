@@ -1,6 +1,6 @@
 <template>
 
-    <div data-theme="agent" class="page-wide">
+    <div class="page-wide">
     <PageHeader :title="$t('views.AdminProductAnalyticsView.title')" :subtitle="$t('views.AdminProductAnalyticsView.subtitle')" />
 
     <LoadingSpinner v-if="store.isLoading" />
@@ -8,10 +8,11 @@
 
     <template v-else-if="store.transparency">
       <div class="space-y-6">
-        <!-- Warning banner -->
-        <div v-if="store.transparency.warning === 'not_reaching_farnalabs'" class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
-          <p class="text-sm font-medium">{{ $t('views.AdminProductAnalyticsView.warning_not_reaching') }}</p>
-        </div>
+        <!-- Warning banner: one shell, content chosen by the warning value so
+             the two cases stay distinct without a second hand-rolled card. -->
+        <Notice v-if="warningMessage" variant="warning" :icon="false">
+          <p class="text-sm font-medium">{{ warningMessage }}</p>
+        </Notice>
 
         <!-- Transparency data -->
         <DataCard variant="bordered" heading-level="h2" :title="$t('views.AdminProductAnalyticsView.delivery_status')">
@@ -29,6 +30,20 @@
               </p>
             </div>
           </div>
+          <!-- Recorded failure detail: rendered even when no warning fires
+               (e.g. consent is off but the last attempt still failed). -->
+          <div
+            v-if="store.transparency.last_failed_dump_at || store.transparency.last_dump_failure"
+            class="mt-4 space-y-1 text-sm text-amber-700 dark:text-amber-300"
+            data-testid="last-dump-failure-detail"
+          >
+            <p v-if="store.transparency.last_failed_dump_at" data-testid="last-failed-dump">
+              {{ $t('views.AdminProductAnalyticsView.last_failed_dump', { when: formatDate(store.transparency.last_failed_dump_at) }) }}
+            </p>
+            <p v-if="store.transparency.last_dump_failure" class="break-words" data-testid="last-dump-failure">
+              {{ store.transparency.last_dump_failure }}
+            </p>
+          </div>
         </DataCard>
 
         <DataCard variant="bordered" heading-level="h2" :title="$t('views.AdminProductAnalyticsView.consent_and_enforcement')">
@@ -36,25 +51,25 @@
             <div>
               <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminProductAnalyticsView.consent_level') }}</span>
               <p class="mt-0.5">
-                <span :class="store.transparency.consent_level === 'all' ? 'badge badge-status-success' : 'badge badge-status-muted'" data-testid="consent-level">
+                <Badge :variant="store.transparency.consent_level === 'all' ? 'success' : 'neutral'" data-testid="consent-level">
                   {{ consentLevelLabel }}
-                </span>
+                </Badge>
               </p>
             </div>
             <div>
               <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminProductAnalyticsView.egress') }}</span>
               <p class="mt-0.5">
-                <span :class="egressAllowed ? 'badge badge-status-success' : 'badge badge-status-muted'" data-testid="egress-allowed">
+                <Badge :variant="egressAllowed ? 'success' : 'neutral'" data-testid="egress-allowed">
                   {{ egressAllowed ? $t('views.AdminProductAnalyticsView.egress_allowed') : $t('views.AdminProductAnalyticsView.egress_blocked') }}
-                </span>
+                </Badge>
               </p>
             </div>
             <div>
               <span class="text-xs font-medium text-muted-foreground">{{ $t('views.AdminProductAnalyticsView.instance_switch') }}</span>
               <p class="mt-0.5">
-                <span :class="instanceEnabled ? 'badge badge-status-success' : 'badge badge-status-muted'" data-testid="instance-enabled">
+                <Badge :variant="instanceEnabled ? 'success' : 'neutral'" data-testid="instance-enabled">
                   {{ instanceEnabled ? $t('views.AdminProductAnalyticsView.enabled') : $t('views.AdminProductAnalyticsView.disabled') }}
-                </span>
+                </Badge>
               </p>
             </div>
             <div>
@@ -74,17 +89,15 @@
               {{ switchSourceCopy }}
             </p>
             <div class="flex flex-wrap items-center gap-3">
-              <label class="inline-flex items-center gap-2 text-sm">
-                <input
-                  ref="toggleEl"
-                  type="checkbox"
-                  data-testid="instance-switch-toggle"
-                  :checked="instanceEnabled"
-                  :disabled="saving"
-                  @change="onToggle"
-                >
-                <span>{{ $t('views.AdminProductAnalyticsView.instance_switch_label') }}</span>
-              </label>
+              <Checkbox
+                ref="toggleEl"
+                :model-value="instanceEnabled"
+                :disabled="saving"
+                :label="$t('views.AdminProductAnalyticsView.instance_switch_label')"
+                class="inline-flex items-center gap-2 text-sm"
+                data-testid="instance-switch-toggle"
+                @update:model-value="onToggle"
+              />
               <button
                 v-if="hasExplicitOperatorValue"
                 type="button"
@@ -110,9 +123,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { parseISO } from 'date-fns'
 import PageHeader from '../components/shared/PageHeader.vue'
+import Badge from '../components/ui/Badge.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Checkbox from '../components/ui/Checkbox.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import { useProductAnalyticsStore } from '../stores/productAnalyticsStore'
 import { formatDateShort } from '../lib/formatDate'
 import { formatApiError } from '../lib/api/formatError'
@@ -132,13 +148,15 @@ interface TransparencyView {
   instance_switch_source: SwitchSource
   licence_requires_analytics: boolean
   egress_allowed: boolean
+  last_failed_dump_at: string | null
+  last_dump_failure: string | null
 }
 
 const store = useProductAnalyticsStore()
 const { t } = useI18n()
 const saving = ref(false)
 const saveError = ref<string | null>(null)
-const toggleEl = ref<HTMLInputElement | null>(null)
+const toggleEl = ref<InstanceType<typeof Checkbox> | null>(null)
 
 const view = computed<TransparencyView | null>(
   () => (store.transparency as unknown as TransparencyView | null) ?? null,
@@ -170,12 +188,27 @@ const switchSourceCopy = computed(() => {
   return t(`views.AdminProductAnalyticsView.switch_source_${source}`)
 })
 
+// The backend distinguishes a stale previous success (`not_reaching_farnalabs`)
+// from an opted-in instance that has NEVER delivered (`never_reached_farnalabs`).
+// Both must surface; the messages differ so the operator can tell them apart.
+const warningMessage = computed(() => {
+  const warning = store.transparency?.warning
+  if (warning === 'not_reaching_farnalabs') {
+    return t('views.AdminProductAnalyticsView.warning_not_reaching')
+  }
+  if (warning === 'never_reached_farnalabs') {
+    return t('views.AdminProductAnalyticsView.warning_never_reached')
+  }
+  return ''
+})
+
 // `:checked` only patches the DOM when the bound value CHANGES. A user-flipped
 // checkbox therefore stays flipped when the write fails (or the server's
 // effective value is unchanged), so re-assert the committed state after every
-// attempt settles.
+// attempt settles. The native control is exposed by the Checkbox primitive.
 function syncToggleDom(): void {
-  if (toggleEl.value) toggleEl.value.checked = instanceEnabled.value
+  const input = toggleEl.value?.inputEl
+  if (input) input.checked = instanceEnabled.value
 }
 
 async function saveSwitch(enabled: boolean | null): Promise<void> {
@@ -200,9 +233,8 @@ async function saveSwitch(enabled: boolean | null): Promise<void> {
   }
 }
 
-function onToggle(event: Event): void {
-  const target = event.target as HTMLInputElement
-  void saveSwitch(target.checked)
+function onToggle(checked: boolean): void {
+  void saveSwitch(checked)
 }
 
 function onReset(): void {

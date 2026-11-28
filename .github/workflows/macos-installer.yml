@@ -192,7 +192,7 @@ jobs:
       MACOS_ARCH: ${{ needs.normalize-inputs.outputs.architecture }}
       RUN_NATIVE_BUILD: ${{ needs.normalize-inputs.outputs.run_native_build }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.normalize-inputs.outputs.ref }}
           persist-credentials: false
@@ -311,7 +311,7 @@ jobs:
         with:
           version: 11.29.0
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}
         with:
           node-version: "22"
@@ -2087,7 +2087,7 @@ jobs:
 
       - name: Upload real macOS installer
         if: ${{ env.RUN_NATIVE_BUILD == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-installer-${{ needs.normalize-inputs.outputs.version }}-${{ needs.normalize-inputs.outputs.architecture }}
           path: build/FarnaControl-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg
@@ -2101,7 +2101,7 @@ jobs:
       # to tell a still-pending submission from a rejected one.
       - name: Upload the notarization submission record
         if: ${{ always() && env.RUN_NATIVE_BUILD == 'true' && hashFiles('build/notary-submission/submission.env') != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-notary-submission-${{ needs.normalize-inputs.outputs.version }}-${{ needs.normalize-inputs.outputs.architecture }}
           path: build/notary-submission/submission.env
@@ -2114,7 +2114,7 @@ jobs:
       # artifact. (On success the DMG is the macos-installer-* artifact above.)
       - name: Preserve the submitted DMG after an unsuccessful run
         if: ${{ (failure() || cancelled()) && env.RUN_NATIVE_BUILD == 'true' && hashFiles('build/notary-submission/submission.env') != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-installer-submitted-${{ needs.normalize-inputs.outputs.version }}-${{ needs.normalize-inputs.outputs.architecture }}
           path: build/FarnaControl-${{ needs.normalize-inputs.outputs.version }}-macos-${{ needs.normalize-inputs.outputs.architecture }}.dmg

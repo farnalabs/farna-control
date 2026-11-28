@@ -34,6 +34,7 @@ from farna.api.mcp_server import (
     _MSG_UUID_PARSE_FAILED,
     _RETRY_DB,
     _check_node_allowed_tools,
+    _ctx_team_id_val,
     _resource_node_scope_error,
     _tool_auth_error,
     _tool_error,
@@ -269,7 +270,7 @@ async def list_environment_profiles(
         lim = max(1, min(limit, 100))
 
         async with _session(org_id) as s:
-            result = await db_list_environment_profiles(s, org_id=org_id, cursor=cursor, page_size=lim)
+            result = await db_list_environment_profiles(s, org_id=org_id, cursor=cursor, page_size=lim, team_id=_ctx_team_id_val())
 
         return {
             "data": [

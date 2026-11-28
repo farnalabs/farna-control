@@ -173,6 +173,34 @@ _START_TIME = datetime.now(UTC)
 # Graceful shutdown manager -- resources registered during lifespan startup.
 _shutdown_manager = ShutdownManager()
 
+# FAR-2850: the `farna-control start --detach` handshake must report ready only
+# once the stack is USABLE -- migrations at head and the `farna_control_app`
+# role created by ``_run_boot_guards_and_seeds`` (bootstrap_roles) -- never
+# merely because uvicorn is about to be constructed. The in-process launcher
+# (``farna.launcher.entry._serve_api``) registers a one-shot callback here
+# before the server starts; the lifespan fires it at the very end of startup.
+# Process-global is correct: there is one API app and one uvicorn server per
+# launcher process, and the callback is cleared as it fires.
+_startup_ready_callback: Callable[[], None] | None = None
+
+
+def set_startup_ready_callback(callback: Callable[[], None] | None) -> None:
+    """Register (or clear) the launcher's detached-readiness callback (FAR-2850)."""
+    global _startup_ready_callback
+    _startup_ready_callback = callback
+
+
+def _signal_startup_ready() -> None:
+    """Fire the one-shot startup-ready callback, if one is registered.
+
+    Idempotent: the callback is cleared BEFORE it runs, so a second startup
+    (or a test that enters the lifespan twice) cannot signal readiness twice.
+    """
+    global _startup_ready_callback
+    callback, _startup_ready_callback = _startup_ready_callback, None
+    if callback is not None:
+        callback()
+
 
 async def _verify_db_connectivity(settings: Settings) -> None:
     """Check database connectivity without preventing application startup."""
@@ -480,11 +508,17 @@ async def _assert_no_owner_rows(settings: Settings) -> None:
 
     from farna.api.dependencies import get_or_create_engine, get_or_create_session_factory
     from farna.db.models.org_membership import OrgMembership
+    from farna.db.rls import bootstrap_read
 
     engine = get_or_create_engine(settings)
     factory = get_or_create_session_factory(engine)
 
-    async with factory() as session, session.begin():
+    async with factory() as session, session.begin(), bootstrap_read(session):
+        # A GLOBAL invariant check: it must see org_memberships rows of every
+        # org, so it cannot be org-scoped. It rides the explicit pre-auth
+        # bootstrap grant (ADR 070 §2, migration 0367) — without it the guard
+        # would see zero rows and silently pass, which is exactly the fail-open
+        # it exists to prevent.
         result = await session.execute(select(OrgMembership).where(OrgMembership.role == _OWNER_ROLE_LEGACY))
         owners = list(result.scalars().all())
 
@@ -710,38 +744,47 @@ async def _seed_system_schemas(settings: Settings) -> None:
 
 
 async def _seed_environment_profiles(settings: Settings) -> None:
-    """Seed a default modulo-dev EnvironmentProfile for the default org.
+    """Seed the shipped "Bundled Runner (Docker)" EnvironmentProfile for the default org.
 
-    Creates a reusable sandbox profile for the dogfood pipeline. Skips if
-    a profile named 'modulo-dev' already exists.
+    FAR-2803: this used to create a legacy ``modulo-dev`` ``local_docker`` row, and
+    two defects meant it never landed on a fresh install:
+
+    * it read ``Organisation`` with ``order_by(created_at).limit(1)``, which picks
+      the sentinel "Orphan (unattributed errors)" org the baseline migration seeds
+      first - the trap ``first_tenant_organisation`` exists to avoid (FAR-2581) -
+      so the row would have belonged to no tenant; and
+    * it never bound an RLS context, so the INSERT ran with no
+      ``app.organisation_id`` and ``rls_team_isolation`` rejected it ("new row
+      violates row-level security policy for table environment_profiles"), which
+      is what every fresh boot logged.
+
+    It now resolves the tenant org through ``first_tenant_organisation``, binds the
+    RLS context BEFORE the existence read (that read inside
+    ``seed_bundled_runner_profile`` is RLS-filtered too: without the context an
+    already-seeded profile is invisible and the insert collides with
+    ``uq_environment_profiles_org_name``), and seeds the same shipped template the
+    org-creation hook seeds - never the retired ``local_docker`` row. Idempotent.
     """
     from sqlalchemy import select
 
     from farna.api.dependencies import get_or_create_engine, get_or_create_session_factory
-    from farna.db.crud.environment_profile import create_environment_profile
     from farna.db.models.account import Account
-    from farna.db.models.environment_profile import EnvironmentProfile
-    from farna.db.models.organisation import Organisation
+    from farna.db.rls import set_rls_org
+    from farna.db.seed import first_tenant_organisation, seed_bundled_runner_profile
 
     engine = get_or_create_engine(settings)
     factory = get_or_create_session_factory(engine)
 
     async with factory() as session, session.begin():
-        org_result = await session.execute(select(Organisation).order_by(Organisation.created_at).limit(1))
-        org = org_result.scalar_one_or_none()
+        # Org ENUMERATION runs without an org context (we do not know the org yet),
+        # exactly like the cost-component seed; ``first_tenant_organisation``
+        # excludes the sentinel library/orphan orgs.
+        org = await first_tenant_organisation(session)
         if org is None:
             logger.warning("startup.no_org_for_env_profile_seed")
             return
 
-        existing = await session.execute(
-            select(EnvironmentProfile).where(
-                EnvironmentProfile.organisation_id == org.id,
-                EnvironmentProfile.name == "modulo-dev",
-            )
-        )
-        if existing.scalar_one_or_none() is not None:
-            logger.info("startup.env_profile_modulo_dev_exists")
-            return
+        await set_rls_org(session, org.id)
 
         admin_result = await session.execute(select(Account).where(Account.email == "admin").order_by(Account.created_at).limit(1))
         admin = admin_result.scalar_one_or_none()
@@ -752,20 +795,7 @@ async def _seed_environment_profiles(settings: Settings) -> None:
                 logger.warning("startup.no_admin_for_env_profile_seed")
                 return
 
-        await create_environment_profile(
-            session,
-            org_id=org.id,
-            name="modulo-dev",
-            description="Default sandbox for Farna Control dogfood development. Python 3.12, git, pip.",
-            provider_type="local_docker",
-            image_ref="python:3.12-slim",
-            capabilities=["git", "python>=3.12", "shell", "network:github.com", "network:pypi.org"],
-            network_policy="outbound",
-            initialisation_strategy="git_clone",
-            persistence_policy="ephemeral",
-            account_id=admin.id,
-        )
-        logger.info("startup.env_profile_modulo_dev_seeded")
+        await seed_bundled_runner_profile(session, org.id, admin.id)
 
 
 async def _init_checkpointer(conn_string: str, fernet_key: str, fernet_key_old: str = "") -> None:
@@ -841,6 +871,16 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _register_shutdown_manager(settings)
 
     tasks = await _start_background_tasks(settings)
+
+    # FAR-2850: the launcher's `--detach` handshake must mean "the stack is
+    # usable", not "uvicorn is about to be constructed". The boot work that
+    # makes it usable -- migrations at head and the `farna_control_app` role
+    # created by `_run_boot_guards_and_seeds` (bootstrap_roles) -- has completed
+    # by this point, so only NOW may the one-shot readiness callback fire. It
+    # sits at the END of the startup phase (not right after boot guards) so a
+    # failure in licence restore or background-task wiring still fails the
+    # detached handshake closed.
+    _signal_startup_ready()
 
     yield
 
@@ -963,7 +1003,8 @@ async def _run_boot_guards_and_seeds(settings: Settings) -> None:
     # Seed system schemas for all existing organisations (idempotent).
     await _boot_seed("system_schemas", _seed_system_schemas(settings))
 
-    # Seed the default modulo-dev EnvironmentProfile for the dogfood pipeline.
+    # Seed the shipped "Bundled Runner (Docker)" EnvironmentProfile for the
+    # tenant org (FAR-2803: same template the org-creation hook seeds).
     await _boot_seed("environment_profiles", _seed_environment_profiles(settings))
 
     # Seed the tier catalog and feature flag definitions (idempotent).

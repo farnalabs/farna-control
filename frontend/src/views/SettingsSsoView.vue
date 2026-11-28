@@ -107,28 +107,14 @@
                   </svg>
                 </button>
                 <TableActions class="whitespace-nowrap" :actions="ssoActions(provider)" />
-                <span tabindex="0"
-                  class="relative inline-flex shrink-0 cursor-pointer items-center"
+                <ToggleSwitch
+                  :checked="provider.enabled"
+                  :label="$t('views.SettingsSsoView.toggle_provider')"
+                  :disabled="togglingId === provider.id"
+                  :toggling="togglingId === provider.id"
                   data-testid="settings-sso-toggle"
-                  :aria-label="$t('views.SettingsSsoView.toggle_provider')"
-                  role="switch"
-                  :aria-checked="provider.enabled"
-                  :class="{ 'opacity-50 pointer-events-none': togglingId === provider.id }"
-                  @click.stop.prevent="toggleProvider(provider)"
-                  @keydown.enter.stop.prevent="toggleProvider(provider)"
-                  @keydown.space.stop.prevent="toggleProvider(provider)"
-                >
-                  <div
-                    class="h-6 w-11 rounded-full transition-colors"
-                    :class="provider.enabled ? 'bg-primary' : 'bg-input'"
-                  >
-                    <div
-                      class="h-5 w-5 rounded-full bg-white shadow-sm transition-transform"
-                      :class="provider.enabled ? 'translate-x-[1.375rem]' : 'translate-x-0.5'"
-                      style="margin-top: 2px;"
-                    />
-                  </div>
-                </span>
+                  @toggle="toggleProvider(provider)"
+                />
               </div>
             </div>
 
@@ -154,7 +140,7 @@
               <p class="mt-1 text-sm text-destructive-text">{{ $t('views.SettingsSsoView.delete_warning') }}</p>
               <p class="mt-1 text-sm text-destructive-text" data-testid="settings-sso-delete-session-warning">{{ $t('views.SettingsSsoView.delete_session_warning') }}</p>
               <div class="mt-3 flex items-center gap-2">
-                <Button :disabled="deleting" severity="danger" data-testid="settings-sso-delete-confirm" @click="deleteProvider(provider.id)">
+                <Button :disabled="deleting" variant="danger" data-testid="settings-sso-delete-confirm" @click="deleteProvider(provider.id)">
                   {{ deleting ? $t('views.SettingsSsoView.deleting') : $t('views.SettingsSsoView.delete') }}
                 </Button>
                 <button type="button"
@@ -194,7 +180,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 import { useDataFetch } from '../composables/useDataFetch'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import TableActions from '../components/shared/TableActions.vue'
 import { api } from '../lib/api/client'
 import type { components } from '../lib/api/client'
@@ -204,6 +190,7 @@ import EmptyState from '../components/shared/EmptyState.vue'
 import BaseCard from '../components/ui/BaseCard.vue'
 import DataCard from '../components/ui/DataCard.vue'
 import JsonViewer from '../components/shared/JsonViewer.vue'
+import ToggleSwitch from '../components/shared/ToggleSwitch.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
 import FeatureGate from '../components/FeatureGate.vue'

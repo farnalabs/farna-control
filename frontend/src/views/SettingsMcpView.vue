@@ -1,7 +1,7 @@
 <template>
   <FeatureGate feature-name="mcp_server" show-disabled>
 
-    <div data-theme="agent" class="page-wide">
+    <div class="page-wide">
     <PageHeader :title="$t('views.SettingsMcpView.mcp_configuration')" :subtitle="$t('views.SettingsMcpView.configure_mcp_server_settings_and_api_keys')" />
 
     <LoadingSpinner v-if="loading" />
@@ -29,15 +29,17 @@
         :description="$t('views.SettingsMcpView.the_url_clients_use_to_connect_to_the_mcp_server')"
       >
         <div class="space-y-4">
-          <div
+          <Notice
             v-if="!publicUrlConfigured"
-            class="rounded-lg border border-warning/50 bg-warning/10 p-4 text-sm text-warning-text"
+            variant="warning"
+            :icon="false"
+            class="text-sm"
           >
             <p class="font-medium">{{ $t('views.SettingsMcpView.modulo_public_url_not_set') }}</p>
             <p class="mt-1">
               {{ $t('views.SettingsMcpView.modulo_public_url_not_configured') }} <code class="rounded bg-warning/10 px-1 py-0.5 text-xs">http://localhost:8000</code>.
             </p>
-          </div>
+          </Notice>
 
           <div class="flex flex-col gap-3 rounded-lg bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
             <div class="min-w-0 flex-1">
@@ -45,10 +47,10 @@
               <p class="mt-0.5 select-all cursor-text break-all sm:break-normal font-mono text-sm text-muted-foreground">{{ mcpUrl || 'http://localhost:8000' }}</p>
             </div>
             <div class="actions-nowrap flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
-              <Button severity="secondary" outlined size="small" data-testid="settings-mcp-copy-url" @click="copyServerUrl">
+              <Button variant="secondary" size="sm" data-testid="settings-mcp-copy-url" @click="copyServerUrl">
                 {{ copiedField === 'server-url' ? $t('views.SettingsMcpView.copied') : $t('views.SettingsMcpView.copy') }}
               </Button>
-              <Badge :severity="publicUrlConfigured ? 'info' : 'secondary'">
+              <Badge :variant="publicUrlConfigured ? 'info' : 'neutral'">
                 {{ publicUrlConfigured ? $t('views.SettingsMcpView.active') : $t('views.SettingsMcpView.local_only') }}
               </Badge>
             </div>
@@ -133,7 +135,7 @@
                 <td class="table-cell">
                   <div class="flex items-center gap-2">
                     <Badge
-                      :severity="key.account_kind === 'human' ? 'success' : 'info'"
+                      :variant="key.account_kind === 'human' ? 'success' : 'info'"
                       class="text-xs"
                     >{{ key.account_kind === 'human' ? $t('views.SettingsMcpView.human') : $t('views.SettingsMcpView.service') }}</Badge>
                     <span class="font-medium">{{ key.account_display_name }}</span>
@@ -141,13 +143,13 @@
                   </div>
                 </td>
                 <td class="table-cell" data-testid="settings-mcp-key-status">
-                  <Badge :severity="apiKeyStatusMeta(key).severity">{{ apiKeyStatusMeta(key).label }}</Badge>
+                  <Badge :variant="apiKeyStatusMeta(key).variant">{{ apiKeyStatusMeta(key).label }}</Badge>
                 </td>
                 <td class="table-cell text-muted-foreground">
                   {{ key.last_used_at ? formatDate(key.last_used_at) : $t('views.SettingsMcpView.never') }}
                 </td>
                 <td class="table-cell-numeric">
-                  <Button v-if="key.is_active" severity="danger" size="small" data-testid="settings-mcp-revoke-key" @click="confirmRevokeKey(key)">
+                  <Button v-if="key.is_active" variant="danger" size="sm" data-testid="settings-mcp-revoke-key" @click="confirmRevokeKey(key)">
                     {{ $t('views.SettingsMcpView.revoke') }}
                   </Button>
                 </td>
@@ -187,7 +189,7 @@
           </div>
           <div class="rounded-lg bg-muted/30 p-4">
             <pre class="text-xs font-mono whitespace-pre-wrap break-all">{{ mcpConfigSnippet }}</pre>
-            <Button severity="secondary" outlined size="small" class="mt-2" data-testid="settings-mcp-copy-snippet" @click="copySnippet">{{ $t('views.SettingsMcpView.copy') }}</Button>
+            <Button variant="secondary" size="sm" class="mt-2" data-testid="settings-mcp-copy-snippet" @click="copySnippet">{{ $t('views.SettingsMcpView.copy') }}</Button>
           </div>
           </div>
       </DataCard>
@@ -220,15 +222,16 @@
     >
       <div class="space-y-4 py-2">
         <div>
-          <label for="settingsmcpview-field-2" class="mb-1 block text-sm font-medium">{{ $t('views.SettingsMcpView.key_name') }}</label>
-          <input id="settingsmcpview-field-2"
-            v-model="createKeyName"
-            type="text"
-            data-testid="settings-mcp-create-key-name"
-            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            :placeholder="$t('views.SettingsMcpView.key_placeholder_example')"
-            @blur="createKeyNameTouched = true"
-          />
+          <Field id="settingsmcpview-field-2" :label="$t('views.SettingsMcpView.key_name')">
+            <Input
+              v-model="createKeyName"
+              type="text"
+              data-testid="settings-mcp-create-key-name"
+              class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              :placeholder="$t('views.SettingsMcpView.key_placeholder_example')"
+              @blur="createKeyNameTouched = true"
+            />
+          </Field>
           <p
             v-if="createKeyNameTouched && !createKeyName.trim()"
             class="mt-1 text-sm text-destructive"
@@ -274,6 +277,9 @@
     <span :data-value="option.value">{{ option.label }}</span>
   </template>
 </Select>
+          <p class="mt-1 text-xs text-muted-foreground">
+            {{ $t('views.SettingsMcpView.role_ceiling_note') }}
+          </p>
         </div>
         <p v-if="grantsLoading" class="text-sm text-muted-foreground" data-testid="settings-mcp-grants-loading">
           {{ $t('views.SettingsMcpView.grants_loading') }}
@@ -313,13 +319,13 @@
           <div>
             <p class="mb-1 text-sm font-medium">{{ $t('views.SettingsMcpView.api_key') }}</p>
             <div class="relative">
-              <input :aria-label="$t('views.SettingsMcpView.api_key')"
+              <Input :aria-label="$t('views.SettingsMcpView.api_key')"
                 :type="keyMasked ? 'password' : 'text'"
-                :value="createdKeyValue"
+                :model-value="createdKeyValue"
                 readonly
                 class="w-full rounded-lg border border-input bg-muted px-3 py-2 font-mono text-sm"
               />
-              <Button severity="secondary" outlined size="small" class="absolute right-1 top-1" data-testid="settings-mcp-copy-key-value" @click="copyToClipboard(createdKeyValue, 'key-value')">
+              <Button variant="secondary" size="sm" class="absolute right-1 top-1" data-testid="settings-mcp-copy-key-value" @click="copyToClipboard(createdKeyValue, 'key-value')">
                 {{ copiedField === 'key-value' ? $t('views.SettingsMcpView.copied') : $t('views.SettingsMcpView.copy') }}
               </Button>
             </div>
@@ -361,10 +367,13 @@ import type { components } from '../lib/api/client'
 import PageHeader from '../components/shared/PageHeader.vue'
 import LoadingSpinner from '../components/shared/LoadingSpinner.vue'
 import ErrorAlert from '../components/shared/ErrorAlert.vue'
+import Notice from '../components/shared/Notice.vue'
 import EmptyState from '../components/shared/EmptyState.vue'
-import Badge from 'primevue/badge'
-import Button from 'primevue/button'
+import Button from '../components/ui/Button.vue'
 import DataCard from '../components/ui/DataCard.vue'
+import Field from '../components/ui/Field.vue'
+import Input from '../components/ui/Input.vue'
+import Badge from '../components/ui/Badge.vue'
 import Dialog from 'primevue/dialog'
 import FormDialog from '../components/shared/FormDialog.vue'
 import { usePlanStore } from '../stores/planStore'
@@ -760,14 +769,14 @@ function apiKeyStatus(key: ApiKeyItem): ApiKeyStatus {
   return 'active'
 }
 
-function apiKeyStatusMeta(key: ApiKeyItem): { severity: 'success' | 'warn' | 'secondary'; label: string } {
+function apiKeyStatusMeta(key: ApiKeyItem): { variant: 'success' | 'warning' | 'neutral'; label: string } {
   switch (apiKeyStatus(key)) {
     case 'active':
-      return { severity: 'success', label: t('views.SettingsMcpView.active') }
+      return { variant: 'success', label: t('views.SettingsMcpView.active') }
     case 'expired':
-      return { severity: 'warn', label: t('views.SettingsMcpView.expired') }
+      return { variant: 'warning', label: t('views.SettingsMcpView.expired') }
     default:
-      return { severity: 'secondary', label: t('views.SettingsMcpView.revoked') }
+      return { variant: 'neutral', label: t('views.SettingsMcpView.revoked') }
   }
 }
 

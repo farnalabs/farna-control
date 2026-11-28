@@ -1748,6 +1748,25 @@ describe('PipelineEditorView — FAR-1812 defensive arms', () => {
     wrapper.unmount()
   })
 
+  it('treats a lookup page that omits its items and total as an empty page', async () => {
+    // `total` is always sent by the server, but a response that omits BOTH it
+    // and `items` must degrade to an empty page (total falls back to the page
+    // length), never to NaN bounds that the bounded search would act on.
+    const wrapper = await mountEditor({ version: '5' }, () =>
+      seedApiWith({
+        snapshots: (init?: any) => {
+          if (init?.params?.query?.page !== undefined) {
+            return Promise.resolve({ data: {}, error: undefined })
+          }
+          return Promise.resolve(serveSnapshotPage(SNAPSHOT_LIST, init))
+        },
+      }),
+    )
+    const vm = wrapper.vm as any
+    expect(vm.versionMissing).toBe(true)
+    wrapper.unmount()
+  })
+
   it('fails the alias resolution loudly when the lookup page cannot be loaded', async () => {
     const wrapper = await mountEditor({ version: '5' }, () =>
       seedApiWith({
@@ -1804,6 +1823,134 @@ describe('PipelineEditorView — FAR-1812 defensive arms', () => {
     )
     const vm = wrapper.vm as any
     expect(vm.versionMissing).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('returns the graceful miss when a bounded search runs out of pages', async () => {
+    // A target that sits below a page's range keeps pushing `lo` past `hi`
+    // without ever landing a hit: the loop must terminate on the bounded search
+    // exhausting its page range, reporting the version as absent (null), never
+    // spinning or guessing a later page.
+    const wrapper = await mountEditor({ version: '1' }, () =>
+      seedApiWith({
+        snapshots: (init?: any) => {
+          const page = init?.params?.query?.page
+          if (page === undefined) return Promise.resolve(serveSnapshotPage(SNAPSHOT_LIST, init))
+          if (page === 1) {
+            return Promise.resolve({
+              data: {
+                items: [
+                  { ...structuredClone(SNAPSHOT_LIST[0]), snapshot_version: 9 },
+                  { ...structuredClone(SNAPSHOT_LIST[1]), snapshot_version: 4 },
+                ],
+                total: 300,
+              },
+              error: undefined,
+            })
+          }
+          return Promise.resolve({
+            data: { items: [{ ...structuredClone(SNAPSHOT_LIST[0]), snapshot_version: 3 }], total: 300 },
+            error: undefined,
+          })
+        },
+      }),
+    )
+    const vm = wrapper.vm as any
+    expect(vm.isViewing).toBe(false)
+    expect(vm.versionMissing).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('ignores a stale in-flight alias success so it cannot clobber a newer resolution', async () => {
+    const wrapper = await mountEditor({ version: '5' })
+    const vm = wrapper.vm as any
+    let resolveStale: (value: unknown) => void = () => {}
+    let aliasCalls = 0
+    apiGetMock.mockImplementation((url: string, init?: any) => {
+      if (url.endsWith('/snapshots')) {
+        if (init?.params?.query?.page !== undefined) {
+          aliasCalls += 1
+          if (aliasCalls === 1) return new Promise((resolve) => { resolveStale = resolve })
+          return Promise.resolve({
+            data: {
+              items: [{ ...structuredClone(SNAPSHOT_LIST[0]), id: 'snap-fresh', snapshot_version: 5 }],
+              total: 1,
+            },
+            error: undefined,
+          })
+        }
+        return Promise.resolve(serveSnapshotPage(SNAPSHOT_LIST, init))
+      }
+      if (url.includes('/pipelines/{pipeline_id}/graph')) {
+        return Promise.resolve({ data: structuredClone(LIVE_GRAPH), error: undefined })
+      }
+      if (url.includes('/pipelines/{pipeline_id}')) {
+        return Promise.resolve({ data: { id: 'test-pipeline-id', name: 'Test Pipeline' }, error: undefined })
+      }
+      return Promise.resolve({ data: { items: [] }, error: undefined })
+    })
+
+    const stale = vm.resolveVersionAlias()
+    const fresh = vm.resolveVersionAlias()
+    await fresh
+    // The superseded search resolves LAST with an older hit; the token guard
+    // must drop it so it cannot overwrite the newer resolution.
+    resolveStale({
+      data: {
+        items: [{ ...structuredClone(SNAPSHOT_LIST[0]), id: 'snap-stale', snapshot_version: 5 }],
+        total: 1,
+      },
+      error: undefined,
+    })
+    await stale
+    await flushPromises()
+
+    expect(vm.versionLookupStatus).toBe('found')
+    expect(vm.resolvedSnapshotId).toBe('snap-fresh')
+    wrapper.unmount()
+  })
+
+  it('ignores a stale in-flight alias failure so it cannot clobber a newer resolution', async () => {
+    const wrapper = await mountEditor({ version: '5' })
+    const vm = wrapper.vm as any
+    let rejectStale: (reason?: unknown) => void = () => {}
+    let aliasCalls = 0
+    apiGetMock.mockImplementation((url: string, init?: any) => {
+      if (url.endsWith('/snapshots')) {
+        if (init?.params?.query?.page !== undefined) {
+          aliasCalls += 1
+          if (aliasCalls === 1) return new Promise((_resolve, reject) => { rejectStale = reject })
+          return Promise.resolve({
+            data: {
+              items: [{ ...structuredClone(SNAPSHOT_LIST[0]), id: 'snap-fresh', snapshot_version: 5 }],
+              total: 1,
+            },
+            error: undefined,
+          })
+        }
+        return Promise.resolve(serveSnapshotPage(SNAPSHOT_LIST, init))
+      }
+      if (url.includes('/pipelines/{pipeline_id}/graph')) {
+        return Promise.resolve({ data: structuredClone(LIVE_GRAPH), error: undefined })
+      }
+      if (url.includes('/pipelines/{pipeline_id}')) {
+        return Promise.resolve({ data: { id: 'test-pipeline-id', name: 'Test Pipeline' }, error: undefined })
+      }
+      return Promise.resolve({ data: { items: [] }, error: undefined })
+    })
+
+    const stale = vm.resolveVersionAlias()
+    const fresh = vm.resolveVersionAlias()
+    await fresh
+    // The superseded search FAILS last: the catch-arm token guard must drop it
+    // so it cannot blank the resolved version or raise a false page error.
+    rejectStale(new Error('alias search deadline exceeded'))
+    await stale
+    await flushPromises()
+
+    expect(vm.versionLookupStatus).toBe('found')
+    expect(vm.resolvedSnapshotId).toBe('snap-fresh')
+    expect(vm.pageError).toBe(null)
     wrapper.unmount()
   })
 

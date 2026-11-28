@@ -855,6 +855,7 @@ def _make_test_client(mock_session: AsyncMock, **principal_kwargs: Any) -> Gener
         get_anonymous_plan_context,
         get_db_session,
         get_plan_context,
+        get_plan_context_any_credential,
         get_system_db_session,
     )
     from farna.api.main import app
@@ -875,6 +876,9 @@ def _make_test_client(mock_session: AsyncMock, **principal_kwargs: Any) -> Gener
     app.dependency_overrides[_get_engine] = lambda: MagicMock()
     app.dependency_overrides[_get_session_factory] = lambda: mock_session_factory(mock_session)
     app.dependency_overrides[get_plan_context] = all_features_plan_context
+    # FAR-2748: the system_maps feature gates can resolve the plan through the
+    # any-credential context; keep it consistent with the JWT variant above.
+    app.dependency_overrides[get_plan_context_any_credential] = all_features_plan_context
     app.dependency_overrides[get_anonymous_plan_context] = all_features_plan_context
     if principal_kwargs:
         app.dependency_overrides[get_current_user] = lambda: AuthenticatedPrincipal(**principal_kwargs)

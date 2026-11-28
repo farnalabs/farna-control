@@ -14,7 +14,7 @@ bdd:
   - backend/tests/bdd/features/dashboard/daily_run_counts.feature
 depends-on:
   - feat-evals
-status: covered
+status: partial
 ---
 
 # Home Dashboard & Metrics Overview
@@ -33,15 +33,20 @@ org/`days` to keep the landing page fast.
       `trend` (7-day), `recent_runs`, `config_warnings`, and an optional `period` block
       when `days` is given (1..90, else 422); responses are cached
       (`test_dashboard.py`)
+      <!-- behaviour: dashboard-01 | tests: backend/tests/unit/api/test_dashboard.py -->
 - [x] `GET /api/v1/dashboard/trends?days=7` returns `run_counts`, `eval_pass_rates`,
       `token_spend`, `hitl_volume`, `rejection_trend`, `correlation` and
       `feedback_volume` over the window; `days` bounded 1..90
+      <!-- behaviour: dashboard-02 | tests: none -->
 - [x] `GET /api/v1/dashboard/daily-run-counts` returns daily counts grouped by run
       status with default/custom `days` bounds (`test_daily_run_counts.py`)
+      <!-- behaviour: dashboard-03 | tests: backend/tests/unit/api/test_daily_run_counts.py -->
 - [x] HITL volume / rejection-rate / correlation series over the trend window (§8.20)
       are asserted by `hitl_trends.feature`
+      <!-- behaviour: dashboard-04 | tests: backend/tests/bdd/features/dashboard/hitl_trends.feature -->
 - [x] All summary/trend endpoints are org-RLS scoped and permission-gated
       (`dashboard.summary` / `dashboard.trends`)
+      <!-- behaviour: dashboard-05 | tests: none -->
 
 ## Known Gaps
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, ref } from 'vue'
+import Input from '../components/ui/Input.vue'
 import SandboxCommandsEditor from '../components/pipeline/SandboxCommandsEditor.vue'
 
 // Harness wires the exact v-model contract the pipeline editor uses, so
@@ -117,5 +118,18 @@ describe('SandboxCommandsEditor', () => {
         expect(btn.attributes('aria-label')).toBeTruthy()
       }
     }
+  })
+
+  it('normalises a null input event from a row and the joiner to an empty string', async () => {
+    const { wrapper, commands, joiner } = mountHarness({ commands: ['cmd-a'] })
+
+    const inputs = wrapper.findAllComponents(Input)
+    // Joiner input is rendered last; a null event must not be stored as "null".
+    await inputs[inputs.length - 1].vm.$emit('update:model-value', null)
+    expect(joiner.value).toBe('')
+
+    // A null event on the row collapses to '' and is emitted back as the list.
+    await inputs[0].vm.$emit('update:model-value', null)
+    expect(commands.value).toEqual([''])
   })
 })

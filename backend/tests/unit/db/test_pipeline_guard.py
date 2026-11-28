@@ -45,6 +45,9 @@ class _PipelineRow:
         self.organisation_id = uuid.uuid4()
         self.deleted_at = None
         self.graph_nodes_json = []
+        # ADR 070 Phase 1A: the writes below stamp the pipeline's owner onto every
+        # replaced edge, so the stand-in mirrors the model's column.
+        self.owner_team_id = None
 
 
 class _EdgeRow:

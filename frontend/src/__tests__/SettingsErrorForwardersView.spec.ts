@@ -152,6 +152,7 @@ describe('SettingsErrorForwardersView', () => {
 
   it('auto-expands configured forwarders and shows their type-specific fields', async () => {
     mockForwarders = [
+      forwarder('sentry', { configured: true }),
       forwarder('datadog', { configured: true, enabled: true }),
       forwarder('pagerduty', { configured: true }),
       forwarder('rollbar', { configured: true }),
@@ -161,6 +162,10 @@ describe('SettingsErrorForwardersView', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    const sentry = cardFor(wrapper, 'Sentry')
+    expect(sentry.find('#settingserrorforwardersview-field-13').exists()).toBe(true)
+    expect(sentry.find('#settingserrorforwardersview-field-12').exists()).toBe(true)
+    expect(sentry.find('#settingserrorforwardersview-field-11').exists()).toBe(true)
     const datadog = cardFor(wrapper, 'Datadog')
     expect(datadog.find('#settingserrorforwardersview-field-10').exists()).toBe(true)
     const pagerduty = cardFor(wrapper, 'Pagerduty')

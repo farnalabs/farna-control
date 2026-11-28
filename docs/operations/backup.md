@@ -164,14 +164,14 @@ command:
 |------|------------------------|----------------|
 | Container (compose) | the image entrypoint, immediately before `alembic upgrade heads` and only when a migration is pending | `/backups/pre-upgrade-dump-<TAG>-<ts>/` in the `snapshot_data` volume |
 | Native bundle | `farna-control upgrade` / the installer, before the binary swap and only when a migration is pending against the new bundle | `<data-dir>/pre-upgrade-dump-<version>-<ts>/`, a sibling of `pgdata/` |
-| Fly.io | nobody — the `[release]` command migrates before any machine boots, so the boot cannot see a pending migration; take an out-of-band backup before a schema-changing deploy | n/a |
+| Fly.io | nobody - the `[release]` command migrates before any machine boots, so the boot cannot see a pending migration; take an out-of-band backup before a schema-changing deploy | n/a |
 
 Every path calls the same helper and shares the same guarantees:
 
 - **Only when a migration is pending.** A database already at the code's
   migration head cannot be changed by the boot, so no snapshot is taken (one
-  line says so). The decision is made inside the shared helper, so no caller —
-  not the container boot, not the installer — can bypass it. This is what stops
+  line says so). The decision is made inside the shared helper, so no caller -
+  not the container boot, not the installer - can bypass it. This is what stops
   a release that migrates and then crash-loops from replacing its own
   pre-upgrade recovery point on each restart, and what stops an installer
   re-run from rotating it for nothing.
@@ -185,7 +185,7 @@ Every path calls the same helper and shares the same guarantees:
   nothing is changed.
 - **Retention keeps the recovery points that matter.** Dump, verify, then
   prune. Kept: the two newest verified snapshots, plus the newest snapshot
-  recording EXACTLY the database's current schema — the recovery point a
+  recording EXACTLY the database's current schema - the recovery point a
   database that did not move since (a failed migration, a rollback) depends on.
   At most three directories survive; older generations are superseded and
   deleted, so snapshots cannot accumulate until the disk guard refuses every
@@ -235,7 +235,7 @@ encrypted media if the archive itself must be encrypted.
 does NOT prune `farna-control backup` directories - delete those yourself.
 
 The `farna-control` and `alembic` commands in this section run from `backend/`, where
-`alembic.ini` and the `farna-control` entry point live — run the commands below from it.
+`alembic.ini` and the `farna-control` entry point live - run the commands below from it.
 
 ### 1. Take the dump
 
@@ -246,7 +246,7 @@ uv run farna-control backup --output-dir "/backups/pre-upgrade-$(date +%Y%m%d-%H
 
 `farna-control backup` and `restore` resolve their maintenance connection from
 `--db-url` if given, else `DATABASE_ADMIN_URL`, else the configured
-`DATABASE_URL` — in that order. `DATABASE_ADMIN_URL` is preferred because the
+`DATABASE_URL` - in that order. `DATABASE_ADMIN_URL` is preferred because the
 application role is `NOBYPASSRLS` (a dump through it is row-partial, and a
 restore cannot DROP/CREATE), and because leaving the URL out of the command
 keeps the superuser password out of the shell history and the process argv.
@@ -298,7 +298,7 @@ refuses, loudly and before anything is written, a dump that:
 
 - is **missing** while the manifest describes one (a manifest entry that
   records a `database.sql` checksum, or an upgrade snapshot, must have the file
-  on disk — a silent no-op restore is worse than a refusal);
+  on disk - a silent no-op restore is worse than a refusal);
 - the manifest records **no checksum** for (a foreign or hand-assembled
   archive cannot be proven to belong to this backup);
 - fails pg_dump's completion re-check, when the manifest attested completeness
@@ -314,11 +314,27 @@ arbitrary file and print its digest. psql runs with `-X`, so an operator's
 zero.
 
 `--verify-target-schema` is the compose path's stand-in for the data-dir
-instance identity: it refuses unless the TARGET database records exactly the
-schema revisions the archive was taken from. `--replace-cluster` overrides it.
-The disk pre-flight measures the DATABASE's filesystem — pass `--target-fs` (or
+instance identity: it refuses a target whose recorded revision is not in the
+archive's lineage (a different release train, or not a Farna Control database
+at all). A target the newer release has migrated PAST the archive is accepted,
+because that is the rollback the archive exists for: the restore returns the
+database to the archived revision with the archived data, naming the migrations
+being rolled back. `--replace-cluster` overrides the refusal.
+The disk pre-flight measures the DATABASE's filesystem - pass `--target-fs` (or
 set `DB_CAPACITY_PATH`, which the compose deployment does) when the archive is
-on a different volume from the database.
+on a different volume from the database. The value only has to be a path on
+that volume: it is only `statvfs`'d, so it does not need to be readable - a
+permission the operator does not have is fine, and the pre-flight degrades with
+a loud warning when it cannot measure.
+
+Before the dump is applied, the replay recreates the target's `public` schema
+**in the same `psql` transaction as the dump**. pg_dump's `--clean` preamble
+only knows the objects that existed when the snapshot was taken, so replaying
+it over a forward-migrated schema can fail on a drop a newer object depends on
+(an FK added by a later migration onto a pre-existing primary key). Recreating
+the schema first makes those drops no-ops, and because the reset and the dump
+commit or roll back together, a failed replay leaves the target exactly as it
+was - on top of the pre-restore safety dump taken before either runs.
 
 Because `database.sql` is a dump of the whole database, restoring it also
 restores the pre-upgrade `alembic_version` row, leaving the database recorded
@@ -326,8 +342,8 @@ at the revision it was dumped from.
 
 With `--data-dir`, restore **stops a running launcher itself** and leaves the
 stack stopped; it prints the exact `farna-control start --data-dir <dir>`
-command on failure as well as success — and on a Ctrl-C / `SIGTERM` interrupt,
-which is the same dark-stack risk — a failed restore must not leave a dark
+command on failure as well as success - and on a Ctrl-C / `SIGTERM` interrupt,
+which is the same dark-stack risk - a failed restore must not leave a dark
 stack with nothing to copy, and never restarts anything. Without `--data-dir`
 it prints the compose start command instead. Nothing is auto-restarted: a
 half-verified database must not be handed to an application.
@@ -350,12 +366,12 @@ Where the connection settings come from, in order:
 
 1. `--db-url` / `--app-db-url` (the operator's own arguments);
 2. an exported `DATABASE_ADMIN_URL` / `DATABASE_URL`;
-3. the data dir's own `config.env` — the launcher's pinned configuration, the
+3. the data dir's own `config.env` - the launcher's pinned configuration, the
    only place a native installation's generated credentials live;
 4. the process `DATABASE_URL` (the compose path, where the service environment
    supplies it).
 
-A target the stop did not take down — an explicitly named external database —
+A target the stop did not take down - an explicitly named external database -
 is never shadowed by a cluster the restore started. A bundled cluster that is
 already accepting connections is reused and left running, because the restore
 only stops what it started.
@@ -365,19 +381,31 @@ For the whole window the restore handles `SIGTERM`, `SIGINT` and `SIGHUP`: each
 stops that cluster (PostgreSQL's fast shutdown, then `SIGTERM`, then `SIGKILL`)
 before the command unwinds, the shell's previous handlers are restored
 afterwards, and a second Ctrl-C while that stop is running is ignored so the
-shutdown can finish. The pid of the cluster the window started is recorded in
+shutdown can finish. The identity of the cluster the window started - its pid,
+that process's start time and the data dir it belongs to - is recorded in
 `<data-dir>/restore-window-postmaster.pid` while the window is open.
 
 **If the process is killed with `SIGKILL`** (a timeout wrapper, the OOM killer, a
 service manager) no handler can run: the postmaster keeps its data directory and
-its port with nothing supervising it. The pid file is what makes that
-recoverable rather than cryptic:
+its port with nothing supervising it. The record is what makes that recoverable
+rather than cryptic - but a pid on its own is not an identity, because the same
+number can belong to any live postgres after a reboot, a `kill -9`, or a data
+dir copied to another machine:
 
-- `farna-control restore <snapshot> --data-dir <data-dir>` reports the leftover
-  by pid and stops it before starting a fresh window;
+- all three recorded fields must match before anything is signalled. A pid that
+  is alive and postgres-looking but whose start time differs is a different
+  process, and it is never stopped;
+- a record that cannot be verified (a legacy bare pid from an older release, a
+  truncated or unreadable file, a record written for a different data dir) is
+  reported with its file, the pid it names and what to do. It is never acted
+  on: `farna-control restore` refuses rather than signal a process it cannot
+  prove it started;
+- `farna-control restore <snapshot> --data-dir <data-dir>` reports a verified
+  leftover by pid and stops it before starting a fresh window;
 - `farna-control start --data-dir <data-dir>` refuses with the pid, the file it
-  was recorded in, and the command to run — instead of only "belongs to a live
+  was recorded in, and the command to run - instead of only "belongs to a live
   postgres process" or a port-in-use error.
+
 
 Either way the process to stop is named for you:
 `kill -INT <pid>` is the same fast shutdown the restore performs itself.
@@ -455,7 +483,16 @@ throwaway Postgres 16 it:
    parent - a downgrade that was skipped fails the gate rather than passing
    silently;
 8. runs `alembic upgrade heads` and asserts the revision is back at head, with
-   the seeded rows still intact.
+   the seeded rows still intact;
+9. restores a PRE-UPGRADE snapshot over a forward-migrated database - the
+   compose recovery. The source is stepped back one revision and snapshotted
+   there, migrated forward again, then given the object a later release's
+   migration would add (a table whose foreign key targets the existing
+   `organisations` primary key) and a changed row; the restore must replay with
+   `--verify-target-schema`, land back on the snapshot's revision, restore the
+   seeded rows, remove the drift object and write its pre-restore safety dump.
+   A snapshot that cannot be restored onto the database it protects is not a
+   recovery point (FAR-2763).
 
 A `downgrade()` that cannot run, a dump that cannot be restored, or data lost
 in either direction fails the job.

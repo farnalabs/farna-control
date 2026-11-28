@@ -50,6 +50,7 @@ from farna.db.crud.run_node_outputs import (
 )
 from farna.db.models.run import Run
 from farna.db.models.run_node_outputs import RunNodeOutput
+from farna.db.run_ownership import resolve_run_owner_team_id
 
 _log = logging.getLogger(__name__)
 
@@ -186,6 +187,10 @@ async def record_resolved_inputs(
         values: dict[str, Any] = {
             "run_id": run_id,
             "organisation_id": organisation_id,
+            # ADR 070 Phase 1A: this writer bypasses ``upsert_rows`` and binds
+            # ``values`` as the row param, so the run's owner is resolved to a
+            # plain value (db/run_ownership.py explains why it comes from the run).
+            "owner_team_id": await resolve_run_owner_team_id(session, run_id),
             "node_id": AUDIT_NODE_ID,
             "attempt_key": attempt_key,
             # FAR-1654: this writer bypasses ``upsert_rows``' shared sanitiser,
@@ -289,6 +294,8 @@ async def record_drift(
         values = {
             "run_id": run_id,
             "organisation_id": organisation_id,
+            # ADR 070 Phase 1A: same rule as record_resolved_inputs above.
+            "owner_team_id": await resolve_run_owner_team_id(session, run_id),
             "node_id": AUDIT_NODE_ID,
             "attempt_key": attempt_key,
             # FAR-1654: this writer bypasses ``upsert_rows``' shared sanitiser,

@@ -388,14 +388,20 @@ async def write_evidence_row(
     from farna.db.models.run import Run
     from farna.db.models.run_evidence import RunEvidence
 
+    # ADR 070 Phase 1A: resolve the tenant anchor AND the owner team from the
+    # parent run in one read. The owner is the RUN's (never the live pipeline's:
+    # a reassigned pipeline must not move this run's evidence to the new team),
+    # so a run of an org-level pipeline - or a legacy-unowned run - yields NULL.
+    run_row = (await session.execute(select(Run.organisation_id, Run.owner_team_id).where(Run.id == run_id))).first()
+    owner_team_id: UUID | None = run_row.owner_team_id if run_row is not None else None
     if organisation_id is None:
-        organisation_id = await session.scalar(select(Run.organisation_id).where(Run.id == run_id))
-        if organisation_id is None:
+        if run_row is None:
             _log.warning(
                 "heuristic.evidence_write_skipped_no_tenant",
                 extra={"run_id": str(run_id), "node_id": node_id, "evidence_state": evidence_state},
             )
             return
+        organisation_id = run_row.organisation_id
 
     # ``node_id`` arrives as a ``str`` from stored ``outputs_json``/
     # ``telemetry_json`` keys, which for legacy runs can hold non-UUID values.
@@ -416,6 +422,7 @@ async def write_evidence_row(
                 RunEvidence(
                     organisation_id=organisation_id,
                     run_id=run_id,
+                    owner_team_id=owner_team_id,
                     node_id=node_uuid,
                     evidence_state=evidence_state,
                     evidence_detail=evidence_detail,

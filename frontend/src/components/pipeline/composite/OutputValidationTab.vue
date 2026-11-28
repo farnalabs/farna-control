@@ -3,7 +3,7 @@ import { ref, computed } from "vue";
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Select from '../../shared/AppSelect.vue'
-import Badge from 'primevue/badge'
+import Badge from '../../ui/Badge.vue'
 
 interface EvalConfig {
   id: string;
@@ -85,7 +85,7 @@ const evalCount = computed(() => props.evalDefinitions.length);
   <div class="space-y-4">
     <div class="flex items-center justify-between">
       <span class="text-sm font-medium">{{ $t('components.pipeline.composite.OutputValidationTab.output_validation') }}</span>
-      <Badge severity="secondary" class="border border-border text-xs">
+      <Badge variant="neutral" class="border border-border text-xs">
         {{ evalCount }} eval{{ evalCount === 1 ? "" : "s" }} configured
       </Badge>
     </div>
@@ -250,7 +250,7 @@ const evalCount = computed(() => props.evalDefinitions.length);
           max="5"
           step="1"
           :value="localRetries"
-          class="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-indigo-500"
+          class="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-node-port"
           aria-label="Max validation retries"
           @input="updateRetries"
         />
