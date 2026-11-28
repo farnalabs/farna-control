@@ -686,6 +686,10 @@ jobs:
       - name: Download frontend coverage report
         id: fe_cov
         shell: bash
+        # This job defaults to `working-directory: backend`; the artifact must
+        # land at the repo-root `frontend/coverage` the gate reads via
+        # `../frontend/coverage/lcov.info`, so override the default here.
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
