@@ -8,6 +8,7 @@ queue job's collection gates onto a train manifest so the two paths cannot drift
   - same-repo author gate   (delegated to .github/scripts/same-repo-author-guard.py)
   - base branch is main
   - APPROVED by farnalabs / farna-reviewbot, and reviewDecision == APPROVED
+  - approval still covers the head (the merge step's SHA-pin guard, FAR-2871)
   - fast tier ("CI: Fast Validation") green PINNED TO THE PR's CURRENT HEAD SHA
   - not a hotfix (label `hotfix` absent)
   - not dropped this hour (no `merge-queue-failed` label applied in the last 60m)
@@ -41,7 +42,9 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Sequence
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from typing import Any
 
 FAST_TIER_WORKFLOW = "CI: Fast Validation"
 APPROVER_LOGINS = {"farnalabs", "farna-reviewbot"}
@@ -52,6 +55,20 @@ DROP_WINDOW_SECONDS = 3600
 #: A GitHub repository slug is ``owner/name``; both halves are word-ish tokens.
 #: Validated before the value reaches any ``gh`` argv (see ``validate_repo``).
 _REPO_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def _load_approve_guard() -> Any:
+    """Import the sibling merge guard (its hyphenated name rules out ``import``)."""
+    path = Path(__file__).with_name("merge-queue-approve-guard.py")
+    spec = spec_from_file_location("merge_queue_approve_guard", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load the merge guard from {path}")
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+approve_guard = _load_approve_guard()
 
 
 def validate_repo(repo: str) -> str:
@@ -160,6 +177,20 @@ def same_repo_ok(repo: str, number: int) -> tuple[bool, str]:
             Path(tmp).unlink()
 
 
+def approval_covers_head(repo: str, number: int) -> tuple[bool, str]:
+    """Apply the merge step's SHA-pin guard. Fails CLOSED: an unverifiable PR is
+    not admitted, so it cannot take a train slot it would be skipped from."""
+    try:
+        pages = {kind: _run(["gh", "api", "--paginate", f"repos/{repo}/pulls/{number}/{kind}?per_page=100"], check=True) for kind in ("reviews", "commits")}
+        verdict, reason = approve_guard.decide(
+            approve_guard.parse_concatenated(pages["reviews"]),
+            approve_guard.parse_concatenated(pages["commits"]),
+        )
+    except Exception as exc:  # fail closed: skip the PR
+        return False, f"could not verify the approval ({exc})"
+    return verdict == "ok", reason
+
+
 def fast_tier_state(branch: str, head_sha: str) -> tuple[str, str]:
     """Return (state, detail) where state is one of: green, waiting, failed.
 
@@ -230,6 +261,11 @@ def evaluate(repo: str, pr: dict, now: dt.datetime) -> tuple[str, str]:
     approvers = {(r.get("author") or {}).get("login") for r in (detail.get("reviews") or []) if r.get("state") == "APPROVED"}
     if not (approvers & APPROVER_LOGINS):
         return "waiting", f"no APPROVED review from {'/'.join(sorted(APPROVER_LOGINS))}"
+
+    covered, guard_note = approval_covers_head(repo, number)
+    if not covered:
+        print(f"::warning::PR #{number} is NOT admitted to the train - approval check: {guard_note}")
+        return "skip", f"approval does not cover the head: {guard_note}"
 
     dropped, drop_note = dropped_within_hour(repo, number, now)
     if dropped:
