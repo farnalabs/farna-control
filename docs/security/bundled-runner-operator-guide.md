@@ -77,21 +77,27 @@ The gate refuses a placeholder digest, a mutable tag, or a reference that does
 not name the runner-opencode repository.
 
 Template-owned values are refreshed by the per-row "shipped template updated
-- apply" action, never silently. The image reference is template-owned only
-while the profile still carries the release placeholder digest (or no image):
-that state reports drift when the release constant advances, and apply writes
-the new digest. Once you set your own image it survives untouched and is not
-reported as drift.
+- apply" action, never silently. The image reference is template-owned while it
+is empty, still carries the release placeholder digest, or points at the
+first-party runner repository (`BUNDLED_RUNNER_IMAGE_REPOSITORY`,
+`ghcr.io/farnalabs/farna-control/runner-opencode`, or the legacy pre-rename
+`modulo-runner:opencode` name) at any digest. In that state it reports drift
+whenever the release constant advances, and apply writes the new digest — which
+is what makes an upgrade from one release to the next work, not only the first
+advance off the placeholder. Once you point the profile at any other
+repository it is operator-owned: it survives untouched and is not reported as
+drift.
 
-**If your profile still carries the placeholder.** A profile seeded by an
-older build keeps its placeholder digest when a release advances the
-constant. The Runners page then reports the row as drifted ("shipped template
-updated - apply"); apply the template to write the released digest. Until you
-do, a dispatch on that profile fails loudly with a typed
-`SandboxDispatchUnboundError` naming the placeholder digest instead of
-failing later at container-create. To pin a different image yourself,
-self-build it (`deploy/docker/runner-opencode.Dockerfile`), set its digest on
-the profile, and it becomes operator-owned.
+**If your profile still points at an older first-party image.** A profile
+seeded by an older build keeps that release's digest when a later release
+advances the constant. Because it is still a first-party reference, the Runners
+page reports the row as drifted ("shipped template updated - apply"); apply the
+template to write the current release's digest. Until you do, a profile still
+carrying the placeholder digest fails a dispatch loudly with a typed
+`SandboxDispatchUnboundError` naming the placeholder digest instead of failing
+later at container-create. To pin a different image yourself, self-build it
+(`deploy/docker/runner-opencode.Dockerfile`), set its digest on the profile, and
+it becomes operator-owned.
 
 ## 4. The seeded profile
 
@@ -99,8 +105,11 @@ Every org gets a **"Bundled Runner (Docker)"** environment profile at
 org-creation (owned by the org's admin account). The first tenant org is also
 re-seeded idempotently at API boot, so an install upgraded from a build that
 predates the hook gains the profile. Re-seeding never rewrites an existing
-row: a template change (including an advanced image digest) surfaces as drift
-and is applied from the Runners page.
+row. A template change — including an advanced first-party image digest —
+surfaces as drift on any row the template still owns (empty, the placeholder,
+or a first-party runner reference at any digest) and is applied from the
+Runners page; a row the operator has pointed at another repository is never
+touched.
 
 Locked property: **`persistence_policy` is `ephemeral`** – the CRUD
 validator rejects `retained`/`cache` for `runner_docker` (dispatch
@@ -109,9 +118,10 @@ re-checks). Runner workspaces are throwaway by design.
 Template drift is computed live against the shipped constants; the Runners
 page (D5) will surface per-row "shipped template updated - apply". The apply
 action refreshes template-owned fields (provider, hardening, network
-defaults) and rewrites the image reference only while the row still carries
-the release placeholder digest (or no image). An operator-set image reference
-survives and is not reported as drift.
+defaults) and rewrites the image reference only while the template still owns
+it (empty, the placeholder, or a first-party runner reference at any digest).
+An operator-set image reference in another repository survives and is not
+reported as drift.
 
 ## 5. What runs where (network shape)
 

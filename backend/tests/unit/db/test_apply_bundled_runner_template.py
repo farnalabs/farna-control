@@ -2,13 +2,14 @@
 
 The apply refreshes ONLY the drifted template-owned fields; operator-owned
 fields (name, description, capabilities, secret refs, untouched config
-keys) must survive. Ownership of the image reference is placeholder-scoped
-(the FAR-1779 delivery decision, not an ADR rule): while the row
-still carries the release placeholder digest (or no image) the
-template owns it and an apply writes ``BUNDLED_RUNNER_IMAGE_REF``; once the
-operator sets their own image it is neither a drift key nor an apply target,
-so an operator-set image_ref survives the apply unchanged. Non-template rows
-are rejected (None).
+keys) must survive. Ownership of the image reference is
+first-party-repository-scoped: while the row carries no image, the release
+placeholder digest, or a first-party runner reference at ANY digest, the
+template owns it and an apply writes ``BUNDLED_RUNNER_IMAGE_REF`` — so the
+digest advances on every release, not just the first one off the placeholder.
+Once the operator points the profile at another repository it is neither a
+drift key nor an apply target, so it survives the apply unchanged. Non-template
+rows are rejected (None).
 """
 
 import uuid
@@ -19,12 +20,16 @@ import pytest
 
 from farna.db.bundled_runner_template import (
     BUNDLED_RUNNER_IMAGE_REF,
+    BUNDLED_RUNNER_IMAGE_REPOSITORY,
     TEMPLATE_CONFIG_JSON,
     TEMPLATE_OWNED_FIELDS,
 )
 from farna.db.crud.environment_profile import apply_bundled_runner_template
 
 _PROFILE_ID = uuid.UUID("00000000-0000-0000-0000-000000000010")
+
+#: A genuinely third-party (operator BYO) image, in another repository.
+_OPERATOR_IMAGE_REF = "ghcr.io/acme/agent@sha256:" + "2" * 64
 
 
 def _make_session() -> AsyncMock:
@@ -37,7 +42,7 @@ def _make_profile(**overrides: Any) -> MagicMock:
     profile = MagicMock()
     profile.id = _PROFILE_ID
     profile.provider_type = overrides.get("provider_type", "runner_docker")
-    profile.image_ref = overrides.get("image_ref", "modulo-runner:old@sha256:" + "2" * 64)
+    profile.image_ref = overrides.get("image_ref", _OPERATOR_IMAGE_REF)
     profile.network_policy = overrides.get("network_policy", "none")
     profile.persistence_policy = overrides.get("persistence_policy", "ephemeral")
     profile.name = overrides.get("name", "Bundled Runner (Docker)")
@@ -63,9 +68,9 @@ async def _apply(profile: Any) -> Any:
 class TestApplyBundledRunnerTemplate:
     @pytest.mark.asyncio
     async def test_refreshes_drifted_template_fields_preserving_operator_image(self) -> None:
-        # Placeholder-scoped ownership (FAR-1779, not an ADR rule):
-        # image_ref is operator-owned, so apply refreshes the shipped template
-        # WITHOUT resetting the operator's chosen image.
+        # First-party-repository-scoped ownership: a third-party image_ref is
+        # operator-owned, so apply refreshes the shipped template WITHOUT
+        # resetting the operator's chosen image.
         profile = _make_profile()
         operator_image_ref = profile.image_ref
         assert operator_image_ref != BUNDLED_RUNNER_IMAGE_REF
@@ -75,19 +80,58 @@ class TestApplyBundledRunnerTemplate:
         assert applied.persistence_policy == "ephemeral"
 
     @pytest.mark.asyncio
+    async def test_apply_does_not_advance_operator_image_when_constant_advances(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A third-party operator image is never overwritten by an advancing release."""
+        advanced = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "9" * 64
+        monkeypatch.setattr("farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF", advanced)
+        profile = _make_profile(image_ref=_OPERATOR_IMAGE_REF)
+        await _apply(profile)
+        assert profile.image_ref == _OPERATOR_IMAGE_REF
+
+    @pytest.mark.asyncio
     async def test_apply_advances_placeholder_image_to_template_constant(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A placeholder-seeded row is refreshed to the advanced release constant.
 
-        Ownership is placeholder-scoped, so an advanced ``BUNDLED_RUNNER_IMAGE_REF``
-        must reach a row that still carries the placeholder digest (the
-        documented remediation path).
+        The template owns a row that still carries the placeholder digest, so
+        an advanced ``BUNDLED_RUNNER_IMAGE_REF`` must reach it (the documented
+        remediation path).
         """
-        advanced = "ghcr.io/farnalabs/farna-control/runner-opencode@sha256:" + "9" * 64
+        advanced = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "9" * 64
         monkeypatch.setattr(
             "farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF",
             advanced,
         )
-        profile = _make_profile(image_ref="ghcr.io/farnalabs/farna-control/runner-opencode@sha256:" + "0" * 64)
+        profile = _make_profile(image_ref=BUNDLED_RUNNER_IMAGE_REF)
+        await _apply(profile)
+        assert profile.image_ref == advanced
+
+    @pytest.mark.asyncio
+    async def test_apply_advances_an_older_first_party_digest(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A row seeded with an EARLIER release's first-party digest still advances.
+
+        This is the upgrade-from-one-release-to-the-next case: the row carries a
+        real (non-placeholder) first-party digest, which the template still owns
+        because it is in the first-party repository.
+        """
+        advanced = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "9" * 64
+        monkeypatch.setattr(
+            "farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF",
+            advanced,
+        )
+        older_release = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "3" * 64
+        profile = _make_profile(image_ref=older_release)
+        await _apply(profile)
+        assert profile.image_ref == advanced
+
+    @pytest.mark.asyncio
+    async def test_apply_advances_a_legacy_first_party_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A pre-rename ``modulo-runner:opencode`` row is first-party-owned and advances."""
+        advanced = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "9" * 64
+        monkeypatch.setattr(
+            "farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF",
+            advanced,
+        )
+        profile = _make_profile(image_ref="modulo-runner:opencode@sha256:" + "3" * 64)
         await _apply(profile)
         assert profile.image_ref == advanced
 

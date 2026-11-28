@@ -9,19 +9,20 @@
 #     release job advances it and republishes; see "Pin-advance process" below)
 #
 # Pin-advance process (ADR 029 / plan D4):
-#   1. The GHCR publish release job (GA item) bumps OPENCODE_VERSION to the
-#      current minor, builds, then scans (trivy/grype fail high/critical)
-#      and runs container-structure-test before publishing the digest.
-#   2. The published tag advances the per-minor `released-<minor>` tag AND
-#     updates the digest constant (`BUNDLED_RUNNER_IMAGE_REF` in
-#     backend/src/farna/db/bundled_runner_template.py). The release job's
-#     digest-drift guard asserts the constant matches `released-<minor>`.
+#   1. The GHCR publish release job bumps OPENCODE_VERSION to the current
+#      minor, builds, then scans (trivy/grype fail high/critical) and runs
+#      container-structure-test before publishing the image.
+#   2. The release job resolves the pushed image's manifest digest and bakes it
+#      into BUNDLED_RUNNER_IMAGE_REF
+#      (backend/src/farna/db/bundled_runner_template.py) IN THE CI CHECKOUT,
+#      then gates it with scripts/check_released_runner_image_ref.py. The
+#      rewritten value is never committed: the committed default on main is the
+#      all-zero placeholder digest.
 #   3. Support window: the image supports the CURRENT opencode minor and
-#     N-1. A pin advance that moves past N-1 is a release-note item.
-#   4. Digests below are release-advanced: the D4 seed constants pin the
-#     per-minor digest, and an operator-pinned older digest survives
-#     (template updates are surfaced for review, never silently applied —
-#     the live drift helper in the profile module).
+#      N-1. A pin advance that moves past N-1 is a release-note item.
+#   4. Rows still pointing at the first-party runner repository at any digest
+#      are template-owned: a later release surfaces as drift and an apply
+#      advances them. An operator image in another repository is never touched.
 
 # FROM digest-pinned base (FAR-590 D4 blocking criterion). debian:12-slim keeps
 # the image small while glibc keeps opencode + python wheels happy. The digest
