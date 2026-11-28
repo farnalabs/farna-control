@@ -20,8 +20,8 @@ already contains the code **and** the virtualenv, and the project is installed
 editable: `uv sync` writes a `.pth` that puts `/app/src` on `sys.path`, and the
 venv holds no copy of `farna` under `site-packages`. So the bind mount replaced
 the image's `/app/src` with the host tree, and **every** Python import in the
-container — including the three separate interpreter starts: role bootstrap,
-`alembic upgrade heads`, and `uvicorn` — read source files over Docker Desktop's
+container - including the three separate interpreter starts: role bootstrap,
+`alembic upgrade heads`, and `uvicorn` - read source files over Docker Desktop's
 bind-mount filesystem instead of the image's overlay layer. Any bytecode baked
 into the image was shadowed by the host directory.
 
@@ -110,13 +110,13 @@ mount.)
 
 ### How a contributor runs from source afterwards
 
-Default (fast) path — runs the image's code, no live edit:
+Default (fast) path - runs the image's code, no live edit:
 
 ```bash
 docker compose up -d
 ```
 
-Live-edit path — re-adds the host mount, edit + restart picks up changes with no
+Live-edit path - re-adds the host mount, edit + restart picks up changes with no
 rebuild:
 
 ```bash
@@ -178,7 +178,7 @@ conscious choice.
   rebuild. Followed up separately in
   [`compose-cold-build-performance.md`](compose-cold-build-performance.md)
   (FAR-2826), which found that Metric C's cost was paid three times for one
-  image and that `chown -R appuser /app` — not the export — is the largest
+  image and that `chown -R appuser /app` - not the export - is the largest
   single step.
 - **Cold-start DB race.** One boot during measurement had the backend exit `1`
   with `ConnectionRefusedError` to `db:5432`: `pg_isready` reported the DB
