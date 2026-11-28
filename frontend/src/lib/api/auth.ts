@@ -54,7 +54,20 @@ if (typeof localStorage !== 'undefined' && localStorage.getItem(LEGACY_REFRESH_T
 }
 
 let _authListeners: Array<(token: string | null) => void> = []
-let _refreshingPromise: Promise<boolean> | null = null
+let _refreshingPromise: Promise<RefreshOutcome> | null = null
+
+// 'rejected' means the server (or the demo-session rule) says this session
+// cannot be refreshed. 'unavailable' means no verdict was reached (network
+// error, rate limit, server error), so the session may well still be good.
+export type RefreshOutcome = 'refreshed' | 'rejected' | 'unavailable'
+
+// Hard limit on a refresh, so a hung request cannot hold the shared in-flight
+// promise or the cross-tab lock for ever. Deliberately generous: the server
+// rotates the refresh token before replying, so aborting can lose the new one.
+// It tolerates reuse of the old one only briefly after rotating
+// (REFRESH_REUSE_GRACE_SECONDS, default 30) and revokes the session after that.
+// Callers that cannot wait this long stop waiting without aborting.
+const REFRESH_TIMEOUT_MS = 20_000
 
 // Stable per-tab identifier so other tabs can tell refresh hints apart when
 // adopting rotated tokens across tabs.
@@ -234,47 +247,74 @@ function hasWebLocks(): boolean {
 // automatically by the browser; we only need to echo the CSRF cookie in the
 // header. Sibling tabs share the cookie jar, so a rotation by one tab is
 // instantly visible to the others — no cross-tab retry loop is needed.
-async function doRefresh(): Promise<boolean> {
+async function doRefresh(): Promise<RefreshOutcome> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS)
   try {
     const csrfToken = readCookie('XSRF-TOKEN')
     const resp = await fetch('/api/v1/auth/refresh', {
       method: 'POST',
       credentials: 'include',
       headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+      // Covers reading the body too.
+      signal: controller.signal,
     })
     if (resp.ok) {
       const data = await resp.json()
       setAccessToken(data.access_token)
       broadcastRefreshAdopted()
-      return true
+      return 'refreshed'
     }
-    // 401 (dead session / stolen family) and any other failure fall through to
-    // the fatal-session path.
-    return false
+    // 401 is a dead session / stolen family; 403 is a failed CSRF double-submit
+    // (the cookies are gone or no longer match).
+    return resp.status === 401 || resp.status === 403 ? 'rejected' : 'unavailable'
   } catch (err) {
     console.warn('[auth] Token refresh failed:', err)
-    return false
+    return 'unavailable'
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
+
+// Web Locks serialise cross-tab refresh attempts. The lock is released when the
+// callback settles, allowing the next queued tab to run. The wait for the lock
+// is bounded too (another tab may hold it); giving up there sends no request.
+// Once the lock is granted, doRefresh's own limit applies instead.
+async function refreshUnderLock(): Promise<RefreshOutcome> {
+  const lockWait = new AbortController()
+  const timeoutId = setTimeout(() => lockWait.abort(), REFRESH_TIMEOUT_MS)
+  try {
+    return await navigator.locks!.request(
+      'modulo-auth-refresh',
+      { mode: 'exclusive', signal: lockWait.signal },
+      () => {
+        clearTimeout(timeoutId)
+        return doRefresh()
+      },
+    )
+  } catch (err) {
+    if (!lockWait.signal.aborted) throw err
+    console.warn('[auth] Timed out waiting for the token refresh lock')
+    return 'unavailable'
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 export async function attemptTokenRefresh(): Promise<boolean> {
+  return (await refreshSession()) === 'refreshed'
+}
+
+// attemptTokenRefresh for callers that must tell a dead session apart from a
+// refresh that could not be completed. Both share one in-flight request.
+export async function refreshSession(): Promise<RefreshOutcome> {
   // Demo access tokens intentionally have no refresh token. Keep this guard in
   // the shared refresh path so API retries and event streams both avoid the
   // refresh endpoint when a demo session expires.
-  if (isDemoSession()) return false
+  if (isDemoSession()) return 'rejected'
   if (_refreshingPromise) return _refreshingPromise
 
-  _refreshingPromise = (async () => {
-    if (hasWebLocks()) {
-      // Web Locks serialise cross-tab refresh attempts. The lock is released
-      // when the callback settles, allowing the next queued tab to run.
-      return navigator.locks!.request(
-        'modulo-auth-refresh',
-        { mode: 'exclusive' },
-        () => doRefresh(),
-      )
-    }
-    return doRefresh()
-  })()
+  _refreshingPromise = hasWebLocks() ? refreshUnderLock() : doRefresh()
 
   try {
     return await _refreshingPromise
