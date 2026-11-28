@@ -335,9 +335,11 @@ pre-commit install --hook-type pre-push
 ```
 
 The pre-push gate mirrors key commands PR CI runs so a branch that fails CI is
-caught locally before the push. Tests are not included: CI's `Test (Backend)`
-jobs run the full suite properly, and a best-guess pre-push subset duplicates
-CI while risking failures on files unrelated to the change.
+caught locally before the push. Tests are not included: the merge train's
+validation (`merge-validate.yml`) runs the full suite on the composed branch
+properly, and a best-guess pre-push subset duplicates it while risking failures
+on files unrelated to the change. (PR CI does run the tests your change affects
+— `Test (Backend) affected` — but that is a selection, not a substitute.)
 
 ### Commit guidelines
 
@@ -439,11 +441,12 @@ pnpm run test:e2e             # playwright test
 
 Coverage is enforced in CI via the coverage-thresholds script
 (`.github/scripts/coverage-thresholds.sh` on Linux runners). The unit suite runs
-as three parallel shards (`Test (Backend) unit shard 1/3`..`3/3`), each writing
-its own coverage data file; a `Coverage combine (backend unit shards)` job then
-merges them with `coverage combine` and applies every threshold above to the
-merged report, so a local `coverage report` after a manual run needs a
-`coverage combine` first (`parallel = true` in `backend/pyproject.toml`).
+unsharded in the merge-train validation, and its `Validation: coverage +
+changed lines` job calls that script to `coverage combine` the coverage data and
+applies every threshold above to the merged report, so a local `coverage
+report` after a manual run needs a `coverage combine` first (`parallel = true`
+in `backend/pyproject.toml`). Pull-request CI no longer runs the unit suite -
+see [CI/CD](#cicd).
 
 ### Running the test suite
 
@@ -472,8 +475,9 @@ in `.github/workflows/`:
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | Push to main, every PR, manual | Backend lint (ruff, ruff-format, mypy, bandit, vulture, semgrep, pip-audit, import-linter); backend unit tests with coverage, sharded across three parallel jobs whose per-shard data files a `Coverage combine (backend unit shards)` job merges and gates on, plus a separate non-unit job (architecture scan, connector contracts, self-contained BDD modules) and changed integration tests; frontend (lint, type-check, vitest, build, pnpm audit, WCAG contrast) plus a separate `Frontend unit suite (merge-queue parity)` job that re-runs the merge queue's exact `pnpm run test:unit` command, so a queue-only unit failure surfaces as a red check instead of a silent merge-queue stall; schema freshness; product-map validation; manifest validation; gitleaks secret scan. Cost controls (FAR-1427): a newer push to a PR cancels that PR's in-flight run (push-to-main and manual runs are never cancelled); `Test (Backend)` unit shards (and the coverage combine that follows them) and the Tier 1b job wait for `Lint (Backend)` so a lint failure does not burn the heavy jobs; on PRs a `Detect changed paths` job skips `Frontend and WCAG` and the `Frontend unit suite (merge-queue parity)` job when nothing frontend-related changed, `Tier 1b` for frontend/docs-only changes, and `SonarCloud` for docs-only changes (skips are step-level, so the checks still report success; every event other than `pull_request` runs everything) |
-| `bdd.yml` | Push to main, every PR, manual | Full BDD/E2E suite: Postgres + Redis, Alembic migrations, frontend build, backend + preview, pytest-bdd Playwright suite. Cost controls (FAR-1527): on `pull_request`, a checkout-free, fail-open, step-level changed-path detector (same pattern as `ci.yml`'s `Detect changed paths`, FAR-1427) skips the expensive steps — Playwright browser install and the E2E suite — unless the change touches backend/heavy paths (anything outside `frontend/` and `docs/`); any unreliable read fails open and runs the full suite. Every event other than `pull_request` (push to main, manual) runs everything. Coverage consequence: frontend-only PRs now skip the pre-merge E2E run — it still runs on push to main, and `Frontend and WCAG` (units, type-check, Vitest, WCAG, route coverage) is unaffected |
+| `ci.yml` | Every PR, manual | The **fast tier**. Deliberately small so a PR gets a verdict in minutes: `Lint (Backend)` (ruff, ruff-format, mypy, bandit, vulture, semgrep and its rule tests, pip-audit, import-linter, Trivy, plus the product-map and behaviour-bindings gates), `UV lockfile freshness`, `Test (Backend) affected` (only the test files the change touches, selected by `scripts/run_affected_tests.py` with its `--prepush` bounded profile, which also defers the integration/docker/bdd/e2e suites to the train rather than running them without their DB/testcontainer/browser setup), `Frontend lint and type-check` (ESLint + vue-tsc), `Schema freshness`, `Secret scan` (gitleaks), `Copy consistency`, `Check migration heads` (one head, plus numeric-prefix collisions against the base), and `E2E route methods`. No push trigger: main changes only through the merge train, which validates the composed tree with the full suite before merging, and the queue dispatches this workflow on main after a merge. Cost controls: a newer push to a PR cancels that PR's in-flight run (dispatch runs are never cancelled), and `Detect changed paths` skips the frontend and affected-test steps when nothing relevant changed (step-level, so the checks still report success) |
+| `merge-validate.yml` | Called by `merge-queue.yml` (merge train), manual | The **full suite**, run once per train on the branch composed from main plus the admitted PRs: unsharded backend unit tests with the coverage floors and changed-lines gate, architecture/connector/BDD-module suites, integration shards, Tier 1b testcontainers, frontend (lint, type-check, WCAG contrast, vitest with coverage, production build, the mobile-nav and visual/token Playwright slices, canvas `@visual` snapshots and the E2E route-coverage gate), a frontend unit-parity job that reruns the queue's exact 4-worker `pnpm run test:unit` (FAR-1947), the Bundled Runner docker harness (boots the runner-ci compose rig - socket-proxy + dind - and runs every docker-marked module in `backend/tests/docker/`, path-filtered against main, FAR-773), the backend pytest-bdd BDD suite (pytest-bdd + Playwright against a served frontend and live backend — not the frontend Playwright E2E specs), the SonarCloud scan and its PR-scoped new-issues gate (the train passes no PR number, so that gate reports a notice; the scan's new-code quality gate still applies), and a summary job that names the failing job |
+| `bdd.yml` | Push to main, every PR, manual | Backend BDD/E2E suite: Postgres + Redis, Alembic migrations, frontend build, backend + preview, then the pytest-bdd Playwright scenarios (not the frontend Playwright E2E specs under `frontend/tests/e2e/`). Cost controls (FAR-1527): on `pull_request`, a checkout-free, fail-open, step-level changed-path detector (same pattern as `ci.yml`'s `Detect changed paths`, FAR-1427) skips the expensive steps — Playwright browser install and the E2E suite — unless the change touches backend/heavy paths (anything outside `frontend/` and `docs/`); any unreliable read fails open and runs the full suite. Every event other than `pull_request` (push to main, manual) runs everything. Coverage consequence: frontend-only PRs skip the pre-merge E2E run — it still runs on push to main and in the merge train |
 | `changelog-classify.yml` | Every PR | Changelog-label gate: PRs touching user-facing paths (`backend/src/**`, `frontend/src/**`) must carry a `changelog:*` label or the check fails. Also hosts the fast-lane classifier merged in from its former standalone workflow (FAR-1527: identical PR triggers, so one runner per event instead of two), which publishes the synthetic `fast-lane-eligible` check run the merge queue reads. Applies path-derived labels (`db: migrations`, `risk: high`, `area: backend` / `frontend` / `ci` / `docs`) for human triage only — no automation reads these labels |
 | `deploy.yml` | Push to main, manual | Deploy pipeline: throttle check → pre-deploy full CI → staging deploy + staging E2E → production deploy + prod smoke tests |
 | `merge-queue.yml` | Cron hourly (`7 * * * *`), manual | Merge queue: squash-merges approved PRs to main after CI + approval re-verification; closes Linear tickets; dispatches CI/deploy on main |
