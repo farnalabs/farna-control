@@ -63,7 +63,7 @@
 
     <div class="flex items-center gap-2 mt-auto">
       <button type="button"
-        v-if="prim.primitive_type === 'pipeline_template' || prim.primitive_type === 'composite'"
+        v-if="canCreatePipeline"
         class="flex-1 px-3 py-2 border border-primary/30 hover:border-primary/60"
         @click="$emit('create-pipeline', prim)"
         data-testid="library-create-pipeline"
@@ -83,6 +83,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import BaseCard from '../ui/BaseCard.vue'
 import ToggleSwitch from '../shared/ToggleSwitch.vue'
 
@@ -96,9 +97,10 @@ export interface LibraryPrimitive {
   forked_from: string | null
   auto_update: boolean
   tier?: 'native' | 'preview' | 'in_dev'
+  content_json?: Record<string, unknown>
 }
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   prim: LibraryPrimitive
   badge: 'modulo' | 'preview' | 'collection'
   showTags?: boolean
@@ -118,6 +120,49 @@ defineEmits<{
   'view-details': [prim: LibraryPrimitive]
   'toggle-auto-update': [prim: LibraryPrimitive]
 }>()
+
+/**
+ * FAR-2870: a workflow primitive installs as a pipeline when it carries the
+ * same graph the backend builder consumes (`graph_nodes` or the declarative
+ * `nodes` shape, one unique id per node, and edges — when present — that
+ * connect declared nodes). The Create Pipeline action must be hidden for a
+ * workflow the endpoint would reject with a 400, so this mirrors the backend's
+ * duplicate-id and dangling-edge checks rather than only the non-empty-id check.
+ */
+function workflowHasUsableGraph(prim: LibraryPrimitive): boolean {
+  const content = prim.content_json
+  if (!content || typeof content !== 'object') return false
+  const raw = Object.prototype.hasOwnProperty.call(content, 'graph_nodes')
+    ? content.graph_nodes
+    : content.nodes
+  if (!Array.isArray(raw) || raw.length === 0) return false
+  const nodeIds = new Set<string>()
+  for (const node of raw) {
+    if (!node || typeof node !== 'object') return false
+    const id = (node as Record<string, unknown>).id
+    if (typeof id !== 'string' || id === '' || nodeIds.has(id)) return false
+    nodeIds.add(id)
+  }
+  if (Object.prototype.hasOwnProperty.call(content, 'edges')) {
+    const edges = content.edges
+    if (!Array.isArray(edges)) return false
+    for (const edge of edges) {
+      if (!edge || typeof edge !== 'object') return false
+      const record = edge as Record<string, unknown>
+      const source = record.source ?? record.source_node_id
+      const target = record.target ?? record.target_node_id
+      if (typeof source !== 'string' || !nodeIds.has(source)) return false
+      if (typeof target !== 'string' || !nodeIds.has(target)) return false
+    }
+  }
+  return true
+}
+
+const canCreatePipeline = computed(() => {
+  const type = props.prim.primitive_type
+  if (type === 'pipeline_template' || type === 'composite') return true
+  return type === 'workflow' && workflowHasUsableGraph(props.prim)
+})
 
 function typeBadgeClass(type: string): string {
   const map: Record<string, string> = {

@@ -2140,6 +2140,51 @@ async def review_abuse_report_endpoint(
 # ---------------------------------------------------------------------------
 
 
+def _template_graph_section(
+    content: dict[str, Any],
+    key: str,
+) -> list[dict[str, Any]] | None:
+    """Read one graph section as a list, or ``None`` when the key is absent.
+
+    A present-but-non-list section is malformed: raise a 400 rather than
+    silently coercing it to an empty list. The coercion installed an EMPTY
+    pipeline (``graph_nodes``) or dropped declared edges (``edges``) instead of
+    rejecting the bad input, which is a client error, not a usable graph.
+    """
+    if key not in content:
+        return None
+    value = content[key]
+    if not isinstance(value, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Primitive graph section '{key}' must be a list",
+        )
+    return value
+
+
+def _template_graph_parts(
+    content: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return (graph_nodes, agents, edges) from an instantiable content blob.
+
+    A ``pipeline_template`` stores its graph under ``graph_nodes`` with
+    ``agent_index`` references into ``agents``. A ``workflow`` stores the same
+    graph under ``nodes`` instead (its ``agent`` slots name sibling primitive
+    slugs), so reading the workflow shape here is what lets both primitive
+    types install through the ONE shared build path rather than a second
+    builder. A section that is absent reads as empty; a present-but-non-list
+    section raises 400 (see :func:`_template_graph_section`).
+    """
+    graph_nodes = _template_graph_section(content, "graph_nodes")
+    if graph_nodes is None:
+        graph_nodes = _template_graph_section(content, "nodes") or []
+    return (
+        graph_nodes,
+        _template_graph_section(content, "agents") or [],
+        _template_graph_section(content, "edges") or [],
+    )
+
+
 def _build_pipeline_from_template(
     primitive: Any,
     name_override: str | None,
@@ -2147,21 +2192,23 @@ def _build_pipeline_from_template(
 ) -> tuple[Any, str | None, list[dict[str, Any]], list[dict[str, Any]], int, int]:
     """Extract pipeline structure from a library primitive's content_json.
 
+    Reads both the ``pipeline_template`` (``graph_nodes``) and the ``workflow``
+    (``nodes``) graph shapes through :func:`_template_graph_parts`.
+
     Returns (name, description, graph_nodes, edges, agent_count, edge_count).
     """
     content = primitive.content_json
-    agents = content.get("agents", [])
+    raw_graph_nodes, agents, edges = _template_graph_parts(content)
     # FAR-1666: a template install cannot carry the template's declared policy
     # gates (evals/gates are not cloned), so strip the blocks before they can be
     # persisted as INERT declarations — with a loud, recorded warning.
-    graph_nodes, dropped_policy_gates = strip_declared_policy_gates(content.get("graph_nodes", []))
+    graph_nodes, dropped_policy_gates = strip_declared_policy_gates(raw_graph_nodes)
     if dropped_policy_gates:
         _log.warning(
             "policy_gate declaration(s) stripped when installing pipeline template %s: %s",
             _sanitise_log_value(getattr(primitive, "id", "?")),
             "; ".join(dropped_policy_gates),
         )
-    edges = content.get("edges", [])
 
     name = name_override or getattr(primitive, "name", "Pipeline from Template")
     description = description_override or getattr(primitive, "description", None)
@@ -2173,7 +2220,12 @@ def _build_pipeline_from_template(
     pipeline_nodes = _convert_template_nodes(graph_nodes, agents, node_id_map)
     pipeline_edges = _convert_template_edges(edges, node_id_map)
 
-    return name, description, pipeline_nodes, pipeline_edges, len(agents), len(edges)
+    # A pipeline_template declares its agents in ``agents``; a workflow names
+    # them inline on each node (``agent`` slug -> ``template_agent``). Counting
+    # only ``len(agents)`` reported 0 for a workflow that carries an agent, so
+    # fall back to the agent slots actually installed.
+    agent_count = len(agents) if agents else sum(1 for node in pipeline_nodes if node.get("template_agent"))
+    return name, description, pipeline_nodes, pipeline_edges, agent_count, len(edges)
 
 
 def _build_template_node_id_map(graph_nodes: list[dict[str, Any]]) -> dict[str, str]:
@@ -2194,13 +2246,15 @@ def _node_label(
     """Compute the display label for a template node.
 
     Manual-gate nodes always prefer their own label; otherwise an in-range
-    ``agent_index`` falls back to the referenced agent's name.
+    ``agent_index`` falls back to the referenced agent's name, and a workflow
+    node falls back to its ``agent`` slug so the installed node is identifiable
+    in the editor.
     """
     if node.get("node_type") == "manual":
         return cast(str, node.get("label", "Manual Gate"))
     if agent_index is not None and agent_index < len(agents):
         return cast(str, node.get("label") or agents[agent_index].get("name", "Agent"))
-    return cast(str, node.get("label", "Node"))
+    return cast(str, node.get("label") or node.get("agent") or "Node")
 
 
 def _convert_template_nodes(
@@ -2226,6 +2280,12 @@ def _convert_template_nodes(
         }
         if agent_index is not None and agent_index < len(agents):
             pipeline_node["template_agent"] = agents[agent_index]
+        elif node.get("agent"):
+            # A workflow node names its sibling agent primitive by slug instead
+            # of an ``agent_index``. Preserve the reference so a later agent
+            # configuration step can resolve it — dropping it left only the
+            # display label and lost the identity of the agent slot.
+            pipeline_node["template_agent"] = {"slug": node["agent"]}
         if node.get("node_type") == "manual":
             # FAR-889: carry every output-schema form through to the pipeline
             # node so the write-path guard accepts template manual gates.
@@ -2295,6 +2355,7 @@ def _pipeline_from_template_response(
     primitive_id: uuid.UUID,
     agent_count: int,
     edge_count: int,
+    ready_to_run: bool,
 ) -> PipelineFromTemplateResponse:
     """Build the pipeline-from-template response from a freshly created pipeline."""
     return PipelineFromTemplateResponse(
@@ -2306,10 +2367,55 @@ def _pipeline_from_template_response(
         template_source_id=primitive_id,
         agent_count=agent_count,
         edge_count=edge_count,
-        ready_to_run=True,
+        ready_to_run=ready_to_run,
         created_at=pipeline.created_at,
         updated_at=pipeline.updated_at,
     )
+
+
+def _template_graph_node_ids(graph_nodes: list[dict[str, Any]]) -> set[str]:
+    """Return the node ids a graph declares, empty when any node is unusable."""
+    node_ids: set[str] = set()
+    for node in graph_nodes:
+        node_id = node.get("id") if isinstance(node, dict) else None
+        if not isinstance(node_id, str) or not node_id:
+            return set()
+        node_ids.add(node_id)
+    return node_ids
+
+
+def _assert_instantiable_pipeline_source(primitive: Any) -> None:
+    """Reject a primitive that cannot be installed as a pipeline.
+
+    A ``pipeline_template`` always installs. A ``workflow`` installs only when
+    it carries the graph the shared builder consumes — a non-empty node list
+    with a unique id per node, and edges (when present) that connect declared
+    nodes. A malformed workflow graph is a client error: without this check the
+    edge writer would raise ``ValueError`` on a non-UUID node reference and
+    surface a 500. Any other primitive type keeps its original rejection.
+    """
+    if primitive.primitive_type == "pipeline_template":
+        return
+    if primitive.primitive_type != "workflow":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Primitive type '{primitive.primitive_type}' is not a pipeline_template",
+        )
+    graph_nodes, _agents, edges = _template_graph_parts(primitive.content_json or {})
+    node_ids = _template_graph_node_ids(graph_nodes)
+    if not graph_nodes or len(node_ids) != len(graph_nodes):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Primitive type 'workflow' does not carry a usable graph (a non-empty graph_nodes/nodes list with one id per node)",
+        )
+    for edge in edges:
+        source = edge.get("source", edge.get("source_node_id")) if isinstance(edge, dict) else None
+        target = edge.get("target", edge.get("target_node_id")) if isinstance(edge, dict) else None
+        if source not in node_ids or target not in node_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Primitive type 'workflow' has an edge that does not connect two declared nodes",
+            )
 
 
 @router.post(
@@ -2339,11 +2445,7 @@ async def create_pipeline_from_template_endpoint(
                     detail=f"Primitive {primitive_id} not found",
                 )
 
-            if primitive.primitive_type != "pipeline_template":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Primitive type '{primitive.primitive_type}' is not a pipeline_template",
-                )
+            _assert_instantiable_pipeline_source(primitive)
 
             name, description, graph_nodes, edges, agent_count, edge_count = _build_pipeline_from_template(
                 primitive,
@@ -2383,7 +2485,13 @@ async def create_pipeline_from_template_endpoint(
         _log.exception(_CODE_LIBRARY_CREATE_PIPELINE_TEMPLATE)
         raise _not_implemented_error() from None
 
-    return _pipeline_from_template_response(pipeline, primitive_id, agent_count, edge_count)
+    return _pipeline_from_template_response(
+        pipeline,
+        primitive_id,
+        agent_count,
+        edge_count,
+        ready_to_run=bool(graph_nodes),
+    )
 
 
 @router.post(
