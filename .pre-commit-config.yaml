@@ -280,7 +280,7 @@ repos:
         pass_filenames: false
         stages: [pre-push]
       # EXACT frontend type-check invocation (ci.yml frontend job):
-      #   pnpm run type-check    (frontend/package.json: "vue-tsc --noEmit")
+      #   pnpm run type-check    (frontend/package.json: cross-env NODE_OPTIONS=--max-old-space-size=3072 vue-tsc --noEmit)
       # run_frontend_npm.py runs `pnpm run type-check` in frontend/ — same command.
       - id: prepush-vue-tsc
         name: prepush vue-tsc (exact CI type-check command)
