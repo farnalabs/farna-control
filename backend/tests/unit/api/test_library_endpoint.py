@@ -535,6 +535,126 @@ def test_create_pipeline_from_invalid_type(client: TestClient) -> None:
     assert "schema" in resp.json()["detail"]
 
 
+def test_create_pipeline_from_workflow_with_graph_nodes_returns_201(client: TestClient) -> None:
+    """FAR-2870: a workflow primitive carrying the template graph shape installs.
+
+    A workflow is graph-shaped but its type is not ``pipeline_template``; the
+    create-pipeline path accepts it when the shared builder can consume the
+    graph, so the Library's Create Pipeline action works for it.
+    """
+    primitive_id = uuid.uuid4()
+    primitive = _make_primitive(pid=primitive_id, primitive_type="workflow")
+    pipeline = _make_pipeline()
+    pipeline.name = "Simplest Workflow"
+
+    with (
+        patch("farna.api.routes.library.get_primitive", return_value=primitive),
+        patch("farna.api.routes.library.create_pipeline", return_value=pipeline) as create_mock,
+        patch("farna.api.routes.library.set_rls_org"),
+        patch("farna.api.routes.library.set_rls_user_context"),
+    ):
+        resp = client.post(
+            f"/api/v1/libraries/{primitive_id}/create-pipeline",
+            json={"name": "Simplest Workflow"},
+        )
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["template_source_id"] == str(primitive_id)
+    assert body["name"] == "Simplest Workflow"
+    assert body["agent_count"] == 2
+    assert body["edge_count"] == 2
+    # The graph is converted through the shared builder: string ids become
+    # UUIDs and the node label resolves from the referenced template agent.
+    assert len(pipeline.graph_nodes_json) == 3
+    assert any(node["label"] == "Issue Reader" for node in pipeline.graph_nodes_json)
+    assert create_mock.await_args is not None
+    assert create_mock.await_args.kwargs["run_context_defaults"]["library_source_id"] == str(primitive_id)
+
+
+def test_create_pipeline_from_seeded_simplest_workflow_returns_201(client: TestClient) -> None:
+    """FAR-2870 regression: the advertised "Simplest Workflow" works end to end.
+
+    The seeded built-in stores its graph in the declarative workflow shape
+    (``nodes`` + ``edges`` + ``entry``), not the ``pipeline_template`` shape.
+    It used to be rejected with 400, leaving a new self-hoster with no
+    connector-free starter; it must now create a pipeline whose graph carries
+    the single agent node.
+    """
+    from farna.core.library_service import _BUILTIN_BY_ID
+
+    primitive = _BUILTIN_BY_ID[uuid.UUID("00000000-0000-0000-0000-000000000071")]
+    assert primitive.primitive_type == "workflow"
+    pipeline = _make_pipeline()
+    pipeline.name = "Simplest Workflow"
+
+    with (
+        patch("farna.api.routes.library.get_primitive", return_value=primitive),
+        patch("farna.api.routes.library.create_pipeline", return_value=pipeline),
+        patch("farna.api.routes.library.set_rls_org"),
+        patch("farna.api.routes.library.set_rls_user_context"),
+    ):
+        resp = client.post(
+            f"/api/v1/libraries/{primitive.id}/create-pipeline",
+            json={},
+        )
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["name"] == "Simplest Workflow"
+    assert body["template_source_id"] == str(primitive.id)
+    assert len(pipeline.graph_nodes_json) == 1
+    node = pipeline.graph_nodes_json[0]
+    assert node["node_type"] == "agent"
+    assert node["label"] == "spec-implementer"
+
+
+def test_create_pipeline_from_workflow_without_graph_rejects(client: TestClient) -> None:
+    """A workflow with no usable graph still rejects with 400, never a 500."""
+    primitive_id = uuid.uuid4()
+    primitive = _make_primitive(pid=primitive_id, primitive_type="workflow")
+    primitive.content_json = {"entry": "spec-implementer", "edges": []}
+
+    with (
+        patch("farna.api.routes.library.get_primitive", return_value=primitive),
+        patch("farna.api.routes.library.create_pipeline") as create_mock,
+        patch("farna.api.routes.library.set_rls_org"),
+        patch("farna.api.routes.library.set_rls_user_context"),
+    ):
+        resp = client.post(
+            f"/api/v1/libraries/{primitive_id}/create-pipeline",
+            json={},
+        )
+
+    assert resp.status_code == 400
+    assert "usable graph" in resp.json()["detail"]
+    create_mock.assert_not_called()
+
+
+def test_create_pipeline_from_workflow_with_dangling_edge_rejects(client: TestClient) -> None:
+    """A workflow edge pointing outside the declared nodes is a 400, not a 500."""
+    primitive_id = uuid.uuid4()
+    primitive = _make_primitive(pid=primitive_id, primitive_type="workflow")
+    primitive.content_json = {
+        "nodes": [{"id": "spec-implementer", "agent": "spec-implementer"}],
+        "edges": [{"source": "spec-implementer", "target": "missing-node"}],
+        "entry": "spec-implementer",
+    }
+
+    with (
+        patch("farna.api.routes.library.get_primitive", return_value=primitive),
+        patch("farna.api.routes.library.set_rls_org"),
+        patch("farna.api.routes.library.set_rls_user_context"),
+    ):
+        resp = client.post(
+            f"/api/v1/libraries/{primitive_id}/create-pipeline",
+            json={},
+        )
+
+    assert resp.status_code == 400
+    assert "edge" in resp.json()["detail"]
+
+
 def test_create_pipeline_from_template_strips_declared_policy_gate(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
     """FAR-1666: a library template declaring a policy_gate block installs with the block stripped.
 

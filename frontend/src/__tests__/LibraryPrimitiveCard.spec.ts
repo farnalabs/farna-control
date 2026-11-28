@@ -150,6 +150,99 @@ describe('LibraryPrimitiveCard', () => {
     expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
   })
 
+  it('renders create-pipeline for a workflow with a graph_nodes graph', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: '00000000-0000-0000-0000-000000000071',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Simplest Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: {
+          graph_nodes: [{ id: 'spec-implementer', node_type: 'agent', label: 'Spec Implementer' }],
+          edges: [],
+        },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(true)
+  })
+
+  it('renders create-pipeline for the declarative workflow nodes shape', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: '00000000-0000-0000-0000-000000000071',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Simplest Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: {
+          nodes: [{ id: 'spec-implementer', agent: 'spec-implementer' }],
+          edges: [],
+          entry: 'spec-implementer',
+        },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(true)
+  })
+
+  it('does not render create-pipeline for a workflow without graph data', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: 'prim-1',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Bare Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: { entry: 'spec-implementer', edges: [] },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
+  })
+
+  it('does not render create-pipeline for a workflow with an empty node list', () => {
+    const wrapper = mountCard({
+      prim: {
+        id: 'prim-1',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Empty Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: { nodes: [], edges: [] },
+      },
+    })
+    expect(wrapper.find('[data-testid="library-create-pipeline"]').exists()).toBe(false)
+  })
+
+  it('emits create-pipeline when the workflow graph action is clicked', async () => {
+    const wrapper = mountCard({
+      prim: {
+        id: 'prim-1',
+        source: 'farna_control',
+        primitive_type: 'workflow',
+        name: 'Graph Workflow',
+        description: null,
+        tags: [],
+        forked_from: null,
+        auto_update: false,
+        content_json: { nodes: [{ id: 'n1' }], edges: [] },
+      },
+    })
+    await wrapper.find('[data-testid="library-create-pipeline"]').trigger('click')
+    expect(wrapper.emitted('create-pipeline')).toHaveLength(1)
+  })
+
   it('emits create-pipeline when button is clicked for pipeline_template', async () => {
     const wrapper = mountCard({ prim: { id: 'prim-1', source: 'farna_control', primitive_type: 'pipeline_template', name: 'Template', description: null, tags: [], forked_from: null, auto_update: false } })
     await wrapper.find('[data-testid="library-create-pipeline"]').trigger('click')

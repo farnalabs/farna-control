@@ -730,13 +730,14 @@ class TestTemplatePipelineCreateReadInsideTxn:
         mock_create_pipeline: AsyncMock,
         mock_get_primitive: AsyncMock,
     ) -> None:
-        """When the primitive is not a pipeline_template, 400 is returned."""
+        """When the primitive is neither a pipeline_template nor a graph-bearing
+        workflow, 400 is returned."""
         from fastapi.testclient import TestClient
 
         from farna.api.main import app as _app
 
         prim = self._make_primitive()
-        prim.primitive_type = "workflow"  # wrong type
+        prim.primitive_type = "schema"  # unsupported type
         mock_get_primitive.return_value = prim
 
         # The permission dependency reads ``result.scalar_one_or_none()`` (a
