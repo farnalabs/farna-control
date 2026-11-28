@@ -79,14 +79,24 @@ It calls `POST /repos/{owner}/{repo}/statuses/{sha}` and returns:
 }
 ```
 
-When `branch` is supplied, the write also reads that branch's protection and
-includes the `enforcement` object (below), so a caller can display
-enforced-versus-advisory from the publish result in one round trip. The branch
-to evaluate is the branch the merge would target (usually the PR base branch),
-not necessarily the branch the commit was authored on.
+When `branch` is supplied, the write **reads that branch's protection first**,
+then publishes the status, and includes the `enforcement` object (below) in the
+result. The order matters: a token that may write statuses but not read branch
+protection fails on the read *before* any status is posted, so a retry can never
+duplicate a real side effect. The branch to evaluate is the branch the merge
+would target (usually the PR base branch), not necessarily the branch the commit
+was authored on.
 
-Every input is validated before the network write, so a malformed payload never
-publishes a status.
+Every input is validated before the network call, so a malformed payload never
+publishes a status. Two inputs are also shape-checked because they are
+interpolated into the request path:
+
+- `repo` must be exactly `owner/name` — two non-empty segments, no leading,
+  trailing or doubled slash, no `.`/`..` segment and no whitespace. Anything
+  else is rejected with a `ValueError` rather than risking a path that reaches a
+  different endpoint.
+- `sha` must be a **full** Git object id: 40 hex characters (SHA-1) or 64
+  (SHA-256). A short, relative or slash-bearing value is rejected.
 
 ## Reading enforcement — `query("branch_protection")`
 
@@ -117,21 +127,31 @@ URL-encoded, so `release/1.0` becomes `release%2F1.0`) and returns one record:
 
 GitHub reports required status checks in two shapes: the legacy `contexts`
 list and the newer `checks` list of `{context, app_id}` entries. A context is
-treated as required when it appears in **either**; `required_checks` is returned
-so an operator can see whether the context is pinned to a specific GitHub App
-(`app_id` set) or is a plain commit status (`app_id` null). Farna Control
-publishes a plain commit status, which satisfies a context that is not pinned
-to an App.
+*required* when it appears in either; `required_contexts` is the full required
+set and `required_checks` is returned so an operator can see each entry's
+`app_id`.
 
-`state` is the display form: `enforced` when the context is in the required set,
-otherwise `advisory`. `reason` names why it is not enforced:
+A context counts as **enforced** only when a plain commit status can satisfy it:
+it appears in the legacy `contexts` list, **or** in a `checks` entry whose
+`app_id` is null. Farna Control publishes a plain commit status. A check pinned
+to a specific GitHub App (`app_id` set) is still required by the branch, but a
+plain status can never satisfy it — reporting it enforced would be a fail-open
+false positive, exactly the failure this feature exists to prevent. Such a
+context is reported with `enforced: false` and the distinct reason
+`required_by_app_only`.
+
+`state` is the display form: `enforced` when the context is satisfied, otherwise
+`advisory`; an unreadable configuration is `unknown` (see below). `reason` names
+why it is not enforced:
 
 | `reason` | Meaning |
 |---|---|
 | `required` | The check is in the required set and gates merging. |
+| `required_by_app_only` | The context is required only through a GitHub-App-pinned `checks` entry, which a plain commit status cannot satisfy — not enforced. |
 | `not_required` | Branch protection exists and requires status checks, but not this context — the verdict is advisory. |
 | `status_checks_not_required` | The branch is protected but "Require status checks to pass" is off — advisory. |
 | `branch_not_protected` | The branch has no protection rule at all — advisory. |
+| `protection_unreadable` | A `200` response whose configuration could not be interpreted — `state` is `unknown`, not advisory (see below). |
 
 ## What happens when the check is not required
 
@@ -172,9 +192,24 @@ Notes:
   repository. A token with only code/status permissions will get HTTP 403.
 - On GitHub's free plan, branch protection on a **private** repository is not
   available, so the read may return 403 regardless of token scope.
-- The `commit_status` write only publishes a status; it never reads branch
-  protection unless you pass `branch`. The combined one-call result requires
-  **both** permissions.
+- The `commit_status` write only publishes a status. It reads branch protection
+  only when you pass `branch`, and then it reads **before** publishing (see
+  above), so a token missing the read permission fails before any status is
+  posted. The combined one-call result requires **both** permissions.
+
+## When the configuration cannot be read
+
+A successful (`200`) protection read whose shape cannot be interpreted is
+**unknown**, never advisory:
+
+- the response body is not a JSON object, or
+- `required_status_checks` is present but is neither an object nor `null`.
+
+In that case the record reports `state: "unknown"`, `reason:
+"protection_unreadable"`, `enforced: false`, `protected: true`, and
+`status_checks_required: null` (we cannot claim it is either on or off). Advisory
+would assert the check is genuinely not enforced; an unreadable configuration is
+unknown, so a caller must be able to fail closed on this state.
 
 ## Error semantics
 
@@ -185,7 +220,8 @@ not actually read the configuration:
 |---|---|
 | Branch exists but is not protected | GitHub returns `404 {"message": "Branch not protected"}`; the connector reports `protected: false`, `enforced: false` — a legitimate advisory answer, not an error. |
 | Repository or branch genuinely missing | Any other `404` propagates as `GitHubNotFoundError` — never silently reported as advisory. |
-| Token lacks permissions (status write or branch-protection read) | `403` propagates as `GitHubAuthError` (`error_code="insufficient_scope"`). |
+| Protection response is unreadable | A `200` whose body or `required_status_checks` shape cannot be interpreted reports `state: "unknown"`, `reason: "protection_unreadable"` (never advisory). |
+| Token lacks permissions (status write or branch-protection read) | `403` propagates as `GitHubAuthError` (`error_code="insufficient_scope"`). When `branch` is supplied the read runs first, so this fails before any status is published. |
 | Rate limited / transient upstream failure | The connector's existing retry + circuit-breaker machinery applies; a terminal failure surfaces a structured `GitHubError`. |
 
 Failing loudly on an unreadable configuration is deliberate: reporting
