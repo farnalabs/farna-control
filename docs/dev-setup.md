@@ -36,8 +36,11 @@ after the staging deploy, blocking the deploy train (FAR-2016's
 `json-viewer` light-mode probe; FAR-1913/FAR-2028's mobile-layout axe
 `color-contrast`).
 
-The `frontend` CI job now runs a narrow, **unconditional** slice of those
-specs against the local mock target on every frontend PR:
+The merge-train `frontend` validation job (`.github/workflows/merge-validate.yml`)
+now runs a narrow, **unconditional** slice of those specs against the local
+mock target on every train validation, i.e. before anything merges. (The
+per-PR `ci.yml` frontend job became lint + type-check only in the 2026-11-27
+fast-tier split, so these slices live in the train.)
 
 | Spec | Why it is in the slice |
 |---|---|
@@ -55,10 +58,10 @@ The selection lives in `frontend/scripts/e2e-visual-slice.mjs`. `--check`
 scans every `@regression` spec for visual-assertion markers and fails if a
 spec is neither in the slice nor in an explicit `STAGING_ONLY` list carrying a
 reason. This prevents silent under-selection: adding a visual spec without
-classifying it is a PR failure, not a quiet coverage gap. The slice is not
-changed-path gated on purpose: a path filter can miss a spec whose subject
-changed without a matching path, and an under-selecting selector reads as
-coverage.
+classifying it is a train-validation failure, not a quiet coverage gap. The
+slice is not changed-path gated on purpose: a path filter can miss a spec whose
+subject changed without a matching path, and an under-selecting selector reads
+as coverage.
 
 Deliberately staging-only (with reasons in the script): `mobile-layout.spec.ts`
 (8.1 min local, and its axe findings can need seeded deployment data),
@@ -68,8 +71,8 @@ and `wcag-contrast.spec.ts` (already runs as its own earlier step in the same
 job).
 
 Snapshot-based visual regression is a separate gate: `canvas.visual.spec.ts`
-is tagged `@visual` and runs in the same `frontend` CI job via
-`pnpm run test:e2e:visual` (equivalently
+is tagged `@visual` and runs in the same merge-train `frontend` validation job
+via `pnpm run test:e2e:visual` (equivalently
 `pnpm exec playwright test --grep "@visual"`). Its baselines live in
 `frontend/tests/e2e/canvas.visual.spec.ts-snapshots/` and are committed per
 platform - Playwright appends the platform suffix, so a Linux baseline (the

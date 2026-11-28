@@ -118,8 +118,11 @@ jobs:
     # checkout, no toolchain: a few seconds) and publishes three outputs:
     #
     #   frontend           - the Frontend lint and type-check job has something
-    #                        to validate: anything under frontend/, the e2e route
-    #                        coverage script, or this workflow itself.
+    #                        to validate: anything under frontend/, or this
+    #                        workflow itself. (The e2e route-coverage script is
+    #                        no longer a frontend trigger here: nothing in this
+    #                        workflow invokes it - the merge train's frontend
+    #                        job does - so its path was a dead trigger.)
     #   backend            - the change is NOT confined to frontend/ + docs, so
     #                        the affected-backend-tests job has something to
     #                        select from. False only when every changed file is
@@ -185,7 +188,7 @@ jobs:
           echo "Changed files (${COUNT}):"
           printf '%s\n' "$FILES" | sort -u | sed 's/^/  /'
           FRONTEND=false; BACKEND=true; E2E_ROUTE_METHODS=false
-          if printf '%s\n' "$FILES" | grep -qE '^(frontend/|\.github/workflows/ci\.yml$|\.github/scripts/check_e2e_route_coverage\.py$)'; then
+          if printf '%s\n' "$FILES" | grep -qE '^(frontend/|\.github/workflows/ci\.yml$)'; then
             FRONTEND=true
           fi
           if printf '%s\n' "$FILES" | grep -qE '^(frontend/tests/e2e/|backend/src/farna/api/|scripts/run_check_e2e_route_methods\.py$|\.github/workflows/ci\.yml$|\.pre-commit-config\.yaml$)'; then
@@ -537,10 +540,14 @@ jobs:
     # Why it exists here: unit tests catch a broken import or a changed contract
     # in seconds, and a PR that never runs one at all waits a whole train cycle
     # to find out. Why it is bounded: a mass rename must not turn the fast tier
-    # into a suite run, so the selection is capped (--max-files) and a
-    # between-suite wall budget stops the run reporting success by running
-    # forever; anything the bounds defer is printed as "deferred to CI" and the
-    # train still runs everything.
+    # into a suite run, so the selection is capped (--max-files) and the
+    # --prepush profile adds the per-suite wall bound AND defers the suites that
+    # need infrastructure this job does not provide (integration/docker stand up
+    # their own Postgres/testcontainers, e2e needs browsers + a running app, bdd
+    # is browser/live-app, load is not a correctness gate). Without --prepush an
+    # affected integration/docker test would run here with none of that setup
+    # and only the job timeout as a backstop. Every deferred suite is printed as
+    # "deferred to CI" (never silently skipped) and the train runs everything.
     #
     # `!= 'false'` (not `== 'true'`) is the fail-open form used throughout this
     # workflow: an absent or unparseable output must RUN the gate, never skip it.
@@ -593,7 +600,7 @@ jobs:
           # driver is invoked from the repository root with --project backend.
           uv run --no-build --project backend --no-sync \
             python scripts/run_affected_tests.py \
-            --base "$BASE" --max-files 80 --time-budget-seconds 600
+            --prepush --base "$BASE" --max-files 80 --time-budget-seconds 600
 
   frontend-lint:
     # The PR-tier frontend gate: ESLint and vue-tsc only. Everything else the
