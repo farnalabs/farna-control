@@ -593,6 +593,36 @@ class OutputSchemaValidationError(ValueError):
         self.enforcement_record: dict[str, Any] | None = None
 
 
+class ApprovalRevisionStaleError(RuntimeError):
+    """A human gate decision was bound to a code revision the run has left.
+
+    FAR-2837: an approval (``approved`` / ``deliver_manual``) is recorded
+    against the revision the gate was raised for (``hitl_claims.revision``, the
+    run's ``input_hash`` at fire time). On resume the decision is re-validated
+    against the run's CURRENT ``input_hash``; when the revision has moved the
+    approval no longer covers the artefact the run would proceed on, so it must
+    NOT be honoured. This exception is raised from the resume seam
+    (``_validate_approved_revision``) and the executor terminalises the run with
+    ``error_code="hitl.approval_stale"`` — the operator re-triggers to obtain a
+    fresh gate against the new revision, rather than silently applying an
+    approval for code the approver never saw. A ``rejected`` decision is a
+    refusal, never an unsafe authorisation, so it is NOT subject to this check.
+    """
+
+    def __init__(
+        self,
+        run_id: object,
+        review_id: str,
+        approved_revision: str | None,
+        current_revision: str | None,
+    ) -> None:
+        self.run_id = run_id
+        self.review_id = review_id
+        self.approved_revision = approved_revision
+        self.current_revision = current_revision
+        super().__init__(f"HITL approval for gate {review_id!r} on run {run_id} was given for revision {approved_revision or '<none>'} but the run is now at revision {current_revision or '<none>'} — the approval is stale and a fresh human decision is required")
+
+
 # Single source of truth for JMESPath guard truthiness — `bool(result)`.
 # Test-pinned in tests/unit/pipeline_engine/test_conditional_transitions.py.
 _is_truthy = bool
@@ -5655,6 +5685,92 @@ def _hitl_review_approve_reject_result(
 _HUMAN_DECISION_ACTIONS = ("approved", "rejected", "deliver_manual")
 
 
+async def _validate_approved_revision(
+    decision: Any,
+    review_id: str,
+    state: dict[str, Any],
+    session_factory: Any,
+    org_id: Any,
+) -> None:
+    """Refuse a gate decision given for a revision the run has since left.
+
+    FAR-2837. The gate row records the revision it was raised for
+    (``hitl_claims.revision`` = the run's ``input_hash`` at fire time, stamped
+    by ``HITLManager.create_gate``). On resume we compare that bound revision
+    with the run's CURRENT ``input_hash``; when they differ the human decided
+    on an artefact the run no longer carries, so the decision is stale and a
+    fresh human decision is required (``ApprovalRevisionStaleError``).
+
+    Scoping / failure policy:
+
+    * Only ``approved`` / ``deliver_manual`` are checked — a ``rejected``
+      decision is a refusal, never an unsafe authorisation, so it is honoured
+      regardless of revision (the caller gates the call).
+    * Skipped entirely when the check itself cannot run: no ``session_factory``
+      / ``org_id`` / ``state["_run_id"]`` (e.g. a pure-function resume unit
+      test), a legacy gate with a NULL ``revision``, or a run row with no
+      ``input_hash``. NULL means "cannot validate", never "stale".
+    * A failure READING the revision (transient DB error) fails OPEN with a
+      warning, mirroring the other post-decision best-effort HITL seams
+      (``_ground_human_gate_evidence``): the human's decision already committed
+      and must not be retro-failed by a read blip. A POSITIVE mismatch fails
+      CLOSED (raises) — the stale approval is never silently applied.
+    """
+    if session_factory is None or org_id is None:
+        return
+    run_id = state.get("_run_id")
+    if run_id is None:
+        return
+    # Lazy imports: keep the sqlalchemy / ORM import off this module's load path
+    # (the file's established convention — see the sibling best-effort readers).
+    from sqlalchemy import select
+
+    from farna.db.models.hitl_claim import HitlClaim
+    from farna.db.models.run import Run
+
+    approved_revision: str | None
+    current_revision: str | None
+    try:
+        async with session_factory() as session, session.begin():
+            await set_rls_org(session, org_id)
+            await set_rls_execution_context(session)
+            approved_revision = (
+                await session.execute(
+                    select(HitlClaim.revision).where(
+                        HitlClaim.run_id == run_id,
+                        HitlClaim.review_id == review_id,
+                        HitlClaim.organisation_id == org_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if approved_revision is None:
+                # Legacy gate / no bound revision — cannot validate; never
+                # fabricate staleness.
+                return
+            current_revision = (await session.execute(select(Run.input_hash).where(Run.id == run_id, Run.organisation_id == org_id))).scalar_one_or_none()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _log.warning(
+            "hitl_review.revision_revalidation_failed",
+            extra={"review_id": review_id, "run_id": str(run_id)},
+        )
+        return
+    if current_revision is None:
+        return
+    if approved_revision != current_revision:
+        _log.warning(
+            "hitl_review.stale_approval_rejected",
+            extra={
+                "review_id": review_id,
+                "run_id": str(run_id),
+                "approved_revision": approved_revision,
+                "current_revision": current_revision,
+            },
+        )
+        raise ApprovalRevisionStaleError(run_id, review_id, approved_revision, current_revision)
+
+
 async def _hitl_review_resume_result(
     decision: Any,
     review_id: str,
@@ -5711,6 +5827,14 @@ async def _hitl_review_resume_result(
             extra={"review_id": review_id, "decision_type": type(decision).__name__, "action": action},
         )
         return (False, None)
+    # FAR-2837: a decision is bound to the revision the gate was raised for.
+    # Re-validate it on resume for the actions that let the run PROCEED on the
+    # reviewed artefact (approved / deliver_manual). A rejection is a refusal,
+    # never an unsafe authorisation, so it is honoured regardless of revision —
+    # only the positive actions can apply an approval to code the approver never
+    # saw. Raises ApprovalRevisionStaleError when the revision has moved.
+    if action != "rejected":
+        await _validate_approved_revision(decision, review_id, state, session_factory, org_id)
     if action == "deliver_manual":
         gate_result = _hitl_review_deliver_manual_result(review_id, decision)
         _inject_answer_state(review_id, decision, gate_result[1])

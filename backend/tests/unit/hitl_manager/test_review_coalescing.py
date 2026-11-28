@@ -36,6 +36,7 @@ OTHER_ORG_ID = uuid.UUID("2b6d9f0a-1c3e-4d5b-8a7f-9e0d1c2b3a4c")
 PIPELINE_ID = uuid.UUID("00000000-0000-0000-0000-000000006666")
 RUN_ID = uuid.UUID("fb4b1368-68ca-4125-8091-ca8d7c25839e")
 OLD_RUN_ID = uuid.UUID("0b0e2f60-1f47-4bda-9aeb-6f6fdd807d3c")
+CLAIMANT_ID = uuid.UUID("3c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f")
 GATE = "hitl_review_review_publish"
 KEY = "github:farnalabs/modulo:pr:42"
 HASH_A = "a" * 64
@@ -61,6 +62,20 @@ def _open_claim() -> MagicMock:
     claim.account_id = None
     claim.created_at = datetime.now(UTC)
     return claim
+
+
+def _claimed_claim() -> MagicMock:
+    """An UNDECIDED gate held by a human (account_id set) — FAR-2837."""
+    claim = _open_claim()
+    claim.account_id = CLAIMANT_ID
+    claim.claim_token = "tok-held"
+    claim.claimed_at = datetime.now(UTC)
+    return claim
+
+
+def _update_values(stmt: Any) -> dict[str, Any]:
+    """Extract an UPDATE's ``.values()`` mapping (column name -> value)."""
+    return {col.name: expr.value for col, expr in stmt._values.items()}
 
 
 class _CoalesceSession:
@@ -253,14 +268,20 @@ class TestEvaluateGateCoalescing:
 
     @patch("farna.core.hitl_manager.gate_coalescing.append_audit_event", new_callable=AsyncMock)
     async def test_candidate_scan_is_open_gate_scoped(self, audit: AsyncMock) -> None:
-        """The candidate query filters on pipeline + gate id + open state."""
+        """The candidate query filters on pipeline + gate id + undecided state.
+
+        FAR-2837: the scan includes undecided CLAIMED gates too (not only
+        unclaimed ones) so a held gate whose revision changed can be
+        superseded — the ``account_id IS NULL`` restriction is gone.
+        """
         session = _CoalesceSession(run_row=_run_row(_payload(), HASH_A), candidates=[])
         await evaluate_gate_coalescing(session, run_id=RUN_ID, review_id=GATE, pipeline_id=PIPELINE_ID, org_id=ORG_ID)
         sql = str(session.statements[1])
         assert "hitl_claims" in sql
         assert "runs" in sql
         assert "decision IS NULL" in sql
-        assert "account_id IS NULL" in sql
+        # FAR-2837: claimed-but-undecided gates are candidates now.
+        assert "account_id IS NULL" not in sql
 
 
 class TestCandidateScanIsolation:
@@ -408,3 +429,76 @@ class TestCallerLockBound:
         session = _CoalesceSession(run_row=_run_row(_payload(), HASH_A), candidates=[])
         await evaluate_gate_coalescing(session, run_id=RUN_ID, review_id=GATE, pipeline_id=PIPELINE_ID, org_id=ORG_ID)
         assert not session.bound_statements
+
+
+class TestClaimedGateCoalescing:
+    """FAR-2837: an undecided gate HELD by a human (account_id set) is a
+    candidate too.
+
+    * same revision -> reuse (one gate per work item; no duplicate gate for the
+      revision the reviewer already holds);
+    * changed revision -> supersede deliberately, RELEASING the claim, so a
+      human is never left reviewing a revision the work item has moved past.
+    """
+
+    @patch("farna.core.hitl_manager.gate_coalescing.append_audit_event", new_callable=AsyncMock)
+    async def test_claimed_same_sha_reuses_the_held_gate(self, audit: AsyncMock) -> None:
+        """A duplicate delivery of the revision the reviewer already holds does
+        NOT raise a second gate — the held gate decides (reuse)."""
+        session = _CoalesceSession(
+            run_row=_run_row(_payload(), HASH_A),
+            candidates=[(_claimed_claim(), HASH_A, _payload())],
+        )
+        outcome = await evaluate_gate_coalescing(session, run_id=RUN_ID, review_id=GATE, pipeline_id=PIPELINE_ID, org_id=ORG_ID)
+        assert outcome == "reuse"
+        # Pure decision + audit — no supersede write.
+        assert len(session.statements) == 2
+        audit.assert_awaited_once()
+        assert audit.await_args.kwargs["event_type"] == "hitl.gate_coalesced"
+
+    @patch("farna.core.hitl_manager.gate_coalescing.append_audit_event", new_callable=AsyncMock)
+    async def test_claimed_changed_sha_supersedes_and_releases_the_claim(self, audit: AsyncMock) -> None:
+        """A held gate whose revision changed is superseded: closed rejected AND
+        its claim RELEASED (account_id / claim_token / claimed_at cleared), the
+        parked run un-parked, and the new run raises fresh."""
+        session = _CoalesceSession(
+            run_row=_run_row(_payload(), HASH_B),
+            candidates=[(_claimed_claim(), HASH_A, _payload())],
+        )
+        outcome = await evaluate_gate_coalescing(session, run_id=RUN_ID, review_id=GATE, pipeline_id=PIPELINE_ID, org_id=ORG_ID)
+        assert outcome == "raise"
+        # run read, scan, supersede UPDATE, un-park.
+        assert len(session.statements) == 4
+        close_values = _update_values(session.statements[2])
+        assert close_values["decision"] == "rejected"
+        # The claim is released: claimant + token cleared, claimed_at reset.
+        assert close_values["account_id"] is None
+        assert close_values["claim_token"] is None
+        assert close_values["claimed_at"] is None
+        assert _SUPERSEDE_REASON_MARKER in str(close_values["decision_payload"])
+        # The guarded close-out pins the claimant we are releasing.
+        assert "account_id = " in str(session.statements[2])
+        # Statement 4 = the parked old run un-parks.
+        unpark_values = _bound_values(session.statements[3])
+        assert "hitl_parked" in unpark_values
+        assert "awaiting_human" in unpark_values
+        assert str(OLD_RUN_ID) in unpark_values
+        audit.assert_awaited_once()
+        payload = audit.await_args.kwargs["payload_json"]
+        assert payload["was_claimed"] is True
+        assert payload["released_claimant"] == str(CLAIMANT_ID)
+
+    @patch("farna.core.hitl_manager.gate_coalescing.append_audit_event", new_callable=AsyncMock)
+    async def test_claimed_supersede_skips_on_a_concurrent_decision(self, audit: AsyncMock) -> None:
+        """A concurrent decision landing between scan and close-out (rowcount 0)
+        skips the supersede — the live decision is never clobbered."""
+        session = _CoalesceSession(
+            run_row=_run_row(_payload(), HASH_B),
+            candidates=[(_claimed_claim(), HASH_A, _payload())],
+            supersede_rowcount=0,
+        )
+        outcome = await evaluate_gate_coalescing(session, run_id=RUN_ID, review_id=GATE, pipeline_id=PIPELINE_ID, org_id=ORG_ID)
+        assert outcome == "raise"
+        # Only the guarded close-out attempt ran; the un-park never fired.
+        assert len(session.statements) == 3
+        audit.assert_not_awaited()

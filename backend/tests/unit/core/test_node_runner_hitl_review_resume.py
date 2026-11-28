@@ -663,3 +663,157 @@ async def test_grounding_skips_an_unrecognised_human_action(
     assert len(unresolved) == 1
     assert unresolved[0].human_action == "not-a-recognised-gate-action"
     append_mock.assert_not_called()
+
+
+# --- FAR-2837: a decision is bound to the revision it was given for ---------
+#
+# The gate row records the revision it was raised for (hitl_claims.revision =
+# the run's input_hash at fire time). On resume the decision is re-validated
+# against the run's CURRENT input_hash: an approval (approved / deliver_manual)
+# for a revision the run has since left is STALE — it must not be honoured, and
+# the run requires a fresh human decision. A rejection is a refusal, never an
+# unsafe authorisation, so it is honoured regardless.
+
+_RUN_ID = uuid.uuid4()
+
+
+def _revision_session(*, approved_revision: str | None, current_revision: str | None) -> MagicMock:
+    """A session double answering claim-revision then run-hash reads.
+
+    Dispatches on statement shape (``hitl_claims`` vs ``runs``) so the order of
+    the helper's two reads is not itself load-bearing.
+    """
+    session = MagicMock()
+    begin_cm = MagicMock()
+    begin_cm.__aenter__ = AsyncMock(return_value=None)
+    begin_cm.__aexit__ = AsyncMock(return_value=False)
+    session.begin = MagicMock(return_value=begin_cm)
+
+    claim_result = MagicMock()
+    claim_result.scalar_one_or_none.return_value = approved_revision
+    run_result = MagicMock()
+    run_result.scalar_one_or_none.return_value = current_revision
+
+    async def _execute(stmt: Any) -> Any:
+        if "hitl_claims" in str(stmt):
+            return claim_result
+        return run_result
+
+    session.execute = _execute
+    return session
+
+
+async def _resume_with_revision(
+    decision: dict[str, Any],
+    session: MagicMock,
+    *,
+    run_id: Any = _RUN_ID,
+) -> tuple[bool, dict[str, Any] | None]:
+    with (
+        patch("farna.core.pipeline_engine.node_runner.set_rls_org", new=AsyncMock()),
+        patch("farna.core.pipeline_engine.node_runner.set_rls_execution_context", new=AsyncMock()),
+    ):
+        return await nr._hitl_review_resume_result(
+            decision,
+            _REVIEW_ID,
+            state={"_run_id": run_id},
+            hitl_review_config={},
+            session_factory=_session_factory_for(session),
+            org_id=uuid.uuid4(),
+        )
+
+
+async def test_approval_resumes_when_revision_is_unchanged() -> None:
+    """An approval whose bound revision still matches the run's current
+    revision is honoured — the normal approve->resume path is unaffected."""
+    session = _revision_session(approved_revision="rev-1", current_revision="rev-1")
+    resumed, result = await _resume_with_revision({"action": "approved", "review_id": _REVIEW_ID}, session)
+    assert resumed is True
+    assert result is not None
+    assert result["artifacts"][0]["result"] == "approved"
+
+
+async def test_approval_is_stale_when_revision_changed() -> None:
+    """THE FAR-2837 ACCEPTANCE TEST: approve a revision, change the revision,
+    then the approval is stale and the run requires a fresh human decision."""
+    session = _revision_session(approved_revision="rev-1", current_revision="rev-2")
+    with pytest.raises(nr.ApprovalRevisionStaleError) as excinfo:
+        await _resume_with_revision({"action": "approved", "review_id": _REVIEW_ID}, session)
+    assert excinfo.value.review_id == _REVIEW_ID
+    assert excinfo.value.approved_revision == "rev-1"
+    assert excinfo.value.current_revision == "rev-2"
+
+
+async def test_deliver_manual_is_stale_when_revision_changed() -> None:
+    """``deliver_manual`` also lets the run proceed on the reviewed artefact, so
+    a stale revision binds it exactly as an approval does."""
+    session = _revision_session(approved_revision="rev-1", current_revision="rev-2")
+    with pytest.raises(nr.ApprovalRevisionStaleError):
+        await _resume_with_revision(
+            {"action": "deliver_manual", "review_id": _REVIEW_ID, "output": {"a": 1}},
+            session,
+        )
+
+
+async def test_rejection_is_honoured_even_when_revision_changed() -> None:
+    """A rejection never authorises progress — refusing it on a moved revision
+    would be wrong — so it is honoured and the revision check is never run."""
+    session = _revision_session(approved_revision="rev-1", current_revision="rev-2")
+    factory_calls = 0
+    original = session.execute
+
+    async def _counting_execute(stmt: Any) -> Any:
+        nonlocal factory_calls
+        factory_calls += 1
+        return await original(stmt)
+
+    session.execute = _counting_execute
+    resumed, result = await _resume_with_revision({"action": "rejected", "review_id": _REVIEW_ID}, session)
+    assert resumed is True
+    assert result is not None
+    assert result["artifacts"][0]["result"] == "rejected"
+    # No DB read at all for a rejection.
+    assert factory_calls == 0
+
+
+async def test_legacy_gate_with_null_revision_skips_revalidation() -> None:
+    """A gate that fired before the revision column existed carries NULL — that
+    means "cannot validate", never "stale" — so the approval is still honoured
+    (an in-flight gate is not retro-invalidated by the deploy)."""
+    session = _revision_session(approved_revision=None, current_revision="rev-2")
+    resumed, result = await _resume_with_revision({"action": "approved", "review_id": _REVIEW_ID}, session)
+    assert resumed is True
+    assert result is not None
+
+
+async def test_stale_approval_logs_a_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """The stale refusal is LOUD: ``hitl_review.stale_approval_rejected`` names
+    the gate, run and both revisions (never payload content)."""
+    session = _revision_session(approved_revision="rev-1", current_revision="rev-2")
+    with (
+        caplog.at_level(logging.WARNING, logger="farna.core.pipeline_engine.node_runner"),
+        pytest.raises(nr.ApprovalRevisionStaleError),
+    ):
+        await _resume_with_revision({"action": "approved", "review_id": _REVIEW_ID}, session)
+    records = [r for r in caplog.records if r.getMessage() == "hitl_review.stale_approval_rejected"]
+    assert len(records) == 1
+    assert records[0].review_id == _REVIEW_ID
+    assert records[0].approved_revision == "rev-1"
+    assert records[0].current_revision == "rev-2"
+
+
+async def test_revision_read_failure_fails_open(caplog: pytest.LogCaptureFixture) -> None:
+    """A failure READING the revision (a transient DB blip) fails OPEN with a
+    warning — the human's decision already committed and must not be
+    retro-failed by the check itself."""
+    session = _revision_session(approved_revision="rev-1", current_revision="rev-1")
+
+    async def _boom(_stmt: Any) -> Any:
+        raise RuntimeError("db blip")
+
+    session.execute = _boom
+    with caplog.at_level(logging.WARNING, logger="farna.core.pipeline_engine.node_runner"):
+        resumed, result = await _resume_with_revision({"action": "approved", "review_id": _REVIEW_ID}, session)
+    assert resumed is True
+    assert result is not None
+    assert any(r.getMessage() == "hitl_review.revision_revalidation_failed" for r in caplog.records)

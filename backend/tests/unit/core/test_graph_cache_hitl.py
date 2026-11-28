@@ -10,11 +10,37 @@ kick back to the plain ``reject_target`` with no correction dispatch.
 """
 
 import uuid
-from unittest.mock import AsyncMock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from farna.core.pipeline_engine.node_runner import make_hitl_review_fn
+
+
+def _noop_session_factory():
+    """A session factory whose revision reads return None (cannot validate).
+
+    FAR-2837: an approved resume re-validates the gate's bound revision against
+    the run's current ``input_hash``. These gates were never stamped (NULL
+    revision), so the check skips — never a stale refusal. A real async-CM
+    factory (not a bare ``AsyncMock``) lets that path run without leaking an
+    un-awaited coroutine under the strict RuntimeWarning filter.
+    """
+    session = MagicMock()
+    begin_cm = MagicMock()
+    begin_cm.__aenter__ = AsyncMock(return_value=None)
+    begin_cm.__aexit__ = AsyncMock(return_value=False)
+    session.begin = MagicMock(return_value=begin_cm)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=result)
+
+    @asynccontextmanager
+    async def _ctx():
+        yield session
+
+    return MagicMock(side_effect=lambda: _ctx())
 
 
 def _gate_fn(correction_target: str | None = None, *, org_id: uuid.UUID | None = None):
@@ -28,7 +54,7 @@ def _gate_fn(correction_target: str | None = None, *, org_id: uuid.UUID | None =
     }
     if correction_target is not None:
         config["correction_target"] = correction_target
-    return make_hitl_review_fn(config, session_factory=AsyncMock(), org_id=org_id or uuid.uuid4())
+    return make_hitl_review_fn(config, session_factory=_noop_session_factory(), org_id=org_id or uuid.uuid4())
 
 
 def _state(**overrides: dict) -> dict:

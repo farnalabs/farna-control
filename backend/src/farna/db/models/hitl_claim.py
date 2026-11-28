@@ -79,6 +79,17 @@ class HitlClaim(OrgScoped):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     decision: Mapped[str | None] = mapped_column(String(20))
     decision_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # FAR-2837: the code revision this gate was raised for and its approval is
+    # bound to — the run's ``input_hash`` (the content hash of the work-item
+    # payload, the SAME identity gate coalescing already treats as the "entity
+    # SHA": unchanged hash = reuse, changed hash = supersede). Stamped at gate
+    # raise (``HITLManager.create_gate``); re-validated at resume so a decision
+    # given for one revision is never honoured once the run has moved to
+    # another. NULL for legacy gates that fired before this column existed (and
+    # for gates whose run row is unresolvable) — the resume check treats NULL
+    # as "cannot validate" and skips rather than fabricating a revision.
+    # Mirrors migration 0370.
+    revision: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Full resume payload persisted at decision time (B1) - the same dict the
     # web routes pass to executor.resume. Survives SAQ job loss so a recovered
     # resume injects the human's actual verdict, never an empty approval.

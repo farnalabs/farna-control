@@ -9,18 +9,20 @@ every 15 minutes, so the pile grows fast).
 :func:`evaluate_gate_coalescing` runs at gate-raise time (executor
 ``_handle_graph_interrupt``) and decides between:
 
-* **reuse** — an OPEN gate (undecided + unclaimed) already exists on ANOTHER
-  LIVE run (``awaiting_human``/``hitl_parked``) of the same pipeline for the
+* **reuse** — an UNDECIDED gate (unclaimed OR claimed, see the CLAIMED gates
+  section below) already exists on ANOTHER LIVE run
+  (``awaiting_human``/``hitl_parked``) of the same pipeline for the
   same work item (same ``_coalesce_key`` stamp, same gate id) and the entity
   SHA (``runs.input_hash``) is UNCHANGED:
   the existing gate decides for the work item. The duplicate run does NOT
   raise a gate; the executor terminalises it ``failed``/``executor_superseded``
   (the house supersession code, ``run.superseded`` spec — silent severity, no
   alert).
-* **supersede** — an open gate exists but the SHA CHANGED (the work item
+* **supersede** — an undecided gate exists but the SHA CHANGED (the work item
   moved on; the old gate reviews obsolete state): the old gate is auto-closed
   with a SYSTEM-committed ``rejected`` decision (loudly audited as
-  ``hitl.gate_superseded``) and the old run — if it was parked — is un-parked
+  ``hitl.gate_superseded``; a CLAIMED gate is released from its claimant in the
+  same write) and the old run — if it was parked — is un-parked
   to ``awaiting_human`` so the existing committed-decision resume machinery
   (dispatcher_reconcile F6a) resumes it, routing it through the gate's reject
   route when one is configured. With no reject route the old run now ENDS
@@ -43,10 +45,29 @@ The model does NOT support multiple runs per gate (``uq_hitl_claims_run_gate``
 keys gate rows per run), so the "link the new run to the existing gate" shape
 is unavailable — reuse = skip the new gate and let the existing one decide.
 
-CLAIMED gates are never superseded (a human holding the claim is mid-review;
-the claim TTL + a later raise close the loop). PARK ≠ DECIDE is preserved in
-the park sweep; the supersede close-out here is an explicit D4 system decision
-on obsolete work, not an expiry action.
+CLAIMED gates (FAR-2837) — the candidate scan includes undecided gates held by
+a human, not only unclaimed ones, because a new delivery for the SAME work
+item can move the revision under a reviewer:
+
+* **same revision** — a duplicate delivery of the revision the reviewer is
+  already looking at: reuse, exactly as for an unclaimed gate (one gate per
+  work item; the duplicate run is skipped and the held gate decides, so there
+  is no second gate for the same revision).
+* **revision changed** — the reviewer is holding a claim on OBSOLETE work.
+  Deliberate decision: SUPERSEDE it, RELEASING the claim (``account_id`` /
+  ``claim_token`` cleared) and closing it with a SYSTEM-committed ``rejected``
+  decision, then raise the new gate fresh. Leaving it stood would let the
+  reviewer approve work the work item has moved past — an approval for a
+  revision the run has since left. The supersede is the same loud
+  ``hitl.gate_superseded`` audit event as the unclaimed case (with
+  ``was_claimed: true`` naming the released claimant), and the old run routes
+  through the identical committed-decision resume machinery (reject route, or
+  ends ``hitl.superseded``). The guarded UPDATE (``decision IS NULL`` AND the
+  claimant unchanged) means a concurrent fresh decision or a claim that
+  expired-and-re-armed in the race window is never clobbered — it is skipped.
+
+PARK ≠ DECIDE is preserved in the park sweep; the supersede close-out here is
+an explicit system decision on obsolete work, not an expiry action.
 """
 
 from __future__ import annotations
@@ -172,7 +193,11 @@ async def evaluate_gate_coalescing(
             HitlClaim.organisation_id == org_id,
             HitlClaim.review_id == review_id,
             HitlClaim.decision.is_(None),
-            HitlClaim.account_id.is_(None),
+            # FAR-2837: undecided CLAIMED gates are candidates too (not only
+            # unclaimed ones). A held gate whose revision changed must be
+            # superseded deliberately (claim released) so a human is never left
+            # reviewing obsolete work; a held gate on the SAME revision is
+            # reused. See the module docstring "CLAIMED gates" section.
             HitlClaim.run_id != run_id,
             Run.cancellation_requested.is_(False),
             # qa F3: only gates of LIVE runs are reuse candidates — a
@@ -197,7 +222,10 @@ async def evaluate_gate_coalescing(
 
     if old_hash == run_hash:
         # Unchanged SHA — the existing gate decides for the work item; the
-        # duplicate run is skipped (terminalised superseded by the caller).
+        # duplicate run is skipped (terminalised superseded by the caller). A
+        # CLAIMED gate on the SAME revision reuses too: one gate per work item,
+        # so a duplicate delivery of the revision a human already holds never
+        # raises a second gate (FAR-2837).
         _log.warning(
             "hitl_coalesce.reused run=%s gate=%s existing_claim=%s existing_run=%s key=%s",
             run_id,
@@ -222,61 +250,81 @@ async def evaluate_gate_coalescing(
         return "reuse"
 
     # Changed SHA — supersede: close the old gate with a SYSTEM-committed
-    # rejection (guarded re-validation against a concurrent claimer) and
+    # rejection (guarded re-validation against a concurrent decide/claim) and
     # un-park the old run so the committed-decision resume machinery resumes
     # it: it routes through the gate's reject route when one is configured;
     # with no reject route it ENDS ``rejected`` / ``hitl.superseded`` (FAR-1487;
     # the executor finalize detects the supersede via this decision's
     # ``decision_payload.reason`` and the absence of an account), unless the
     # gate is explicitly ``on_reject: proceed``. Then raise fresh.
+    #
+    # FAR-2837: a CLAIMED-but-undecided gate is superseded too, RELEASING the
+    # claimant (account_id / claim_token / claimed_at cleared) — the reviewer
+    # holds a claim on obsolete work the work item has moved past, so leaving
+    # it stood would let them approve a stale revision. The guard pins BOTH
+    # ``decision IS NULL`` and the claimant whose claim we are releasing, so a
+    # concurrent fresh decision, or a claim that expired and re-armed into a
+    # different account in the race window, is skipped rather than clobbered.
     now = datetime.now(UTC)
+    claimed_by = old_claim.account_id
+    supersede_values: dict[str, Any] = {
+        "decision": "rejected",
+        "decision_at": now,
+        "decision_payload": {"action": "rejected", "review_id": review_id, "reason": _SUPERSEDE_REASON},
+        "account_id": None,
+        "claim_token": None,
+        "expires_at": now,
+    }
+    if claimed_by is not None:
+        # Release the claim so the obsolete gate is not left held by a human.
+        supersede_values["claimed_at"] = None
+    claim_guard = HitlClaim.account_id == claimed_by if claimed_by is not None else HitlClaim.account_id.is_(None)
     superseded = await session.execute(
         update(HitlClaim)
         .where(
             HitlClaim.id == old_claim.id,
             HitlClaim.organisation_id == org_id,
             HitlClaim.decision.is_(None),
-            HitlClaim.account_id.is_(None),
+            claim_guard,
         )
-        .values(
-            decision="rejected",
-            decision_at=now,
-            decision_payload={"action": "rejected", "review_id": review_id, "reason": _SUPERSEDE_REASON},
-            account_id=None,
-            claim_token=None,
-            expires_at=now,
-        )
+        .values(**supersede_values)
     )
     if superseded.rowcount:  # type: ignore[attr-defined]  # ORM update Result exposes rowcount at runtime
         # Shared un-park transition (qa F15) — same helper the decision path
         # (HITLManager._decide) uses, guarded to parked runs only.
         await unpark_parked_run(session, run_id=old_claim.run_id, org_id=org_id)
         _log.warning(
-            "hitl_coalesce.superseded old_claim=%s old_run=%s new_run=%s gate=%s key=%s",
+            "hitl_coalesce.superseded old_claim=%s old_run=%s new_run=%s gate=%s key=%s was_claimed=%s",
             old_claim.id,
             old_claim.run_id,
             run_id,
             review_id,
             entity_key,
+            claimed_by is not None,
         )
+        audit_payload: dict[str, Any] = {
+            "pipeline_run_id": str(old_claim.run_id),
+            "node_id": review_id,
+            "superseded_by_run_id": str(run_id),
+            "coalesce_key": entity_key,
+            "reason": _SUPERSEDE_REASON,
+            "was_claimed": claimed_by is not None,
+        }
+        if claimed_by is not None:
+            audit_payload["released_claimant"] = str(claimed_by)
         await _audit(
             session,
             org_id,
             "hitl.gate_superseded",
             old_claim.id,
-            {
-                "pipeline_run_id": str(old_claim.run_id),
-                "node_id": review_id,
-                "superseded_by_run_id": str(run_id),
-                "coalesce_key": entity_key,
-                "reason": _SUPERSEDE_REASON,
-            },
+            audit_payload,
         )
     else:
-        # A claimer took the old gate between the scan and the close-out —
-        # leave it to the human + claim TTL; raise the new gate fresh.
+        # A concurrent decision landed, or a claimant took / re-armed the gate
+        # between the scan and the close-out — leave it to that decision + the
+        # claim TTL; raise the new gate fresh.
         _log.info(
-            "hitl_coalesce.supersede_skipped_claimed old_claim=%s new_run=%s gate=%s",
+            "hitl_coalesce.supersede_skipped old_claim=%s new_run=%s gate=%s",
             old_claim.id,
             run_id,
             review_id,
