@@ -36,6 +36,12 @@ name: "Merge train: validate"
 #                     `pnpm run test:unit` (4 workers) at train time, so the
 #                     non-train queue path's ordering-sensitive worker count is
 #                     validated on the composed branch too.
+#   runner-ci-harness ci.yml's runner-ci-harness job (FAR-773): boots the
+#                     runner-ci compose rig and runs the docker-marked Bundled
+#                     Runner suite. The fast-tier split removed its per-PR home,
+#                     so it runs HERE, once per train, against the composed
+#                     branch (path-filtered internally against base_ref). Do not
+#                     let backend/tests/docker/** go unrun before merge.
 #   sonar             former ci.yml sonarcloud-scan (coverage import).
 #   sonar-new-issues  former ci.yml sonar-new-issues-gate (PR-scoped; retired from
 #                     the PR tier - the train passes no PR number so it reports a
@@ -414,8 +420,13 @@ jobs:
     # route-coverage gate that used to run per-PR in ci.yml. The fast-tier split
     # (2026-11-27) dropped those from ci.yml and nothing else ran them, so they
     # run HERE, once per train, before anything merges (FAR-1850 mobile nav,
-    # FAR-2017 visual/token slice, FAR-2461 canvas @visual). The FAR-1947
-    # 4-worker parity guard is a separate job below, not this one.
+    # FAR-2017 visual/token slice, FAR-2461 canvas @visual, FAR-637 route
+    # coverage, and the full-spec `playwright test --list` compile check). The
+    # FAR-1947 4-worker parity guard is a separate job below, not this one.
+    # `pnpm audit` is deliberately NOT re-homed here: npm CVEs are covered by
+    # the Trivy CRITICAL/HIGH fs scan in ci.yml `backend-lint` and by the deploy
+    # pre-deploy `pnpm audit`, so a network-dependent advisory gate on the train
+    # would add merge-blocking flake without new coverage.
     name: "Validation: frontend"
     runs-on: ubicloud-standard-2
     # 40 (was 30): the visual/mobile Playwright slices each boot a fresh Vite dev
@@ -447,6 +458,12 @@ jobs:
       - run: pnpm run type-check
       - name: Install Playwright browsers
         run: pnpm exec playwright install chromium
+      - name: Validate Playwright test compilation
+        # `--list` compiles EVERY spec, so a malformed spec outside the selected
+        # slices is caught here. The fast-tier split (2026-11-27) removed this
+        # from ci.yml and nothing re-homed it; the train owns it now. No browser
+        # interaction - it is a cheap parse/compile check.
+        run: pnpm exec playwright test --list
       - name: Run WCAG contrast tests
         run: pnpm exec playwright test wcag-contrast
       # FAR-1850: the mobile nav specs used to run only inside the staging E2E
@@ -585,6 +602,23 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Run unit tests (exact merge-queue invocation)
         run: pnpm run test:unit
+
+  runner-ci-harness:
+    # FAR-773: the Bundled Runner harness (boots deploy/compose/runner-ci.yml -
+    # socket-proxy + dind + workspace network - and runs every docker-marked
+    # module in backend/tests/docker/). ci.yml ran it per PR before the
+    # fast-tier split (2026-11-27); it runs HERE now, once per train, on the
+    # composed branch, so a PR touching bundled_runner / runtime_provider /
+    # executor still fails this gate before merge instead of only on the weekly
+    # backstop. The reusable workflow path-filters internally against
+    # `base_ref`, so it boots the rig only when the Bundled Runner surface
+    # changed (FAR-528: it fails OPEN, loudly, if the filter cannot decide).
+    name: "Validation: Bundled Runner harness (compose + socket-proxy + dind)"
+    uses: ./.github/workflows/runner-ci-harness.yml
+    with:
+      ref: ${{ inputs.ref }}
+      base_ref: ${{ inputs.base_ref }}
+    secrets: inherit
 
   sonar:
     # SonarCloud scan with coverage import. It needs the combined backend
@@ -1040,7 +1074,7 @@ jobs:
     # always() so a failed validation still names the failing job; a skipped job
     # (full=false) is not a failure.
     name: "Validation: summary"
-    needs: [backend-unit, backend-non-unit, integration, tier1b, frontend, frontend-unit-parity, sonar, sonar-new-issues, coverage, bdd]
+    needs: [backend-unit, backend-non-unit, integration, tier1b, frontend, frontend-unit-parity, runner-ci-harness, sonar, sonar-new-issues, coverage, bdd]
     if: always()
     runs-on: ubicloud-standard-2
     timeout-minutes: 5
@@ -1059,6 +1093,7 @@ jobs:
           R_TIER1B: ${{ needs.tier1b.result }}
           R_FRONTEND: ${{ needs.frontend.result }}
           R_FRONTEND_UNIT_PARITY: ${{ needs.frontend-unit-parity.result }}
+          R_RUNNER_CI_HARNESS: ${{ needs.runner-ci-harness.result }}
           R_SONAR: ${{ needs.sonar.result }}
           R_SONAR_NEW_ISSUES: ${{ needs.sonar-new-issues.result }}
           R_COVERAGE: ${{ needs.coverage.result }}
@@ -1082,6 +1117,7 @@ jobs:
           record tier1b "$R_TIER1B"
           record frontend "$R_FRONTEND"
           record frontend-unit-parity "$R_FRONTEND_UNIT_PARITY"
+          record runner-ci-harness "$R_RUNNER_CI_HARNESS"
           record sonar "$R_SONAR"
           record sonar-new-issues "$R_SONAR_NEW_ISSUES"
           record coverage "$R_COVERAGE"

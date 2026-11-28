@@ -21,8 +21,8 @@ on:
   #   backend unit shards, architecture/connector/BDD-module suites, integration
   #   shards, Tier 1b testcontainers, full frontend vitest + WCAG + build, the
   #   Playwright mobile-nav / visual-token / canvas @visual / route-coverage
-  #   gates, SonarCloud (scan and its new-code quality gate) and the
-  #   changed-lines coverage gate.
+  #   gates, the Bundled Runner docker harness (FAR-773), SonarCloud (scan and
+  #   its new-code quality gate) and the changed-lines coverage gate.
   # The extra PR-scoped Sonar new-issues COUNT gate is retired from the PR tier
   # (PR CI no longer runs a SonarCloud analysis, so there is no PR analysis to
   # query); the train's SonarCloud quality gate is the pre-merge quality signal,
