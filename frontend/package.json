@@ -1,6 +1,6 @@
 {
     "name": "farna-control-frontend",
-    "version": "0.3.331",
+    "version": "0.3.332",
     "private": true,
     "scripts": {
         "generate:api": "uv run --project ../backend --no-sync python ../scripts/run_generate_api_types.py",
