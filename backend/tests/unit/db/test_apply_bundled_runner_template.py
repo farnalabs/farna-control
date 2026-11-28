@@ -9,7 +9,10 @@ template owns it and an apply writes ``BUNDLED_RUNNER_IMAGE_REF`` — so the
 digest advances on every release, not just the first one off the placeholder.
 Once the operator points the profile at another repository it is neither a
 drift key nor an apply target, so it survives the apply unchanged. Non-template
-rows are rejected (None).
+rows are rejected (None). The template may only ADVANCE a reference: an apply
+writes ``image_ref`` only while the shipped ``BUNDLED_RUNNER_IMAGE_REF`` is a
+real release pin, so a non-release build whose constant is still the placeholder
+never downgrades a row's real digest to the placeholder.
 """
 
 import uuid
@@ -21,6 +24,7 @@ import pytest
 from farna.db.bundled_runner_template import (
     BUNDLED_RUNNER_IMAGE_REF,
     BUNDLED_RUNNER_IMAGE_REPOSITORY,
+    BUNDLED_RUNNER_PLACEHOLDER_DIGEST,
     TEMPLATE_CONFIG_JSON,
     TEMPLATE_OWNED_FIELDS,
 )
@@ -30,6 +34,9 @@ _PROFILE_ID = uuid.UUID("00000000-0000-0000-0000-000000000010")
 
 #: A genuinely third-party (operator BYO) image, in another repository.
 _OPERATOR_IMAGE_REF = "ghcr.io/acme/agent@sha256:" + "2" * 64
+
+#: The shipped placeholder reference (the committed default on a non-release build).
+_PLACEHOLDER_REF = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@" + BUNDLED_RUNNER_PLACEHOLDER_DIGEST
 
 
 def _make_session() -> AsyncMock:
@@ -136,11 +143,55 @@ class TestApplyBundledRunnerTemplate:
         assert profile.image_ref == advanced
 
     @pytest.mark.asyncio
-    async def test_apply_writes_template_image_when_row_has_none(self) -> None:
-        """A row with no image is template-owned, so apply supplies the constant."""
+    async def test_apply_writes_template_image_when_row_has_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A row with no image is template-owned, so a real-pin apply supplies the constant."""
+        advanced = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "9" * 64
+        monkeypatch.setattr(
+            "farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF",
+            advanced,
+        )
         profile = _make_profile(image_ref=None)
         await _apply(profile)
-        assert profile.image_ref == BUNDLED_RUNNER_IMAGE_REF
+        assert profile.image_ref == advanced
+
+    @pytest.mark.asyncio
+    async def test_apply_never_downgrades_a_real_digest_to_the_placeholder(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """On a non-release build apply MUST NOT rewrite a real digest to the placeholder.
+
+        The shipped constant is still the all-zero placeholder (``:latest``,
+        local dev, a placeholder checkout). A row seeded by an earlier release
+        carries a real first-party digest; writing the placeholder would break
+        dispatch, so the template may only ever advance a reference.
+        """
+        monkeypatch.setattr(
+            "farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF",
+            _PLACEHOLDER_REF,
+        )
+        real_digest_ref = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "3" * 64
+        profile = _make_profile(image_ref=real_digest_ref)
+        await _apply(profile)
+        assert profile.image_ref == real_digest_ref
+        assert profile.image_ref != _PLACEHOLDER_REF
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "image_ref",
+        [
+            _PLACEHOLDER_REF,
+            BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "0" * 64,
+            _OPERATOR_IMAGE_REF,
+        ],
+        ids=["placeholder", "placeholder-by-digest", "third-party"],
+    )
+    async def test_apply_writes_nothing_to_image_ref_when_constant_is_the_placeholder(self, image_ref: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        """With a placeholder shipped constant, apply leaves image_ref untouched."""
+        monkeypatch.setattr(
+            "farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF",
+            _PLACEHOLDER_REF,
+        )
+        profile = _make_profile(image_ref=image_ref)
+        await _apply(profile)
+        assert profile.image_ref == image_ref
 
     @pytest.mark.asyncio
     async def test_config_drifted_keys_reset_operator_keys_survive(self) -> None:

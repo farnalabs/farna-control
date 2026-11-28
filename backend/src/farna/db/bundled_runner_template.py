@@ -37,6 +37,12 @@ Digest contract (ADR 029 / plan D4):
   N+1 advances the constant, so upgrades work release over release. Any other
   repository is operator-owned: it is not reported as drift and apply never
   overwrites it, so a BYO image can never be silently reverted.
+- The template may only ADVANCE a reference, never downgrade it: ``image_ref``
+  participates in drift and an apply writes the constant ONLY while the shipped
+  ``BUNDLED_RUNNER_IMAGE_REF`` is itself a real release pin
+  (:func:`shipped_image_ref_is_real_pin`). On a non-release build the constant
+  is still the all-zero placeholder, so writing it would replace a real
+  earlier-release first-party digest with the placeholder and break dispatch.
 """
 
 from __future__ import annotations
@@ -117,10 +123,29 @@ def is_template_owned_image_ref(image_ref: str | None) -> bool:
     has not been claimed by the operator. In that state the reference
     participates in drift and an apply writes the release constant — which is
     what makes an upgrade from one release to the next advance the digest, not
-    just the first advance off the placeholder. Any other reference is
-    operator-set (BYO) and is neither drift nor an apply target.
+    just the first advance off the placeholder — provided the shipped constant
+    is itself a real release pin (see :func:`shipped_image_ref_is_real_pin`).
+    Any other reference is operator-set (BYO) and is neither drift nor an apply
+    target.
     """
     return not image_ref or is_placeholder_bundled_runner_image_ref(image_ref) or is_first_party_runner_image_ref(image_ref)
+
+
+def shipped_image_ref_is_real_pin() -> bool:
+    """True when the shipped ``BUNDLED_RUNNER_IMAGE_REF`` carries a real release pin.
+
+    The committed default is the all-zero placeholder digest, and only the
+    release job rewrites it (in its CI checkout). On a non-release build — a
+    ``:latest`` image built by ``publish-images.yml``, local dev, or any
+    checkout whose constant is still the placeholder — the shipped constant is
+    NOT a pin. The template may only ever ADVANCE a row's reference, so in that
+    state it must not write the constant: doing so would downgrade a real
+    earlier-release first-party digest to the placeholder and break dispatch.
+
+    Reads the module global at call time so the release rewrite (and a test's
+    ``monkeypatch``) is observed live.
+    """
+    return not is_placeholder_bundled_runner_image_ref(BUNDLED_RUNNER_IMAGE_REF)
 
 
 # Template-owned fields (drift-keyed): provider, digest, hardening, and
@@ -197,14 +222,21 @@ def template_drift_fields(
 
     ``image_ref`` participates only while the template still owns it (empty, the
     release placeholder digest, or a first-party runner reference at any
-    digest). An operator-set BYO image in another repository is not drift and
-    is never reported as a "shipped template updated" state.
+    digest) AND the shipped constant is itself a real release pin. A shipped
+    placeholder (a non-release build) never drifts a row's image: the template
+    may only advance a reference, never downgrade it to the placeholder. An
+    operator-set BYO image in another repository is not drift and is never
+    reported as a "shipped template updated" state.
     """
     if provider_type != BUNDLED_RUNNER_PROVIDER_TYPE:
         # Only template-shaped runner_docker rows participate in drift.
         return {"is_seeded": False, "drifted": False, "drifted_fields": []}
     drifted_fields: list[str] = []
-    if is_template_owned_image_ref(image_ref) and image_ref != BUNDLED_RUNNER_IMAGE_REF:
+    # The template may only ADVANCE a reference. When the shipped constant is
+    # still the placeholder (non-release build) writing it to a row would
+    # downgrade a real earlier-release digest and break dispatch, so image_ref
+    # is not a drift key in that state.
+    if shipped_image_ref_is_real_pin() and is_template_owned_image_ref(image_ref) and image_ref != BUNDLED_RUNNER_IMAGE_REF:
         drifted_fields.append("image_ref")
     if network_policy != TEMPLATE_OWNED_FIELDS["network_policy"]:
         drifted_fields.append("network_policy")

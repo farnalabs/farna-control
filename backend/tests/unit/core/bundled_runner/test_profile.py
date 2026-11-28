@@ -18,7 +18,11 @@ from farna.db.bundled_runner_template import (
     BUNDLED_RUNNER_PLACEHOLDER_DIGEST,
     is_first_party_runner_image_ref,
     is_template_owned_image_ref,
+    shipped_image_ref_is_real_pin,
 )
+
+#: The shipped placeholder reference (the committed default on a non-release build).
+_PLACEHOLDER_REF = BUNDLED_RUNNER_IMAGE_REPOSITORY + "@" + BUNDLED_RUNNER_PLACEHOLDER_DIGEST
 
 
 def test_template_constants_shape() -> None:
@@ -112,6 +116,50 @@ def test_image_ref_ownership_is_scoped_to_the_first_party_repository(image_ref: 
 def test_drift_none_for_fresh_template_row() -> None:
     status = template_drift_status(_row())
     assert status == {"is_seeded": True, "drifted": False, "drifted_fields": []}
+
+
+def test_shipped_pin_gate_tracks_the_constant(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gate is False while the shipped constant is the placeholder."""
+    monkeypatch.setattr("farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF", _PLACEHOLDER_REF)
+    assert shipped_image_ref_is_real_pin() is False
+    monkeypatch.setattr(
+        "farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF",
+        BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "9" * 64,
+    )
+    assert shipped_image_ref_is_real_pin() is True
+
+
+@pytest.mark.parametrize(
+    "image_ref",
+    [
+        BUNDLED_RUNNER_IMAGE_REPOSITORY + "@sha256:" + "3" * 64,  # real first-party digest (earlier release)
+        _PLACEHOLDER_REF,  # the placeholder itself
+        BUNDLED_RUNNER_LEGACY_IMAGE_NAME + "@" + BUNDLED_RUNNER_PLACEHOLDER_DIGEST,  # legacy name, placeholder digest
+        "ghcr.io/acme/agent@sha256:" + "3" * 64,  # third-party (BYO)
+        None,  # no image at all
+    ],
+    ids=[
+        "real-first-party-digest",
+        "placeholder",
+        "legacy-name-placeholder-digest",
+        "third-party",
+        "none",
+    ],
+)
+def test_drift_never_reports_image_ref_when_constant_is_the_placeholder(image_ref: str | None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A placeholder shipped constant never downgrades or drifts a row's image.
+
+    On a non-release build (``:latest``, local dev, a placeholder checkout) the
+    constant is the all-zero placeholder, so the template may not ADVANCE a row
+    to it: a real earlier-release first-party digest must NOT report image_ref
+    drift (apply would otherwise rewrite it to the placeholder and break
+    dispatch).
+    """
+    monkeypatch.setattr("farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF", _PLACEHOLDER_REF)
+    status = template_drift_status(_row(image_ref=image_ref))
+    assert status["is_seeded"] is True
+    assert status["drifted"] is False
+    assert "image_ref" not in status["drifted_fields"]
 
 
 def test_drift_none_when_row_matches_the_first_party_constant(monkeypatch: pytest.MonkeyPatch) -> None:
