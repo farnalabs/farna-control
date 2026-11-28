@@ -270,6 +270,18 @@ _EXCLUDE_PATTERNS: list[str] = [
     "**/tests/**",
     "**/migrations/**",
     "**/__tests__/**",
+    # ``frontend/src/test-utils/**`` is test scaffolding (shared fixtures,
+    # guards and measuring instruments imported by specs), not client source.
+    # The vitest v8 scan DOES load and instrument it, so it reaches the LCOV
+    # report, but it is the same measurement-boundary class as
+    # ``frontend/src/__tests__/**``: a helper's defensive branches (an
+    # unparseable-SFC throw, a ``.tsx`` fallback) are not shipped behaviour and
+    # cannot all be driven to 98% branch coverage. Observed on PR #3625: the new
+    # ``complexity-measure.ts`` scored 94.4% line / 87.9% branch and failed the
+    # changed-lines gate even though the spec exercises every reachable path;
+    # the module is already excluded from the complexity ratchet for the same
+    # reason. Client source elsewhere under ``src/`` stays gated.
+    "frontend/src/test-utils/**",
     "**/*.spec.*",
     "**/*.test.*",
 ]

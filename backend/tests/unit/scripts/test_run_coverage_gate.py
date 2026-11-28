@@ -856,6 +856,26 @@ def test_frontend_build_config_files_are_excluded_from_the_gate():
     assert mod._is_excluded("frontend/src/composables/useEnv.ts") is False
 
 
+def test_frontend_test_utils_are_excluded_from_the_gate():
+    """``frontend/src/test-utils/**`` is shared test scaffolding, not client source.
+
+    Regression for PR #3625: the vitest v8 scan loads and instruments
+    ``frontend/src/test-utils/complexity-measure.ts`` because a spec imports it,
+    so it appears in the LCOV report and was scored as production coverage —
+    94.4% line / 87.9% branch, below the 98% gate. Its remaining branches are
+    defensive scaffolding (an unparseable-SFC throw, a ``.tsx`` fallback) that
+    cannot all be driven to 98%. It is the same measurement-boundary class as
+    ``frontend/src/__tests__/**`` and is already excluded from the complexity
+    ratchet. Test scaffolding is out of scope; client source stays gated.
+    """
+    assert mod._is_excluded("frontend/src/test-utils/complexity-measure.ts") is True
+    assert mod._is_excluded("frontend/src/test-utils/design-system-detectors.ts") is True
+    assert mod._is_excluded("frontend/src/test-utils/nested/helper.ts") is True
+    # Client source in the same tree must still be gated.
+    assert mod._is_excluded("frontend/src/composables/useEventStream.ts") is False
+    assert mod._is_excluded("frontend/src/components/NotificationBell.vue") is False
+
+
 def test_changed_production_files_uses_merge_base_range():
     """Regression: ``git diff`` must use the three-dot merge-base range.
 
