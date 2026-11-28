@@ -303,7 +303,7 @@ step modules have relaxed rules.
 
 - `farna.api` must not import `langgraph` directly
 - `farna.connectors` must not import `farna.api` or `farna.auth`
-- `farna.core`, `.api`, `.connectors` must not import `modulo_cloud`
+- `farna.core`, `.api`, `.connectors` must not import the hosted cloud package (kept zero-coupled so the self-hosted product stands alone)
 - `farna.otel_bridge` must not import `core.pipeline_engine`, `hitl_manager`, `eval_engine`
 
 ### TypeScript / Vue (frontend)
