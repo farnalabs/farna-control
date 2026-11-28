@@ -72,24 +72,33 @@ permissions:
 
 # One merge train at a time, for the WHOLE run.
 #
-# The group MUST be at workflow level, not only on the merging jobs. A train is
-# a multi-job sequence (admit -> build -> validate -> merge); job-level
-# concurrency cannot serialise a sequence, because each job releases the group
-# when it finishes. With MERGE_TRAIN_ENABLED=true the `queue` job is skipped and
-# only `merge` held the group, so overlapping cron / workflow_dispatch /
-# repository_dispatch runs each ran admit + build + validate CONCURRENTLY and
-# then raced for the merge lock - doubling validation cost and letting a stale
-# train (built from an older main) reach `gh pr merge` after a newer one.
+# The group MUST be at workflow level, and it must be the ONLY place it is
+# declared. A train is a multi-job sequence (admit -> build -> validate ->
+# merge); job-level concurrency cannot serialise a sequence, because each job
+# releases the group when it finishes. With MERGE_TRAIN_ENABLED=true the `queue`
+# job is skipped and only `merge` held the group, so overlapping cron /
+# workflow_dispatch / repository_dispatch runs each ran admit + build + validate
+# CONCURRENTLY and then raced for the merge lock - doubling validation cost and
+# letting a stale train (built from an older main) reach `gh pr merge` after a
+# newer one.
+#
+# No job may re-declare this group. GitHub keeps workflow-run and job
+# concurrency in ONE shared repository-wide group namespace, so a job that
+# declares the same `merge-queue` group the run already holds queues behind its
+# OWN run's workflow-level lock and can never start - permanently, because
+# cancel-in-progress is false. That deadlock would stall the merge queue, the
+# sole merge authority. merge-queue-watchdog.yml does not rescue it: the
+# watchdog only cancels an in_progress run whose EVERY job has started_at ==
+# null, and here the freeze-gate / event-gate jobs start normally before the
+# deadlocked job blocks. The architecture test (test_workflow_structure.py)
+# fails CI if any job re-declares the group.
 #
 # This reverses the 2026-10 decision to scope the group to the `queue` job only.
 # That was taken while the removed high-frequency triggers (pull_request_review,
 # check_suite - see on.repository_dispatch, FAR-1428) flooded the queue: every
 # chained pass then queued behind an incumbent's event-gate pacing sleep. Two
 # things changed: those triggers are gone, and event-gate caps its wait at 120s,
-# so the cost of holding the lock across the gates is now bounded. The
-# stuck-runner failure mode (a run whose job never gets picked up holding a
-# workflow-wide lock) is covered by merge-queue-watchdog.yml, which runs in its
-# own group, outside this lock, and cancels such runs.
+# so the cost of holding the lock across the gates is now bounded.
 #
 # cancel-in-progress MUST stay false: a later run must never cancel an
 # in-flight train mid-validate or mid-merge. GitHub keeps one pending run per
@@ -294,14 +303,12 @@ jobs:
     # pre-train condition because `vars.MERGE_TRAIN_ENABLED != 'true'` is true when
     # the variable is unset.
     if: needs.freeze-gate.outputs.frozen == 'false' && needs.event-gate.outputs.should_run == 'true' && vars.MERGE_TRAIN_ENABLED != 'true'
-    # Defence in depth: the merge-queue group is declared at workflow level (see
-    # the top-level `concurrency` block), so this job already runs inside it.
-    # The job-level copy is kept so the serialisation intent stays explicit on
-    # every job that runs `gh pr merge`, and so a future edit that narrows the
-    # workflow-level block cannot silently un-serialise the merge.
-    concurrency:
-      group: merge-queue
-      cancel-in-progress: false
+    # NO job-level `concurrency:` here: the merge-queue group is held at
+    # workflow level (see the top-level `concurrency` block), so this job already
+    # runs inside it. Re-declaring the same group on the job would queue it
+    # behind its own run's workflow-level lock and it would never start — GitHub
+    # shares one concurrency namespace across workflow runs and jobs. The
+    # architecture test enforces that no job re-declares the group.
     # 60 is the measured ceiling plus dispatch headroom. The last successful pass
     # took 37.0 min, of which the backend/frontend validation step alone was
     # 34.3 min; at the former 45-min timeout that left only ~8 min for the
@@ -311,7 +318,7 @@ jobs:
     # late-but-successful dispatch would have spent the 45-min margin - and a
     # cancelled job skips both the merge steps and the failure()-gated final
     # notification, i.e. the silent drop FAR-2066 exists to remove. Still
-    # bounded: this job holds the merge-queue concurrency lock
+    # bounded: this run holds the workflow-level merge-queue concurrency lock
     # (cancel-in-progress: false), so an unbounded hold would stall every
     # later queue pass. (History: 30 was the old failure ceiling at a 29.1-min
     # observed pass - backend 19.9 + frontend 7.2 sequential.)
@@ -3359,16 +3366,12 @@ jobs:
       && needs.admit.outputs.admitted != '0'
     runs-on: ubicloud-standard-2
     timeout-minutes: 60
-    # Defence in depth: this job merges to main via `gh pr merge`, exactly like
-    # `queue`, so it declares the same merge-queue group the workflow already
-    # holds (see the top-level `concurrency` block). Keeping the job-level copy
-    # means the intent is explicit on the job that merges and a later narrowing
-    # of the workflow-level block cannot silently un-serialise merges.
-    # cancel-in-progress must stay false: a later run must never cancel an
-    # in-flight merge.
-    concurrency:
-      group: merge-queue
-      cancel-in-progress: false
+    # NO job-level `concurrency:` here either: this job merges to main via
+    # `gh pr merge`, exactly like `queue`, and runs inside the workflow-level
+    # `merge-queue` group (see the top-level `concurrency` block). Re-declaring
+    # the same group on the job would queue it behind its own run's
+    # workflow-level lock and it would never start — GitHub shares one
+    # concurrency namespace across workflow runs and jobs.
     permissions:
       contents: write
       pull-requests: write

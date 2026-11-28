@@ -494,25 +494,29 @@ def test_merge_queue_ci_gates_are_pinned_to_the_pr_head_sha() -> None:
 #
 # A merge train is a multi-JOB sequence (admit -> build -> validate -> merge),
 # and job-level concurrency cannot serialise a sequence: each job releases the
-# group when it finishes. So the group must be declared at WORKFLOW level, or
-# overlapping runs each run admit/build/validate CONCURRENTLY (doubling runner
-# spend) and then race for the merge lock - letting a stale train, built from an
-# older main, reach `gh pr merge` after a newer one. The per-job declarations are
-# kept as defence in depth: they make the intent explicit on every job that runs
-# `gh pr merge`, and a later narrowing of the workflow-level block then fails
-# this test instead of silently un-serialising merges.
+# group when it finishes. So the group must be declared at WORKFLOW level.
+# It must ALSO be the only place it is declared: GitHub keeps workflow-run and
+# job concurrency in one shared repository-wide group namespace, so a job that
+# re-declares the run's `merge-queue` group queues behind its own run and can
+# never start (permanently, since cancel-in-progress is false). This test fails
+# CI if the workflow-level group is missing or if any job re-declares it.
 
 
 def test_merge_queue_serialises_the_whole_train_at_workflow_level() -> None:
-    """The ``merge-queue`` group must be declared at WORKFLOW level.
+    """The ``merge-queue`` group must be declared at WORKFLOW level ONLY.
 
-    Only a workflow-level group spans the train's jobs; scoping it to the
-    merging jobs alone leaves ``admit``/``build``/``validate`` unserialised
-    whenever ``MERGE_TRAIN_ENABLED`` is on (the ``queue`` job is skipped then,
-    so merging-job declarations no longer cover the run). The per-job
-    declarations must ALSO remain, as defence in depth. ``cancel-in-progress``
-    must be ``false`` at both levels: a later run must never cancel an
-    in-flight train or merge.
+    Only a workflow-level group spans the train's jobs (admit -> build ->
+    validate -> merge); scoping it to the merging jobs alone leaves
+    ``admit``/``build``/``validate`` unserialised whenever
+    ``MERGE_TRAIN_ENABLED`` is on (the ``queue`` job is skipped then, so
+    merging-job declarations no longer cover the run).
+
+    ``cancel-in-progress`` must be ``false`` so a later run never cancels an
+    in-flight train. And NO job may re-declare the group: GitHub keeps
+    workflow-run and job concurrency in one shared repository-wide namespace,
+    so a job that repeats the run's own group queues behind its own run's
+    workflow-level lock and never starts — permanently, stalling the merge
+    queue.
     """
     workflow = _load_yaml(MERGE_QUEUE_YML)
     jobs = workflow.get("jobs") or {}
@@ -536,18 +540,17 @@ def test_merge_queue_serialises_the_whole_train_at_workflow_level() -> None:
     merging_jobs = {name: job for name, job in jobs.items() if _merges_to_main(job)}
     assert merging_jobs, "merge-queue.yml: no job runs `gh pr merge` — the merge jobs moved; update this test deliberately"
 
-    # Defence in depth: every merge-to-main job keeps its own declaration, so the
-    # requirement survives a later narrowing of the workflow-level block.
-    for name, job in merging_jobs.items():
-        job_concurrency = job.get("concurrency")
+    # No job may re-declare the workflow-level group: workflow-run and job
+    # concurrency share one repository-wide namespace, so a job that repeats the
+    # group queues behind its own run and never starts.
+    for name, job in jobs.items():
+        job_concurrency = job.get("concurrency") if isinstance(job, dict) else None
         if not isinstance(job_concurrency, dict):
-            violations.append(f"  merge-queue.yml: jobs.{name} merges to main but has no `concurrency` mapping — the defence-in-depth declaration is gone")
             continue
-        if job_concurrency.get("group") != "merge-queue":
-            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.group must be 'merge-queue' (got {job_concurrency.get('group')!r})")
-        if job_concurrency.get("cancel-in-progress") is not False:
-            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.cancel-in-progress must be false (got {job_concurrency.get('cancel-in-progress')!r}) — a later run must never cancel an in-flight merge")
-    assert not violations, "merge-queue.yml no longer serialises the merge train on the merge-queue group:\n" + "\n".join(violations)
+        job_group = job_concurrency.get("group")
+        if job_group == "merge-queue":
+            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.group re-declares the workflow-level group {job_group!r} — GitHub shares one concurrency namespace across workflow runs and jobs, so this job queues behind its own run and never starts")
+    assert not violations, "merge-queue.yml no longer serialises the merge train on the workflow-level merge-queue group:\n" + "\n".join(violations)
 
 
 # --- The queue's verdict is a required gate on every landing path -----------
