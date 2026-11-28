@@ -76,6 +76,16 @@
       "groupName": "CI tooling"
     },
     {
+      "description": "Group GitHub Actions major updates into a single PR so a batch of action majors arrives as one reviewable change rather than one PR per action.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "GitHub Actions majors"
+    },
+    {
       "description": "Automerge patch and digest updates after required checks",
       "matchUpdateTypes": [
         "patch",
@@ -151,6 +161,21 @@
         "python"
       ],
       "allowedVersions": "<3.15"
+    },
+    {
+      "description": "Hold PrimeVue at v4. PrimeVue 5 cannot be packaged for self-hosters because of its licensing, so the stack was deliberately kept on PrimeVue 4 and these caps must not be raised without a licensing decision that supports self-hosted redistribution.",
+      "matchPackageNames": [
+        "primevue",
+        "@primevue/themes"
+      ],
+      "allowedVersions": "<5"
+    },
+    {
+      "description": "Hold @primeuix/styled below v1. PrimeVue 5 cannot be packaged for self-hosters because of its licensing, so the stack was deliberately kept on PrimeVue 4 and these caps must not be raised without a licensing decision that supports self-hosted redistribution. @primeuix/styled v1 ships with the PrimeVue 5 line, which is why it is capped below v1 even though it sits on 0.7.x today.",
+      "matchPackageNames": [
+        "@primeuix/styled"
+      ],
+      "allowedVersions": "<1"
     }
   ]
 }
