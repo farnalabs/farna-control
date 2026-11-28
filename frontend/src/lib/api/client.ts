@@ -8,6 +8,7 @@ import {
   exitToLogin,
   wasDemoSessionEnded,
 } from './auth'
+import { mayTearDownSession } from './sessionTeardown'
 
 export {
   getAccessToken,
@@ -86,13 +87,20 @@ function withAuth<M extends AnyClientMethod>(fn: M, retryable: boolean): M {
   const call = fn as unknown as CallableMethod
   const wrapped = (async (url: string, options?: RequestOptions) => {
     const optionsRecord = options ?? {}
-    let resp = await call(url, { ...optionsRecord, headers: mergeHeaders(optionsRecord.headers) })
+    let sentAuthorization: string | undefined
+    const send = () => {
+      const headers = mergeHeaders(optionsRecord.headers)
+      sentAuthorization = headers.get('Authorization') ?? undefined
+      return call(url, { ...optionsRecord, headers })
+    }
+    let resp = await send()
     if (resp.response?.status === 401) {
       const refreshed = await attemptTokenRefresh()
       if (refreshed && retryable) {
-        resp = await call(url, { ...optionsRecord, headers: mergeHeaders(optionsRecord.headers) })
+        resp = await send()
       }
-      if (!refreshed || (retryable && resp.response?.status === 401)) {
+      const unrecoverable = !refreshed || (retryable && resp.response?.status === 401)
+      if (unrecoverable && mayTearDownSession(sentAuthorization)) {
         clearAccessToken()
         exitToLogin()
         return { response: undefined, data: undefined, error: undefined }
