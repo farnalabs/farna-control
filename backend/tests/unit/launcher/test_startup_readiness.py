@@ -200,6 +200,79 @@ def test_serve_api_fails_the_handshake_closed_when_startup_never_signals(monkeyp
     assert main._startup_ready_callback is None
 
 
+def test_serve_api_without_a_readiness_fd_leaves_no_callback_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No readiness fd: no callback is installed and none is cleared.
+
+    A foreground serve (``start`` without ``--detach``) must not touch the
+    process-global startup-ready callback. Covers both false arms of
+    ``if ready_fd is not None`` in ``_serve_api``: the install arm before the
+    server runs and the ``finally`` clear arm after it.
+    """
+    import uvicorn
+
+    class _FakeServer:
+        def __init__(self, config: Any) -> None:
+            self.started = False
+            self.should_exit = False
+            self.force_exit = False
+
+        def run(self) -> None:
+            # A foreground serve has no detach handshake to signal.
+            return None
+
+    monkeypatch.setattr(uvicorn, "Config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(uvicorn, "Server", _FakeServer)
+    main.set_startup_ready_callback(None)
+
+    stop_event, force_exit = _stopped_events()
+    entry_module._serve_api("127.0.0.1", 18000, stop_event, force_exit, ready_fd=None)
+
+    # Reaching this line proves ``_serve_api`` returned normally; the callback
+    # is still None, so neither the install arm nor the clear arm ran.
+    assert main._startup_ready_callback is None
+
+
+def test_serve_api_one_shot_guard_writes_ready_exactly_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Firing the registered callback twice writes ``ready`` once.
+
+    The launcher wraps the API callback in its own one-shot guard. Production
+    ``_signal_startup_ready`` clears the callback before invoking it, so it can
+    never reach that guard twice; this invokes the registered callback directly
+    to exercise the guard's early return.
+    """
+    import uvicorn
+
+    class _TwiceFiringServer:
+        def __init__(self, config: Any) -> None:
+            self.started = False
+            self.should_exit = False
+            self.force_exit = False
+
+        def run(self) -> None:
+            callback = main._startup_ready_callback
+            assert callback is not None
+            callback()  # first fire: writes "ready\n" and sets the one-shot event
+            callback()  # second fire: the launcher's guard must return early
+
+    monkeypatch.setattr(uvicorn, "Config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(uvicorn, "Server", _TwiceFiringServer)
+
+    stop_event, force_exit = _stopped_events()
+    read_fd, write_fd = os.pipe()
+    try:
+        entry_module._serve_api("127.0.0.1", 18000, stop_event, force_exit, ready_fd=write_fd)
+        os.close(write_fd)
+        write_fd = None
+        handshake = os.read(read_fd, 4096)
+    finally:
+        if write_fd is not None:
+            os.close(write_fd)
+        os.close(read_fd)
+
+    # Exactly one write despite two fires; a second one would append here.
+    assert handshake == b"ready\n"
+
+
 @pytest.mark.anyio
 async def test_lifespan_fires_the_startup_ready_signal_at_the_end_of_startup(monkeypatch: pytest.MonkeyPatch) -> None:
     """The API lifespan fires the launcher's readiness callback at the end of startup.
