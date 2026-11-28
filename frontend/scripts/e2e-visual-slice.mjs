@@ -96,7 +96,7 @@ const SLICE = [
  */
 const STAGING_ONLY = {
   'tests/e2e/wcag-contrast.spec.ts':
-    'Already runs in this same frontend job as a dedicated, earlier step — not duplicated here.',
+    'Already runs in this same frontend e2e job as a dedicated, earlier step — not duplicated here.',
   'tests/e2e/mobile-layout.spec.ts':
     'Measured 8.1 min locally (82-route sweep + axe + CLS + screenshots), and its axe findings can need seeded deployment data (the FAR-2028 unread-badge contrast node only renders with unread notifications, which the local mock does not seed). Too expensive and not data-realistic per train; stays in the staging gate.',
   'tests/e2e/pipeline-editor.spec.ts':
