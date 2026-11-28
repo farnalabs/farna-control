@@ -385,4 +385,66 @@ describe('StateTabs', () => {
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     wrapper.unmount()
   })
+
+  it('replaces the list wrapper classes with listClass', () => {
+    const wrapper = mountTabs({ listClass: 'flex items-center border-b px-2' })
+
+    const list = wrapper.get('[role="tablist"]')
+    expect(list.classes()).toContain('border-b')
+    expect(list.classes()).toContain('px-2')
+    // Replacement, not an append: the default row gap must be gone.
+    expect(list.classes()).not.toContain('gap-2')
+    wrapper.unmount()
+  })
+
+  it('replaces the whole per-tab class string with tabClass', () => {
+    const wrapper = mountTabs({
+      testidPrefix: 'example',
+      tabClass: 'px-3 py-2 text-xs font-medium border-b-2 border-transparent text-muted-foreground',
+    })
+
+    for (const id of ['example-alpha', 'example-beta', 'example-gamma']) {
+      const classes = tab(wrapper, id).classes()
+      expect(classes).toContain('px-3')
+      expect(classes).toContain('text-xs')
+      expect(classes).toContain('border-b-2')
+      // None of the default pill survives, so a caller's strip is not fought
+      // by leftover base/size/active classes.
+      expect(classes).not.toContain('rounded-lg')
+      expect(classes).not.toContain('bg-accent')
+      expect(classes).not.toContain('border-input')
+    }
+    wrapper.unmount()
+  })
+
+  it('marks only the active tab with activeClass, with or without tabClass', () => {
+    const replaced = mountTabs({
+      testidPrefix: 'example',
+      tabClass: 'px-3 py-2 text-xs',
+      activeClass: 'text-primary-text border-primary',
+    })
+
+    expect(tab(replaced, 'example-alpha').classes()).toContain('text-primary-text')
+    expect(tab(replaced, 'example-alpha').classes()).toContain('border-primary')
+    expect(tab(replaced, 'example-beta').classes()).not.toContain('text-primary-text')
+    expect(tab(replaced, 'example-beta').classes()).not.toContain('border-primary')
+    replaced.unmount()
+
+    // With the default pill, activeClass replaces just the active half.
+    const defaultPill = mountTabs({ testidPrefix: 'example', activeClass: 'bg-accent' })
+
+    expect(tab(defaultPill, 'example-alpha').classes()).toContain('bg-accent')
+    expect(tab(defaultPill, 'example-alpha').classes()).toContain('rounded-lg')
+    expect(tab(defaultPill, 'example-beta').classes()).not.toContain('bg-accent')
+    defaultPill.unmount()
+  })
+
+  it('keeps the default pill and list classes when the class props are omitted', () => {
+    const wrapper = mountTabs({ testidPrefix: 'example' })
+
+    expect(wrapper.get('[role="tablist"]').classes()).toContain('gap-2')
+    expect(tab(wrapper, 'example-alpha').classes()).toContain('rounded-lg')
+    expect(tab(wrapper, 'example-alpha').classes()).toContain('bg-accent')
+    wrapper.unmount()
+  })
 })

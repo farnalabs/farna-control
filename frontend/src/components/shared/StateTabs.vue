@@ -2,7 +2,7 @@
   <div
     :aria-label="ownsTabs ? undefined : ariaLabel"
     :aria-orientation="ownsTabs ? undefined : orientation"
-    :class="listClass"
+    :class="listClasses"
     :role="ownsTabs ? undefined : 'tablist'"
   >
     <!-- A per-tab trailing action (e.g. a close button) cannot sit inside the
@@ -28,7 +28,7 @@
         :ref="(el) => setTabRef(tab.id, el)"
         :aria-controls="panelFor(tab)"
         :aria-selected="isActive(tab) ? 'true' : 'false'"
-        :class="tabClass(tab)"
+        :class="resolveTabClass(tab)"
         :data-testid="testId(tab)"
         :disabled="tab.disabled"
         :tabindex="tabindexFor(tab, index)"
@@ -82,6 +82,14 @@
  * static literal stays in the adopting view for the product-map guard: it lands
  * on the tablist normally, and on the wrapping row when the `tab-trailing` slot
  * switches to the `aria-owns` form.
+ *
+ * Visual treatment: the default pill is the page density, but a strip with its
+ * own look (a flush border-bottom strip, say) can keep it exactly - `listClass`
+ * replaces the list wrapper classes, and `tabClass` REPLACES the whole per-tab
+ * class string rather than appending to it, so leftover base classes cannot
+ * fight the caller's own. `activeClass` is the active-only half and works
+ * either way. A caller that keeps its own strip therefore needs no separate
+ * "underline variant"; the primitives stay single-purpose.
  */
 import { computed, useId, useSlots, type ComponentPublicInstance } from 'vue'
 
@@ -117,6 +125,25 @@ const props = withDefaults(
     panelIdPrefix?: string
     /** One panel id every tab controls (when a single panel serves the list). */
     panelId?: string
+    /**
+     * Replaces the default list wrapper classes (`flex items-center gap-2`, or
+     * the vertical stack). For a site whose strip is not the default pill row -
+     * e.g. a flush, border-bottom strip.
+     */
+    listClass?: string
+    /**
+     * Replaces the whole per-tab class string (the base pill, the size padding
+     * and the active/inactive pair). It REPLACES rather than appends: a caller
+     * keeping its own visual treatment must not have to fight leftover base
+     * classes. Omit it to keep the default pill.
+     */
+    tabClass?: string
+    /**
+     * The class applied to the active tab only. Works with the default pill
+     * (replacing just the active half) and with `tabClass` (appended when the
+     * tab is active).
+     */
+    activeClass?: string
   }>(),
   {
     size: 'default',
@@ -147,10 +174,10 @@ const instanceId = useId()
 /** A per-tab action forces the `aria-owns` tablist shape (see the template). */
 const ownsTabs = computed(() => Boolean(slots['tab-trailing']))
 
-const listClass = computed(() =>
-  props.orientation === 'vertical'
+const listClasses = computed(() =>
+  props.listClass ?? (props.orientation === 'vertical'
     ? 'flex flex-col items-start gap-2'
-    : 'flex items-center gap-2',
+    : 'flex items-center gap-2'),
 )
 
 const enabledTabs = computed(() => props.tabs.filter((tab) => !tab.disabled))
@@ -201,8 +228,16 @@ function panelFor(tab: StateTab): string | undefined {
   return props.panelIdPrefix ? `${props.panelIdPrefix}-${tab.id}` : undefined
 }
 
-function tabClass(tab: StateTab): string[] {
-  return [BASE_CLASS, SIZE_CLASS[props.size], isActive(tab) ? ACTIVE_CLASS : INACTIVE_CLASS]
+function resolveTabClass(tab: StateTab): string[] {
+  const active = isActive(tab)
+  if (props.tabClass !== undefined) {
+    return active && props.activeClass ? [props.tabClass, props.activeClass] : [props.tabClass]
+  }
+  return [
+    BASE_CLASS,
+    SIZE_CLASS[props.size],
+    active ? (props.activeClass ?? ACTIVE_CLASS) : INACTIVE_CLASS,
+  ]
 }
 
 function activate(tab: StateTab) {

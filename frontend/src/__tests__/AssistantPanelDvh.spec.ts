@@ -75,4 +75,33 @@ describe('AssistantPanel docked height (FAR-2547)', () => {
     expect(panel.exists()).toBe(true)
     expect((panel.element as HTMLElement).style.height).toBe('100vh')
   })
+
+  // FAR-2825: the assistant strip is the shared StateTabs, keeping this panel's
+  // own flush border-bottom treatment through list-class/tab-class/active-class
+  // (the scoped `.assistant-tab` rules cannot reach a child component's inner
+  // buttons). The tablist semantics and the v-model switch must survive.
+  it('renders the assistant strip as the shared StateTabs with its own treatment', async () => {
+    const wrapper = await mountDocked()
+    const list = wrapper.get('[role="tablist"]')
+
+    expect(list.classes()).toContain('assistant-chat-tabs')
+    expect(list.classes()).toContain('border-b')
+    // `list-class` replaces the default row gap rather than appending to it.
+    expect(list.classes()).not.toContain('gap-2')
+    expect(list.attributes('aria-label')).toBe('Assistant')
+
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map((tab) => tab.text())).toEqual(['Chat', 'Skills', 'Sessions', 'Sources'])
+    // The caller's own tab treatment, not the default pill.
+    expect(tabs[0].classes()).toContain('text-xs')
+    expect(tabs[0].classes()).not.toContain('rounded-lg')
+
+    expect(tabs[0].attributes('aria-selected')).toBe('true')
+    expect(tabs[0].classes()).toContain('text-primary-text')
+    expect(tabs[1].attributes('aria-selected')).toBe('false')
+    expect(tabs[1].classes()).not.toContain('text-primary-text')
+
+    await tabs[1].trigger('click')
+    expect(wrapper.findAll('[role="tab"]')[1].attributes('aria-selected')).toBe('true')
+  })
 })

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import Aura from '@primevue/themes/aura'
 import { toNormalizeVariable, toVariables } from '@primeuix/styled'
 
@@ -247,5 +249,132 @@ describe('Button', () => {
 
     expect(wrapper.emitted('click')).toHaveLength(1)
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('maps danger-text to the text flag plus the app destructive-ink class', () => {
+    const wrapper = mount(Button, { props: { variant: 'danger-text', label: 'Remove' } })
+
+    // A transparent (text) shape - the destructive ink is the app's own token,
+    // so no PrimeVue severity is set and the class is what paints it.
+    expect(wrapper.classes()).toContain('p-button-text')
+    expect(wrapper.classes()).toContain('ui-button-danger-text')
+    expect(wrapper.classes()).not.toContain('p-button-outlined')
+    expect(wrapper.attributes('data-p-severity')).toBeUndefined()
+  })
+
+  it('gives danger-text an icon-only form that needs no hand-written padding', () => {
+    const wrapper = mount(Button, {
+      props: { variant: 'danger-text', size: 'xs', ariaLabel: 'Delete pipeline' },
+      slots: { icon: '<svg class="icon-glyph" />' },
+    })
+
+    expect(wrapper.classes()).toContain('ui-button-danger-text')
+    expect(wrapper.classes()).toContain('ui-button-xs')
+    // Icon-only comes from the #icon slot, so an SVG-only call site gets the
+    // square form (and its pinned 1.75rem padding) without `p-1`/`h-7`/`w-7`.
+    expect(wrapper.classes()).toContain('p-button-icon-only')
+    expect(wrapper.find('.icon-glyph').exists()).toBe(true)
+    expect(wrapper.attributes('aria-label')).toBe('Delete pipeline')
+  })
+
+  it('maps plain to text with the default-ink class, distinct from ghost and secondary-text', () => {
+    const plain = mount(Button, { props: { variant: 'plain', label: 'Stay' } })
+    const ghost = mount(Button, { props: { variant: 'ghost', label: 'Stay' } })
+    const secondaryText = mount(Button, { props: { variant: 'secondary-text', label: 'Stay' } })
+
+    expect(plain.classes()).toContain('p-button-text')
+    expect(plain.classes()).toContain('ui-button-plain')
+    expect(plain.classes()).not.toContain('ui-button-danger-text')
+
+    // All three are text buttons; only `plain` carries the app-ink class, and
+    // only `secondary-text` keeps a PrimeVue severity at rest.
+    expect(ghost.classes()).not.toContain('ui-button-plain')
+    expect(secondaryText.classes()).not.toContain('ui-button-plain')
+    expect(secondaryText.attributes('data-p-severity')).toBe('secondary')
+    expect(plain.attributes('data-p-severity')).toBeUndefined()
+  })
+
+  it('maps size xs to the compact class and PrimeVue small, and pins the toolbar geometry', () => {
+    const wrapper = mount(Button, { props: { variant: 'secondary', size: 'xs', label: 'Save' } })
+
+    expect(wrapper.classes()).toContain('p-button-sm')
+    expect(wrapper.classes()).toContain('ui-button-xs')
+    expect(wrapper.classes()).not.toContain('p-button-icon-only')
+
+    // jsdom does not apply the SFC's scoped CSS, so the visual contract is
+    // asserted against the source rule that pins it: the 1.75rem row, the
+    // 0.625rem inline padding and the square icon-only form.
+    const sfc = readFileSync(resolve(__dirname, '../components/ui/Button.vue'), 'utf8')
+    expect(sfc).toContain('.p-button-sm.ui-button-xs {')
+    expect(sfc).toContain('height: 1.75rem;')
+    expect(sfc).toContain('padding: 0 0.625rem;')
+    expect(sfc).toContain('.p-button-sm.ui-button-xs.p-button-icon-only {')
+    expect(sfc).toContain('width: 1.75rem;\n  height: 1.75rem;\n  padding: 0;')
+    // The compact controls this size replaces faded when disabled; PrimeVue
+    // only sets `cursor: default`, so the size carries the state itself.
+    expect(sfc).toContain('.p-button-sm.ui-button-xs:disabled {')
+    expect(sfc).toContain('cursor: not-allowed;\n  opacity: 0.5;')
+  })
+
+  it('leaves md and sm without the compact class', () => {
+    const medium = mount(Button, { props: { label: 'Save' } })
+    const small = mount(Button, { props: { size: 'sm', label: 'Save' } })
+
+    expect(medium.classes()).not.toContain('ui-button-xs')
+    expect(small.classes()).not.toContain('ui-button-xs')
+    expect(small.classes()).toContain('p-button-sm')
+  })
+
+  it('maps the action variants to their app token classes', () => {
+    const action = mount(Button, { props: { variant: 'action', label: 'Run pipeline' } })
+    const actionLink = mount(Button, { props: { variant: 'action-link', label: 'Reset' } })
+
+    // Solid, non-severity: the build hue is an app token, not a PrimeVue one.
+    expect(action.classes()).toContain('ui-button-action')
+    expect(action.classes()).not.toContain('p-button-text')
+    expect(action.classes()).not.toContain('p-button-link')
+    expect(action.attributes('data-p-severity')).toBeUndefined()
+
+    // Link tone: the link flag (transparent + underlined on hover), in the
+    // action hue.
+    expect(actionLink.classes()).toContain('ui-button-action-link')
+    expect(actionLink.classes()).toContain('p-button-link')
+    expect(actionLink.classes()).not.toContain('p-button-text')
+
+    // Both variants paint from the tokens style.css owns, so a renamed/removed
+    // token is a test failure rather than an invisible flat button.
+    const css = readFileSync(resolve(__dirname, '../style.css'), 'utf8')
+    for (const token of ['--action-build:', '--action-build-hover:', '--action-link:', '--action-link-hover:']) {
+      expect(css).toContain(token)
+    }
+  })
+
+  it('exposes the underlying element and a focus() for callers holding a template ref', () => {
+    const wrapper = mount(Button, {
+      props: { label: 'Delete' },
+      attrs: { 'data-testid': 'delete-button' },
+      attachTo: document.body,
+    })
+    const exposed = wrapper.vm as unknown as { el: HTMLElement | null; focus: () => void }
+
+    expect(exposed.el).toBe(wrapper.element)
+    expect(exposed.el?.tagName).toBe('BUTTON')
+
+    exposed.focus()
+    expect(document.activeElement).toBe(wrapper.element)
+
+    wrapper.unmount()
+  })
+
+  it('still forwards a caller class alongside the variant and size classes', () => {
+    const wrapper = mount(Button, {
+      props: { variant: 'secondary', size: 'xs', label: 'Save' },
+      attrs: { class: 'shrink-0 md:hidden' },
+    })
+
+    expect(wrapper.classes()).toContain('ui-button-xs')
+    expect(wrapper.classes()).toContain('p-button-secondary')
+    expect(wrapper.classes()).toContain('shrink-0')
+    expect(wrapper.classes()).toContain('md:hidden')
   })
 })

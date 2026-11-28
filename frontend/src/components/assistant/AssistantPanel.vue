@@ -48,121 +48,104 @@
         <span v-if="store.isStreaming" class="assistant-pulse-dot" />
       </div>
       <div class="flex items-center gap-1">
-        <button
+        <Button
           v-if="store.activeSessionId && store.messages.length > 0"
           type="button"
-          class="assistant-titlebar-btn"
+          variant="secondary-text"
+          size="xs"
           @click="exportTranscript"
           title="Export Transcript"
           :aria-label="$t('components.assistant.export_transcript')"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-        </button>
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </template>
+        </Button>
 
-        <button type="button"
+        <Button
           v-if="store.panelState === 'floating'"
-          class="assistant-titlebar-btn"
+          type="button"
+          variant="secondary-text"
+          size="xs"
           @click="store.setPanelState('docked')"
           title="Dock"
           :aria-label="$t('components.assistant.dock_panel')"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-          </svg>
-        </button>
-        <button type="button"
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+          </template>
+        </Button>
+        <Button
           v-if="store.panelState === 'docked'"
-          class="assistant-titlebar-btn"
+          type="button"
+          variant="secondary-text"
+          size="xs"
           @click="store.setPanelState('floating')"
           title="Undock"
           :aria-label="$t('components.assistant.undock_panel')"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <path d="M15 3l6 0 0 6" />
-            <path d="M21 3l-9 9" />
-          </svg>
-        </button>
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M15 3l6 0 0 6" />
+              <path d="M21 3l-9 9" />
+            </svg>
+          </template>
+        </Button>
 
-        <button type="button"
+        <Button
           v-if="store.panelState !== 'maximised'"
-          class="assistant-titlebar-btn"
+          type="button"
+          variant="secondary-text"
+          size="xs"
           @click="store.setPanelState('maximised')"
           title="Maximise"
           :aria-label="$t('components.assistant.maximise')"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-          </svg>
-        </button>
-        <button type="button"
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+            </svg>
+          </template>
+        </Button>
+        <Button
           v-else
-          class="assistant-titlebar-btn"
+          type="button"
+          variant="secondary-text"
+          size="xs"
           @click="store.setPanelState('docked')"
           title="Minimise"
           :aria-label="$t('components.assistant.minimise')"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-          </svg>
-        </button>
-        <button type="button"
-          class="assistant-titlebar-btn"
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+            </svg>
+          </template>
+        </Button>
+        <Button
+          type="button"
+          variant="secondary-text"
+          size="xs"
           @click="store.setPanelState('closed')"
           title="Close"
           :aria-label="$t('components.assistant.close_panel')"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+          <template #icon>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </template>
+        </Button>
       </div>
     </div>
 
@@ -189,36 +172,15 @@
         />
       </div>
       <div class="assistant-main">
-          <div class="assistant-chat-tabs flex items-center border-b px-2">
-            <button type="button"
-              class="assistant-tab"
-              :class="{ active: activeTab === 'chat' }"
-              @click="activeTab = 'chat'"
-            >
-              Chat
-            </button>
-            <button type="button"
-              class="assistant-tab"
-              :class="{ active: activeTab === 'skills' }"
-              @click="activeTab = 'skills'"
-            >
-              Skills
-            </button>
-            <button type="button"
-              class="assistant-tab"
-              :class="{ active: activeTab === 'sessions' }"
-              @click="activeTab = 'sessions'"
-            >
-              Sessions
-            </button>
-            <button type="button"
-              class="assistant-tab"
-              :class="{ active: activeTab === 'sources' }"
-              @click="activeTab = 'sources'"
-            >
-              Sources
-            </button>
-          </div>
+          <StateTabs
+            v-model="activeTab"
+            class="assistant-chat-tabs"
+            :tabs="assistantTabs"
+            :ariaLabel="$t('components.assistant.AssistantPanel.assistant')"
+            list-class="flex items-center border-b px-2"
+            tab-class="px-3 py-2 text-xs font-medium transition-colors motion-reduce:transition-none border-b-2 border-transparent text-muted-foreground hover:text-foreground"
+            active-class="text-primary-text border-primary"
+          />
           <AssistantChat v-show="activeTab === 'chat'" ref="chatRef" />
           <AssistantSkillManager v-if="activeTab === 'skills'" />
           <div
@@ -268,6 +230,9 @@ import { shortId } from "@/utils/format";
 import { useAssistantStore } from "@/composables/useAssistantStore";
 import { useAssistantContext } from "@/composables/useAssistantContext";
 import Input from "../ui/Input.vue";
+import Button from "../ui/Button.vue";
+import StateTabs from "../shared/StateTabs.vue";
+import type { StateTab } from "../shared/StateTabs.vue";
 import AssistantChat from "./AssistantChat.vue";
 import AssistantSessionDrawer from "./AssistantSessionDrawer.vue";
 import AssistantSkillManager from "./AssistantSkillManager.vue";
@@ -283,7 +248,17 @@ watch(
   { immediate: true },
 );
 const showSidebar = ref(false);
-const activeTab = ref<"chat" | "skills" | "sessions" | "sources">("chat");
+// The strip is a StateTabs instance: it owns the tablist semantics, the roving
+// tabindex and the arrow-key pattern, while `list-class`/`tab-class`/
+// `active-class` keep this panel's own flush, border-bottom treatment (the
+// scoped `.assistant-tab` rules cannot reach StateTabs' inner buttons).
+const assistantTabs: StateTab[] = [
+  { id: "chat", label: "Chat" },
+  { id: "skills", label: "Skills" },
+  { id: "sessions", label: "Sessions" },
+  { id: "sources", label: "Sources" },
+];
+const activeTab = ref<string>("chat");
 
 const editingName = ref(false)
 const editNameValue = ref('')
@@ -579,14 +554,6 @@ onUnmounted(() => {
 .assistant-titlebar:active {
   cursor: grabbing;
 }
-.assistant-titlebar-btn {
-  @apply flex items-center justify-center rounded p-1 transition-colors motion-reduce:transition-none;
-  color: hsl(var(--muted-foreground));
-}
-.assistant-titlebar-btn:hover {
-  background-color: hsl(var(--accent));
-  color: hsl(var(--foreground));
-}
 .assistant-pulse-dot {
   width: 8px;
   height: 8px;
@@ -626,17 +593,6 @@ onUnmounted(() => {
 }
 .assistant-chat-tabs {
   background-color: hsl(var(--card));
-}
-.assistant-tab {
-  @apply px-3 py-2 text-xs font-medium transition-colors motion-reduce:transition-none border-b-2 border-transparent;
-  color: hsl(var(--muted-foreground));
-}
-.assistant-tab:hover {
-  color: hsl(var(--foreground));
-}
-.assistant-tab.active {
-  color: hsl(var(--primary-text));
-  border-bottom-color: hsl(var(--primary));
 }
 .assistant-floating-btn {
   @apply fixed bottom-6 right-6 z-50 flex items-center justify-center rounded-full shadow-lg transition-all motion-reduce:transition-none;
