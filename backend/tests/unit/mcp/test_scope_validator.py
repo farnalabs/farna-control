@@ -1118,7 +1118,7 @@ class TestCheckToolScopeDelegation:
                 patch("farna.api.mcp_server.validate_current_auth", return_value=True),
                 patch("farna.api.mcp_server._session"),
                 patch(
-                    "farna.api.mcp_server._load_pending_hitl_reviews",
+                    "farna.api.mcp_tools.hitl._load_pending_hitl_reviews",
                     new=AsyncMock(return_value=([], 0)),
                 ),
             ):

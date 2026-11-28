@@ -304,7 +304,7 @@ class TestMcpNonLinkedDenials(_OAuthContext):
         with (
             _mcp_patches(session, manager, flag_enabled=True, membership=("admin", "human")),
             patch("farna.api.mcp_server._check_agent_tool_scope", return_value=None),
-            patch("farna.api.mcp_server._load_hitl_run", new=AsyncMock(return_value=run)),
+            patch("farna.api.mcp_tools.hitl._load_hitl_run", new=AsyncMock(return_value=run)),
             patch(
                 "farna.db.crud.hitl_review_config.resolve_hitl_review_config",
                 new=AsyncMock(return_value={"human_only": True}),

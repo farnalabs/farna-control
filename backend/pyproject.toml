@@ -506,6 +506,18 @@ module = "farna.api.mcp_server"
 # always returns or raises (OperationalError raises on attempt 2).
 disable_error_code = ["return"]
 
+[[tool.mypy.overrides]]
+module = "farna.api.mcp_tools.*"
+# The extracted MCP tool domains are copied VERBATIM from farna.api.mcp_server
+# (structural hardening), and the helpers they share resolve through
+# ``_patch_surface`` so the suite's ``mock.patch("farna.api.mcp_server.<name>")``
+# targets keep intercepting. A call-time forwarder necessarily returns ``Any``,
+# so an expression the original module type-checked now returns ``Any`` from a
+# function with a concrete return type. That is the ONLY relaxation here: it is
+# the same "the indirection the module needs widens these expressions" trade the
+# ``farna.api.mcp_server`` override above records.
+disable_error_code = ["no-any-return"]
+
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -455,7 +455,7 @@ class TestHitlInspectionBranches(_AuthContext):
         out = await list_hitl_reviews()
         assert out["error"] == "server_error"
 
-    @patch("farna.api.mcp_server._load_hitl_run", new_callable=AsyncMock)
+    @patch("farna.api.mcp_tools.hitl._load_hitl_run", new_callable=AsyncMock)
     @patch("farna.api.mcp_server._session")
     @patch("farna.api.mcp_server.validate_current_auth", return_value=True)
     async def test_get_gate_run_team_scope_error(

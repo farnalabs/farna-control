@@ -484,15 +484,19 @@ def test_system_admin_flag_is_inert_for_every_undeclared_tool() -> None:
 
 def test_system_admin_flag_is_read_only_by_the_shared_dispatch_wrapper() -> None:
     """The ``_ctx_is_system_admin_val()`` ContextVar is read at exactly ONE
-    call site in the MCP server — the shared dispatch wrapper
+    call site in the MCP surface — the shared dispatch wrapper
     ``_check_agent_tool_scope`` (plus its definition).
 
     A per-tool in-body gate (the duplicated shape FAR-1930 centralised away)
-    reintroduces a second reader and fails here.
+    reintroduces a second reader and fails here. The scan covers the WHOLE
+    surface (``api/mcp_server.py`` plus every extracted
+    ``api/mcp_tools/*.py`` module), so relocating a handler cannot take its
+    would-be inline gate out of scope.
     """
-    path = _SRC_ROOT / "api" / "mcp_server.py"
-    call_sites = len(re.findall(r"_ctx_is_system_admin_val\(\)", path.read_text(encoding="utf-8")))
-    assert call_sites == 2, f"expected exactly one _ctx_is_system_admin_val() call site (the shared wrapper) plus its definition in api/mcp_server.py, found {call_sites} — a per-tool system-admin gate has crept back in; enforce the requirement through SYSTEM_ADMIN_TOOLS instead"
+    call_sites = sum(len(re.findall(r"_ctx_is_system_admin_val\(\)", path.read_text(encoding="utf-8"))) for path in _mcp_surface_sources())
+    assert call_sites == 2, (
+        f"expected exactly one _ctx_is_system_admin_val() call site (the shared wrapper) plus its definition across api/mcp_server.py and api/mcp_tools/, found {call_sites} — a per-tool system-admin gate has crept back in; enforce the requirement through SYSTEM_ADMIN_TOOLS instead"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -503,14 +507,43 @@ def test_system_admin_flag_is_read_only_by_the_shared_dispatch_wrapper() -> None
 # ``_check_agent_tool_scope``. A tool declared in ``SYSTEM_ADMIN_TOOLS`` whose
 # handler never calls that chokepoint is SILENTLY UNENFORCED while every
 # resolver-level guard passes — the exact failure mode FAR-1930 names. The
-# guard below walks the real call graph of ``api/mcp_server.py`` (following
-# delegating helpers transitively, as the handlers do at runtime) and asserts
-# every declared tool reaches the chokepoint under its OWN name. The set of
-# registered tools that do NOT is pinned, so a future tool must either be
-# wired or join a reviewed exception.
+# guard below walks the real call graph of the WHOLE MCP surface — the handlers
+# in ``api/mcp_server.py`` PLUS every extracted ``api/mcp_tools/*.py`` module,
+# following delegating helpers transitively, as they do at runtime — and
+# asserts every declared tool reaches the chokepoint under its OWN name. The
+# set of registered tools that do NOT is pinned, so a future tool must either
+# be wired or join a reviewed exception.
 # ---------------------------------------------------------------------------
 
 _MCP_SERVER_SRC = _SRC_ROOT / "api" / "mcp_server.py"
+#: Extracted tool domains (behaviour-preserving split of ``mcp_server.py``).
+#: Every module here can DEFINE a registered ``@mcp.tool`` / ``@mcp.resource``
+#: handler, so the structural guards must scan the union.
+_MCP_TOOLS_SRC = _SRC_ROOT / "api" / "mcp_tools"
+
+
+def _mcp_surface_sources() -> list[Path]:
+    """Every module of the MCP surface: ``mcp_server.py`` + ``mcp_tools/*.py``.
+
+    The surface was split for structural hardening; the handlers still register
+    on the same FastMCP app. A guard that parsed only ``mcp_server.py`` would
+    therefore pass VACUOUSLY for a relocated handler (it would never see the
+    tool definition, nor the chokepoint call inside its body).
+
+    ``mcp_tools/_patch_surface.py`` is excluded: it defines no handler, only
+    call-time aliases that re-resolve a helper from ``mcp_server.py`` so the
+    suite's ``mock.patch`` targets keep intercepting. Keeping those aliases in
+    the graph would collide with — and could shadow — the real definition. The
+    edge they represent is NOT lost: the caller's bare-name call is recorded on
+    the caller (``func_callees[caller]``) and resolves to the real definition
+    keyed from ``mcp_server.py``. A tool registered in that file would still
+    fail ``test_call_graph_covers_every_registered_tool`` here.
+    """
+    sources = [_MCP_SERVER_SRC]
+    sources.extend(sorted(path for path in _MCP_TOOLS_SRC.glob("*.py") if path.name != "_patch_surface.py"))
+    return [path for path in sources if path.is_file()]
+
+
 _CHOKEPOINT = "_check_agent_tool_scope"
 # FAR-1976: the node-allowed_tools-leg helper the chokepoint-bypassing handlers
 # call at their top (the only control they can reach).
@@ -646,52 +679,65 @@ class _CallGraph:
 
 
 def _build_call_graph() -> _CallGraph:
-    tree = ast.parse(_MCP_SERVER_SRC.read_text(encoding="utf-8"), filename=str(_MCP_SERVER_SRC))
+    """Merge the call graphs of every module of the MCP surface.
+
+    ``api/mcp_server.py`` plus each extracted ``api/mcp_tools/*.py`` domain: the
+    handlers register on the same FastMCP app, so a registered tool/resource may
+    be DEFINED in any of them, and a handler's body may call a shared helper that
+    still lives in ``mcp_server.py`` (or, via ``_patch_surface``, resolve it
+    there at call time). Functions are keyed by bare name exactly as before —
+    the split re-exports names instead of redefining them, and a name defined in
+    two surface modules is rejected here so the merge can never silently pick
+    one definition over another.
+    """
     tool_to_func: dict[str, str] = {}
     resource_to_func: dict[str, str] = {}
     func_callees: dict[str, set[str]] = {}
     func_chokepoint_literals: dict[str, set[str]] = {}
     func_node_scope_literals: dict[str, set[str]] = {}
-    for node in tree.body:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        callees: set[str] = set()
-        literals: set[str] = set()
-        node_scope_literals: set[str] = set()
-        for sub in ast.walk(node):
-            if not isinstance(sub, ast.Call):
+    for path in _mcp_surface_sources():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            callee = sub.func
-            if isinstance(callee, ast.Name):
-                callees.add(callee.id)
-                if sub.args and isinstance(sub.args[0], ast.Constant) and isinstance(sub.args[0].value, str):
-                    if callee.id == _CHOKEPOINT:
-                        literals.add(sub.args[0].value)
-                    elif callee.id in (_NODE_SCOPE_HELPER, _RESOURCE_SCOPE_HELPER):
-                        node_scope_literals.add(sub.args[0].value)
-            elif isinstance(callee, ast.Attribute):
-                callees.add(callee.attr)
-        func_callees[node.name] = callees
-        func_chokepoint_literals[node.name] = literals
-        func_node_scope_literals[node.name] = node_scope_literals
-        for dec in node.decorator_list:
-            if not isinstance(dec, ast.Call):
-                continue
-            deco = dec.func
-            is_mcp_tool = (isinstance(deco, ast.Attribute) and deco.attr == "tool") or (isinstance(deco, ast.Name) and deco.id == "tool")
-            is_mcp_resource = (isinstance(deco, ast.Attribute) and deco.attr == "resource") or (isinstance(deco, ast.Name) and deco.id == "resource")
-            if is_mcp_resource:
-                uri = dec.args[0].value if dec.args and isinstance(dec.args[0], ast.Constant) else None
-                if isinstance(uri, str):
-                    resource_to_func[uri] = node.name
-                continue
-            if not is_mcp_tool:
-                continue
-            name = node.name
-            for kw in dec.keywords:
-                if kw.arg == "name" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
-                    name = kw.value.value
-            tool_to_func[name] = node.name
+            assert node.name not in func_callees, f"function '{node.name}' is defined in more than one MCP surface module (last seen: {path.name}); the call graph keys functions by name"
+            callees: set[str] = set()
+            literals: set[str] = set()
+            node_scope_literals: set[str] = set()
+            for sub in ast.walk(node):
+                if not isinstance(sub, ast.Call):
+                    continue
+                callee = sub.func
+                if isinstance(callee, ast.Name):
+                    callees.add(callee.id)
+                    if sub.args and isinstance(sub.args[0], ast.Constant) and isinstance(sub.args[0].value, str):
+                        if callee.id == _CHOKEPOINT:
+                            literals.add(sub.args[0].value)
+                        elif callee.id in (_NODE_SCOPE_HELPER, _RESOURCE_SCOPE_HELPER):
+                            node_scope_literals.add(sub.args[0].value)
+                elif isinstance(callee, ast.Attribute):
+                    callees.add(callee.attr)
+            func_callees[node.name] = callees
+            func_chokepoint_literals[node.name] = literals
+            func_node_scope_literals[node.name] = node_scope_literals
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                deco = dec.func
+                is_mcp_tool = (isinstance(deco, ast.Attribute) and deco.attr == "tool") or (isinstance(deco, ast.Name) and deco.id == "tool")
+                is_mcp_resource = (isinstance(deco, ast.Attribute) and deco.attr == "resource") or (isinstance(deco, ast.Name) and deco.id == "resource")
+                if is_mcp_resource:
+                    uri = dec.args[0].value if dec.args and isinstance(dec.args[0], ast.Constant) else None
+                    if isinstance(uri, str):
+                        resource_to_func[uri] = node.name
+                    continue
+                if not is_mcp_tool:
+                    continue
+                name = node.name
+                for kw in dec.keywords:
+                    if kw.arg == "name" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                        name = kw.value.value
+                tool_to_func[name] = node.name
     return _CallGraph(
         tool_to_func=tool_to_func,
         resource_to_func=resource_to_func,
@@ -956,3 +1002,110 @@ def test_unified_registry_entries_are_internally_consistent() -> None:
         else:
             assert key not in sv.READ_ONLY_TOOLS, f"mapped key '{key}' must not be read-only"
     assert not (sv.READ_ONLY_TOOLS & set(sv.TOOL_SCOPE_REQUIREMENTS))
+
+
+# ---------------------------------------------------------------------------
+# Patch-contract guard: a relocated helper must still observe a patch applied
+# on ``farna.api.mcp_server``.
+#
+# The suite pins the MCP spine by STRING PATH (``mock.patch("farna.api.
+# mcp_server.<name>")``). ``mock.patch`` rebinds an attribute on the module
+# object, and a function resolves its globals from the DEFINING module's
+# ``__dict__`` -- so once a helper (or its caller) moves into
+# ``api/mcp_tools/<domain>.py``, a bare-name call there keeps calling the
+# original object and the test silently passes vacuously.
+#
+# ``mcp_tools/_patch_surface.py`` exists to prevent exactly that. These two
+# shapes are the ones that lose interception, and both are mechanically
+# detectable:
+#   1. a domain module that IMPORTS a patched name straight from
+#      ``farna.api.mcp_server`` instead of from ``_patch_surface``;
+#   2. a domain module that DEFINES a patched name and calls it by bare name
+#      without rebinding it through ``patchable_local(...)``.
+# ---------------------------------------------------------------------------
+
+_PATCH_TARGET_RE = re.compile(r"farna\.api\.mcp_server\.([A-Za-z_][A-Za-z0-9_]*)")
+_TESTS_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _patched_mcp_server_names() -> set[str]:
+    """Every name the suite patches via ``farna.api.mcp_server.<name>``.
+
+    Reads the test tree, which is the only place the patch contract is
+    declared. ``patch.object(mcp_server, "<name>")`` is not used in this suite;
+    if that form appears, teach this helper about it rather than weakening the
+    guard.
+    """
+    names: set[str] = set()
+    for path in _TESTS_ROOT.rglob("*.py"):
+        names.update(_PATCH_TARGET_RE.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return names
+
+
+@dataclass(frozen=True)
+class _ModuleBindings:
+    defined_here: frozenset[str]
+    imported_from_mcp_server: frozenset[str]
+    imported_from_patch_surface: frozenset[str]
+    patchable_local: frozenset[str]
+    bare_name_calls: frozenset[str]
+
+
+def _module_bindings(path: Path) -> _ModuleBindings:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    from_mcp_server: set[str] = set()
+    from_patch_surface: set[str] = set()
+    patchable: set[str] = set()
+    defined: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defined.add(node.name)
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name) and node.value.func.id == "patchable_local":
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    patchable.add(target.id)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.module == "farna.api.mcp_server":
+            from_mcp_server.update(alias.asname or alias.name for alias in node.names)
+        elif node.module == "farna.api.mcp_tools._patch_surface":
+            from_patch_surface.update(alias.asname or alias.name for alias in node.names)
+    bare_calls = {node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+    return _ModuleBindings(
+        defined_here=frozenset(defined),
+        imported_from_mcp_server=frozenset(from_mcp_server),
+        imported_from_patch_surface=frozenset(from_patch_surface),
+        patchable_local=frozenset(patchable),
+        bare_name_calls=frozenset(bare_calls),
+    )
+
+
+def test_relocated_helpers_keep_their_mcp_server_patch_contract() -> None:
+    """A patch on ``farna.api.mcp_server.<name>`` must still reach every
+    extracted module that imports or calls ``<name>``.
+
+    A direct ``from farna.api.mcp_server import <name>`` freezes the original
+    object into the domain module's globals, and a bare-name call to a helper
+    the module itself defines bypasses the ``mcp_server`` attribute entirely.
+    Either way the patch is missed and the guarding test runs against the real
+    helper -- a vacuous pass. Fix by importing from ``_patch_surface`` or by
+    rebinding through ``patchable_local(...)``.
+    """
+    patched = _patched_mcp_server_names()
+    assert patched, "no `farna.api.mcp_server.<name>` patch targets found - is the tests root right?"
+
+    violations: list[str] = []
+    for path in sorted(_MCP_TOOLS_SRC.glob("*.py")):
+        if path.name in ("__init__.py", "_patch_surface.py"):
+            continue
+        bindings = _module_bindings(path)
+        for name in sorted(patched & bindings.imported_from_mcp_server):
+            if name in bindings.imported_from_patch_surface:
+                continue  # same module imports it via the forwarder too; patch resolves there
+            violations.append(f"{path.name}: imports '{name}' directly from farna.api.mcp_server - import it from mcp_tools._patch_surface so mock.patch('farna.api.mcp_server.{name}') intercepts")
+        for name in sorted(patched & bindings.defined_here & bindings.bare_name_calls):
+            if name in bindings.patchable_local:
+                continue
+            violations.append(f"{path.name}: calls '{name}' by bare name without patchable_local - rebind it at module end so mock.patch('farna.api.mcp_server.{name}') intercepts")
+    assert not violations, "extracted MCP modules no longer honour the farna.api.mcp_server patch contract:\n" + "\n".join(violations)

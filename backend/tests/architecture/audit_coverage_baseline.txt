@@ -26,9 +26,6 @@ evals.py:compare_evals
 library.py:analyse_import_bundle_endpoint
 library.py:export_pipeline_endpoint
 library.py:upload_zip_and_analyse_endpoint
-mcp_server.py:create_api_key
-mcp_server.py:revoke_api_key
-mcp_server.py:set_org_triggers_paused
 observability.py:test_otel_connection
 parameter_schemas.py:validate_parameter_values_endpoint
 pipelines.py:demote_pipeline_autonomy
@@ -42,5 +39,8 @@ schemas.py:infer_schema_endpoint
 schemas.py:migrate_data_endpoint
 schemas.py:migration_plan_endpoint
 schemas.py:validate_schema_endpoint
+secrets_api_keys.py:create_api_key
+secrets_api_keys.py:revoke_api_key
 system_maps.py:diff_system_map_revision_endpoint
+triggers.py:set_org_triggers_paused
 triggers.py:test_polling_condition

@@ -206,14 +206,23 @@ class TestMcpToolsAuditCoverage:
     MCP tools that write data (create_pipeline, trigger_pipeline, create_model_backend,
     review_hitl, copy_library_primitive) delegate audit logging to the underlying
     service layer (HITLManager, pipeline engine, DB CRUD), not to direct
-    append_audit_event calls in mcp_server.py itself.
+    append_audit_event calls in the MCP surface itself.
+
+    The surface is scanned as ``api/mcp_server.py`` PLUS every extracted
+    ``api/mcp_tools/*.py`` domain: a handler moved out of ``mcp_server.py``
+    still has to exist, so the pin follows it rather than going vacuous.
     """
 
     mcp_server_path = BACKEND_ROOT / "src" / "farna" / "api" / "mcp_server.py"
+    mcp_tools_dir = BACKEND_ROOT / "src" / "farna" / "api" / "mcp_tools"
+
+    def _mcp_surface_source(self) -> str:
+        paths = [self.mcp_server_path, *sorted(self.mcp_tools_dir.glob("*.py"))]
+        return "\n".join(path.read_text() for path in paths if path.is_file())
 
     def test_mcp_mutating_tools_exist(self) -> None:
         """Verify each MCP tool that changes state exists in the server."""
-        source = self.mcp_server_path.read_text()
+        source = self._mcp_surface_source()
         tools = [
             "create_pipeline",
             "update_pipeline_graph",
@@ -223,7 +232,7 @@ class TestMcpToolsAuditCoverage:
             "copy_library_primitive",
         ]
         for tool in tools:
-            assert tool in source, f"MCP tool {tool} must exist in mcp_server.py"
+            assert tool in source, f"MCP tool {tool} must exist in the MCP surface (api/mcp_server.py or api/mcp_tools/)"
 
 
 # ---------------------------------------------------------------------------

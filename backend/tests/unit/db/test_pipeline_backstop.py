@@ -211,7 +211,7 @@ async def test_rollback_to_snapshot_requires_caller_type() -> None:
 _CALL_SITE_FILES = (
     "api/routes/pipelines.py",
     "api/routes/onboarding.py",
-    "api/mcp_server.py",
+    "api/mcp_tools/pipelines.py",
     "db/seed_demo.py",
 )
 
@@ -282,20 +282,20 @@ def test_mcp_call_site_passes_literal_mcp_caller_type() -> None:
     rides inside the ``actor`` object, so the literal is asserted on the
     ``GraphWriteActor`` the MCP write constructs.
     """
-    path = _SRC_ROOT / "api" / "mcp_server.py"
+    path = _SRC_ROOT / "api" / "mcp_tools" / "pipelines.py"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     violations: list[str] = []
     replace_calls = [n for n in _guarded_calls(tree) if n.func.id == "replace_pipeline_graph"]
     if not replace_calls:
-        violations.append("api/mcp_server.py: no replace_pipeline_graph() call found")
+        violations.append("api/mcp_tools/pipelines.py: no replace_pipeline_graph() call found")
     for node in replace_calls:
         actor = _actor_kwarg(node)
         if actor is None:
-            violations.append(f"api/mcp_server.py:{node.lineno}: replace_pipeline_graph() has no actor=GraphWriteActor(...)")
+            violations.append(f"api/mcp_tools/pipelines.py:{node.lineno}: replace_pipeline_graph() has no actor=GraphWriteActor(...)")
             continue
         caller_type = next((kw for kw in actor.keywords if kw.arg == "caller_type"), None)
         if caller_type is None or not isinstance(caller_type.value, ast.Constant) or caller_type.value.value != "mcp":
-            violations.append(f"api/mcp_server.py:{node.lineno}: actor caller_type is not the literal 'mcp'")
+            violations.append(f"api/mcp_tools/pipelines.py:{node.lineno}: actor caller_type is not the literal 'mcp'")
     assert not violations, "\n".join(violations)
 
 

@@ -25,6 +25,9 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError, S
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import farna.api.mcp_server as ms
+import farna.api.mcp_tools.analytics as ms_analytics
+import farna.api.mcp_tools.hitl as ms_hitl
+import farna.api.mcp_tools.triggers as ms_triggers
 from farna.api.mcp_server import (
     _analytics_deep_link,
     _append_mcp_hitl_denial_audit,
@@ -1468,7 +1471,7 @@ class TestSimpleToolErrorHandlers(_AuthContext):
         assert result["error"] == "server_error"
 
     async def test_list_pending_hitl_internal_error(self) -> None:
-        with patch.object(ms, "_list_pending_hitl_impl", side_effect=RuntimeError("boom")):
+        with patch.object(ms_hitl, "_list_pending_hitl_impl", side_effect=RuntimeError("boom")):
             result = await ms.list_pending_hitl()
         assert result["error"] == "server_error"
 
@@ -2797,7 +2800,7 @@ class TestHitlHelpers(_AuthContext):
     async def test_review_impl_degenerate_parse(self) -> None:
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
-            patch.object(ms, "_parse_hitl_action", return_value=(None, None)),
+            patch.object(ms_hitl, "_parse_hitl_action", return_value=(None, None)),
             pytest.raises(RuntimeError),
         ):
             await _review_hitl_impl(
@@ -2813,7 +2816,7 @@ class TestHitlHelpers(_AuthContext):
         from sqlalchemy.exc import OperationalError
 
         with (
-            patch.object(ms, "_review_hitl_impl", side_effect=OperationalError("s", {}, Exception())),
+            patch.object(ms_hitl, "_review_hitl_impl", side_effect=OperationalError("s", {}, Exception())),
             pytest.raises(OperationalError),
         ):
             await ms.review_hitl(run_id=str(uuid.uuid4()), review_id="gate", action="claim")
@@ -2828,7 +2831,7 @@ class TestTriggerToolGaps(_AuthContext):
     async def test_create_impl_degenerate_validation(self) -> None:
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
-            patch.object(ms, "_validate_trigger_create_inputs", return_value=(None, None)),
+            patch.object(ms_triggers, "_validate_trigger_create_inputs", return_value=(None, None)),
             pytest.raises(RuntimeError),
         ):
             await _create_trigger_impl(
@@ -2843,10 +2846,10 @@ class TestTriggerToolGaps(_AuthContext):
             )
 
     async def test_create_error_envelopes(self) -> None:
-        with patch.object(ms, "_create_trigger_impl", side_effect=ProgrammingError("s", {}, Exception())):
+        with patch.object(ms_triggers, "_create_trigger_impl", side_effect=ProgrammingError("s", {}, Exception())):
             result = await create_trigger(pipeline_id=str(uuid.uuid4()), name="t")
         assert result["error"] == "migration_required"
-        with patch.object(ms, "_create_trigger_impl", side_effect=RuntimeError("boom")):
+        with patch.object(ms_triggers, "_create_trigger_impl", side_effect=RuntimeError("boom")):
             result = await create_trigger(pipeline_id=str(uuid.uuid4()), name="t")
         assert result["error"] == "server_error"
 
@@ -2888,7 +2891,7 @@ class TestTriggerToolGaps(_AuthContext):
     async def test_update_trigger_degenerate_validation(self) -> None:
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
-            patch.object(ms, "_validate_trigger_update_inputs", return_value=(None, None)),
+            patch.object(ms_triggers, "_validate_trigger_update_inputs", return_value=(None, None)),
         ):
             result = await update_trigger(trigger_id=str(uuid.uuid4()))
         assert result["error"] == "server_error"
@@ -2896,13 +2899,13 @@ class TestTriggerToolGaps(_AuthContext):
     async def test_update_trigger_error_envelopes(self) -> None:
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
-            patch.object(ms, "_load_trigger_for_update", side_effect=ProgrammingError("s", {}, Exception())),
+            patch.object(ms_triggers, "_load_trigger_for_update", side_effect=ProgrammingError("s", {}, Exception())),
         ):
             result = await update_trigger(trigger_id=str(uuid.uuid4()))
         assert result["error"] == "migration_required"
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
-            patch.object(ms, "_load_trigger_for_update", side_effect=RuntimeError("boom")),
+            patch.object(ms_triggers, "_load_trigger_for_update", side_effect=RuntimeError("boom")),
         ):
             result = await update_trigger(trigger_id=str(uuid.uuid4()))
         assert result["error"] == "server_error"
@@ -2918,7 +2921,7 @@ class TestTriggerToolGaps(_AuthContext):
         trigger.max_concurrent_runs = 1
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
-            patch.object(ms, "_load_trigger_for_update", new=AsyncMock(return_value=(trigger, None, None))),
+            patch.object(ms_triggers, "_load_trigger_for_update", new=AsyncMock(return_value=(trigger, None, None))),
             patch.object(ms, "validate_cron_expression", return_value=None),
             patch.object(ms, "compute_next_fire", return_value=_NOW),
             patch.object(ms, "anchor_trigger_streak_epoch", new=AsyncMock(return_value=None)) as mock_anchor,
@@ -3036,10 +3039,10 @@ class TestTriggerToolGaps(_AuthContext):
         assert result["error"] == "server_error"
 
     async def test_list_trigger_events_error_envelopes(self) -> None:
-        with patch.object(ms, "_list_trigger_events_impl", side_effect=ProgrammingError("s", {}, Exception())):
+        with patch.object(ms_triggers, "_list_trigger_events_impl", side_effect=ProgrammingError("s", {}, Exception())):
             result = await list_trigger_events()
         assert result["error"] == "migration_required"
-        with patch.object(ms, "_list_trigger_events_impl", side_effect=RuntimeError("boom")):
+        with patch.object(ms_triggers, "_list_trigger_events_impl", side_effect=RuntimeError("boom")):
             result = await list_trigger_events()
         assert result["error"] == "server_error"
 
@@ -3105,8 +3108,11 @@ class TestAnalyticsAndStatusHelpers(_AuthContext):
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
             patch.object(ms, "get_settings", return_value=MagicMock()),
-            patch.object(ms, "_require_analytics_feature", new=AsyncMock(return_value=None)),
-            patch.object(ms, "_parse_analytics_params", return_value=(None, None)),
+            # The analytics helpers live in api/mcp_tools/analytics.py now, so the
+            # patch target is the module that DEFINES them: patching the
+            # mcp_server re-export would not intercept the impl's own call.
+            patch.object(ms_analytics, "_require_analytics_feature", new=AsyncMock(return_value=None)),
+            patch.object(ms_analytics, "_parse_analytics_params", return_value=(None, None)),
             pytest.raises(RuntimeError),
         ):
             await ms._query_analytics_impl(ms._AnalyticsQueryInput())
@@ -3115,8 +3121,8 @@ class TestAnalyticsAndStatusHelpers(_AuthContext):
         with (
             patch.object(ms, "validate_current_auth", new=AsyncMock(return_value=True)),
             patch.object(ms, "get_settings", return_value=MagicMock()),
-            patch.object(ms, "_require_analytics_feature", new=AsyncMock(return_value=None)),
-            patch.object(ms, "_parse_analytics_concurrency_params", return_value=(None, None)),
+            patch.object(ms_analytics, "_require_analytics_feature", new=AsyncMock(return_value=None)),
+            patch.object(ms_analytics, "_parse_analytics_concurrency_params", return_value=(None, None)),
             pytest.raises(RuntimeError),
         ):
             await ms._query_analytics_concurrency_impl(ms._AnalyticsQueryInput())

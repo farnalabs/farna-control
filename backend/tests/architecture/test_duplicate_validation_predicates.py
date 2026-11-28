@@ -877,8 +877,8 @@ def test_scan_finds_the_known_live_constants() -> None:
 
 def test_scan_finds_the_known_live_block_copy() -> None:
     """Guard probe 3: the REST<->MCP parity copy of the expires-at parser
-    (``api/mcp_server.py`` / ``api/routes/api_keys.py``) must still be seen."""
-    found = any(("api/mcp_server.py", "_parse_api_key_expires_at") in members and ("api/routes/api_keys.py", "_parse_expires_at") in members for members in _current_block_bodies().values())
+    (``api/mcp_tools/secrets_api_keys.py`` / ``api/routes/api_keys.py``) must still be seen."""
+    found = any(("api/mcp_tools/secrets_api_keys.py", "_parse_api_key_expires_at") in members and ("api/routes/api_keys.py", "_parse_expires_at") in members for members in _current_block_bodies().values())
     assert found, "the live expires-at body duplication was not detected"
 
 

@@ -27,6 +27,19 @@ def _read(relative_path: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_mcp_surface() -> str:
+    """The whole MCP surface as one text: ``api/mcp_server.py`` + its domains.
+
+    The MCP handlers were split out of ``api/mcp_server.py`` into
+    ``api/mcp_tools/<domain>.py`` (behaviour-preserving extraction). A source
+    assertion about where a handler applies a gate must scan the union, or a
+    relocated call site would silently fall out of the scan.
+    """
+    api_dir = REPO_ROOT / "backend" / "src" / "farna" / "api"
+    paths = [api_dir / "mcp_server.py", *sorted((api_dir / "mcp_tools").glob("*.py"))]
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths if path.is_file())
+
+
 class TestReviewerIdentitySeparation:
     """The reviewer identity is a distinct, privileged actor in CI."""
 
@@ -78,7 +91,7 @@ class TestHitlHumanOnlyEnforcement:
 
     def test_hitl_mcp_claim_path_enforces_human_only_gate(self) -> None:
         """The MCP claim path applies the same human-only gate as REST."""
-        source = _read("backend/src/farna/api/mcp_server.py")
+        source = _read_mcp_surface()
         assert "_check_human_only_gate(" in source
 
 
