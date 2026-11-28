@@ -2106,6 +2106,12 @@ jobs:
           # FAR-2369: default OFF — full backend + frontend unit suites run
           # unless this is explicitly set to 'true'.
           MERGE_QUEUE_LIGHT_VALIDATION: ${{ vars.MERGE_QUEUE_LIGHT_VALIDATION || 'false' }}
+          # Same heap pin as ci.yml's "Frontend and WCAG" job: vue-tsc's working
+          # set (~2.05 GB) sits above Node's RAM-derived default old-space limit
+          # on this runner, so without it the train fails on an OOM rather than
+          # a type error (FAR-2855). It is a ceiling, not an allocation, so the
+          # backend processes running concurrently in this step are unaffected.
+          NODE_OPTIONS: --max-old-space-size=2560
         shell: bash
         run: |
           # --- Frontend checks: background subshell (was a separate sequential step) ---

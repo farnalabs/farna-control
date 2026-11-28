@@ -424,6 +424,12 @@ jobs:
       # Lint and type-check first, before the Playwright browser download.
       - run: pnpm run lint
       - run: pnpm run type-check
+        # Same heap pin as ci.yml's "Frontend and WCAG" job: vue-tsc's working
+        # set (~2.05 GB) sits above Node's RAM-derived default old-space limit
+        # on this runner, so without it the gate OOMs instead of reporting a
+        # type error (FAR-2855).
+        env:
+          NODE_OPTIONS: --max-old-space-size=2560
       - name: Install Playwright browsers
         run: pnpm exec playwright install chromium
       - name: Run WCAG contrast tests

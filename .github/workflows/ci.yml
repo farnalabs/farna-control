@@ -1061,6 +1061,14 @@ jobs:
         if: needs.changes.outputs.frontend == 'true'
       - run: pnpm run type-check
         if: needs.changes.outputs.frontend == 'true'
+        # vue-tsc's working set is now ~2.05 GB, and Node's default old-space
+        # limit on this 4 GB runner is derived from RAM at ~2 GB — so the gate
+        # died with "Reached heap limit Allocation failed" instead of a type
+        # error (FAR-2855). Pin the limit so type-check fails only on a real
+        # type error and never on the runner's derived default. 2560 leaves
+        # ~1.4 GB for Node's non-heap memory and the rest of the job.
+        env:
+          NODE_OPTIONS: --max-old-space-size=2560
       # The graph-write checker is dependency-free but is invoked through uv
       # (as in the backend structural-gate job), so this job needs uv on PATH.
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
