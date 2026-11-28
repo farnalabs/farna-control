@@ -173,6 +173,34 @@ _START_TIME = datetime.now(UTC)
 # Graceful shutdown manager -- resources registered during lifespan startup.
 _shutdown_manager = ShutdownManager()
 
+# FAR-2850: the `farna-control start --detach` handshake must report ready only
+# once the stack is USABLE -- migrations at head and the `farna_control_app`
+# role created by ``_run_boot_guards_and_seeds`` (bootstrap_roles) -- never
+# merely because uvicorn is about to be constructed. The in-process launcher
+# (``farna.launcher.entry._serve_api``) registers a one-shot callback here
+# before the server starts; the lifespan fires it at the very end of startup.
+# Process-global is correct: there is one API app and one uvicorn server per
+# launcher process, and the callback is cleared as it fires.
+_startup_ready_callback: Callable[[], None] | None = None
+
+
+def set_startup_ready_callback(callback: Callable[[], None] | None) -> None:
+    """Register (or clear) the launcher's detached-readiness callback (FAR-2850)."""
+    global _startup_ready_callback
+    _startup_ready_callback = callback
+
+
+def _signal_startup_ready() -> None:
+    """Fire the one-shot startup-ready callback, if one is registered.
+
+    Idempotent: the callback is cleared BEFORE it runs, so a second startup
+    (or a test that enters the lifespan twice) cannot signal readiness twice.
+    """
+    global _startup_ready_callback
+    callback, _startup_ready_callback = _startup_ready_callback, None
+    if callback is not None:
+        callback()
+
 
 async def _verify_db_connectivity(settings: Settings) -> None:
     """Check database connectivity without preventing application startup."""
@@ -843,6 +871,16 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _register_shutdown_manager(settings)
 
     tasks = await _start_background_tasks(settings)
+
+    # FAR-2850: the launcher's `--detach` handshake must mean "the stack is
+    # usable", not "uvicorn is about to be constructed". The boot work that
+    # makes it usable -- migrations at head and the `farna_control_app` role
+    # created by `_run_boot_guards_and_seeds` (bootstrap_roles) -- has completed
+    # by this point, so only NOW may the one-shot readiness callback fire. It
+    # sits at the END of the startup phase (not right after boot guards) so a
+    # failure in licence restore or background-task wiring still fails the
+    # detached handshake closed.
+    _signal_startup_ready()
 
     yield
 
