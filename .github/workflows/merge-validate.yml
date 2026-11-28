@@ -917,6 +917,9 @@ jobs:
       - name: Download frontend coverage report
         id: fe_cov
         shell: bash
+        # The job defaults to `working-directory: backend`; the gate reads
+        # ../frontend/coverage/lcov.info, so download at the repo root.
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
