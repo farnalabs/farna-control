@@ -130,7 +130,7 @@ def test_deploy_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
 
 def test_ci_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
     ci = _assert_no_raw_uv_sync("ci.yml")
-    assert ci.count("uv_sync_with_retry.sh") == 10
+    assert ci.count("uv_sync_with_retry.sh") == 6
 
 
 def test_bdd_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
