@@ -21,7 +21,7 @@
         "lint": "eslint src tests/visual-baseline tests/e2e --cache --cache-location .cache/eslint",
         "test:contrast": "playwright test wcag-contrast",
         "lint:fix": "npm run lint -- --fix",
-        "type-check": "vue-tsc --noEmit",
+        "type-check": "cross-env NODE_OPTIONS=--max-old-space-size=3072 vue-tsc --noEmit",
         "postinstall": "node scripts/internationalized-date-patch.cjs"
     },
     "optionalDependencies": {
