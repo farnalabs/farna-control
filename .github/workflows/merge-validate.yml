@@ -743,15 +743,40 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
+          # MAIN-branch analysis. ci.yml lost its push trigger in the fast-tier
+          # cut, and nothing dispatches this workflow with `ref: main`
+          # automatically (the merge queue dispatches ci.yml on main and calls
+          # this workflow with the TRAIN branch). So the project's main baseline
+          # and coverage badge update only on a MANUAL dispatch with `ref: main`
+          # until a scheduled/dispatch path exists. For that case the scanner is
+          # told the branch EXPLICITLY, because its own SCM detection follows the
+          # CALLER's ref (a train branch, or a detached dispatch ref) and the
+          # report would otherwise land as a feature-branch analysis that never
+          # touches the main baseline. Any other ref is left to the scanner's
+          # default (a branch analysis, never main).
+          #
+          # NOT named SONAR_*: SonarScanner maps SONAR_<NAME> environment
+          # variables onto sonar.<name> analysis properties, so a SONAR_-prefixed
+          # hint would be read as configuration itself (and an empty value would
+          # send `sonar.branch.name=`). It is passed explicitly below instead.
+          MERGE_TIER_SONAR_BRANCH: ${{ (inputs.ref == 'main' || inputs.ref == 'refs/heads/main') && 'main' || '' }}
         run: |
           set -uo pipefail
           LOG="$(mktemp)"
           trap 'rm -f "$LOG"' EXIT
           CE_FAILURES=0
+          # Only main is named explicitly; every other ref stays a plain branch
+          # analysis, so a train-branch scan can never overwrite the main
+          # baseline.
+          SCAN_ARGS=(-Dsonar.projectBaseDir=.)
+          if [ -n "${MERGE_TIER_SONAR_BRANCH:-}" ]; then
+            echo "::notice::SonarCloud analysis is pinned to branch '${MERGE_TIER_SONAR_BRANCH}' (main-baseline update)."
+            SCAN_ARGS+=("-Dsonar.branch.name=${MERGE_TIER_SONAR_BRANCH}")
+          fi
           for attempt in 1 2 3; do
             : > "$LOG"
             set +e
-            "$SCANNER" -Dsonar.projectBaseDir=. 2>&1 | tee "$LOG"
+            "$SCANNER" "${SCAN_ARGS[@]}" 2>&1 | tee "$LOG"
             RC=${PIPESTATUS[0]}
             set -e
             if [ "$RC" -eq 0 ]; then
