@@ -2441,3 +2441,82 @@ def test_main_failure_dispatch_skips_when_a_fix_pr_is_open() -> None:
 def test_open_fix_pr_skip_script_exists() -> None:
     script = REPO / "scripts" / "main_failure_fix_pr_open.sh"
     assert script.is_file()
+
+
+# --- Merge-tier coverage: checks the fast PR tier left with no gate ---------
+#
+# The 2026-11-27 fast-tier cut removed three checks from ci.yml's frontend job
+# and nowhere else ran them, so they ran in NO gate at all until merge-validate
+# reintroduced them. This pin is about the WORKFLOW running them, not which job
+# holds them, so the checks may be moved between jobs freely.
+
+
+def _statically_disabled(condition: object) -> bool:
+    """True when an ``if:`` value is literally false (YAML bool or string)."""
+    return condition is False or (isinstance(condition, str) and condition.strip().lower() == "false")
+
+
+def _enabled_jobs_running(workflow: dict, command: str) -> list[tuple[str, dict]]:
+    """Jobs with a non-disabled step whose ``run`` text contains ``command``.
+
+    A job or step gated off with a literal ``if: false`` is not counted: the
+    command would never execute, so it must not satisfy a "somewhere runs this"
+    assertion. (A non-literal gate such as ``inputs.full`` is beyond static
+    reach; this catches the common ``if: false`` re-orphaning.)
+    """
+    hits: list[tuple[str, dict]] = []
+    for job_id, job in (workflow.get("jobs") or {}).items():
+        if not isinstance(job, dict) or _statically_disabled(job.get("if")):
+            continue
+        for step in job.get("steps") or []:
+            if not isinstance(step, dict) or _statically_disabled(step.get("if")):
+                continue
+            if command in str(step.get("run") or ""):
+                hits.append((job_id, job))
+                break
+    return hits
+
+
+#: label -> command substring. Each is a check whose ONLY gate is the merge tier:
+#: the @visual canvas snapshots are excluded from the staging @regression run by
+#: their tag, the mobile-nav specs were deliberately taken out of the staging E2E
+#: job (FAR-1850), and the slice guard inspects @regression specs rather than
+#: running them.
+MERGE_TIER_ONLY_CHECKS = {
+    "the mobile-nav specs": "playwright test mobile-nav-flash mobile-nav-usable",
+    "the @visual canvas snapshots": 'playwright test --grep "@visual"',
+    "the e2e-visual-slice classification guard": "scripts/e2e-visual-slice.mjs --check",
+}
+
+
+def test_merge_validate_runs_the_checks_that_have_no_other_gate() -> None:
+    """If one of these leaves merge-validate.yml, it runs in no gate at all.
+
+    That is exactly how the fast-PR-tier cut lost them: they lived only in
+    ci.yml's frontend job, the job was slimmed, and nothing failed - the checks
+    simply stopped running. A red test here is the only signal that would have
+    fired.
+
+    The owning job must EXIST and not be statically disabled (``if: false``):
+    matching the command substring anywhere in the file would let a job gated off
+    re-orphan the check while this test stayed green.
+    """
+    workflow = _load_yaml(VALIDATE_YML)
+    violations = [f"  merge-validate.yml: no enabled job runs {label} ({command!r}) - that check would have no gate at all" for label, command in MERGE_TIER_ONLY_CHECKS.items() if not _enabled_jobs_running(workflow, command)]
+    assert not violations, "merge-validate.yml dropped a check that runs nowhere else:\n" + "\n".join(violations)
+
+
+def test_merge_validate_runs_the_e2e_route_coverage_gate() -> None:
+    """The FAR-637 e2e route-coverage gate must run in an enabled job.
+
+    It was orphaned by the 2026-11-27 fast-tier cut: removed from ci.yml's old
+    frontend job and left in no workflow at all, so nothing exercised it while
+    provenance comments claimed it still ran. This pin fails if the script
+    leaves every workflow OR its owning job is statically disabled, so it
+    cannot be silently re-orphaned again. The merge train owns it (the fast PR
+    tier is deliberately slimmed to ESLint/vue-tsc), so it is pinned here.
+    """
+    workflow = _load_yaml(VALIDATE_YML)
+    command = "check_e2e_route_coverage.py"
+    hits = _enabled_jobs_running(workflow, command)
+    assert hits, f"merge-validate.yml: no enabled job runs the FAR-637 e2e route-coverage gate ({command!r}); it would have no gate at all"
