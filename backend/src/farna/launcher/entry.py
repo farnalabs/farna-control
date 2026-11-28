@@ -37,7 +37,9 @@ Boot order (ADR 031 Decision 2):
 intermediate fork waits for a readiness handshake from the detached
 grandchild and forwards boot failures to the original stderr BEFORE the
 caller's process exits, so a failed detached boot can never surface as a
-silent success. TODO(P3): the Windows service seam.
+silent success. The handshake's ``ready`` means the stack is USABLE (the API
+lifespan has completed its boot guards, migrations and role bootstrap), not
+that uvicorn is about to start (FAR-2850). TODO(P3): the Windows service seam.
 
 Terminal degraded (FAR-674): a crash-cap trip is TERMINAL. The supervisor
 persists the degrade record (``degraded.json`` sibling of state.json —
@@ -243,9 +245,9 @@ def _start_detached(data_dir: Path, bin_dir: Path | None, *, clear_degraded: boo
     The caller must NOT be told "success" before the detached boot has
     proven itself: the intermediate fork keeps the original stderr and a
     pipe, waits for the grandchild's readiness handshake (the grandchild
-    writes ``ready`` once the boot reached the serve phase, or ``failed``
-    with the error text), and forwards the outcome so the CLI's exit code
-    reflects reality.
+    writes ``ready`` once the API lifespan has finished starting -- migrations
+    at head and the app role bootstrapped -- or ``failed`` with the error
+    text), and forwards the outcome so the CLI's exit code reflects reality.
     """
     if sys.platform == "win32":
         # Deferred P3: Windows service/DETACHED_PROCESS seam.
@@ -369,24 +371,32 @@ def _serve_until_shutdown(
 ) -> int:
     """Serve until signalled, then return the clean/degraded exit code.
 
-    The boot reached the serve phase here — everything before this point has
-    succeeded, so the readiness handshake (when a detached caller is waiting)
-    is written first. A terminal-degraded outcome (the supervisor tripped, or
-    its monitor thread died unexpectedly) returns ``DEGRADED_EXIT_CODE`` after
-    the ordered teardown.
+    A terminal-degraded outcome (the supervisor tripped, or its monitor thread
+    died unexpectedly) returns ``DEGRADED_EXIT_CODE`` after the ordered
+    teardown.
+
+    The readiness handshake (``ready_fd``) is signalled by the SERVE PHASE, not
+    here (FAR-2850). ``ready`` must mean "the stack is usable" -- migrations at
+    head and the ``farna_control_app`` role bootstrapped -- which only the API
+    lifespan does (see ``_serve_api``). Writing it before ``_serve_api`` runs
+    reported ready about 15s before the role existed, so a seed issued straight
+    afterwards failed with 28P01. The ``serve`` stub seam has no lifespan, so it
+    completes its own handshake here (and ``ready_fd`` is ``None`` on every
+    foreground path, so this only matters when a test drives the handshake
+    directly).
     """
     from farna.launcher import policy
 
     if run_state.shutdown_requested.is_set():
         supervisor.shutdown()
         return 0
-    if ready_fd is not None:
-        with contextlib.suppress(OSError):
-            os.write(ready_fd, b"ready\n")
     if serve is not None:
+        if ready_fd is not None:
+            with contextlib.suppress(OSError):
+                os.write(ready_fd, b"ready\n")
         serve(POSTGRES_HOST, launcher_state.api_port, run_state.serve_stop)
     else:
-        _serve_api(POSTGRES_HOST, launcher_state.api_port, run_state.serve_stop, run_state.force_exit)
+        _serve_api(POSTGRES_HOST, launcher_state.api_port, run_state.serve_stop, run_state.force_exit, ready_fd=ready_fd)
     monitor_abnormal = not supervisor.monitor_thread_alive() and supervisor.degraded_reason is None and not run_state.shutdown_requested.is_set()
     supervisor.shutdown()
     if run_state.degraded.is_set() or supervisor.degraded_reason is not None or monitor_abnormal:
@@ -1079,16 +1089,37 @@ def _ensure_app_database(launcher_state: Any, secrets: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _serve_api(host: str, port: int, stop_event: threading.Event, force_exit: threading.Event) -> None:
+def _serve_api(host: str, port: int, stop_event: threading.Event, force_exit: threading.Event, *, ready_fd: int | None = None) -> None:
     """Serve the API with uvicorn in-process; the entry owns signal handling.
 
     A first Ctrl-C starts the graceful drain; a SECOND one (``force_exit``)
     skips the drain — an operator must always be able to force-exit.
+
+    FAR-2850: the detached-boot handshake (``ready_fd``) is NOT written before
+    the server starts. It is written by the one-shot callback the API lifespan
+    fires at the END of its startup phase, so ``ready`` means the stack is
+    usable (migrations at head + the app role bootstrapped), not that uvicorn
+    is about to be constructed. If startup never reaches that signal the
+    handshake fails closed with a clear message instead of leaving the detached
+    caller to time out.
     """
     import uvicorn
 
-    from farna.api.main import app
+    from farna.api.main import app, set_startup_ready_callback
 
+    signalled = threading.Event()
+
+    if ready_fd is not None:
+        ready_sink = ready_fd
+
+        def _signal_ready() -> None:
+            if signalled.is_set():
+                return
+            with contextlib.suppress(OSError):
+                os.write(ready_sink, b"ready\n")
+            signalled.set()
+
+        set_startup_ready_callback(_signal_ready)
     config = uvicorn.Config(app, host=host, port=port, server_header=False)
     server = uvicorn.Server(config)
     # The entry owns signal handling (SIGINT/SIGTERM must drive the ordered
@@ -1096,7 +1127,18 @@ def _serve_api(host: str, port: int, stop_event: threading.Event, force_exit: th
     server.install_signal_handlers = _noop_signal_handlers  # type: ignore[attr-defined]
     watcher = threading.Thread(target=_serve_watch, args=(server, stop_event, force_exit), daemon=True)
     watcher.start()
-    server.run()
+    try:
+        server.run()
+    finally:
+        if ready_fd is not None:
+            set_startup_ready_callback(None)
+    if ready_fd is not None and not signalled.is_set():
+        # The lifespan never reached the readiness signal (startup raised or
+        # returned without completing boot). Fail the detached handshake
+        # loudly and immediately instead of leaving the caller to time out.
+        message = b"failed: API startup did not complete (boot guards, migrations or role bootstrap failed) - check launcher.log in the data dir\n"
+        with contextlib.suppress(OSError):
+            os.write(ready_fd, message)
 
 
 def _noop_signal_handlers() -> None:  # pragma: no cover - trivial seam

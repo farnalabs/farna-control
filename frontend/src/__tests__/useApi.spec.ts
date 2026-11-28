@@ -434,3 +434,33 @@ describe('useApi timeout', () => {
     await expect(pending).resolves.toEqual({ id: 1 })
   })
 })
+
+describe('useApi 401 teardown ownership (FAR-2857)', () => {
+  afterEach(() => {
+    window.history.replaceState(null, '', '/')
+  })
+
+  it('leaves the session alone while the /demo entry is being resolved', async () => {
+    window.history.replaceState(null, '', '/demo')
+    mockedAttemptTokenRefresh.mockResolvedValue(false)
+    fetchMock.mockImplementation(async () => jsonResponse(401, { detail: 'Invalid or expired token' }))
+
+    await expect(useApi().get('/api/v1/widgets')).rejects.toBeInstanceOf(ApiError)
+
+    expect(mockedClearAccessToken).not.toHaveBeenCalled()
+    expect(mockedExitToLogin).not.toHaveBeenCalled()
+  })
+
+  it('does not tear down a session stored after the rejected request was sent', async () => {
+    mockedAttemptTokenRefresh.mockResolvedValue(false)
+    fetchMock.mockImplementation(async () => {
+      mockedGetAuthHeaders.mockReturnValue({ Authorization: 'Bearer token-2' })
+      return jsonResponse(401, { detail: 'Invalid or expired token' })
+    })
+
+    await expect(useApi().get('/api/v1/widgets')).rejects.toBeInstanceOf(ApiError)
+
+    expect(mockedClearAccessToken).not.toHaveBeenCalled()
+    expect(mockedExitToLogin).not.toHaveBeenCalled()
+  })
+})

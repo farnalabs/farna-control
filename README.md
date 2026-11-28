@@ -23,9 +23,11 @@
 </p>
 
 > [!WARNING]
-> **Alpha software.** Farna Control is under active development. Interfaces,
-> database migrations, configuration, and deployment procedures may change.
-> Evaluate it before using it with production data and keep current backups.
+> **Alpha software.** Farna Control is under active development. Dependable today:
+> PostgreSQL 16 as the only supported runtime database, an immutable run snapshot,
+> an append-only hash-chained audit log, and self-hosted with no telemetry by
+> default. Still changing: the HTTP API (no stability contract yet), database
+> migrations, configuration keys and deployment procedures. Keep current backups.
 
 ## Table of Contents
 - [What it is](#what-it-is)

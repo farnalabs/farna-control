@@ -676,7 +676,7 @@ Derived status: `partial`
 
 - `backup-restore-12` - `.github/workflows/backup-restore-nightly.yml` runs
   - why: behaviour text names no test; only code paths (or nothing) are cited
-- `backup-restore-28` - The compose release bundle ships `compose-restore.sh` — the one documented
+- `backup-restore-28` - The compose release bundle ships `compose-restore.sh` - the one documented
   - why: behaviour text names no test; only code paths (or nothing) are cited
 
 ## docs/product-map/infra/container-deployment.md

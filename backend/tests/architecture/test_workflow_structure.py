@@ -490,23 +490,47 @@ def test_merge_queue_ci_gates_are_pinned_to_the_pr_head_sha() -> None:
     assert not unpinned, "merge-queue.yml: CI gate(s) not pinned to the PR head SHA:\n" + "\n".join(unpinned)
 
 
-# --- Merge-queue concurrency is scoped to the queue job, not the workflow ---
+# --- Merge-queue concurrency serialises the WHOLE train ----------------------
+#
+# A merge train is a multi-JOB sequence (admit -> build -> validate -> merge),
+# and job-level concurrency cannot serialise a sequence: each job releases the
+# group when it finishes. So the group must be declared at WORKFLOW level.
+# It must ALSO be the only place it is declared: GitHub keeps workflow-run and
+# job concurrency in one shared repository-wide group namespace, so a job that
+# re-declares the run's `merge-queue` group queues behind its own run and can
+# never start (permanently, since cancel-in-progress is false). This test fails
+# CI if the workflow-level group is missing or if any job re-declares it.
 
 
-def test_merge_queue_concurrency_is_scoped_to_the_queue_job() -> None:
-    """Every job that merges to main must hold the ``merge-queue`` group.
+def test_merge_queue_serialises_the_whole_train_at_workflow_level() -> None:
+    """The ``merge-queue`` group must be declared at WORKFLOW level ONLY.
 
-    The group serialises merges: two runs that both reach ``gh pr merge`` would
-    otherwise race labels, branch cleanup and post-merge CI dispatch. It lives
-    on the JOB, not the workflow, so ``event-gate``'s ~10-min ``CHAIN_READY_AT``
-    pacing sleep does not hold it and delay every chained pass. Historically only
-    the ``queue`` job merged to main; the merge train's ``merge`` job (behind
-    ``MERGE_TRAIN_ENABLED``) is a second merge-to-main job, so it must hold the
-    same group too. ``cancel-in-progress`` must stay ``false``, or a later run
-    would cancel a merge that is already in flight.
+    Only a workflow-level group spans the train's jobs (admit -> build ->
+    validate -> merge); scoping it to the merging jobs alone leaves
+    ``admit``/``build``/``validate`` unserialised whenever
+    ``MERGE_TRAIN_ENABLED`` is on (the ``queue`` job is skipped then, so
+    merging-job declarations no longer cover the run).
+
+    ``cancel-in-progress`` must be ``false`` so a later run never cancels an
+    in-flight train. And NO job may re-declare the group: GitHub keeps
+    workflow-run and job concurrency in one shared repository-wide namespace,
+    so a job that repeats the run's own group queues behind its own run's
+    workflow-level lock and never starts — permanently, stalling the merge
+    queue.
     """
     workflow = _load_yaml(MERGE_QUEUE_YML)
     jobs = workflow.get("jobs") or {}
+
+    violations: list[str] = []
+
+    workflow_concurrency = workflow.get("concurrency")
+    if not isinstance(workflow_concurrency, dict):
+        violations.append("  merge-queue.yml: missing workflow-level `concurrency` — the merge train (admit -> build -> validate -> merge) is no longer serialised across runs, so overlapping runs build/validate concurrently and a stale train can merge after a newer one")
+    else:
+        if workflow_concurrency.get("group") != "merge-queue":
+            violations.append(f"  merge-queue.yml: workflow-level concurrency.group must be 'merge-queue' (got {workflow_concurrency.get('group')!r})")
+        if workflow_concurrency.get("cancel-in-progress") is not False:
+            violations.append(f"  merge-queue.yml: workflow-level concurrency.cancel-in-progress must be false (got {workflow_concurrency.get('cancel-in-progress')!r}) — a later run must never cancel an in-flight train")
 
     def _merges_to_main(job: object) -> bool:
         if not isinstance(job, dict):
@@ -516,19 +540,17 @@ def test_merge_queue_concurrency_is_scoped_to_the_queue_job() -> None:
     merging_jobs = {name: job for name, job in jobs.items() if _merges_to_main(job)}
     assert merging_jobs, "merge-queue.yml: no job runs `gh pr merge` — the merge jobs moved; update this test deliberately"
 
-    violations: list[str] = []
-    if "concurrency" in workflow:
-        violations.append("  merge-queue.yml: workflow-level `concurrency` is present — the group must be scoped to each merge job, or event-gate's pacing sleep holds it and delays every chained pass")
-    for name, job in merging_jobs.items():
-        job_concurrency = job.get("concurrency")
+    # No job may re-declare the workflow-level group: workflow-run and job
+    # concurrency share one repository-wide namespace, so a job that repeats the
+    # group queues behind its own run and never starts.
+    for name, job in jobs.items():
+        job_concurrency = job.get("concurrency") if isinstance(job, dict) else None
         if not isinstance(job_concurrency, dict):
-            violations.append(f"  merge-queue.yml: jobs.{name} merges to main but has no `concurrency` mapping — merges to main are no longer serialised")
             continue
-        if job_concurrency.get("group") != "merge-queue":
-            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.group must be 'merge-queue' (got {job_concurrency.get('group')!r})")
-        if job_concurrency.get("cancel-in-progress") is not False:
-            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.cancel-in-progress must be false (got {job_concurrency.get('cancel-in-progress')!r}) — a later run must never cancel an in-flight merge")
-    assert not violations, "merge-queue.yml no longer serialises every merge-to-main job on the merge-queue group:\n" + "\n".join(violations)
+        job_group = job_concurrency.get("group")
+        if job_group == "merge-queue":
+            violations.append(f"  merge-queue.yml: jobs.{name}.concurrency.group re-declares the workflow-level group {job_group!r} — GitHub shares one concurrency namespace across workflow runs and jobs, so this job queues behind its own run and never starts")
+    assert not violations, "merge-queue.yml no longer serialises the merge train on the workflow-level merge-queue group:\n" + "\n".join(violations)
 
 
 # --- The queue's verdict is a required gate on every landing path -----------
@@ -1407,20 +1429,29 @@ def test_signing_canary_status_gate_remains() -> None:
 
 # --- Sonar new-issues gate: blocking policy --------------------------------
 
+#: The PR-scoped Sonar new-issues gate left the PR tier on 2026-11-27: ci.yml no
+#: longer runs a SonarCloud analysis on a pull request, so there is no PR
+#: analysis to query. The gate itself (and the blocking policy it enforces) moved
+#: with the analysis into the merge-train validation, which is where these pins
+#: now follow it. The train leaves `pr_number` empty and the gate reports a
+#: notice instead of a false pass; a manual dispatch with a PR number gets the
+#: full check.
+VALIDATE_YML = WORKFLOWS / "merge-validate.yml"
+
 
 def _sonar_new_issues_gate_step() -> dict:
-    """Return the step dict for the 'Fail on new SonarCloud bugs...' step in ci.yml."""
-    wf = _load_yaml(CI_YML)
+    """Return the gate step dict from the merge-train validation workflow."""
+    wf = _load_yaml(VALIDATE_YML)
     jobs = wf.get("jobs") or {}
-    job = jobs.get("sonar-new-issues-gate")
-    assert isinstance(job, dict), "ci.yml: sonar-new-issues-gate job missing"
+    job = jobs.get("sonar-new-issues")
+    assert isinstance(job, dict), "merge-validate.yml: sonar-new-issues job missing"
     steps = job.get("steps") or []
-    target_name = "Fail on new SonarCloud bugs, vulnerabilities, and critical smells"
+    target_name = "Gate on new blocking SonarCloud issues (PR only)"
     step = next(
         (s for s in steps if isinstance(s, dict) and s.get("name") == target_name),
         None,
     )
-    assert step is not None, "ci.yml: sonar-new-issues-gate step not found"
+    assert step is not None, "merge-validate.yml: sonar-new-issues gate step not found"
     return step
 
 
@@ -1443,8 +1474,8 @@ def test_sonar_new_issues_gate_queries_bug_and_vulnerability() -> None:
     run = _run_script(step)
     violations: list[str] = []
     if "types=BUG,VULNERABILITY" not in run:
-        violations.append("  ci.yml: sonar-new-issues-gate step does not query types=BUG,VULNERABILITY")
-    assert not violations, "sonar-new-issues-gate no longer queries BUG+VULNERABILITY:\n" + "\n".join(violations)
+        violations.append("  merge-validate.yml: sonar-new-issues step does not query types=BUG,VULNERABILITY")
+    assert not violations, "sonar-new-issues no longer queries BUG+VULNERABILITY:\n" + "\n".join(violations)
 
 
 def test_sonar_new_issues_gate_queries_critical_code_smells() -> None:
@@ -1459,62 +1490,78 @@ def test_sonar_new_issues_gate_queries_critical_code_smells() -> None:
     run = _run_script(step)
     violations: list[str] = []
     if "types=CODE_SMELL" not in run:
-        violations.append("  ci.yml: sonar-new-issues-gate step does not query types=CODE_SMELL")
+        violations.append("  merge-validate.yml: sonar-new-issues step does not query types=CODE_SMELL")
     if "severities=BLOCKER,CRITICAL" not in run:
-        violations.append("  ci.yml: sonar-new-issues-gate step does not filter CODE_SMELL to BLOCKER,CRITICAL")
-    assert not violations, "sonar-new-issues-gate no longer queries critical CODE_SMELL:\n" + "\n".join(violations)
+        violations.append("  merge-validate.yml: sonar-new-issues step does not filter CODE_SMELL to BLOCKER,CRITICAL")
+    assert not violations, "sonar-new-issues no longer queries critical CODE_SMELL:\n" + "\n".join(violations)
 
 
 def test_sonar_new_issues_gate_fail_closed_on_api_error() -> None:
-    """The job must still treat a non-200 / API error as a failure (fail-closed).
+    """The gate must still treat a non-200 / API error as a failure (fail-closed).
 
     The fail-closed semantics are load-bearing: an unknown state must never
-    pass. This test asserts the ::error:: annotation branch exists.
+    pass. This asserts the HTTP status is actually captured (so an API failure
+    cannot be read as an empty result) and that every failure arm annotates and
+    exits non-zero.
     """
     step = _sonar_new_issues_gate_step()
     run = _run_script(step)
     violations: list[str] = []
-    # The fail-closed pattern checks for non-200 and exits 1 with ::error::
-    if "HTTP_CODE" not in run:
-        violations.append("  ci.yml: no HTTP_CODE capture — cannot distinguish API failure from empty result")
+    # Capturing the status is what separates "the API failed" from "no issues".
+    if "-w '%{http_code}'" not in run:
+        violations.append("  merge-validate.yml: no HTTP status capture — cannot distinguish API failure from empty result")
     if '!= "200"' not in run:
-        violations.append("  ci.yml: no non-200 check — API errors would not fail closed")
+        violations.append("  merge-validate.yml: no non-200 check — API errors would not fail closed")
     if "::error::" not in run:
-        violations.append("  ci.yml: no ::error:: annotation on API failure — failure would be silent")
+        violations.append("  merge-validate.yml: no ::error:: annotation on API failure — failure would be silent")
     if "failing closed" not in run:
-        msg = "ci.yml: 'failing closed' phrase missing — fail-closed intent not documented in the failure path"
-        violations.append(msg)
-    assert not violations, "sonar-new-issues-gate no longer fails closed on API error:\n" + "\n".join(violations)
+        violations.append("  merge-validate.yml: 'failing closed' phrase missing — fail-closed intent not documented in the failure path")
+    if "exit 1" not in run:
+        violations.append("  merge-validate.yml: a fail-closed arm does not exit non-zero")
+    assert not violations, "sonar-new-issues no longer fails closed on API error:\n" + "\n".join(violations)
 
 
-def test_sonar_new_issues_gate_non_blocking_smells_cannot_fail() -> None:
-    """The non-blocking query (INFO/MINOR/MAJOR code smells) must not fail the job.
+def test_sonar_new_issues_gate_is_retired_from_the_pr_tier() -> None:
+    """The PR-scoped Sonar count gate is deliberately gone from ci.yml.
 
-    The non-blocking count is printed as a ::notice:: and its query failure
-    is downgraded to a ::warning::. Neither can cause the step to exit non-zero.
-    This test asserts the || true / warning path exists (the else branch that
-    does not exit).
+    This is a documented, intentional retirement, not an accidental drop: on
+    2026-11-27 the PR tier stopped running a SonarCloud analysis, so the
+    PR-scoped new-issues COUNT gate has nothing to query automatically. The
+    pre-merge quality signal is the SonarCloud quality gate on the train's
+    ``sonar`` scan (new-code ratios); this test pins the retirement so that
+    re-adding a ci.yml job is a deliberate, visible change rather than a
+    resurrection of a gate that could silently no-op.
+    """
+    ci_wf = _load_yaml(CI_YML)
+    jobs = ci_wf.get("jobs") or {}
+    stale = [name for name in ("sonarcloud-scan", "sonar-new-issues-gate") if name in jobs]
+    assert not stale, (
+        f"ci.yml unexpectedly runs the PR-tier Sonar jobs {stale}; the PR-scoped count gate was retired on 2026-11-27 (it lives in merge-validate.yml, which only enforces it when a PR number is supplied). If this is deliberate, update this test and the merge-validate sonar-new-issues note together."
+    )
+
+
+def test_sonar_new_issues_gate_counts_only_the_blocking_subset() -> None:
+    """Only the two blocking queries can contribute to the failing count.
+
+    The gate lives in merge-validate.yml now (retired from the PR tier - see
+    test_sonar_new_issues_gate_is_retired_from_the_pr_tier). It used to also run
+    a third, non-blocking query (INFO/MINOR/MAJOR smells) purely to emit a
+    notice. The surviving implementation carries no such query at all, which is
+    the strongest form of the same guarantee: nothing outside BUG/VULNERABILITY
+    and BLOCKER/CRITICAL CODE_SMELL can ever reach the count the gate fails on.
+    This pins that shape - exactly two issues queries, and a total that is their
+    sum - so re-adding a query that could fail the gate is a deliberate, visible
+    change rather than a silent widening.
     """
     step = _sonar_new_issues_gate_step()
     run = _run_script(step)
     violations: list[str] = []
-    # The non-blocking query must NOT have an unconditional exit 1
-    # It should either print ::notice:: (success) or ::warning:: (query failed) but continue
-    if "::notice::" not in run:
-        violations.append("  ci.yml: no ::notice:: for non-blocking count — non-blocking signal is not emitted")
-    if "::warning::" not in run:
-        msg = "ci.yml: no ::warning:: fallback for non-blocking query failure — a query failure could fail the gate"
-        violations.append(msg)
-    # The non-blocking branch must NOT contain 'exit 1'
-    # We find the non-blocking section (after the blocking check) and ensure no exit 1
-    # The script uses 'else' for the warning path and does not exit
-    if 'echo "::warning::SonarCloud non-blocking code smell query failed' not in run:
-        msg = "ci.yml: non-blocking query failure does not emit expected warning"
-        violations.append(msg)
-    # Verify the non-blocking branch doesn't have an exit that would fail the step
-    # The blocking exit is explicit; the non-blocking else branch should just warn
-    # and fall through to the final "No blocking" echo
-    assert not violations, "sonar-new-issues-gate non-blocking path can fail the job:\n" + "\n".join(violations)
+    queries = run.count("/api/issues/search")
+    if queries != 2:
+        violations.append(f"  merge-validate.yml: expected exactly 2 issues queries (BUG/VULNERABILITY + BLOCKER/CRITICAL smells), found {queries}")
+    if "BLOCKING_TOTAL=$((TOTAL_BV + TOTAL_CS))" not in run:
+        violations.append("  merge-validate.yml: the failing count is not the sum of the two blocking queries")
+    assert not violations, "sonar-new-issues no longer counts only the blocking subset:\n" + "\n".join(violations)
 
 
 # --- FAR-2139: the deploy escalation email edge is one shared implementation --
@@ -2259,9 +2306,9 @@ PR_ONLY_CONDITION = "github.event_name == 'pull_request'"
 #: must be listed, so this allowlist cannot silently suppress a live job.
 NOTIFIER_NEEDS_EXEMPTIONS: dict[str, dict[str, str]] = {
     "notify-pr-failure": {},
-    "notify-main-failure": {
-        "sonar-new-issues-gate": ("PR-only (`if: github.event_name == 'pull_request'`) - it never runs, so it cannot fail, on the push/workflow_dispatch events this notifier handles"),
-    },
+    # No exemptions: every job in ci.yml now runs on the events this notifier
+    # handles, so every one of them can fail there and must be listed.
+    "notify-main-failure": {},
 }
 
 
@@ -2416,3 +2463,82 @@ def test_main_failure_dispatch_skips_when_a_fix_pr_is_open() -> None:
 def test_open_fix_pr_skip_script_exists() -> None:
     script = REPO / "scripts" / "main_failure_fix_pr_open.sh"
     assert script.is_file()
+
+
+# --- Merge-tier coverage: checks the fast PR tier left with no gate ---------
+#
+# The 2026-11-27 fast-tier cut removed three checks from ci.yml's frontend job
+# and nowhere else ran them, so they ran in NO gate at all until merge-validate
+# reintroduced them. This pin is about the WORKFLOW running them, not which job
+# holds them, so the checks may be moved between jobs freely.
+
+
+def _statically_disabled(condition: object) -> bool:
+    """True when an ``if:`` value is literally false (YAML bool or string)."""
+    return condition is False or (isinstance(condition, str) and condition.strip().lower() == "false")
+
+
+def _enabled_jobs_running(workflow: dict, command: str) -> list[tuple[str, dict]]:
+    """Jobs with a non-disabled step whose ``run`` text contains ``command``.
+
+    A job or step gated off with a literal ``if: false`` is not counted: the
+    command would never execute, so it must not satisfy a "somewhere runs this"
+    assertion. (A non-literal gate such as ``inputs.full`` is beyond static
+    reach; this catches the common ``if: false`` re-orphaning.)
+    """
+    hits: list[tuple[str, dict]] = []
+    for job_id, job in (workflow.get("jobs") or {}).items():
+        if not isinstance(job, dict) or _statically_disabled(job.get("if")):
+            continue
+        for step in job.get("steps") or []:
+            if not isinstance(step, dict) or _statically_disabled(step.get("if")):
+                continue
+            if command in str(step.get("run") or ""):
+                hits.append((job_id, job))
+                break
+    return hits
+
+
+#: label -> command substring. Each is a check whose ONLY gate is the merge tier:
+#: the @visual canvas snapshots are excluded from the staging @regression run by
+#: their tag, the mobile-nav specs were deliberately taken out of the staging E2E
+#: job (FAR-1850), and the slice guard inspects @regression specs rather than
+#: running them.
+MERGE_TIER_ONLY_CHECKS = {
+    "the mobile-nav specs": "playwright test mobile-nav-flash mobile-nav-usable",
+    "the @visual canvas snapshots": 'playwright test --grep "@visual"',
+    "the e2e-visual-slice classification guard": "scripts/e2e-visual-slice.mjs --check",
+}
+
+
+def test_merge_validate_runs_the_checks_that_have_no_other_gate() -> None:
+    """If one of these leaves merge-validate.yml, it runs in no gate at all.
+
+    That is exactly how the fast-PR-tier cut lost them: they lived only in
+    ci.yml's frontend job, the job was slimmed, and nothing failed - the checks
+    simply stopped running. A red test here is the only signal that would have
+    fired.
+
+    The owning job must EXIST and not be statically disabled (``if: false``):
+    matching the command substring anywhere in the file would let a job gated off
+    re-orphan the check while this test stayed green.
+    """
+    workflow = _load_yaml(VALIDATE_YML)
+    violations = [f"  merge-validate.yml: no enabled job runs {label} ({command!r}) - that check would have no gate at all" for label, command in MERGE_TIER_ONLY_CHECKS.items() if not _enabled_jobs_running(workflow, command)]
+    assert not violations, "merge-validate.yml dropped a check that runs nowhere else:\n" + "\n".join(violations)
+
+
+def test_merge_validate_runs_the_e2e_route_coverage_gate() -> None:
+    """The FAR-637 e2e route-coverage gate must run in an enabled job.
+
+    It was orphaned by the 2026-11-27 fast-tier cut: removed from ci.yml's old
+    frontend job and left in no workflow at all, so nothing exercised it while
+    provenance comments claimed it still ran. This pin fails if the script
+    leaves every workflow OR its owning job is statically disabled, so it
+    cannot be silently re-orphaned again. The merge train owns it (the fast PR
+    tier is deliberately slimmed to ESLint/vue-tsc), so it is pinned here.
+    """
+    workflow = _load_yaml(VALIDATE_YML)
+    command = "check_e2e_route_coverage.py"
+    hits = _enabled_jobs_running(workflow, command)
+    assert hits, f"merge-validate.yml: no enabled job runs the FAR-637 e2e route-coverage gate ({command!r}); it would have no gate at all"
