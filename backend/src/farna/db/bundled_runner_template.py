@@ -1,21 +1,27 @@
 """Bundled Runner shipped template constants (FAR-590, D4).
 
 The single source of truth for the "Bundled Runner (Docker)" seeded
-EnvironmentProfile template: provider type, pinned per-minor image digest,
-hardening + network preset, and the LOCKED ``ephemeral`` persistence policy.
+EnvironmentProfile template: provider type, the pinned runner image
+reference, hardening + network preset, and the LOCKED ``ephemeral``
+persistence policy.
 
 This module lives in the DB layer so both the org-creation seeding hook
-(``db.seed``) and the one-time backfill migration can consume it without a
+(``db.seed``) and the shipped-template drift helper can consume it without a
 ``db -> core`` import (import-linter contract ``db-does-not-import-core``).
 The core-side ``bundled_runner.profile`` module re-exports these constants
 and owns the LIVE drift helper.
 
 Digest contract (ADR 029 / plan D4):
-- ``BUNDLED_RUNNER_IMAGE_REF`` is **release-advanced**: the GHCR publish job
-  (GA item) bumps it to the latest ``released-<minor>`` digest of the pinned
-  modulo-runner image and asserts the value here matches the published tag
-  (the digest-drift guard; migration 0189 mirrors these constants and the
-  release job asserts they never diverge).
+- ``BUNDLED_RUNNER_IMAGE_REF``'s committed default is the all-zero
+  placeholder digest. ``release-unified.yml`` builds and pushes the release's
+  ``ghcr.io/farnalabs/farna-control/runner-opencode`` image FIRST, resolves
+  its manifest digest, and rewrites this constant IN THE CI CHECKOUT to
+  ``ghcr.io/farnalabs/farna-control/runner-opencode@sha256:<digest>`` before
+  the all-in-one and backend images are built, so the released image bakes
+  the real digest. The rewritten value is never committed or pushed to main.
+- ``scripts/check_released_runner_image_ref.py`` is the release gate. It runs
+  after that injection and before the remaining images are built, and refuses
+  a placeholder, malformed, or wrong-repository reference.
 - Seeded rows carry their own copy of the template-owned fields at
   creation; drift is computed LIVE against these constants (no fingerprint
   lifecycle): a divergent row surfaces "shipped template updated - apply"
@@ -37,21 +43,23 @@ from typing import Any
 
 TEMPLATE_PROFILE_NAME = "Bundled Runner (Docker)"
 
-# The per-minor digest constant (release-advanced). Supports the CURRENT
-# bundled-dessert minor + N-1; a pin advance past N-1 is a release-note item.
-# GHCR publish CI is the GA item (deploy/docker/runner-opencode.Dockerfile).
-BUNDLED_RUNNER_IMAGE_REF = "modulo-runner:opencode@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+# The pinned runner image reference. The committed default is the all-zero
+# placeholder; the release workflow injects the real
+# ``ghcr.io/farnalabs/farna-control/runner-opencode@sha256:<digest>`` into the
+# CI checkout before the all-in-one/backend images are built (see the module
+# docstring and ``scripts/check_released_runner_image_ref.py``).
+BUNDLED_RUNNER_IMAGE_REF = "ghcr.io/farnalabs/farna-control/runner-opencode@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
 BUNDLED_RUNNER_PROVIDER_TYPE = "runner_docker"
 
-# The release-advanced placeholder digest: an all-zero sha256. A seeded /
-# backfilled profile whose ``image_ref`` still carries this cannot provision
-# (the image does not exist in any registry) — a pipeline re-pointed onto the
-# Bundled Runner would fail at container-create with an opaque pull error until
-# the GHCR publish job (GA item) bumps the real pinned digest. This is a STABLE
-# sentinel, intentionally independent of ``BUNDLED_RUNNER_IMAGE_REF``, which
-# becomes the real released digest — so the placeholder check below keeps firing
-# only while the digest is un-landed, and never false-positives on a real digo.
+# The release placeholder digest: an all-zero sha256. A seeded profile whose
+# ``image_ref`` still carries this cannot provision (the image does not exist
+# in any registry) — a pipeline bound to it fails at dispatch with an explicit
+# placeholder error until the release constant advances and an apply writes the
+# real digest. This is a STABLE sentinel, intentionally independent of
+# ``BUNDLED_RUNNER_IMAGE_REF``, which the release workflow rewrites to the real
+# released digest — so the placeholder check below keeps firing only while the
+# digest is un-landed, and never false-positives on a real digest.
 BUNDLED_RUNNER_PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
 
 
@@ -112,10 +120,10 @@ TEMPLATE_OWNED_FIELDS: dict[str, Any] = {
 
 
 def build_bundled_runner_profile_values() -> dict[str, Any]:
-    """Shipped template values for seeding / backfill (org-creation + migration)."""
+    """Shipped template values for seeding (org-creation + startup re-seed)."""
     return {
         "name": TEMPLATE_PROFILE_NAME,
-        "description": ("The Bundled Runner: first-party modulo-runner:opencode workspace executed on this deployment's Docker engine via the filtered socket proxy. Persistence is locked to ephemeral."),
+        "description": ("The Bundled Runner: first-party ghcr.io/farnalabs/farna-control/runner-opencode workspace executed on this deployment's Docker engine via the filtered socket proxy. Persistence is locked to ephemeral."),
         "provider_type": BUNDLED_RUNNER_PROVIDER_TYPE,
         "image_ref": BUNDLED_RUNNER_IMAGE_REF,
         "capabilities_json": [],

@@ -17,7 +17,7 @@ from farna.db.bundled_runner_template import BUNDLED_RUNNER_PLACEHOLDER_DIGEST
 
 def test_template_constants_shape() -> None:
     assert BUNDLED_RUNNER_PROVIDER_TYPE == "runner_docker"
-    assert BUNDLED_RUNNER_IMAGE_REF.startswith("modulo-runner:opencode@sha256:")
+    assert BUNDLED_RUNNER_IMAGE_REF.startswith("ghcr.io/farnalabs/farna-control/runner-opencode@sha256:")
     assert len(BUNDLED_RUNNER_IMAGE_REF.split("@sha256:", 1)[1]) == 64
     assert TEMPLATE_OWNED_FIELDS["persistence_policy"] == "ephemeral"
     assert TEMPLATE_OWNED_FIELDS["network_policy"] == "outbound"
@@ -40,6 +40,18 @@ def test_build_values_round_trip() -> None:
     assert values["persistence_policy"] == "ephemeral"
     assert values["network_policy"] == "outbound"
     assert values["config_json"] == TEMPLATE_CONFIG_JSON
+
+
+def test_committed_default_is_the_placeholder_digest() -> None:
+    """The in-source default stays the all-zero placeholder.
+
+    The release workflow injects the real ``runner-opencode`` manifest digest
+    into the CI checkout; the committed value must NOT carry a per-release
+    digest (that would be a stale pin on main between releases). The release
+    gate ``scripts/check_released_runner_image_ref.py`` fails the release if
+    the injected value is still this placeholder.
+    """
+    assert BUNDLED_RUNNER_IMAGE_REF == "ghcr.io/farnalabs/farna-control/runner-opencode@" + BUNDLED_RUNNER_PLACEHOLDER_DIGEST
 
 
 def _row(**overrides: object) -> SimpleNamespace:

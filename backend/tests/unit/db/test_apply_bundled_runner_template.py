@@ -82,12 +82,12 @@ class TestApplyBundledRunnerTemplate:
         must reach a row that still carries the placeholder digest (the
         documented remediation path).
         """
-        advanced = "modulo-runner:opencode@sha256:" + "9" * 64
+        advanced = "ghcr.io/farnalabs/farna-control/runner-opencode@sha256:" + "9" * 64
         monkeypatch.setattr(
             "farna.db.bundled_runner_template.BUNDLED_RUNNER_IMAGE_REF",
             advanced,
         )
-        profile = _make_profile(image_ref="modulo-runner:opencode@sha256:" + "0" * 64)
+        profile = _make_profile(image_ref="ghcr.io/farnalabs/farna-control/runner-opencode@sha256:" + "0" * 64)
         await _apply(profile)
         assert profile.image_ref == advanced
 

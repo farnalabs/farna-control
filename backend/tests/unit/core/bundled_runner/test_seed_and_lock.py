@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from farna.core.bundled_runner.profile import (
+    BUNDLED_RUNNER_IMAGE_REF,
     TEMPLATE_CONFIG_JSON,
     TEMPLATE_PROFILE_NAME,
     build_bundled_runner_profile_values,
@@ -97,6 +98,9 @@ async def test_seed_carries_current_template_values() -> None:
     values = build_bundled_runner_profile_values()
     assert profile.description == values["description"]
     assert profile.image_ref == values["image_ref"]
+    # Invariant: org seeding writes the SHIPPED reference (the single source of
+    # truth), so a release-time advance reaches new orgs without re-seeding.
+    assert profile.image_ref == BUNDLED_RUNNER_IMAGE_REF
     assert profile.capabilities_json == values["capabilities_json"]
     assert profile.network_policy == values["network_policy"]
     assert profile.initialisation_strategy == values["initialisation_strategy"]

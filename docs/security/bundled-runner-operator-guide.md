@@ -15,8 +15,8 @@ operations.
 - Docker engine reachable from the Farna Control backend and SAQ workers (the same
   host in the default compose; a remote engine works identically – see
   "Remote engine" below).
-- The runner image available at the pinned digest (see §3 – until the GHCR
-  publish job is live, build it yourself: `deploy/docker/runner-opencode.Dockerfile`).
+- The runner image available at the pinned digest (see §3). Releases publish
+  it and bake the digest; to self-build, use `deploy/docker/runner-opencode.Dockerfile`.
 
 ## 2. Enable the overlay
 
@@ -49,10 +49,11 @@ silent fallback.
 
 ## 3. The runner image + digest pinning
 
-The shipped profile pins `modulo-runner:opencode@sha256:<digest>` (the
-per-minor constant in `backend/src/farna/db/bundled_runner_template.py`;
-the compose overlay's `bundled-runner` service builds the same Dockerfile
-for self-builders):
+The shipped profile pins
+`ghcr.io/farnalabs/farna-control/runner-opencode@sha256:<digest>` (the
+constant in `backend/src/farna/db/bundled_runner_template.py`; the compose
+overlay's `bundled-runner` service builds the same Dockerfile for
+self-builders):
 
 ```bash
 docker compose -f deploy/compose/runner.yml --profile runner build bundled-runner
@@ -65,14 +66,15 @@ while still installing the native Linux binary required by the image. The
 package version is pinned by `OPENCODE_VERSION`; do not replace the explicit
 postinstall with a wildcard or a general lifecycle-script enablement.
 
-Pin-advance process: the GHCR publish job (GA item) bumps `OPENCODE_VERSION`
-(current minor + N-1 support window), scans (trivy/grype fail high/critical
-with a documented time-boxed CVE-allowlist), runs container-structure-test,
-publishes `released-<minor>`, and advances the seed/docs digest constant
-(the digest-drift guard asserts the constant matches the published tag).
-Until that job is live, an operator advance is manual: build, scan, pin the
-new digest in the template constants, and apply it from the Runners page
-(re-seeding does not update an existing profile).
+At release time the digest is advanced automatically: `release-unified.yml`
+builds and pushes `ghcr.io/farnalabs/farna-control/runner-opencode:<rc-tag>`
+first, resolves its manifest digest, rewrites `BUNDLED_RUNNER_IMAGE_REF` in
+the CI checkout to that digest **before** the all-in-one and backend images
+are built, and runs `scripts/check_released_runner_image_ref.py` as a release
+gate. The released image therefore bakes the real digest; the committed
+default stays the all-zero placeholder and is never pushed back to `main`.
+The gate refuses a placeholder digest, a mutable tag, or a reference that does
+not name the runner-opencode repository.
 
 Template-owned values are refreshed by the per-row "shipped template updated
 - apply" action, never silently. The image reference is template-owned only
@@ -81,33 +83,24 @@ that state reports drift when the release constant advances, and apply writes
 the new digest. Once you set your own image it survives untouched and is not
 reported as drift.
 
-> **⚠️ Dispatch breakage window – placeholder digest (known GA follow-up).**
-> As shipped, `BUNDLED_RUNNER_IMAGE_REF` is the **all-zero `sha256:0000…0000`
-> placeholder** digest. A seeded or backfilled profile that still carries this
-> digest **cannot provision a workspace** – the image does not exist in any
-> registry, so a dispatch fails at container-create. This is **fail-loud by
-> design, not silent**: resolving the dispatch route raises a typed
-> `SandboxDispatchUnboundError` naming the placeholder digest and pointing here,
-> instead of letting the run appear to complete and then error at pull time.
-> Until the GHCR publish job lands the real released digest (or an operator
-> pins a built digest into the template constants and applies), **every
-> pipeline bound to a Bundled Runner profile fails at dispatch.** Critically, the
-> migration `0191_bundled_runner_seed_backfill` re-points the legacy `modulo-dev`
-> `local_docker` row to the Bundled Runner, so any pipeline that previously ran
-> on E2B via `modulo-dev` will **also fail at dispatch** on this branch until the
-> digest is provisioned. Remediation before relying on it: either wait for the
-> GA digest bump, or self-build the runner image
-> (`deploy/docker/runner-opencode.Dockerfile`), pin its digest in
-> `bundled_runner_template.py`, and re-seed/apply.
+**If your profile still carries the placeholder.** A profile seeded by an
+older build keeps its placeholder digest when a release advances the
+constant. The Runners page then reports the row as drifted ("shipped template
+updated - apply"); apply the template to write the released digest. Until you
+do, a dispatch on that profile fails loudly with a typed
+`SandboxDispatchUnboundError` naming the placeholder digest instead of
+failing later at container-create. To pin a different image yourself,
+self-build it (`deploy/docker/runner-opencode.Dockerfile`), set its digest on
+the profile, and it becomes operator-owned.
 
 ## 4. The seeded profile
 
 Every org gets a **"Bundled Runner (Docker)"** environment profile at
-org-creation (owned by the org's admin account). Orgs that predate the hook
-receive it via the one-time migration `0191_bundled_runner_seed_backfill`,
-which also re-points the legacy `modulo-dev` `local_docker` row to the
-Bundled Runner (release note covers the change; the rollback path restores
-the row, and the inserted backfill rows are left in place – additive).
+org-creation (owned by the org's admin account). The first tenant org is also
+re-seeded idempotently at API boot, so an install upgraded from a build that
+predates the hook gains the profile. Re-seeding never rewrites an existing
+row: a template change (including an advanced image digest) surfaces as drift
+and is applied from the Runners page.
 
 Locked property: **`persistence_policy` is `ephemeral`** – the CRUD
 validator rejects `retained`/`cache` for `runner_docker` (dispatch
