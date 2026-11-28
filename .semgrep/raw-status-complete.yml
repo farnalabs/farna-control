@@ -86,10 +86,11 @@ rules:
         - "**/backend/src/farna/core/pipeline_execution.py"
         - "**/backend/src/farna/core/pipeline_engine/executor.py"
         # Same pre-existing consumer sites as executor.py, relocated verbatim by
-        # the finalize/telemetry mixin extraction - remove together with the
-        # executor.py entry when FAR-146 rewrites them.
+        # the finalize/telemetry/execute-resume mixin extractions - remove
+        # together with the executor.py entry when FAR-146 rewrites them.
         - "**/backend/src/farna/core/pipeline_engine/executor_parts/finalize.py"
         - "**/backend/src/farna/core/pipeline_engine/executor_parts/telemetry.py"
+        - "**/backend/src/farna/core/pipeline_engine/executor_parts/run_execute.py"
         - "**/backend/src/farna/core/saq_worker.py"
         - "**/backend/src/farna/core/feedback_manager/__init__.py"
         - "**/backend/src/farna/core/analytics/builder.py"

@@ -442,25 +442,30 @@ _UNGUARDED_SITES: set[tuple[str, str]] = {
     # FAR-1610: the capacity claim/demote ``update_run_status`` calls moved with
     # the method body into ``_claim_under_capacity`` (``_check_capacity`` now
     # delegates to it); the source-scan pin is keyed by the enclosing function.
-    ("core/pipeline_engine/executor.py", "_claim_under_capacity"),
+    # The whole admission group (claim / demote / retry-budget / spend-ceiling /
+    # policy-pin) was subsequently extracted verbatim into the
+    # ``executor_parts.admission`` mixin, so the pins are keyed by that module.
+    ("core/pipeline_engine/executor_parts/admission.py", "_claim_under_capacity"),
     # FAR-2076: the capacity demotion was split back out of
     # ``_claim_under_capacity`` into its own ``_demote_for_capacity`` helper.
     # Like the claim-path write it sends only status + the decline
     # error_code/error_detail + the claim fence (from_status/claim_token) and
     # NEVER outputs_json/node_telemetry_json — a no-blobs site, so no guard.
-    ("core/pipeline_engine/executor.py", "_demote_for_capacity"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_demote_for_capacity"),
     # FAR-2076: the retry-budget refusal terminalizes with status "failed" +
     # error_code/error_detail + the claim fence only — no outputs/telemetry
     # kwargs, so it cannot raise DualWriteError and needs no guard.
-    ("core/pipeline_engine/executor.py", "_retry_budget_gate"),
-    ("core/pipeline_engine/executor.py", "_check_policy_gate_pin"),
-    ("core/pipeline_engine/executor.py", "_check_spend_ceiling_gate"),
-    ("core/pipeline_engine/executor.py", "_claim_run_and_audit"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_retry_budget_gate"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_check_policy_gate_pin"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_check_spend_ceiling_gate"),
+    ("core/pipeline_engine/executor_parts/admission.py", "_claim_run_and_audit"),
     # FAR-366 refactor moved the resume first-transaction body (including the
     # "running" status write) out of ``resume`` into ``_resume_load_and_validate``;
     # the write still sends status + claimed_by only — no outputs/telemetry — so
-    # it remains a no-blobs site needing no guard.
-    ("core/pipeline_engine/executor.py", "_resume_load_and_validate"),
+    # it remains a no-blobs site needing no guard. The execute/resume mixin split
+    # moved the enclosing function into ``executor_parts/run_execute.py``, so the
+    # pin follows it (same site, same no-blobs shape).
+    ("core/pipeline_engine/executor_parts/run_execute.py", "_resume_load_and_validate"),
     ("core/dispatch.py", "_org_capacity_deferred"),
     # FAR-1831: the capacity-defer reset writes only status + the claim refund
     # (no outputs_json/node_telemetry_json kwargs) — a no-blobs site, so no
@@ -471,6 +476,20 @@ _UNGUARDED_SITES: set[tuple[str, str]] = {
     # which carries NO outputs/telemetry kwargs — the site no longer calls
     # ``update_run_status`` at all, so there is nothing to guard there.
 }
+
+
+def _is_update_run_status_call(node: ast.Call) -> bool:
+    """True for a direct ``update_run_status(...)`` call or its ``_ref`` bridge form.
+
+    The executor package split moved call sites into ``executor_parts`` mixins,
+    where the module-level writer is resolved at CALL time through
+    ``support._ref("update_run_status")`` so a ``mock.patch`` on ``executor``
+    still intercepts. Both shapes must count, or a moved site silently drops out
+    of this guard scan (the pin would stop covering it while staying green).
+    """
+    if isinstance(node.func, ast.Name) and node.func.id == "update_run_status":
+        return True
+    return isinstance(node.func, ast.Call) and isinstance(node.func.func, ast.Name) and node.func.func.id == "_ref" and len(node.func.args) == 1 and isinstance(node.func.args[0], ast.Constant) and node.func.args[0].value == "update_run_status"
 
 
 def _update_run_status_call_sites() -> set[tuple[str, str, bool]]:
@@ -503,7 +522,7 @@ def _update_run_status_call_sites() -> set[tuple[str, str, bool]]:
                 self.guard_depth -= 1
 
         def visit_Call(self, node: ast.Call) -> None:
-            if isinstance(node.func, ast.Name) and node.func.id == "update_run_status":
+            if _is_update_run_status_call(node):
                 enclosing = self.scope[-1] if self.scope else "<module>"
                 self.findings.add((self._rel, enclosing, self.guard_depth > 0))
             self.generic_visit(node)

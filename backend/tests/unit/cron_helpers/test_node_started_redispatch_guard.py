@@ -506,8 +506,10 @@ class TestFencedResetIsIdempotencyGated:
     def test_every_fenced_reset_call_site_is_behind_an_idempotency_gate(self) -> None:
         """Pin the production call sites AND their safety premise.
 
-        ``_fenced_pending_reset`` is awaited exactly three times directly: twice
-        in the executor and once in ``watchdog_retry``. A fourth production
+        ``_fenced_pending_reset`` is awaited exactly three times directly: once
+        in the executor, once in the ``executor_parts.admission`` mixin (the
+        admission group was extracted verbatim; ``PipelineExecutor`` inherits
+        it), and once in ``watchdog_retry``. A fourth production
         reset runs in ``retry_policy._redispatch_after_policy`` through the
         ``fenced_pending_reset_fn`` callback the executor binds to its own
         method (FAR-2407 moved the retry helpers out of ``executor.py``). Three
@@ -523,12 +525,22 @@ class TestFencedResetIsIdempotencyGated:
         its own gate stops working.
         """
         from farna.core.pipeline_engine import executor, retry_policy, watchdog_retry
+        from farna.core.pipeline_engine.executor_parts import admission, run_execute
 
-        exec_src = Path(executor.__file__).read_text(encoding="utf-8")
+        # The execute/resume group (including the in-execute transient requeue)
+        # moved into ``executor_parts/run_execute.py``, and the admission group
+        # (including the pre-node deferral) moved verbatim into
+        # ``executor_parts/admission.py``, so the census scans all three modules:
+        # same two call sites, same gates, same premise.
+        admission_src = Path(admission.__file__).read_text(encoding="utf-8")
+        exec_src = Path(executor.__file__).read_text(encoding="utf-8") + Path(run_execute.__file__).read_text(encoding="utf-8") + admission_src
         rp_src = Path(retry_policy.__file__).read_text(encoding="utf-8")
         wr_src = Path(watchdog_retry.__file__).read_text(encoding="utf-8")
 
         assert exec_src.count("await self._fenced_pending_reset(") == 2
+        # Keyed to the module that now holds it: the union count above cannot be
+        # satisfied by two sites in one module while the moved site is untracked.
+        assert admission_src.count("await self._fenced_pending_reset(") == 1
         assert rp_src.count("await fenced_pending_reset_fn(") == 1
         assert wr_src.count("await executor._fenced_pending_reset(") == 1
         # The retry_policy call site is only reachable through the executor's
@@ -621,9 +633,13 @@ class TestExecutorWriteSiteSharesPhaseConstant:
         predicates bind — and no bare ``"first_node_dispatched"`` literal
         remains in the executor module."""
         from farna.core.pipeline_engine import executor
+        from farna.core.pipeline_engine.executor_parts import streaming
 
         assert executor.PHASE_FIRST_NODE_DISPATCHED is PHASE_FIRST_NODE_DISPATCHED
-        source = Path(executor.__file__).read_text(encoding="utf-8")
+        # The write site lives in ``_publish_mapped_stream_event``, which the
+        # stream-phase split moved into ``executor_parts/streaming.py``; the
+        # scan covers that module too so the site stays covered.
+        source = Path(executor.__file__).read_text(encoding="utf-8") + Path(streaming.__file__).read_text(encoding="utf-8")
         assert 'enter_phase("first_node_dispatched")' not in source
         assert "enter_phase(PHASE_FIRST_NODE_DISPATCHED)" in source
 
