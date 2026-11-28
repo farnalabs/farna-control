@@ -2326,6 +2326,8 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import { useDataFetch } from '../composables/useDataFetch'
 import { FOCUSABLE_SELECTOR, trapTabInElement } from '../composables/useFocusTrap'
+import { usePipelineRestore } from '../composables/usePipelineRestore'
+import { usePipelineVersionQuery } from '../composables/usePipelineVersionQuery'
 import { formatApiError, throwOnError } from '../lib/api/formatError'
 import { usePlanStore } from '../stores/planStore'
 
@@ -2353,15 +2355,7 @@ import { NODE_REGISTRY, PIPELINE_CONNECTORS_KEY, PIPELINE_TEAM_NAMES_KEY } from 
 import { projectCanvasEdge, projectGraphNode } from '../types/pipeline-graph-projection'
 import { shortId } from '../utils/format'
 import { doesNodeHaveCapabilityScope } from '../utils/pipeline-graph'
-import {
-  isBlockingSeverity,
-  readBreakingChanges,
-  readChangeClassCounts,
-  readImpactedNodes,
-  severityLabel as resolveSeverityLabel,
-  type SnapshotBreakingChange,
-  type SnapshotDiffPayload,
-} from '../lib/pipelineSnapshotDiff'
+import { isBlockingSeverity, type SnapshotDiffPayload } from '../lib/pipelineSnapshotDiff'
 import { formatDateShort } from '../lib/formatDate'
 import { formatCompactDuration, worstCaseForEvent, type WorstCase } from '../lib/worstCase'
 import { withTimeout } from '../lib/requestTimeout'
@@ -6090,191 +6084,21 @@ const pipelineLoadError = ref<string | null>(null)
 // early-returns while isViewing holds.
 // ---------------------------------------------------------------------------
 
-function readQueryValue(value: unknown): string | null {
-  const raw = Array.isArray(value) ? value.at(0) : value
-  return typeof raw === 'string' && raw.length > 0 ? raw : null
-}
-
-const snapshotParam = computed(() => readQueryValue(route.query.snapshot))
-const versionParam = computed(() => readQueryValue(route.query.version))
-const historicRequested = computed(() => snapshotParam.value !== null || versionParam.value !== null)
-
-// FAR-1818: version compare mode. `?compare=<uuid>` — the KEY's presence is
-// what selects the mode, and an empty/absent id means "compare against the
-// latest version". The base side is the resolved `?snapshot=` version (or its
-// `?version=` alias), so the canonical deep link is
-// `?snapshot=<base>&compare=<other>`. Kept separate from the historic-view
-// refs: entering compare never hydrates the editable graph.
-const compareRequested = computed(() => route.query.compare !== undefined)
-const compareParam = computed(() => readQueryValue(route.query.compare))
-
-// The latest saved version (the snapshot list is version-DESCENDING and
-// loadCatalog filters version 0) — the default "compare against" target.
-const latestSnapshotId = computed<string | null>(() => snapshots.value.at(0)?.id ?? null)
-
-/** `?version=<n>`: the positive integer, -1 when malformed, null when absent. */
-const requestedVersion = computed(() => {
-  const raw = versionParam.value
-  if (raw === null) return null
-  return /^\d+$/.test(raw) ? Number(raw) : -1
-})
-
-// --- `?version=<n>` alias resolution ---------------------------------------
-// The alias resolves against the server's version-DESCENDING snapshot list
-// (`GET /{pipeline_id}/snapshots`), which is PAGINATED (page_size caps at
-// 100, default 20). Resolving only the first loaded page made a deep link
-// like `?version=3` on a long-lived pipeline report "This version is no
-// longer available" for a version that exists — a false statement on the
-// exact promise the feature exists to keep. The search here is BOUNDED by
-// construction:
-//
-//   * page 1 at SNAPSHOT_PAGE_SIZE — a single request covers the top
-//     100 versions (every pipeline up to 100 versions), and
-//   * for deeper versions, a binary search over the remaining pages — at
-//     most log2(pageCount) further requests, hard-capped at
-//     SNAPSHOT_LOOKUP_MAX_PROBES (12 probes = 409,600 versions; exhausting
-//     the budget throws rather than guessing "missing").
-//
-// The `?snapshot=<uuid>` path never enters this code — no extra request, no
-// latency change for the canonical link. Nothing depends on loadCatalog's
-// page-1 list, so a partial or failed catalog load cannot make an existing
-// deep version read as missing either.
-//
-// FAR-1816/1817: SNAPSHOT_PAGE_SIZE is the shared window this lookup and the
-// timeline fetch (lib/pipelineVersion). The chip no longer uses it (FAR-1895:
-// it resolves through a server-filtered query), so the number is NOT a
-// chip/timeline parity guarantee — that parity is structural (see
-// currentVersionSnapshot below and PipelineSnapshotTimeline's groupHistory).
-const SNAPSHOT_LOOKUP_MAX_PROBES = 12
-
-type VersionLookupStatus = 'idle' | 'loading' | 'found' | 'absent' | 'failed'
-const versionLookupStatus = ref<VersionLookupStatus>('idle')
-const versionLookupId = ref<string | null>(null)
-// Monotonic token: a search superseded by a newer query change (or a page
-// reload) must never write its result over the newer one.
-let versionLookupToken = 0
-
-async function fetchSnapshotLookupPage(
-  page: number,
-): Promise<{ items: components['schemas']['SnapshotResponse'][]; total: number }> {
-  const { data, error } = await withTimeout((signal) =>
-    api.GET('/api/v1/pipelines/{pipeline_id}/snapshots', {
-      params: { path: { pipeline_id: pipelineId }, query: { page, page_size: SNAPSHOT_PAGE_SIZE } },
-      signal,
-    }),
-  )
-  if (error || !data) throw new Error(`snapshot list page ${page} could not be loaded`)
-  const items = data.items ?? []
-  // `total` is always sent by the server; fall back to the page's own length
-  // so a response without it degrades to "one page", never to NaN bounds.
-  const total = Number.isFinite(data.total) ? data.total : items.length
-  return { items, total }
-}
-
-/**
- * Find `version` in the server's version-DESC snapshot ordering.
- *
- * Returns the snapshot id, or null when the version is PROVABLY absent
- * (it lies outside the existing version range, or the page whose range
- * contains it has no such row — the list is sorted, so absence on that page
- * is absence everywhere). Throws when the search could not complete: a
- * failed search must never masquerade as "this version is no longer
- * available".
- */
-async function findSnapshotIdByVersion(version: number): Promise<string | null> {
-  const find = (items: components['schemas']['SnapshotResponse'][]) =>
-    items.find((s) => s.snapshot_version === version) ?? null
-  const pageOne = await fetchSnapshotLookupPage(1)
-  const onFirst = find(pageOne.items)
-  if (onFirst) return onFirst.id
-  if (pageOne.items.length === 0) return null // no snapshots at all
-  // Sorted version-DESC: page 1 spans [newest … oldest-on-page-1].
-  if (version > pageOne.items.at(0)!.snapshot_version) return null // newer than the newest
-  if (version >= pageOne.items.at(-1)!.snapshot_version) {
-    return null // inside page 1's range, not present — absent
-  }
-  // Below page 1: binary search the remaining pages by the range each spans.
-  let lo = 2
-  let hi = Math.ceil(pageOne.total / SNAPSHOT_PAGE_SIZE)
-  let probes = 0
-  while (lo <= hi) {
-    if (probes >= SNAPSHOT_LOOKUP_MAX_PROBES) {
-      throw new Error('version alias search exceeded its probe budget')
-    }
-    probes += 1
-    const mid = Math.floor((lo + hi) / 2)
-    const page = await fetchSnapshotLookupPage(mid)
-    // Versions saved while this search runs push every older version DOWN
-    // the ranking — refresh `hi` from each page's live total so a stale
-    // bound can never truncate the search below the target's new rank (a
-    // false "no longer available" of exactly the kind this search exists to
-    // prevent). Termination is unaffected: `probes` still caps the loop.
-    hi = Math.max(hi, Math.ceil(page.total / SNAPSHOT_PAGE_SIZE))
-    if (page.items.length === 0) {
-      hi = mid - 1 // past the end (list shrank) — search earlier
-      continue
-    }
-    const hit = find(page.items)
-    if (hit) return hit.id
-    if (version > page.items.at(0)!.snapshot_version) {
-      hi = mid - 1 // belongs above this page
-      continue
-    }
-    if (version < page.items.at(-1)!.snapshot_version) {
-      lo = mid + 1 // belongs below this page
-      continue
-    }
-    return null // inside this page's range, not present — absent
-  }
-  return null
-}
-
-/**
- * Resolve the current `?version=<n>` alias. No-op for the canonical
- * `?snapshot=` link (which needs no list at all), for an absent alias, and
- * for a malformed one (versionMissing derives that case directly, with no
- * request). A completed search records found/absent; a FAILED one lands on
- * pageError — an accurate load error — never on the graceful miss, because
- * "no longer available" would be false when the search itself failed.
- */
-async function resolveVersionAlias(): Promise<void> {
-  const token = ++versionLookupToken
-  const version = requestedVersion.value
-  if (snapshotParam.value !== null || versionParam.value === null || version === null || version <= 0) {
-    versionLookupId.value = null
-    versionLookupStatus.value = 'idle'
-    return
-  }
-  versionLookupId.value = null
-  versionLookupStatus.value = 'loading'
-  try {
-    const id = await findSnapshotIdByVersion(version)
-    if (token !== versionLookupToken) return
-    versionLookupId.value = id
-    versionLookupStatus.value = id ? 'found' : 'absent'
-  } catch (e: unknown) {
-    if (token !== versionLookupToken) return
-    console.warn('Failed to resolve the ?version= alias', e)
-    versionLookupStatus.value = 'failed'
-    pageError.value = t('views.PipelineEditorView.version_load_failed', { error: formatApiError(e) })
-  }
-}
-
-// Re-resolve whenever the alias (or its precedence against `?snapshot=`)
-// changes: entering a version, switching versions, or leaving to latest.
-// NOT immediate — mount is covered by the fetcher below, which AWAITS this
-// same routine, so `loading` spans the search and the spinner never gaps.
-// reloadPage (ErrorAlert's retry) re-runs it for the same reason: a failed
-// search must be retryable from the error it produced.
-watch([snapshotParam, versionParam], () => {
-  void resolveVersionAlias()
-})
-
-const resolvedSnapshotId = computed<string | null>(() => {
-  if (snapshotParam.value !== null) return snapshotParam.value
-  if (versionLookupStatus.value !== 'found') return null
-  return versionLookupId.value
-})
+// The query-derived version state and the bounded `?version=` alias lookup
+// live in usePipelineVersionQuery (extracted verbatim). `?snapshot=` still
+// wins over the alias; a failed search still lands on pageError.
+const {
+  snapshotParam,
+  versionParam,
+  historicRequested,
+  compareRequested,
+  compareParam,
+  latestSnapshotId,
+  requestedVersion,
+  versionLookupStatus,
+  resolveVersionAlias,
+  resolvedSnapshotId,
+} = usePipelineVersionQuery({ route, pipelineId, snapshots, pageError })
 
 type VersionDetailStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'failed'
 const versionDetailStatus = ref<VersionDetailStatus>('idle')
@@ -6609,6 +6433,10 @@ function openVersionTimeline(): void {
 // never rewritten), and the server's own guards still refuse a weakening
 // restore. The dialog shows the old-vs-latest change summary from the diff
 // endpoint and names the consequences before the user confirms.
+//
+// The dialog STATE stays here (its markup binds it, and the component specs
+// read/write it); usePipelineRestore owns the behaviour - the change summary,
+// its sequence guard, the refusal copy and the rollback orchestration.
 const showRestoreConfirm = ref(false)
 const restoreLoading = ref(false)
 const restoreError = ref<string | null>(null)
@@ -6629,57 +6457,6 @@ const restoreDiffError = ref<string | null>(null)
 // a bare "Change summary" title that reads as "nothing will change".
 const restoreDiffIsCurrent = ref(false)
 const restoreDiffNoBaseline = ref(false)
-// M6: sequence guard so an earlier dialog's diff cannot land after a later one.
-let restoreDiffRequestSeq = 0
-
-interface RestoreDiffSummary {
-  nodesRestored: number
-  nodesRemoved: number
-  nodesModified: number
-  edgesRestored: number
-  edgesRemoved: number
-  edgesModified: number
-  impacted: number
-  breaking: SnapshotBreakingChange[]
-  /** True when restoring would change ANYTHING (see the predicate below). */
-  hasChanges: boolean
-}
-
-const restoreDiffSummary = computed<RestoreDiffSummary | null>(() => {
-  const d = restoreDiff.value
-  if (!d) return null
-  // FAR-1893: the change-class enumeration, the semantic readers and the
-  // severity label all come from the shared module. Only this dialog's LAYOUT
-  // (the list of counts) stays local.
-  const counts = readChangeClassCounts(d)
-  const breaking = readBreakingChanges(d)
-  const impacted = readImpactedNodes(d).length
-  // Deliberately broader than the compare view's `hasStructuralChanges`
-  // (structural only): this dialog answers "does restoring this version
-  // change anything at all?", so a semantic-only difference (an impacted node
-  // or a breaking port change) still means "not identical". Both predicates
-  // are expressed from the same shared counts, so neither can drift on the
-  // structural half.
-  const hasChanges = counts.hasChanges || impacted > 0 || breaking.length > 0
-  return {
-    nodesRestored: counts.nodesAdded,
-    nodesRemoved: counts.nodesRemoved,
-    nodesModified: counts.nodesModified,
-    edgesRestored: counts.edgesAdded,
-    edgesRemoved: counts.edgesRemoved,
-    edgesModified: counts.edgesModified,
-    impacted,
-    breaking,
-    hasChanges,
-  }
-})
-
-/** Shared severity rule (neutral namespace), injected with this view's `t`. */
-function restoreSeverityLabel(severity?: string): string {
-  return resolveSeverityLabel(severity, t)
-}
-
-const timelineRef = ref<InstanceType<typeof PipelineSnapshotTimeline> | null>(null)
 
 function setRestoreNotice(message: string): void {
   restoreNotice.value = message
@@ -6707,123 +6484,40 @@ function restoreSuccessNotice(restored: number | null, created: number | null): 
   return t('views.PipelineEditorView.historic_restore_success_generic')
 }
 
-async function loadRestoreDiff(): Promise<void> {
-  const seq = ++restoreDiffRequestSeq
-  restoreDiff.value = null
-  restoreDiffError.value = null
-  restoreDiffIsCurrent.value = false
-  restoreDiffNoBaseline.value = false
-  const target = restoreTargetId.value
-  // The newest snapshot is the closest representation of the live/current
-  // config. Without it (or when the target IS the current snapshot) there is
-  // nothing to compare — but that outcome must still be stated explicitly
-  // (C2), never left as an empty box.
-  const latest = snapshots.value.at(0)?.id as string | undefined
-  if (!target || !latest) {
-    restoreDiffNoBaseline.value = true
-    return
-  }
-  if (target === latest) {
-    restoreDiffIsCurrent.value = true
-    return
-  }
-  restoreDiffLoading.value = true
-  try {
-    const { data, error } = await withTimeout((signal) =>
-      api.POST('/api/v1/pipelines/{pipeline_id}/snapshots/diff', {
-        params: { path: { pipeline_id: pipelineId } },
-        body: { snapshot_a_id: latest, snapshot_b_id: target },
-        signal,
-      }),
-    )
-    // C2/M6: an earlier dialog's response must not land after a later one.
-    if (seq !== restoreDiffRequestSeq) return
-    if (error) {
-      console.warn('[PipelineEditorView] failed to load restore diff', formatApiError(error))
-      restoreDiffError.value = formatApiError(error)
-      return
-    }
-    restoreDiff.value = data ?? null
-  } catch (e: unknown) {
-    if (seq !== restoreDiffRequestSeq) return
-    console.warn('[PipelineEditorView] failed to load restore diff', formatApiError(e))
-    restoreDiffError.value = formatApiError(e)
-  } finally {
-    if (seq === restoreDiffRequestSeq) restoreDiffLoading.value = false
-  }
-}
+const timelineRef = ref<InstanceType<typeof PipelineSnapshotTimeline> | null>(null)
 
-/**
- * FAR-1816: turn a restore refusal into human language. The server refuses a
- * restore that would weaken a HITL gate, strip a node-bound guardrail, or pin
- * another team's connector — those must read as plain sentences, never the raw
- * server string. Any UNCLASSIFIED refusal gets generic human copy too (the
- * detail is logged for diagnostics); the raw server text is never rendered.
- */
-function describeRestoreRefusal(err: unknown): string {
-  const raw = formatApiError(err)
-  if (/connector_team_mismatch/i.test(raw)) {
-    return t('views.PipelineEditorView.historic_restore_blocked_connector')
-  }
-  if (/gate weakening denied/i.test(raw)) {
-    return t('views.PipelineEditorView.historic_restore_blocked_hitl')
-  }
-  if (/guardrail/i.test(raw)) {
-    return t('views.PipelineEditorView.historic_restore_blocked_guardrail')
-  }
-  // M8: never surface the raw server string as user-facing copy.
-  console.warn('[PipelineEditorView] restore refused', raw)
-  return t('views.PipelineEditorView.historic_restore_failed_generic')
-}
-
-async function openRestoreConfirm(snapshotId?: string, snapshotVersion?: number): Promise<void> {
-  // Reuse the same unsaved-changes guard the "view historic version" path
-  // runs: restoring replaces the live graph, so unsaved edits must not be
-  // silently discarded.
-  if (isGraphDirty.value && !(await confirmLeaveUnsaved())) return
-  restoreTargetId.value = snapshotId ?? resolvedSnapshotId.value
-  restoreTargetVersion.value = snapshotVersion ?? viewSnapshot.value?.snapshot_version ?? null
-  restoreError.value = null
-  restoreDiff.value = null
-  restoreDiffError.value = null
-  showRestoreConfirm.value = true
-  void loadRestoreDiff()
-}
-
-async function confirmRestore(): Promise<void> {
-  const snapshotId = restoreTargetId.value ?? resolvedSnapshotId.value
-  if (!snapshotId || !canEditGraph.value) return
-  const restoredVersion = restoreTargetVersion.value ?? viewSnapshot.value?.snapshot_version ?? null
-  restoreLoading.value = true
-  restoreError.value = null
-  try {
-    const { data, error } = await withTimeout((signal) =>
-      api.POST('/api/v1/pipelines/{pipeline_id}/snapshots/{snapshot_id}/rollback', {
-        params: { path: { pipeline_id: pipelineId, snapshot_id: snapshotId } },
-        signal,
-      }),
-    )
-    if (error) {
-      restoreError.value = describeRestoreRefusal(error)
-      return
-    }
-    const createdVersion = (data as { snapshot_version?: number } | null)?.snapshot_version ?? null
-    showRestoreConfirm.value = false
-    setRestoreNotice(restoreSuccessNotice(restoredVersion, createdVersion))
-    // A restore replays this version into the LIVE graph and creates a new
-    // version from it — reload the graph, the catalog (for the version chip)
-    // and the timeline (so the new version shows as a rollback entry), then
-    // land back in the latest editor with the historic banner gone.
-    await loadGraph()
-    await loadCatalog()
-    await timelineRef.value?.reload()
-    viewLatest()
-  } catch (e: unknown) {
-    restoreError.value = describeRestoreRefusal(e)
-  } finally {
-    restoreLoading.value = false
-  }
-}
+const {
+  restoreDiffSummary,
+  restoreSeverityLabel,
+  loadRestoreDiff,
+  openRestoreConfirm,
+  confirmRestore,
+} = usePipelineRestore({
+  pipelineId,
+  snapshots,
+  resolvedSnapshotId,
+  viewSnapshot,
+  isGraphDirty,
+  confirmLeaveUnsaved,
+  loadGraph,
+  loadCatalog,
+  viewLatest,
+  timelineRef,
+  setRestoreNotice,
+  restoreSuccessNotice,
+  state: {
+    showRestoreConfirm,
+    restoreLoading,
+    restoreError,
+    restoreTargetId,
+    restoreTargetVersion,
+    restoreDiff,
+    restoreDiffLoading,
+    restoreDiffError,
+    restoreDiffIsCurrent,
+    restoreDiffNoBaseline,
+  },
+})
 
 // --- Copy link (banner action) --------------------------------------------
 const linkCopied = ref(false)
