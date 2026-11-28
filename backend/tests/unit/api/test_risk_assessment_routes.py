@@ -919,6 +919,10 @@ class TestRiskAssessmentSupportingEvidenceHelpers:
         rule = _fake_rule()
         with (
             _client("admin") as client,
+            # ADR 070 §4: both plain evidence reads now verify the parent run's
+            # team boundary. An admin is exempt, so the boundary is stubbed
+            # allowed here; the clamp itself is pinned in test_run_child_scope.
+            patch(f"{_ROUTES}._subject_in_scope", new=AsyncMock(return_value=True)),
             patch(f"{_ROUTES}._load_redaction_rules", new=AsyncMock(return_value=[rule])),
             patch(f"{_ROUTES}._upsert_redaction_rule", new=AsyncMock(return_value=rule)),
             patch(f"{_ROUTES}._load_evidence_row", new=AsyncMock(return_value=row)),
