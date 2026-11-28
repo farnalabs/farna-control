@@ -242,7 +242,7 @@ unsubscribed event type is logged and acknowledged without an alert.
 
 ## Demo Mode
 
-Optional visitor demo experience (FAR-535): navigating to `/demo` logs the visitor in as a known read-only demo user in a dedicated `Demo` organization with benign sample data. All three variables must be set, otherwise the endpoint answers 404 and nothing is seeded.
+Optional visitor demo experience (FAR-535): navigating to `/demo` logs the visitor in as a known read-only demo user in a dedicated `Demo` organization with benign sample data. All three variables must be set, otherwise the endpoint answers 404 and nothing is seeded. A browser that already has a working session keeps it when it visits `/demo`. If the stored session no longer works, an expired real session is refreshed where possible, and a new demo session is started only when it cannot be refreshed (always the case for a demo session). A refresh that fails without an answer from the server (network error, rate limit, server error) leaves a real session in place on that visit.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|

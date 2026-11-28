@@ -23,6 +23,7 @@ import {
   attemptTokenRefresh,
   clearAccessToken,
   exitToLogin,
+  getAuthHeaders,
 } from '../lib/api/auth'
 import { api } from '../lib/api/client'
 import { fetchMock } from './helpers/resolve-request-origin'
@@ -106,5 +107,42 @@ describe('api client withAuth (non-retryable verbs)', () => {
     const headers = new Headers(request.headers)
     expect(headers.get('authorization')).toBe('Bearer token-1')
     expect(headers.get('x-request-id')).toBe('request-1')
+  })
+})
+
+describe('api client 401 teardown ownership (FAR-2857)', () => {
+  afterEach(() => {
+    window.history.replaceState(null, '', '/')
+    vi.mocked(getAuthHeaders).mockReturnValue({ Authorization: 'Bearer token-1' })
+  })
+
+  it('leaves the session alone while the /demo entry is being resolved', async () => {
+    window.history.replaceState(null, '', '/demo')
+
+    const result = await api.GET('/api/v1/me/settings')
+
+    expect(result.response?.status).toBe(401)
+    expect(mockedClearAccessToken).not.toHaveBeenCalled()
+    expect(mockedExitToLogin).not.toHaveBeenCalled()
+  })
+
+  it('does not tear down a session stored after the rejected request was sent', async () => {
+    fetchMock.mockImplementation(async () => {
+      vi.mocked(getAuthHeaders).mockReturnValue({ Authorization: 'Bearer token-2' })
+      return jsonResponse(401)
+    })
+
+    const result = await api.GET('/api/v1/me/settings')
+
+    expect(result.response?.status).toBe(401)
+    expect(mockedClearAccessToken).not.toHaveBeenCalled()
+    expect(mockedExitToLogin).not.toHaveBeenCalled()
+  })
+
+  it('still tears down when the stored token is the rejected one', async () => {
+    await api.GET('/api/v1/me/settings')
+
+    expect(mockedClearAccessToken).toHaveBeenCalledTimes(1)
+    expect(mockedExitToLogin).toHaveBeenCalledTimes(1)
   })
 })

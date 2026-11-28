@@ -4,6 +4,7 @@ import {
   clearAccessToken,
   exitToLogin,
 } from '../lib/api/auth'
+import { mayTearDownSession } from '../lib/api/sessionTeardown'
 import { ApiError, getProblemCode } from '../lib/api/apiError'
 import { formatApiError } from '../lib/api/formatError'
 
@@ -16,7 +17,13 @@ interface ApiOptions {
 
 const REQUEST_TIMEOUT_MS = 30000
 
-async function requestWorker(method: string, path: string, body?: unknown, options?: ApiOptions): Promise<Response> {
+async function requestWorker(
+  method: string,
+  path: string,
+  body: unknown,
+  options: ApiOptions | undefined,
+  onSend: (authorization: string | undefined) => void,
+): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   const onCallerAbort = () => controller.abort()
@@ -25,11 +32,12 @@ async function requestWorker(method: string, path: string, body?: unknown, optio
     else options.signal.addEventListener('abort', onCallerAbort)
   }
   try {
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...getAuthHeaders(),
       ...options?.headers,
     }
+    onSend(headers.Authorization)
     const res = await fetch(`${BASE}${path}`, {
       method,
       signal: controller.signal,
@@ -59,15 +67,21 @@ async function requestWorker(method: string, path: string, body?: unknown, optio
 }
 
 async function request<T>(method: string, path: string, body?: unknown, options?: ApiOptions): Promise<T> {
-  let res = await requestWorker(method, path, body, options)
+  let sentAuthorization: string | undefined
+  const send = () =>
+    requestWorker(method, path, body, options, (authorization) => {
+      sentAuthorization = authorization
+    })
+  let res = await send()
 
   if (res.status === 401) {
     const idempotent = method === 'GET' || method === 'HEAD'
     const refreshed = await attemptTokenRefresh()
     if (refreshed && idempotent) {
-      res = await requestWorker(method, path, body, options)
+      res = await send()
     }
-    if (!refreshed || (idempotent && res.status === 401)) {
+    const unrecoverable = !refreshed || (idempotent && res.status === 401)
+    if (unrecoverable && mayTearDownSession(sentAuthorization)) {
       clearAccessToken()
       exitToLogin()
       throw new Error('Session expired. Please log in again.')
