@@ -129,8 +129,18 @@ def test_deploy_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
 
 
 def test_ci_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
+    # The fast-tier CI split (2026-11-28) moved the full backend suites into the
+    # merge train, so ci.yml keeps only its remaining backend jobs. merge-validate
+    # carries the rest — see the pin below.
     ci = _assert_no_raw_uv_sync("ci.yml")
-    assert ci.count("uv_sync_with_retry.sh") == 10
+    assert ci.count("uv_sync_with_retry.sh") == 6
+
+
+def test_merge_validate_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
+    # The merge train is the only full suite after the fast-tier split, so its
+    # dependency installs must route through the same retry wrapper.
+    validate = _assert_no_raw_uv_sync("merge-validate.yml")
+    assert validate.count("uv_sync_with_retry.sh") == 6
 
 
 def test_bdd_workflow_routes_every_uv_sync_through_the_wrapper() -> None:
