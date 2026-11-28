@@ -104,12 +104,16 @@
       "automerge": false
     },
     {
-      "description": "Never automerge major updates",
+      "description": "Major updates merge on green: the merge train's full suite is the gate, so a major no longer waits for a human. Demoted only where we deliberately pin a version or hold a package (js-yaml, pytest, python, primevue, @primeuix/styled, postgres, @sentry/vue, mcp).",
       "matchUpdateTypes": [
         "major"
       ],
-      "automerge": false,
-      "dependencyDashboardApproval": true
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true,
+      "dependencyDashboardApproval": false,
+      "minimumReleaseAge": "3 days"
     },
     {
       "description": "js-yaml v5 dropped YAML merge-key (<<) expansion — manifest tier/role gating depends on it",
@@ -176,6 +180,38 @@
         "@primeuix/styled"
       ],
       "allowedVersions": "<1"
+    },
+    {
+      "description": "Hold postgres below a major bump. postgres:16-alpine is the image in deploy/compose/docker-compose.prod.yml as well as every test and CI database, so a major bump changes the production database image, not just CI. PostgreSQL 16 is the only supported runtime database (ADR 068), and a green run on a newer major does not validate 16. Expanding supported PostgreSQL versions is tracked in a separate ticket; until that lands this stays held.",
+      "matchPackageNames": [
+        "postgres"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Hold @sentry/vue major updates for manual review. Sentry fails silently, so a green build proves the least here; validation that the new major actually reports errors is tracked separately, and this hold comes off when it passes.",
+      "matchPackageNames": [
+        "@sentry/vue"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Hold mcp major updates for manual review. mcp is the MCP server SDK, where a protocol change can pass tests and still break tool calls at runtime; validation is tracked separately, so a human signs off on the major until then.",
+      "matchPackageNames": [
+        "mcp"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false,
+      "dependencyDashboardApproval": true
     }
   ]
 }
