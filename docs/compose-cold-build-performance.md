@@ -26,7 +26,7 @@ time, base commit `ecd445feec`, with:
 
 - `--no-cache` for the cold single-image builds, so no layer of the target image
   is reused. The shared BuildKit **cache mounts** (uv, pip, apt) were **not**
-  cleared — other work on this host depends on them — so dependency *downloads*
+  cleared - other work on this host depends on them - so dependency *downloads*
   can still be served from those mounts. Stated per row below.
 - `docker compose down -v` before every acceptance boot, so Postgres initdb and
   the full Alembic chain are part of every boot.
@@ -42,7 +42,7 @@ time, base commit `ecd445feec`, with:
 | M1 | `docker compose build --no-cache backend` (before) | no image layer cached; BuildKit dependency mounts warm; host otherwise idle | **2024 s** | 897 s | 601 s |
 | M2 | `docker compose build --no-cache saq-runner` (before) | same, but a concurrent host job shared I/O for the first ~6 min | **2683 s** | 1431 s | 649 s |
 
-M1 and M2 are the **same work** — the second and third copies of one image —
+M1 and M2 are the **same work** - the second and third copies of one image -
 so their spread (2024–2683 s, driven by disk contention) is the noise band. Both
 agree on the shape: two per-image steps account for ~74 % of the build.
 
@@ -63,14 +63,14 @@ Full M1 breakdown (`--no-cache`, one image):
 
 Metric C in the sibling doc attributed the cold build to "export/unpack of three
 ~2 GB images (~360 s each)". That is half the story. `chown -R appuser:appuser
-/app` is **larger than the export** — 897–1431 s against 601–649 s — because it
+/app` is **larger than the export** - 897–1431 s against 601–649 s - because it
 copy-on-write duplicates the entire `/app` tree (the 645 MB virtualenv and the
 42 MB source) into a new layer just to change ownership: it is the 700 MB layer
 in `docker history`. Both steps run once per image, so today both run three times.
 
 The image store told the same story before the change: three images of the same
 content, `farna-control-backend:latest`, `farna-control-saq-runner:latest` and
-`farna-control-saq-system:latest`, each **2.09 GB** with a different image ID —
+`farna-control-saq-system:latest`, each **2.09 GB** with a different image ID -
 6.3 GB of disk for one logical image.
 
 ### After the change
@@ -127,7 +127,7 @@ shape (one image, one `build:`, local-only tag, workers keep their `command:`).
 That variant removes the one wart below, because no service references an image
 it does not build. It was rejected on measurement, not taste: `--no-cache`
 disables BuildKit's cross-service cache reuse, so under the cold-build protocol
-above each of the three `build:` blocks would be a **full** rebuild — three
+above each of the three `build:` blocks would be a **full** rebuild - three
 `chown` layers (897 s each) and three exports. The variant only looks free when
 the cache is already warm, which is precisely the case a cold build is not.
 
@@ -144,7 +144,7 @@ the cache is already warm, which is precisely the case a cold build is not.
 2. **Pull the published image instead of building (the ticket's third
    candidate).** Evaluated with real registry numbers. `publish-images.yml`
    already builds `ghcr.io/farnalabs/farna-control/backend` from
-   `backend/Dockerfile` with context `backend` — the identical artifact — and
+   `backend/Dockerfile` with context `backend` - the identical artifact - and
    tags it `type=sha` plus `latest` on `main`. The linux/amd64 manifest is
    **382.9 MB compressed** (13 layers) versus a 2024 s cold build and a 2.09 GB
    local store; the all-in-one image is 417.3 MB compressed (2.14 GB on disk).
@@ -166,7 +166,7 @@ worker services before it builds `backend`, so `up` prints two benign
 everything normally. It is cosmetic and only on the first build; after the image
 exists, no pull is attempted. It is the price of the minimal diff and of keeping
 the cold-build cost at one pass. (Verified: `up` still exits 0 and all services
-start — see M4.)
+start - see M4.)
 
 ## Consequences
 
@@ -205,5 +205,5 @@ start — see M4.)
   and a persistent `permission denied for table checkpoints` in `saq-system`'s
   `stale_run_recovery` sweep. `pg_class.relacl` confirms the cause of the
   latter: `checkpoints` and `checkpoint_migrations` are the only tables with no
-  grants — LangGraph creates them at runtime — so any role other than the owner
+  grants - LangGraph creates them at runtime - so any role other than the owner
   is denied. Reported separately.

@@ -104,8 +104,8 @@ curl -fsSL 'https://<your-domain>/install.sh?version=0.3.329' -o farna-control-i
 VERSION=bundle-v0.3.329 bash farna-control-install.sh
 ```
 
-`version=X.Y.Z` maps to the release tag `bundle-v<X.Y.Z>` — the convention the
-release pipeline creates and `scripts/install.sh` consumes — and any other
+`version=X.Y.Z` maps to the release tag `bundle-v<X.Y.Z>` - the convention the
+release pipeline creates and `scripts/install.sh` consumes - and any other
 version shape (including a present-but-empty `?version=`) is refused with `400`
 rather than silently served from the default branch.
 
@@ -114,9 +114,9 @@ A pinned install needs **both** steps, because the two pin different things:
 - the `?version=X.Y.Z` URL selects the installer **script as it shipped in that
   release** (fetched from the `bundle-v<X.Y.Z>` tag), and
 - `VERSION=bundle-v<X.Y.Z>` selects the **bundle the script downloads**. The
-  installer resolves the latest release at run time unless `VERSION` is set —
+  installer resolves the latest release at run time unless `VERSION` is set -
   its usage text reads `VERSION=<tag>  Install a specific bundle tag (default:
-  latest release)` — so the tagged URL on its own still installs the latest
+  latest release)` - so the tagged URL on its own still installs the latest
   bundle. The URL alone does not pin the install; the two together do.
 
 The rule is an exact-path (`location =` / Caddy `path /install.sh`) match, so it
@@ -209,7 +209,7 @@ tracked as known residuals: the Helm frontend configmap
 - [x] An upgrade enforces a pre-upgrade `pg_dump` through the old bundle's
       runtime: the dump goes to a versioned snapshot inside the data dir, must be
       non-empty, and any failure aborts before the binary swap. The dump is
-      taken ONLY when a migration against the NEW bundle is actually pending —
+      taken ONLY when a migration against the NEW bundle is actually pending -
       the shared helper owns that decision (`--target-bundle` names the bundle
       being upgraded TO, never the old install running the helper), so an
       installer re-run cannot rotate the recovery points for nothing and an

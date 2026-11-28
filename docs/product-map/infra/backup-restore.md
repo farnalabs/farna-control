@@ -200,16 +200,16 @@ operator-facing contract lives in `docs/operations/backup.md`.
       `test_backup.py::TestRestoreDumpIntegrity`).
       <!-- behaviour: backup-restore-15 | tests: backend/tests/unit/launcher/test_upgrade_snapshot.py -->
 - [x] Retention is BOUNDED: it keeps the two newest VERIFIED snapshots plus
-      the newest snapshot recording EXACTLY the database's current schema — the
+      the newest snapshot recording EXACTLY the database's current schema - the
       recovery point a database that did not move since (a failed migration, a
-      rollback) actually depends on — and never prunes before the new snapshot
+      rollback) actually depends on - and never prunes before the new snapshot
       verifies: dump, verify, then prune. Older generations are superseded and
       deleted, so snapshots cannot accumulate until the disk guard refuses every
       upgrade; at most `retain + 1` directories survive. A directory another live
       process is writing (its in-progress marker names a live pid) is never
       touched; pruning and snapshotting serialise on a per-directory lock. A
-      snapshot that is not intact — including one whose dump checksum no longer
-      matches — is swept, so the corrupt one is pruned rather than the good one
+      snapshot that is not intact - including one whose dump checksum no longer
+      matches - is swept, so the corrupt one is pruned rather than the good one
       beside it (`launcher/upgrade.py::prune_snapshots`,
       `_retention_keep_set`, `snapshot_is_intact`;
       `test_upgrade_snapshot.py::TestPruneSnapshots`,
@@ -219,7 +219,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
 - [x] The snapshot only happens when a migration is PENDING, and the decision
       is made INSIDE the shared helper so no caller can bypass it: a database
       already at the target's migration head takes no snapshot, so a release
-      that migrates and then crash-loops — or a plain installer re-run — cannot
+      that migrates and then crash-loops - or a plain installer re-run - cannot
       rotate its own pre-upgrade recovery point away. The comparison is against
       the TARGET release (`--target-bundle` for the installer, which runs the
       OLD installation's helper), never the helper's own code
@@ -258,7 +258,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
       `--data-dir` it stops a live launcher (refusing when it survives the stop
       request), takes the exclusive lock, and prints the exact
       `farna-control start --data-dir <dir>` command; without `--data-dir` it
-      prints the compose start command. The command is printed on EVERY exit —
+      prints the compose start command. The command is printed on EVERY exit -
       success, a handled failure, and an interrupt: `KeyboardInterrupt` (Ctrl-C,
       and the window's signal handlers) is a `BaseException`, so guidance that
       lived only in `except` clauses was never printed on the one path where the
@@ -282,10 +282,10 @@ operator-facing contract lives in `docs/operations/backup.md`.
       a cluster already accepting connections is reused and left running. The
       target and application URLs come from `--db-url`/`--app-db-url`, an
       exported `DATABASE_ADMIN_URL`/`DATABASE_URL`, or the data dir's own
-      `config.env`, in that order — a native operator's shell exports none of
+      `config.env`, in that order - a native operator's shell exports none of
       them (`cli/backup.py::_bundled_cluster_for_restore`,
       `::_target_is_bundled_cluster`, `::_launcher_config_values`;
-      `test_restore_bundled_cluster_window.py` — a REAL PostgreSQL 16 stopped
+      `test_restore_bundled_cluster_window.py` - a REAL PostgreSQL 16 stopped
       and restarted under the real `_run_restore`; prove-the-fix: with the
       window removed the replay fails with a connection timeout;
       `test_backup.py::TestNativeRestoreServesItsOwnBundledTarget`,
@@ -293,11 +293,11 @@ operator-facing contract lives in `docs/operations/backup.md`.
       <!-- behaviour: backup-restore-22 | tests: backend/tests/integration/test_restore_bundled_cluster_window.py -->
 - [x] An interrupted restore does not leave an unsupervised PostgreSQL behind:
       the window's postmaster runs in its own session, so nothing supervises it.
-      SIGTERM, SIGINT and SIGHUP are handled for the whole window — each stops
+      SIGTERM, SIGINT and SIGHUP are handled for the whole window - each stops
       that cluster before the command unwinds, and a second signal during that
-      stop is ignored so the shutdown can finish — and the previous handlers are
-      restored afterwards. The window records the child's IDENTITY — pid, that
-      process's start time and the data dir it belongs to — in
+      stop is ignored so the shutdown can finish - and the previous handlers are
+      restored afterwards. The window records the child's IDENTITY - pid, that
+      process's start time and the data dir it belongs to - in
       `<data-dir>/restore-window-postmaster.pid` while it is open, because a
       bare pid can belong to any live postgres after a reboot, a `kill -9`, a
       truncated write or a data dir copied to another machine. All recorded
@@ -309,7 +309,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
       record is then the recovery, so the next `farna-control restore
       --data-dir` verifies and stops that process and says so, and
       `farna-control start --data-dir` refuses naming the pid, the recorded file
-      and the `kill -INT <pid>` to run — instead of only "belongs to a live
+      and the `kill -INT <pid>` to run - instead of only "belongs to a live
       postgres process" or a port-in-use failure (`cli/backup.py::_bundled_cluster_for_restore`,
       `::_restore_window_signal_handlers`, `::_reap_leftover_window_postmaster`;
       `launcher/supervisor.py::reconcile_orphans`,
@@ -323,7 +323,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
       <!-- behaviour: backup-restore-23 | tests: backend/tests/unit/launcher/test_supervisor.py::test_reconcile_names_a_live_restore_window_postmaster_by_pid, backend/tests/unit/cli/test_backup.py::test_a_real_sigterm_stops_the_cluster_before_the_window_unwinds, backend/tests/unit/cli/test_backup.py::test_a_second_signal_does_not_interrupt_the_stop, backend/tests/unit/cli/test_backup.py::test_a_leftover_window_postmaster_is_stopped_by_pid_before_the_window -->
 - [x] Restore refuses a MISSING dump when the archive describes one (a silent
       no-op restore is worse than a refusal), refuses a manifest filename that
-      escapes the archive directory (absolute, `..`, or a symlink — the
+      escapes the archive directory (absolute, `..`, or a symlink - the
       checksum loop would otherwise hash an arbitrary file), runs psql with
       `-X` so a `~/.psqlrc` cannot disable `ON_ERROR_STOP`, and its disk
       pre-flight measures the DATABASE's filesystem (`--target-fs` /
@@ -340,12 +340,12 @@ operator-facing contract lives in `docs/operations/backup.md`.
       recorded revision is not in the snapshot's lineage (a different release
       train, or not a Farna Control database at all). A target the newer
       release has migrated PAST the snapshot is accepted, because that is the
-      rollback the archive exists for (`--verify-target-schema`) — the stand-in
+      rollback the archive exists for (`--verify-target-schema`) - the stand-in
       for the data-dir instance identity guard, which the old no-`--data-dir`
       invocation skipped
       entirely. Every one-off container overrides the image ENTRYPOINT with
       `--entrypoint farna-control`, because the all-in-one image's
-      `/entrypoint.sh` ignores its arguments, migrates and execs supervisord —
+      `/entrypoint.sh` ignores its arguments, migrates and execs supervisord -
       without the override the "dry run" MIGRATED the live database and
       restored nothing. The helper never reads or passes a database URL: the
       one-off container inherits `DATABASE_ADMIN_URL` from the service
@@ -357,9 +357,9 @@ operator-facing contract lives in `docs/operations/backup.md`.
       <!-- behaviour: backup-restore-25 | tests: backend/tests/unit/cli/test_backup_restore_semantics.py, backend/tests/unit/scripts/test_compose_restore_wiring.py -->
 - [x] `--skip-backup` skips the DUMP, not the recovery point: it refuses unless
       an INTACT snapshot of the CURRENT schema state already exists under the
-      data dir — the snapshot's recorded revisions must EQUAL the live
+      data dir - the snapshot's recorded revisions must EQUAL the live
       database's, so a snapshot several migrations stale cannot satisfy the
-      requirement — and it reads the LIVE database's revisions (not the old
+      requirement - and it reads the LIVE database's revisions (not the old
       bundle's script heads) so an already-migrated-ahead database is still
       detected (`launcher/upgrade.py::_require_existing_snapshot`,
       `live_database_revisions`; `test_upgrade_skip_backup.py`).
@@ -367,7 +367,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
 - [x] Every upgrade path whose NORMAL migration runs where a snapshot can be
       taken does, through the same helper: the compose entrypoint and the
       supervisor entrypoint call `farna.launcher.upgrade` between the alignment
-      guard and the migrations. Fly cannot — its normal migration is the
+      guard and the migrations. Fly cannot - its normal migration is the
       `[release]` stage, which runs before any machine boots and takes no
       snapshot. Its boot entrypoint still carries an `alembic upgrade heads`
       fallback (also entered on any probe error), and THAT migration path is
@@ -377,8 +377,8 @@ operator-facing contract lives in `docs/operations/backup.md`.
       `test_alignment_entrypoints.py::test_entrypoint_orders_guard_snapshot_migrate`,
       `test_compose_restore_wiring.py::TestTheFlyBootCannotTakeTheSnapshot`).
       <!-- behaviour: backup-restore-27 | tests: backend/tests/unit/db/test_alignment_entrypoints.py::test_entrypoint_orders_guard_snapshot_migrate, backend/tests/unit/scripts/test_compose_restore_wiring.py -->
-- [x] The compose release bundle ships `compose-restore.sh` — the one documented
-      recovery command for that path — which stops the application, restores
+- [x] The compose release bundle ships `compose-restore.sh` - the one documented
+      recovery command for that path - which stops the application, restores
       through a one-off container, and prints the exact start command without
       starting anything (`scripts/compose-restore.sh`,
       `scripts/package_compose_release.py`).
@@ -401,7 +401,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
   schema at head. A boot-time migration path still exists and is NOT
   snapshot-protected: `deploy/fly/entrypoint.sh` keeps a 10-attempt
   `alembic upgrade heads` fallback that runs when its at-head probe reports the
-  database behind — and, because that probe is fail-safe, on any probe error. A
+  database behind - and, because that probe is fail-safe, on any probe error. A
   schema change applied there has no recovery point. Fly is therefore the
   documented exception to "every upgrade path keeps a recovery point", and a Fly
   operator must take an out-of-band backup before a schema-changing deploy.
@@ -456,7 +456,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
   stopped the database it then needed. Its own launcher stop is the ordered
   teardown that stops the bundled PostgreSQL, so the safety dump, the replay,
   the credential re-encryption, the collation check and the posture re-run all
-  connected to a server the same command had just stopped — and nothing
+  connected to a server the same command had just stopped - and nothing
   restarted it. The earlier "mitigation" (refuse unless an explicit,
   independently reachable `--db-url` is given) only dodged it: a native
   operator's shell has no `DATABASE_ADMIN_URL`, which is also what the printed
@@ -469,7 +469,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
   fails with a connection timeout); `restore_guidance` no longer prints a
   `--db-url` the operator does not have.
 - 2026-11-23 (FAR-2667 fifth review round): the printed compose rollback command
-  did not roll back — the packaged bundle rewrites the image line to a literal
+  did not roll back - the packaged bundle rewrites the image line to a literal
   release tag, so `TAG=<previous-version> docker compose up -d` only set
   `FARNA_CONTROL_VERSION` and restarted the failed release. The instruction is
   now `compose-rollback.sh <previous-version>`, which ships in the bundle and
@@ -489,7 +489,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
   does not exist in the shipped bundle and carried no `TAG`; the compose
   quickstart mis-stated the retention rule; the Fly boot carried a
   `FARNA_CONTROL_SNAPSHOT_DIR` opt-in that could never fire (the release stage
-  migrates first) — removed, and Fly is documented as unsupported; the native
+  migrates first) - removed, and Fly is documented as unsupported; the native
   pre-flight now runs the FAR-2659 downgrade refusal BEFORE the dump; and the
   dead `_run_dump` producer was deleted.
 - 2026-11-22 (FAR-2667 third review round): fixed the nine findings from the
@@ -498,7 +498,7 @@ operator-facing contract lives in `docs/operations/backup.md`.
   the "read-only verification" ran `/entrypoint.sh`, migrated the live database
   and restored nothing, and the bare token `restore` is not installed (now
   `--entrypoint farna-control --no-deps`). It also required
-  `$DATABASE_ADMIN_URL` in the operator's shell — unbound, so `set -u` aborted,
+  `$DATABASE_ADMIN_URL` in the operator's shell - unbound, so `set -u` aborted,
   and exporting it put the superuser password on a host argv (now the script
   references no URL at all; the container resolves it). Seven probes still
   handed the password-bearing DSN to psycopg, so a password with a space or a
