@@ -58,19 +58,19 @@
                place: components/shared/FlowControls.vue (FAR-740). -->
           <FlowControls :show-interactive="false" />
           <template #node-manual="nodeProps">
-            <div class="rounded-lg border-2 border-warning/60 bg-warning/10 px-4 py-2 shadow-sm">
+            <div :class="['break-words rounded-lg border-2 border-warning/60 bg-warning/10 px-4 py-2 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
               <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-warning-text">{{ $t('views.CompositeEditorView.node_manual_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
           </template>
           <template #node-agent="nodeProps">
-            <div class="rounded-lg border-2 border-primary/60 bg-primary/10 px-4 py-2 shadow-sm">
+            <div :class="['break-words rounded-lg border-2 border-primary/60 bg-primary/10 px-4 py-2 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
               <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-primary-text">{{ $t('views.CompositeEditorView.node_agent_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
           </template>
           <template #node-composite="nodeProps">
-            <div class="rounded-lg border-2 border-node-composite/60 bg-node-composite/10 px-4 py-2 shadow-sm">
+            <div :class="['break-words rounded-lg border-2 border-node-composite/60 bg-node-composite/10 px-4 py-2 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
               <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-node-composite-text">{{ $t('views.CompositeEditorView.node_composite_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
@@ -78,7 +78,7 @@
           <!-- FAR-1141: dispatch nodes get their own canvas badge so they never
                render as AGENT. Display only — no authoring controls. -->
           <template #node-dispatch="nodeProps">
-            <div class="rounded-lg border-2 border-node-dispatch/60 bg-node-dispatch/10 px-4 py-2 shadow-sm">
+            <div :class="['break-words rounded-lg border-2 border-node-dispatch/60 bg-node-dispatch/10 px-4 py-2 shadow-sm', PIPELINE_NODE_MAX_WIDTH_CLASS]">
               <div class="font-brand-mono text-[11px] font-medium lowercase tracking-wide text-node-dispatch-text">{{ $t('views.CompositeEditorView.node_dispatch_badge') }}</div>
               <div class="text-sm font-semibold">{{ nodeProps.data.label }}</div>
             </div>
@@ -155,6 +155,7 @@ import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import BackLink from '../../components/BackLink.vue'
+import { PIPELINE_NODE_MAX_WIDTH_CLASS } from '../../components/pipeline/nodes/NodeRegistry'
 import ErrorAlert from '../../components/shared/ErrorAlert.vue'
 import FormDialog from '../../components/shared/FormDialog.vue'
 import FlowControls from '../../components/shared/FlowControls.vue'

@@ -18,7 +18,8 @@ name: "Fix: PR Conflict Reconciler"
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Fallback poller (not a primary trigger): hourly at :17. A conflicted PR stays deadlocked until the next tick, so detection latency rises to up to ~1h - an accepted cost for a fallback that exists only to unstick PRs the webhook path cannot see.
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -315,7 +316,7 @@ jobs:
               # backoff) is the SHARED policy now — deliberately the same
               # every other webhook dispatch step in this repo uses.
               echo "::error::Branch Fixer dispatch failed for PR #$PR_NUM (HTTP ${LAST_HTTP}: ${DETAIL}) after retries — this PR was never handed to the fixer."
-              # Idempotent: this reconciler runs every 15 minutes, so a persistently
+              # Idempotent: this reconciler runs hourly, so a persistently
               # failing webhook (e.g. a sustained 429) would otherwise post a fresh
               # comment on every cycle. Mirror the manual-delivery note below: key
               # the note on an HTML marker and skip when it already exists.

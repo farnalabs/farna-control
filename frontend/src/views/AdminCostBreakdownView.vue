@@ -234,53 +234,19 @@ const avgCostPerRun = computed(() => totalRuns.value > 0 ? totalSpend.value / to
 
 // Cost per successful run.
 //
-// FAR-2820: prefer the server-computed count. The costs report now returns
-// `org_successful_run_count` from the SAME run_daily_facts query (and the SAME
-// UTC month-to-date window) as `org_run_count`, so "Total Runs" and "N
-// successful runs" on the same card can never disagree - previously the
-// success count came from /analytics/query over a BROWSER-LOCAL month start
-// while the total came from the UTC month, so the two windows could straddle a
-// month boundary and report more successes than runs.
+// FAR-2820: the costs report returns `org_successful_run_count` from the SAME
+// run_daily_facts query (and the SAME UTC month-to-date window) as
+// `org_run_count`, so "Total Runs" and "N successful runs" on the same card can
+// never disagree.
 //
-// The analytics fallback preserves the figure for an older backend that does
-// not send the field yet. Each bucket carries `count` (total runs) and
-// `success_rate` (complete / count); summing count * success_rate across the
-// day-buckets gives an approximate successful-run count.
-type AnalyticsBucket = components['schemas']['AnalyticsBucket']
-type AnalyticsResponse = components['schemas']['AnalyticsResponse']
-
-const analyticsSuccessfulRuns = ref(0)
-
+// FAR-2824: this is the ONLY source for the figure. The removed fallback read a
+// BROWSER-LOCAL month start while the total came from the UTC month, so the two
+// windows could straddle a month boundary and report more successes than runs.
+// Reading a single response removes that divergence.
 const successfulRuns = computed<number>(() => {
   const backendCount = (data.value as CostReportResponse | undefined)?.org_successful_run_count
-  return backendCount ?? analyticsSuccessfulRuns.value
+  return backendCount ?? 0
 })
-
-async function loadSuccessCount() {
-  try {
-    const now = new Date()
-    // UTC month-to-date, matching the report's UTC period window so the
-    // fallback figure is scoped the same way as `org_run_count`.
-    const dateFrom = `${now.toISOString().slice(0, 7)}-01`
-    const dateTo = now.toISOString().slice(0, 10)
-
-    const { data: analyticsData, error: analyticsErr } = await api.GET('/api/v1/analytics/query', {
-      params: { query: { group_by: 'day', date_from: dateFrom, date_to: dateTo } },
-    })
-    if (!analyticsErr && analyticsData) {
-      const resp = analyticsData as AnalyticsResponse
-      analyticsSuccessfulRuns.value = (resp.buckets ?? []).reduce((sum: number, b: AnalyticsBucket) => {
-        if (b.success_rate != null) {
-          return sum + Math.round(b.count * b.success_rate)
-        }
-        return sum
-      }, 0)
-    }
-  } catch {
-    // Analytics endpoint may lack permission — degrade gracefully to 0.
-    analyticsSuccessfulRuns.value = 0
-  }
-}
 
 const costPerSuccessfulRun = computed(() => successfulRuns.value > 0 ? totalSpend.value / successfulRuns.value : 0)
 
@@ -335,7 +301,6 @@ async function dismissAnomaly(id: string) {
 onMounted(() => {
   planStore.fetchPlan()
   void loadData()
-  void loadSuccessCount()
   void loadAnomalies()
   void loadCurrency()
 })

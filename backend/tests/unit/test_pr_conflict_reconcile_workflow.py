@@ -45,7 +45,7 @@ def test_has_cron_schedule_and_workflow_dispatch() -> None:
     schedules = on["schedule"]
     assert isinstance(schedules, list), "schedule must be a list"
     crons = [s.get("cron") for s in schedules]
-    assert any("*/15" in c for c in crons if c), "Missing */15 cron schedule"
+    assert any(c and c.split() == ["17", "*", "*", "*", "*"] for c in crons), "Missing hourly (17 * * * *) cron schedule"
     assert "workflow_dispatch" in on, "Missing workflow_dispatch trigger"
 
 
@@ -271,7 +271,7 @@ def test_dispatch_failure_keeps_the_loud_failure_and_can_comment() -> None:
 
 
 def test_dispatch_failure_comment_is_idempotent_via_marker() -> None:
-    """FAR-1949 review: this reconciler fires every 15 minutes, so a
+    """FAR-1949 review: this reconciler fires hourly, so a
     persistently failing webhook (e.g. a sustained 429) must not post a fresh
     undelivered-dispatch comment on every cycle. The note must carry an HTML
     marker and be skipped when that marker already exists — the same

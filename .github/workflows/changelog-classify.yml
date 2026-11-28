@@ -312,7 +312,8 @@ jobs:
           # an agent has already misread one as "fix the PR" (PR #3253).
           # Invoked indirectly via `trap on_exit EXIT` - shellcheck has no
           # call-site for a trap handler, so it reports the body unreachable.
-          # shellcheck disable=SC2317
+          # SC2329 (0.11+) is the newer check for this case: the trap IS the call site.
+          # shellcheck disable=SC2317,SC2329
           on_exit() {
             rc=$?
             if [ "$rc" -ne 0 ] && [ "$COMPLETED" != "true" ] && [ -n "$CREATED_IDS" ]; then
