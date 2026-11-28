@@ -70,6 +70,34 @@ env:
 permissions:
   contents: read
 
+# One merge train at a time, for the WHOLE run.
+#
+# The group MUST be at workflow level, not only on the merging jobs. A train is
+# a multi-job sequence (admit -> build -> validate -> merge); job-level
+# concurrency cannot serialise a sequence, because each job releases the group
+# when it finishes. With MERGE_TRAIN_ENABLED=true the `queue` job is skipped and
+# only `merge` held the group, so overlapping cron / workflow_dispatch /
+# repository_dispatch runs each ran admit + build + validate CONCURRENTLY and
+# then raced for the merge lock - doubling validation cost and letting a stale
+# train (built from an older main) reach `gh pr merge` after a newer one.
+#
+# This reverses the 2026-10 decision to scope the group to the `queue` job only.
+# That was taken while the removed high-frequency triggers (pull_request_review,
+# check_suite - see on.repository_dispatch, FAR-1428) flooded the queue: every
+# chained pass then queued behind an incumbent's event-gate pacing sleep. Two
+# things changed: those triggers are gone, and event-gate caps its wait at 120s,
+# so the cost of holding the lock across the gates is now bounded. The
+# stuck-runner failure mode (a run whose job never gets picked up holding a
+# workflow-wide lock) is covered by merge-queue-watchdog.yml, which runs in its
+# own group, outside this lock, and cancels such runs.
+#
+# cancel-in-progress MUST stay false: a later run must never cancel an
+# in-flight train mid-validate or mid-merge. GitHub keeps one pending run per
+# group, so a newer trigger replaces an older pending one - normal, non-lossy.
+concurrency:
+  group: merge-queue
+  cancel-in-progress: false
+
 jobs:
   freeze-gate:
     name: Release freeze gate
@@ -182,9 +210,10 @@ jobs:
     # Cheap context-only filter. schedule/workflow_dispatch always pass;
     # repository_dispatch (self-chain) honors the payload's not-before time so
     # chained passes pace themselves - the wait happens HERE on a tiny idle
-    # runner, NOT inside the queue job, which would hold the merge-queue
-    # concurrency slot and delay other runs. The merge-queue concurrency group
-    # is scoped to the `queue` job precisely so this sleep cannot hold it.
+    # runner rather than on a merge-capable job. NOTE: now that the merge-queue
+    # group is declared at workflow level (see the top-level `concurrency`
+    # block), this wait DOES hold that lock; it is capped at 120s, which bounds
+    # the delay a chained pass can impose on the next one.
     # (The pull_request_review and check_suite paths were removed in FAR-1428.)
     runs-on: ubicloud-standard-2
     timeout-minutes: 15
@@ -265,11 +294,11 @@ jobs:
     # pre-train condition because `vars.MERGE_TRAIN_ENABLED != 'true'` is true when
     # the variable is unset.
     if: needs.freeze-gate.outputs.frozen == 'false' && needs.event-gate.outputs.should_run == 'true' && vars.MERGE_TRAIN_ENABLED != 'true'
-    # The merge-queue concurrency group lives on THIS job, not at workflow
-    # level: only this job merges to main, so only it needs serialising. At
-    # workflow level the group was held by the whole run - including the
-# event-gate pacing sleep - so every chained pass queued behind an incumbent's
-# sleep and waited out the full pacing window before its own turn.
+    # Defence in depth: the merge-queue group is declared at workflow level (see
+    # the top-level `concurrency` block), so this job already runs inside it.
+    # The job-level copy is kept so the serialisation intent stays explicit on
+    # every job that runs `gh pr merge`, and so a future edit that narrows the
+    # workflow-level block cannot silently un-serialise the merge.
     concurrency:
       group: merge-queue
       cancel-in-progress: false
@@ -3330,11 +3359,11 @@ jobs:
       && needs.admit.outputs.admitted != '0'
     runs-on: ubicloud-standard-2
     timeout-minutes: 60
-    # This job merges to main via `gh pr merge`, exactly like `queue`, so it must
-    # hold the SAME concurrency group. With MERGE_TRAIN_ENABLED=true the `queue`
-    # job is skipped, so without this the group is unheld and two overlapping
-    # cron / workflow_dispatch / repository_dispatch train runs could merge in
-    # parallel - racing labels, branch cleanup and post-merge CI dispatch.
+    # Defence in depth: this job merges to main via `gh pr merge`, exactly like
+    # `queue`, so it declares the same merge-queue group the workflow already
+    # holds (see the top-level `concurrency` block). Keeping the job-level copy
+    # means the intent is explicit on the job that merges and a later narrowing
+    # of the workflow-level block cannot silently un-serialise merges.
     # cancel-in-progress must stay false: a later run must never cancel an
     # in-flight merge.
     concurrency:
